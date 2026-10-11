@@ -3336,3 +3336,13 @@ State: `feat/sidebar-morph` @ 41d5c842d pushed. Stacked on integrate/vnext-dials
 - [ ] (2026-10-10, sidebar morph) "the status icons are still a friction point of how you recognize what something is at a glance ... figure out that a little bit more functional in the future" — rail status glyph recognizability.
 - [ ] (2026-10-10) `ComposerSingleLineStyleTests/singleLineFieldTextIsInsetFromTheCardsLeftEdge()` fails only on Dark-appearance full runs — make it appearance-independent. Not caused by sidebar-morph.
 - [ ] Rail hover-reveal (Sean, 2026-10-11): "instead of the popover... when hovering over the rail the sidebar gets revealed temporarily. same animation. if you hover for ~1-2 seconds it animates." Decided: NEW PR after #205. Strawman: 0.6s dwell (Sean said 1–2s — confirm), overlay the terminal (no reflow) using the morph, ~0.3s exit grace, click-through collapses, Cmd+S still pins, retires the Flow 09 popover, DialKit dwell + off switch.
+
+### 2026-10-11 night — sidebar morph #214 + hover-reveal/springs #215 handed to the Beta 26 thread
+
+- [ ] #214 needs before/after screenshots. The agent upload was classifier-blocked; images are in session d50f2d3b's scratchpad. | carried 1×, Sean's hands
+- [ ] Dev check: does the selection chip slide cleanly with Cmd+1–9 / next session in rail mode (off-screen row, History footer outside the ScrollView)? | carried
+- [ ] Dev check: under an Overlay reveal, does the terminal still get hover and cursor changes? | carried
+- [ ] A spring channel joining mid-flight starts at the shared progress speed (e.g. the card when Cmd+S pins an overlay reveal mid-flight). Fixing it needs per-channel spring state. | parked
+- [ ] The rail-tile hover popover card still slides with `NSAnimationContext`, not a spring. | parked
+- [ ] Cosmetic: the `// MARK: Motion` source comment should match the "Morph springs" DialKit label. | parked
+- [ ] Remove the worktrees hover-reveal, ui-springs, bisect-tray, one-clock and glass-bake once #214 and #215 merge. | carried
