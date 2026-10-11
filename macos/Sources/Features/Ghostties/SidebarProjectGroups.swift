@@ -338,6 +338,9 @@ struct ProjectAccordionHeader: View {
     @Environment(\.sidebarMorphDials) private var morphDials
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @FocusState private var isFocused: Bool
+    /// The chevron's and count's resting trailing edges in the header's own
+    /// space, measured outside their ride (`MorphTrailingClusterRide`).
+    @State private var clusterEdges: [ClusterPart: CGFloat] = [:]
 
     var body: some View {
         let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
@@ -391,6 +394,8 @@ struct ProjectAccordionHeader: View {
                     .padding(.leading, 4)
                     .opacity(isEmpty ? 0 : 1)
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
+                    .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.chevron), progress: progress))
+                    .background(ClusterEdgeReporter(part: .chevron))
                 Spacer(minLength: 8)
                 // Never squeezed by a long name: it keeps its own width.
                 Text("\(count)")
@@ -402,8 +407,12 @@ struct ProjectAccordionHeader: View {
                         alignment: .trailing
                     )
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
+                    .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.count), progress: progress))
+                    .background(ClusterEdgeReporter(part: .count))
             }
         }
+        .coordinateSpace(name: ClusterEdgeReporter.space)
+        .onPreferenceChange(ClusterEdgesKey.self) { clusterEdges = $0 }
         .foregroundStyle(ink)
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
@@ -435,6 +444,35 @@ struct ProjectAccordionHeader: View {
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
         .accessibilityHint(Self.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
+    }
+
+    /// How far `part`'s trailing edge sits inside the count's (0 for the
+    /// count, and until both are measured).
+    private func clusterSlack(_ part: ClusterPart) -> CGFloat {
+        guard let count = clusterEdges[.count], let edge = clusterEdges[part] else { return 0 }
+        return count - edge
+    }
+
+    enum ClusterPart: Hashable { case chevron, count }
+
+    /// Reports a cluster part's resting trailing edge. Attached outside the
+    /// part's ride, so it reads the laid-out frame, not the drawn one.
+    private struct ClusterEdgeReporter: View {
+        static let space = "ProjectAccordionHeader.cluster"
+        let part: ClusterPart
+
+        var body: some View {
+            GeometryReader { proxy in
+                Color.clear.preference(key: ClusterEdgesKey.self, value: [part: proxy.frame(in: .named(Self.space)).maxX])
+            }
+        }
+    }
+
+    private struct ClusterEdgesKey: PreferenceKey {
+        static let defaultValue: [ClusterPart: CGFloat] = [:]
+        static func reduce(value: inout [ClusterPart: CGFloat], nextValue: () -> [ClusterPart: CGFloat]) {
+            value.merge(nextValue()) { $1 }
+        }
     }
 
     /// What a click does: an empty project selects, any other folds or

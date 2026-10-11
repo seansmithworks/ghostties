@@ -316,8 +316,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             let rIdle = try XCTUnwrap(renderWholeSidebar(expanded: false, state: .idle, appearance: appearance))
             let e = try XCTUnwrap(diffBounds(eNeeds, eIdle, fromX: leadingSlot.from, toX: leadingSlot.to), "expanded glyph not found")
             let r = try XCTUnwrap(diffBounds(rNeeds, rIdle, fromX: 0), "rail glyph not found")
-            // The rail's project header grows with its larger tile (40 vs
-            // 30), so the row under it sits that much lower on the rail.
+            // Any difference between the rail's and the sidebar's project
+            // header heights moves the row under it; both are 40 at the
+            // defaults (keyframe spec D1), so the row keeps its y.
             let headerGrowth = ProjectAccordionHeader.height(.rail) - ProjectAccordionHeader.height(.sidebar)
             XCTAssertEqual((e.minY + e.maxY) / 2 + headerGrowth, (r.minY + r.maxY) / 2, accuracy: 0.6, "first session glyph centre (\(appearance))")
         }

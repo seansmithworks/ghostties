@@ -130,12 +130,24 @@ struct SidebarMorphMetrics: Equatable {
     }
 
     /// The width a project header's chevron and count are laid out at
-    /// through the morph: their resting width, at every step. The labels
-    /// fade on their own clock (`MorphLabelFade`, 0–60ms on collapse) while
-    /// the layout stays the expanded sidebar's, so nothing narrows or
-    /// truncates them mid-fade (keyframe spec, defect 5).
+    /// through the morph: their resting width, at every step. They are never
+    /// narrowed or truncated; what keeps them uncut by the panel's shrinking
+    /// clip is `trailingClusterTravel`, which moves them with its edge.
     static func trailingClusterWidth(resting: CGFloat, progress _: CGFloat) -> CGFloat {
         resting
+    }
+
+    /// How far left a project header's count or chevron is drawn at this
+    /// step so the panel's trailing edge never cuts it while it fades
+    /// (keyframe spec, defect 5). The list is laid out at `expandedWidth`
+    /// and clipped to the current width, `lerp(expandedWidth, railWidth)`,
+    /// so the edge moves in by `(expandedWidth - railWidth) * progress`. The
+    /// count, the cluster's trailing element (`slack` 0), rides that edge
+    /// from the first frame, keeping its resting gap to it; the chevron,
+    /// `slack` short of the count's trailing edge, stays put until the edge
+    /// reaches it, then rides too. 0 on the expanded sidebar.
+    func trailingClusterTravel(slack: CGFloat) -> CGFloat {
+        min(0, max(slack, 0) - (expandedWidth - railWidth) * progress)
     }
 
     // MARK: Ends
@@ -296,6 +308,27 @@ enum MorphTileScale {
     static func scale(from: CGFloat, to: CGFloat, progress: CGFloat) -> CGFloat {
         guard to > 0 else { return 0 }
         return SidebarMorphMetrics.lerp(from, to, progress) / to
+    }
+}
+
+/// Draws a project header's count or chevron `trailingClusterTravel` to the
+/// left at this frame's progress: render-only, so the header's layout
+/// never changes.
+struct MorphTrailingClusterRide: GeometryEffect {
+    let metrics: SidebarMorphMetrics
+    let slack: CGFloat
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let step = SidebarMorphMetrics(
+            dials: metrics.dials, expandedWidth: metrics.expandedWidth, railWidth: metrics.railWidth, progress: progress
+        )
+        return ProjectionTransform(CGAffineTransform(translationX: step.trailingClusterTravel(slack: slack), y: 0))
     }
 }
 

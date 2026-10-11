@@ -646,6 +646,13 @@ struct SidebarTray: View {
     var forceOpaque = false
     /// `SidebarDialTuning.epoch()`, so a live dial change re-renders the tray.
     var dialEpoch = 0
+    /// The panel's width as SwiftUI animates it (`SidebarWidthModel.width`).
+    /// Set, the tray is laid out in a box of exactly that width (the rail's
+    /// width when vertical), from the sidebar's leading edge, so a pinned ⇄
+    /// rail toggle moves it as one animated change of a number on the
+    /// toggle's transaction, never reading the AppKit-driven host width
+    /// mid-flight. Nil (a tray rendered on its own), it fills its proposal.
+    var panelWidth: CGFloat? = nil
 
     /// Space the tray occupies at the bottom of the sidebar, for the content
     /// underneath to reserve. Horizontal: one capsule row + `bottomPadding`,
@@ -746,12 +753,13 @@ struct SidebarTray: View {
         .padding(.leading, isVertical ? rail.margin : SidebarDialTuning.windowMargin())
         .padding(.trailing, isVertical ? rail.margin : max(0, SidebarDialTuning.windowMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
-        // Leading in the expanded sidebar (layout B); on the rail, centred
-        // on the rail's own width from the leading edge, not on the panel's
-        // current width, so mid-morph the stack lands straight on the rail's
-        // centre instead of sliding with the narrowing panel.
-        .frame(width: isVertical ? railWidth : nil)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Leading in the expanded sidebar (layout B); centred on the rail.
+        // With `panelWidth`, both are a box of a concrete width (the panel's,
+        // or the rail's) from the leading edge, so the toggle animates one
+        // width and one position, and the rail stack lands on the rail's
+        // centre instead of sliding with the narrowing host.
+        .frame(width: panelWidth.map { isVertical ? railWidth : $0 }, alignment: isVertical ? .center : .leading)
+        .frame(maxWidth: .infinity, alignment: panelWidth == nil && isVertical ? .center : .leading)
         .transaction { transaction in
             if reduceMotion { transaction.animation = nil }
         }

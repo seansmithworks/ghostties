@@ -248,8 +248,9 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     func testFirstRowSitsAtTheSameYInExpandedAndRail() throws {
         let e = try selectedChip(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
         let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
-        // The rail's project header grows with its larger tile (40 vs 30),
-        // so the row under it sits that much lower on the rail.
+        // Any difference between the rail's and the sidebar's project header
+        // heights moves the row under it; both are 40 at the defaults
+        // (keyframe spec D1), so the row keeps its y.
         let headerGrowth = ProjectAccordionHeader.height(.rail) - ProjectAccordionHeader.height(.sidebar)
         XCTAssertEqual((e.lowerBound + e.upperBound) / 2 + headerGrowth, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
     }

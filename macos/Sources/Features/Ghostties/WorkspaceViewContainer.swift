@@ -151,7 +151,7 @@ private struct SidebarHostRoot: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .overlay(alignment: .bottom) {
                 if vertical || showsTrayWhenExpanded {
-                    SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch())
+                    SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch(), panelWidth: model.width)
                 }
             }
             .environment(\.sidebarTrailingGutter, trailingGutter)

@@ -41,10 +41,11 @@ struct RecentsRowView: View, Equatable {
     var onCommitRename: () -> Void = {}
     var onCancelRename: () -> Void = {}
 
-    /// This row's position within its rendered section (Pinned/Active/
-    /// Inactive) — decorative only, feeds the Flow 05 expand stagger
-    /// (`WorkspaceLayout.expandLabelDelay`). Defaults to 0 so every other
-    /// call site (unaffected by the stagger) is unchanged.
+    /// This row's place in the expand cascade: one index through every
+    /// section and project header in reading order (`SidebarLabelCascade`)
+    /// — decorative only, feeds `WorkspaceLayout.expandLabelDelay`. Defaults
+    /// to 0 so every other call site (unaffected by the stagger) is
+    /// unchanged.
     var staggerIndex: Int = 0
 
     /// `SidebarDialTuning.epoch()` at construction — DEBUG-tuning-only.
@@ -228,8 +229,9 @@ struct SidebarListRowTitle: View {
 struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     let subtitle: String
     let isActive: Bool
-    /// Position within the rendered section — feeds the expand stagger
-    /// (`WorkspaceLayout.expandLabelDelay`).
+    /// The row's place in the expand cascade, one index across every
+    /// section and header (`SidebarLabelCascade`) — feeds
+    /// `WorkspaceLayout.expandLabelDelay`.
     var staggerIndex: Int = 0
     let redlineID: String
     /// The session whose hover card this row shows, if any. On the rail

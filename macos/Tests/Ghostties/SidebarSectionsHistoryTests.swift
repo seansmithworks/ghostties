@@ -422,14 +422,24 @@ final class SidebarSectionsHistoryTests: XCTestCase {
 
     // MARK: - No section titles
 
-    /// "No more section titles": the first row of the expanded list sits where
-    /// a bare row would, directly under the list's top padding. A "Pinned" or
-    /// "Active" header above it would push its ink down by the header's height
-    /// (about 25pt). Tested for a pinned first row and for an active first row.
+    /// "No more section titles": the list's first element (here the
+    /// project's accordion header, the Projects tab being one view) sits
+    /// where a bare header would, directly under the list's top padding. A
+    /// "Pinned" or "Active" title above it would push its ink down by the
+    /// title's height (about 25pt). Tested for a pinned first row and for an
+    /// active first row. (Was measured against a bare session row, which
+    /// matched the 32pt header within the tolerance; the 40pt header,
+    /// keyframe spec D1, centres its ink 4pt lower.)
     func testExpandedListRendersNoSectionTitles() throws {
-        let bare = try XCTUnwrap(render(SessionRowHarness()))
-        let bareInk = try XCTUnwrap(ink(bare, fromX: 0, toX: width - 60), "bare row ink")
-        let expectedTop = SidebarDialTuning.contentPaddingTop() + bareInk.minY
+        let headerHeight = ProjectAccordionHeader.height(.sidebar)
+        let bare = try XCTUnwrap(render(
+            ProjectAccordionHeader(
+                name: "3 sessions · last 2h ago",
+                monogram: ProjectMonogram.monograms(for: ["3 sessions · last 2h ago"]).first ?? "?", count: 1, isCollapsed: false, onToggle: {})
+        ))
+        let bareInk = try XCTUnwrap(ink(bare, fromX: 0, toX: width - 60), "bare header ink")
+        // `render` centres the header in a row-high frame.
+        let expectedTop = SidebarDialTuning.contentPaddingTop() + bareInk.minY - (rowHeight - headerHeight) / 2
 
         for pinned in [true, false] {
             let project = Project(name: "3 sessions · last 2h ago", rootPath: "~/Code/x")
