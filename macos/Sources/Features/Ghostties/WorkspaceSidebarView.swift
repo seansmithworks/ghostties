@@ -101,9 +101,9 @@ struct WorkspaceSidebarView: View {
             Spacer(minLength: 0)
 
             // The tray itself is hosted once at the sidebar root
-            // (`SidebarTray`), over both this list and the rail, so it can
-            // morph between them; this reserves its space.
-            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: false))
+            // (`SidebarTray`), over the list on the sidebar and the rail
+            // alike, so it can morph between them; this reserves its space.
+            MorphTrayReserve()
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
@@ -123,7 +123,7 @@ struct WorkspaceSidebarView: View {
             // Round 6 follow-up: capture-rig-only — exercises the
             // selected-row styling in `GHOSTTIES_CAPTURE_FIXTURE`
             // screenshots. No-ops outside fixture mode (see the method's
-            // own doc comment for why `SidebarRailView` needs the same call).
+            // own doc comment for why `SidebarRailColumn` needs the same call).
             #if DEBUG
             coordinator.applyCaptureFixtureFocusIfNeeded()
             applyCaptureExpandProjectIfNeeded()
@@ -301,6 +301,38 @@ struct WorkspaceSidebarView: View {
         (RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable)
             + RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: pinningAvailable))
             .filter { coordinator.hasLiveSurface(id: $0.id) }
+    }
+}
+
+// MARK: - Rail column
+
+/// The rail for the layouts that don't morph (task-first, and the Projects
+/// tab's tabs layout): the session list the morphing layouts collapse to,
+/// held at the rail's end (`sidebarMorphOverride` 1), under the same
+/// titlebar band and above the same tray reservation as the sidebar. It
+/// lists Pinned and Active as the Sessions list does (grouped by project in
+/// One view's Projects tab), whichever view the sidebar shows expanded.
+struct SidebarRailColumn: View {
+    @EnvironmentObject private var store: WorkspaceStore
+    @EnvironmentObject private var coordinator: SessionCoordinator
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
+            RecentsListView()
+            Spacer(minLength: 0)
+            MorphTrayReserve()
+        }
+        .environment(\.sidebarMorphOverride, 1)
+        .onAppear {
+            // A capture can cold-launch straight into `.collapsed` mode, in
+            // which case `WorkspaceSidebarView` (and its own identical call)
+            // never mounts. No-ops outside `GHOSTTIES_CAPTURE_FIXTURE`.
+            #if DEBUG
+            coordinator.applyCaptureFixtureFocusIfNeeded()
+            #endif
+        }
+        .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
     }
 }
 

@@ -136,7 +136,7 @@ struct RecentsListView: View {
         let orderedRowIds = displaySections.rowSessions.map { $0.id.uuidString }
 
         // History (when shown) is pinned below the list as `layout.footer`.
-        // The rail renders the same layout (`SidebarRailView`).
+        // The rail is this same list, held at morph 1.
         let layout = displaySections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
 
         VStack(spacing: 0) {
@@ -185,6 +185,12 @@ struct RecentsListView: View {
             removeDragEndMonitors()
             stopAutoScroll()
         }
+        // A rename in progress doesn't survive the trip to the rail, where
+        // its field has no room.
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceSidebarWillMorph)) { note in
+            guard note.object as? NSWindow === coordinator.containerView?.window, editingSessionId != nil else { return }
+            cancelRename()
+        }
     }
 
     // MARK: - Sections Content
@@ -221,14 +227,14 @@ struct RecentsListView: View {
                 slotContent(slot, sections)
             }
         }
-        // Option D: the selected session's project group on one card.
+        // Option D: the selected session's project group on one card,
+        // narrowing into the rail's column.
         .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
-            ExpandedGroupCard(anchors: anchors)
+            ProjectGroupCard(anchors: anchors)
         }
     }
 
-    /// One slot of the section layout (`SidebarSessionSections.Slot`), the
-    /// same sequence `SidebarRailView` renders.
+    /// One slot of the section layout (`SidebarSessionSections.Slot`).
     @ViewBuilder
     private func slotContent(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
         switch slot {
@@ -293,6 +299,11 @@ struct RecentsListView: View {
             .padding(.trailing, -trailingBleed)
             .accessibilityLabel("Sessions")
             .redlineFrame(RedlineID.listViewport)
+            .modifier(RailScrollToKeyboardSelection(
+                selectedSessionId: coordinator.sidebarSelectedSessionId,
+                window: { [coordinator] in coordinator.containerView?.window },
+                scrollProxy: scrollProxy
+            ))
             .overlay(alignment: .top) { autoScrollEdgeZone(direction: -1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
             .overlay(alignment: .bottom) { autoScrollEdgeZone(direction: 1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
         }
@@ -301,22 +312,15 @@ struct RecentsListView: View {
     /// How far the scroll region reaches above the first row, so the group
     /// card's inset above a first header isn't clipped: the card inset, but
     /// never into the traffic lights' row (centred at half the titlebar
-    /// inset, 16pt tall). Same rule as `SidebarRailView.scrollBleed`.
+    /// inset, 16pt tall). On the rail the column's smaller inset fits in it.
     private var scrollBleed: CGFloat {
         let titlebarInset = store.toolbarRowTopAnchorConstant * 2
         return min(SidebarDialTuning.groupCardInset(), max(0, titlebarInset / 2 - 8))
     }
 
     /// The group card's overhang past the column's trailing edge
-    /// (`ExpandedGroupCard.horizontalOutset`), so it isn't clipped there:
-    /// the widest it gets, with the chip's overhang.
-    private var trailingBleed: CGFloat {
-        max(0, ExpandedGroupCard.horizontalOutset(
-            cardInset: SidebarDialTuning.groupCardInset(),
-            rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
-            chipOverhang: RailProjectColumn.chipOverhang(.sidebar)
-        ))
-    }
+    /// (`ProjectGroupCard.trailingBleed`), so it isn't clipped there.
+    private var trailingBleed: CGFloat { ProjectGroupCard.trailingBleed() }
 
     // MARK: - Section Rows (drag-reflow aware)
 
@@ -356,7 +360,7 @@ struct RecentsListView: View {
         let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
         // Option D: each header leads with its project's monogram tile (the
         // rail's), and the group holding the selected session sits on one
-        // card (`ExpandedGroupCard`), its rows marked by chips.
+        // card (`ProjectGroupCard`), its rows marked by chips.
         let monograms = Dictionary(
             zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
             uniquingKeysWith: { first, _ in first }
@@ -916,6 +920,8 @@ struct RecentsListView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The rail has no room for it; it leaves with the labels.
+        .modifier(MorphLabelFade())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No sessions yet")
     }

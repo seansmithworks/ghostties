@@ -78,15 +78,16 @@ final class SelectedRowFootprintTests: XCTestCase {
     // MARK: - Rail
 
     /// A rail row outside any project column (a Pinned or Sessions-tab row)
-    /// selects with the rail chip, centred on the rail.
+    /// selects with the rail chip, centred on the rail: the expanded row,
+    /// held at the rail's end.
     func testRailSelectedRowIsTheChip() throws {
         let width = try railWidth()
         let column = VStack(spacing: 0) {
-            RailSessionRow(sessionId: UUID(), name: "Claude Code 6", projectName: "atlas-api", indicatorState: .inactive, isActive: true, onTap: {})
+            ExpandedHarness()
         }
-            .modifier(SidebarRailView.columnPadding)
-            .environment(\.sidebarTrailingGutter, 0)
+            .modifier(SidebarColumnPadding())
             .environmentObject(SessionCoordinator())
+            .asRail(width: width)
         let (rep, scale) = try render(column, width: width)
         try assertIsChip(
             rep, scale: scale, side: RailProjectColumn.chipSize(.rail),
@@ -100,10 +101,10 @@ final class SelectedRowFootprintTests: XCTestCase {
     func testRailHistorySelectedRowIsTheChip() throws {
         let width = try railWidth()
         let column = VStack(spacing: 0) {
-            RailHistoryRow(subtitle: "3 sessions", isActive: true, onTap: {})
+            HistoryRowView(subtitle: "3 sessions", isActive: true, onTap: {})
         }
-            .modifier(SidebarRailView.columnPadding)
-            .environment(\.sidebarTrailingGutter, 0)
+            .modifier(SidebarColumnPadding())
+            .asRail(width: width)
         let (rep, scale) = try render(column, width: width)
         try assertIsChip(
             rep, scale: scale, side: RailProjectColumn.chipSize(.rail),

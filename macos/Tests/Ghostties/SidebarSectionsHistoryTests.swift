@@ -330,12 +330,13 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     private let width: CGFloat = 220
     private let rowHeight: CGFloat = 48
 
-    private func render<V: View>(_ row: V) -> NSBitmapImageRep? {
-        let framed = row
-            .environmentObject(SidebarWidthModel(width: width))
+    /// `asRail`: the same row held at the rail's end, on a rail `width` wide.
+    private func render<V: View>(_ row: V, asRail: Bool = false) -> NSBitmapImageRep? {
+        let padded = row
             .environmentObject(SessionCoordinator())
             .padding(.leading, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingTrailing())
+        let framed = (asRail ? AnyView(padded.asRail(width: width)) : AnyView(padded.environmentObject(SidebarWidthModel(width: width))))
             .frame(width: width, height: rowHeight)
             .background(Color.white)
         let hosting = NSHostingView(rootView: framed)
@@ -406,7 +407,7 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     }
 
     func testRailHistoryClockIsCentredOnTheRail() throws {
-        let rail = try XCTUnwrap(render(RailHistoryRow(subtitle: "3 sessions", isActive: false, onTap: {})))
+        let rail = try XCTUnwrap(render(HistoryRowView(subtitle: "3 sessions", isActive: false, onTap: {}), asRail: true))
         let clock = try XCTUnwrap(ink(rail, fromX: 0, toX: width), "rail clock")
         // The clock symbol's ink is a little heavier on its leading side,
         // which shows at the rail's 26pt glyph.

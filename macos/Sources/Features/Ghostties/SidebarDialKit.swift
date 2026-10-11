@@ -156,7 +156,7 @@ enum SidebarDialTuning {
     static let rowLeadingPaddingKey = "ghostties.sidebarDial.rowLeadingPadding"
     static let rowTrailingPaddingKey = "ghostties.sidebarDial.rowTrailingPadding"
     /// The selected project's group card (option D): its margin, inset from
-    /// the tile and chips on all four sides (`ExpandedGroupCard`).
+    /// the tile and chips on all four sides (`ProjectGroupCard`).
     static let groupCardInsetKey = "ghostties.sidebarDial.groupCardInset"
     // MARK: Tiles, per context (`SidebarTileContext`; "Tiles" in the Sidebar
     // panel, "Rail tiles" in the Rail panel). A project tile is the monogram
@@ -1215,7 +1215,7 @@ enum SidebarListDialPanel: FocusedDialPanel {
                 .select("trayWidth", keyPath: \.trayWidth, label: "Tray width",
                         options: TrayGlassStyle.TrayWidth.allCases.map(\.rawValue)),
             ]),
-            // The selected project's group card (`ExpandedGroupCard`).
+            // The selected project's group card (`ProjectGroupCard`).
             .group("groupCard", label: "Group card", children: [
                 .slider("groupCardInset", keyPath: \.groupCardInset, label: "Card inset", range: 0...16, step: 0.5, unit: "pt"),
             ]),

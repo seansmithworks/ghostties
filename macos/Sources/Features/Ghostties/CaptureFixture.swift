@@ -220,7 +220,7 @@ enum CaptureFixture {
     /// Active) — same row position Flow 07's own "portfolio" occupies.
     /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
     /// called from both `WorkspaceSidebarView.onAppear` and
-    /// `SidebarRailView.onAppear`.
+    /// `SidebarRailColumn.onAppear`.
     static var focusedSessionId: UUID? {
         sessions.first?.id
     }
@@ -491,6 +491,24 @@ enum CaptureFixture {
     static func parseSidebarToggleAfter(_ raw: String?) -> TimeInterval? {
         raw.flatMap(parsePositiveSeconds)
     }
+
+    /// `GHOSTTIES_CAPTURE_MORPH_STEPS=<n>:<holdMs>`: holds the sidebar at
+    /// `n` evenly spaced steps of the pinned ⇄ rail morph, 0 through 1, each
+    /// for `holdMs` (`WorkspaceViewContainer.applyMorphStep`), so a capture
+    /// can screenshot every step without synthetic input. At least 2 steps.
+    struct MorphSteps: Equatable {
+        let count: Int
+        let hold: TimeInterval
+    }
+
+    static func parseMorphSteps(_ raw: String?) -> MorphSteps? {
+        guard let parts = raw?.split(separator: ":"), parts.count == 2,
+              let count = Int(parts[0]), count >= 2,
+              let holdMs = Double(parts[1]), holdMs.isFinite, holdMs > 0 else { return nil }
+        return MorphSteps(count: count, hold: holdMs / 1000)
+    }
+
+    static var morphSteps: MorphSteps? { parseMorphSteps(env("GHOSTTIES_CAPTURE_MORPH_STEPS")) }
 
     /// `GHOSTTIES_CAPTURE_SIDEBAR_RAIL_CLOSE_PIN_AFTER=<seconds>` — drives
     /// pinned -> rail -> closed -> pinned, one step per interval.

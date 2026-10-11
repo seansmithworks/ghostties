@@ -180,7 +180,9 @@ struct HistoryGlyph: View {
 
 /// The History row after the Active rows (mock I3): the session row's own
 /// chrome (`SidebarListRowChrome`) with title "History", the history
-/// summary as subtitle, and a clock in the status-glyph slot.
+/// summary as subtitle, and a clock in the status-glyph slot. On the rail
+/// it is the same row, its clock centred in its chip, its summary a
+/// tooltip.
 struct HistoryRowView: View {
     let subtitle: String
     let isActive: Bool
@@ -197,63 +199,18 @@ struct HistoryRowView: View {
             subtitle: subtitle,
             isActive: isActive,
             staggerIndex: staggerIndex,
-            redlineID: Self.redlineID
+            redlineID: Self.redlineID,
+            railHelp: "History — \(subtitle)"
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
-        } glyph: {
-            // In its chip like every expanded row: "Thread tile icon".
-            HistoryGlyph(size: RailProjectColumn.chipGlyphSize(.sidebar))
-                .frame(width: RailProjectColumn.chipGlyphSize(.sidebar), height: RailProjectColumn.chipGlyphSize(.sidebar))
+        } glyph: { size in
+            // In its chip like every row: "Thread tile icon".
+            HistoryGlyph(size: size)
         }
         .onTapGesture(perform: onTap)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("History, \(subtitle)")
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : [.isButton])
-    }
-}
-
-// MARK: - History Row (rail)
-
-/// The rail's History row: the clock centred in the same 48pt row and
-/// chip as `RailSessionRow`.
-struct RailHistoryRow: View {
-    /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
-    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    let subtitle: String
-    let isActive: Bool
-    let onTap: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        // Same glyph size and chip as `RailSessionRow`.
-        let glyphSize = RailProjectColumn.chipGlyphSize(.rail)
-        Button(action: onTap) {
-            HistoryGlyph(size: glyphSize)
-                .frame(width: glyphSize, height: glyphSize)
-                .background {
-                    SidebarRowChipBackground(context: .rail, isActive: isActive, isHovered: isHovered)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: SidebarDialTuning.rowHeight())
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .help("History — \(subtitle)")
-        .accessibilityLabel("History, \(subtitle)")
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-}
-
-/// Stands in for the expanded list's zero-height end-of-section drop
-/// zone, so the rail keeps the same row-gap rhythm.
-struct RailSectionEndMarker: View {
-    var body: some View {
-        Color.clear
-            .frame(height: 0)
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
     }
 }
 

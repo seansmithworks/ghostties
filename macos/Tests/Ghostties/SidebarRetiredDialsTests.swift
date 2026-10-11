@@ -109,7 +109,7 @@ final class SidebarRetiredDialsTests: XCTestCase {
             let width: CGFloat = rail ? 80 : 260
             let height: CGFloat = 480
             let column: AnyView = rail
-                ? AnyView(SidebarRailView())
+                ? AnyView(SidebarRailColumn().asRail(width: width))
                 : AnyView(VStack(spacing: 0) {
                     Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
                     RecentsListView()

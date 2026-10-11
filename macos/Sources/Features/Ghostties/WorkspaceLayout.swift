@@ -612,51 +612,36 @@ enum WorkspaceLayout {
     /// before the card has reached the edge.
     static let closedHotZoneActivationDelay: TimeInterval = 0.18
 
-    // MARK: - Flow 05 Content Choreography (row-level, sidebar-presence)
+    // MARK: - Label choreography (motion spec §1, sidebar ⇄ rail)
 
-    /// Duration of a session row's label (name/subtitle/timestamp) fade on
-    /// COLLAPSE — the canvas's "label opacity 1 → 0, window 0-100ms" row.
-    /// Runs from the very start of the collapse transition (no delay) —
-    /// labels leave first, before the panel/glyph motion below even starts.
-    static let sidebarRowLabelCollapseFadeDuration: TimeInterval = 0.1
+    /// A label's fade on the way to the rail: it leaves first, from the
+    /// very start of the collapse, before the panel has moved far.
+    static let sidebarRowLabelCollapseFadeDuration: TimeInterval = 0.09
 
-    /// Duration a session row's glyph takes to travel back out on EXPAND —
-    /// the canvas's reopen note: "reverse at 240ms on the drawer curve...
-    /// session glyphs fade in 40ms apart, labels land 60ms after their
-    /// glyph." The glyph travels the FULL expand window; only the label is
-    /// delayed/staggered (see `expandLabelDelay(rowIndex:glyphLandDuration:)`).
-    static func sidebarRowGlyphExpandTravelDuration() -> TimeInterval {
-        sidebarTransitionTiming(from: .collapsed, to: .pinned).duration
+    /// How far a label drifts left as it fades on the way to the rail.
+    static let sidebarRowLabelCollapseTravel: CGFloat = -4
+
+    /// A label's fade-in on the way out of the rail, once its delay
+    /// (`expandLabelDelay`) has passed.
+    static let sidebarRowLabelExpandFadeDuration: TimeInterval = 0.14
+
+    /// The expand stagger: the first label starts 100ms into the 240ms
+    /// expand, each later row 12ms after the one above, capped at the
+    /// ninth row so a long list still lands by ~310ms.
+    static func expandLabelDelay(rowIndex: Int) -> TimeInterval {
+        0.1 + 0.012 * TimeInterval(min(max(rowIndex, 0), 8))
     }
 
-    /// Duration of a session row's label fade-in on EXPAND, once its delay
-    /// (`expandLabelDelay`) elapses. Deliberately shorter than a glyph's
-    /// travel — the label is arriving, not moving spatially — but still a
-    /// standard UI fade (Emil: tooltips/small popovers 125-200ms).
-    static let sidebarRowLabelExpandFadeDuration: TimeInterval = 0.12
-
-    /// Flow 05 expand stagger, exactly as spec'd on the canvas: "session
-    /// glyphs fade in 40ms apart, labels land 60ms after their glyph." Every
-    /// row's glyph travels the SAME full `glyphLandDuration` window (they
-    /// all start together, at t=0) — only each row's LABEL is delayed:
-    /// `glyphLandDuration` (wait for the glyph to land) + a flat 60ms, plus
-    /// 40ms more per row index (0-based, in the row's own rendered section).
-    /// Pure so the stagger schedule is directly unit-testable without
-    /// driving any real animation. Stagger is decorative — never gates
-    /// hit-testing, so rows stay clickable from frame 1 regardless of this
-    /// delay (per the canvas's own "controls are clickable from frame 1").
-    static func expandLabelDelay(rowIndex: Int, glyphLandDuration: TimeInterval) -> TimeInterval {
-        glyphLandDuration + 0.06 + 0.04 * TimeInterval(max(rowIndex, 0))
-    }
-
-    /// Whether a session row should run the Flow 05 windowed label-fade/
-    /// glyph-travel choreography above, or snap straight to its resting
-    /// state and let only the container-level cross-fade animate (Flow 05
-    /// "Reduced Motion: drop the translate entirely... layout snaps").
-    /// Pure selector, mirroring `sidebarTransitionAlphaDuration`'s pattern,
-    /// so the reduced-motion branch a row takes is covered directly.
-    static func sidebarRowChoreographyEnabled(reduceMotion: Bool) -> Bool {
-        !reduceMotion
+    /// The label fade for one direction: ease-out (`.close`'s curve) in both,
+    /// fast and immediate leaving, delayed and staggered arriving. Reduce
+    /// Motion: one 120ms ease-in-out fade either way, never nothing.
+    static func sidebarLabelAnimation(appearing: Bool, rowIndex: Int, reduceMotion: Bool) -> Animation {
+        if reduceMotion {
+            return .easeInOut(duration: sidebarReducedMotionCrossfadeDuration)
+        }
+        let easeOut = { (duration: TimeInterval) in Animation.timingCurve(0.23, 1, 0.32, 1, duration: duration) }
+        guard appearing else { return easeOut(sidebarRowLabelCollapseFadeDuration) }
+        return easeOut(sidebarRowLabelExpandFadeDuration).delay(expandLabelDelay(rowIndex: rowIndex))
     }
 }
 
@@ -801,6 +786,10 @@ extension Notification.Name {
     /// writing the new tab value to UserDefaults. `@AppStorage` handles the SwiftUI
     /// side automatically; this notification is available for AppKit observers.
     static let workspaceSidebarTabChanged = Notification.Name("com.seansmithdesign.ghostties.workspace.sidebarTabChanged")
+    /// Posted by `WorkspaceViewContainer` as the sidebar starts to morph
+    /// between the expanded list and the rail; the object is the window.
+    /// The list cancels a rename in progress.
+    static let workspaceSidebarWillMorph = Notification.Name("com.seansmithdesign.ghostties.workspace.sidebarWillMorph")
 
     /// Posted by `AppDelegate`'s ⌘⇧N local-event monitor and by any code path
     /// that wants to open the new-task composer. `NewTaskComposerStore.shared`

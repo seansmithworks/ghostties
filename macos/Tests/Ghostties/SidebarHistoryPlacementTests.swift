@@ -92,7 +92,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let width = rail ? try railWidth() : 260
         let column: AnyView
         if rail {
-            column = AnyView(SidebarRailView())
+            column = AnyView(SidebarRailColumn().asRail(width: width))
         } else {
             column = AnyView(VStack(spacing: 0) {
                 Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)

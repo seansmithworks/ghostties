@@ -3,8 +3,8 @@ import SwiftUI
 import GhosttiesCore
 @testable import Ghostty
 
-/// Pixel coverage for the status-glyph slot of the expanded Sessions row
-/// (`RecentsRowView`) and the collapsed-rail row (`RailSessionRow`).
+/// Pixel coverage for the status-glyph slot of the Sessions row
+/// (`RecentsRowView`), expanded and held at the rail's end.
 ///
 /// The old ghost draws the same silhouette for every state, so "the slot
 /// shows the glyph for this state" is asserted as "two different states
@@ -80,18 +80,21 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         render(ProjectRowHarness(state: state), appearance: appearance)
     }
 
+    /// The same row held at the rail's end, on a rail `width` wide.
     private func renderRail(_ state: SessionIndicatorState, appearance: NSAppearance.Name) -> NSBitmapImageRep? {
         render(
-            RailSessionRow(sessionId: UUID(), name: "Claude Code 6", projectName: "atlas-api", indicatorState: state, isActive: false, onTap: {})
+            ExpandedHarness(state: state)
                 .environmentObject(SessionCoordinator()),
-            appearance: appearance
+            appearance: appearance,
+            asRail: true
         )
     }
 
-    private func render<V: View>(_ row: V, appearance: NSAppearance.Name) -> NSBitmapImageRep? {
-        let framed = row
+    private func render<V: View>(_ row: V, appearance: NSAppearance.Name, asRail: Bool = false) -> NSBitmapImageRep? {
+        let padded = row
             .padding(.leading, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingTrailing())
+        let framed = (asRail ? AnyView(padded.asRail(width: width)) : AnyView(padded))
             .frame(width: width, height: rowHeight)
             .background(Color(nsColor: appearance == .darkAqua ? .black : .white))
         let hosting = NSHostingView(rootView: framed)
@@ -258,9 +261,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             )
         } else {
             content = AnyView(
-                SidebarRailView()
+                SidebarRailColumn()
+                    .asRail(width: width)
                     .environmentObject(s).environmentObject(coordinator)
-                    .environmentObject(SidebarWidthModel(width: width))
             )
         }
         // The list and rail read the sidebar tab from store-less
@@ -604,17 +607,18 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         }
     }
 
-    /// The rail column (`SidebarRailView.columnPadding`) with one row, under
-    /// the rail's real trailing gutter, on white. Returns the row glyph's
-    /// ink centre x in points.
+    /// The list column with one row, held at the rail's end on a rail
+    /// `railWidth` wide, under the rail's real trailing gutter, on white.
+    /// Returns the row glyph's ink centre x in points.
     private func railRowGlyphCenterX(railWidth: CGFloat, gutter: CGFloat) throws -> CGFloat {
         let column = VStack(spacing: 0) {
-            RailSessionRow(sessionId: UUID(), name: "Claude Code 6", projectName: "atlas-api", indicatorState: .needsAttention, isActive: false, onTap: {})
+            ExpandedHarness(state: .needsAttention)
         }
-            .modifier(SidebarRailView.columnPadding)
+            .modifier(SidebarColumnPadding())
+            .environmentObject(SessionCoordinator())
+            .asRail(width: railWidth)
             .frame(width: railWidth, height: 100, alignment: .top)
             .environment(\.sidebarTrailingGutter, gutter)
-            .environmentObject(SessionCoordinator())
             .background(Color.white)
         let hosting = NSHostingView(rootView: column)
         hosting.frame = NSRect(x: 0, y: 0, width: railWidth, height: 100)
@@ -760,16 +764,4 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         XCTAssertEqual(TrayGlassStyle.trayWidth, .split)
     }
 
-    // MARK: - Rail VoiceOver label
-
-    func testRailRowLabelNamesTheSessionAndItsStatus() {
-        XCTAssertEqual(
-            RailSessionRow.accessibilityLabel(name: "Claude Code 6", projectName: "atlas-api", kind: SessionIndicatorState.needsAttention.statusGlyphKind, isActive: false),
-            "Claude Code 6, in atlas-api, needs your input"
-        )
-        XCTAssertEqual(
-            RailSessionRow.accessibilityLabel(name: "A", projectName: "p", kind: .done, isActive: true),
-            "A, in p, idle, active"
-        )
-    }
 }

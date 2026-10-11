@@ -234,7 +234,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             XCTAssertEqual(RailProjectColumn.columnInset, 4)
             XCTAssertEqual(RailProjectColumn.chipOverhang(.sidebar), 0)
             XCTAssertEqual(RailProjectColumn.chipOverhang(.rail), 0)
-            XCTAssertEqual(ExpandedGroupCard.horizontalOutset(cardInset: 6, rowLeadingPadding: 4, chipOverhang: 0), 2)
+            XCTAssertEqual(ProjectGroupCard.horizontalOutset(cardInset: 6, rowLeadingPadding: 4, chipOverhang: 0), 2)
             XCTAssertEqual(RailProjectColumn.columnWidth(anchorCount: 5, inset: RailProjectColumn.columnInset), 48)
             assertGroupCardAndColumnInsetOnAllSides(chipSize: 30, railChipSize: 40)
             // Fills: tile 10%, selected chip 10%, card/column 6%.
@@ -302,7 +302,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let mirroredSlotMidX = union.maxX - lead - slotWidth / 2
         let markLeading = min(slotMidX - tileSize / 2, slotMidX - chipSize / 2)
         let markTrailing = max(mirroredSlotMidX + tileSize / 2, mirroredSlotMidX + chipSize / 2)
-        let outset = ExpandedGroupCard.horizontalOutset(
+        let outset = ProjectGroupCard.horizontalOutset(
             cardInset: cardInset, rowLeadingPadding: lead,
             chipOverhang: RailProjectColumn.sideOverhang(anchorCount: anchorCount, context: .sidebar)
         )
@@ -325,7 +325,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let folded = RailProjectColumn.verticalExtent(union: header, anchorCount: 1, inset: cardInset, context: .sidebar)
         XCTAssertEqual(tileTop - folded.lowerBound, cardInset, file: file, line: line)
         XCTAssertEqual(folded.upperBound - (tileTop + tileSize), cardInset, file: file, line: line)
-        let foldedOutset = ExpandedGroupCard.horizontalOutset(
+        let foldedOutset = ProjectGroupCard.horizontalOutset(
             cardInset: cardInset, rowLeadingPadding: lead,
             chipOverhang: RailProjectColumn.sideOverhang(anchorCount: 1, context: .sidebar)
         )
@@ -463,7 +463,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
                     let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchorCount, inset: inset, context: context)
                     let cardWidth: CGFloat
                     if context == .sidebar {
-                        let outset = ExpandedGroupCard.horizontalOutset(
+                        let outset = ProjectGroupCard.horizontalOutset(
                             cardInset: inset, rowLeadingPadding: lead,
                             chipOverhang: RailProjectColumn.sideOverhang(anchorCount: anchorCount, context: context)
                         )

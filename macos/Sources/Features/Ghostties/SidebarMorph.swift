@@ -1,12 +1,14 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import SwiftUI
 
 /// The one-object sidebar ⇄ rail morph's geometry (plan
-/// `vnext/morph/plan.md`, slice 1): every shared element's size and
-/// position as a pure function of the dials and one progress value,
-/// 0 = the expanded sidebar, 1 = the rail. Nothing reads it yet; the
-/// unified list (slice 3) and the morph itself (slice 4) will.
+/// `vnext/morph/plan.md`): every shared element's size and position as a
+/// pure function of the dials and one progress value, 0 = the expanded
+/// sidebar, 1 = the rail. One view tree renders both (`SidebarMorphFrame`
+/// lays it out at the expanded width); the leaves below read their ends
+/// from here once per change and interpolate between them per frame.
 ///
 /// Every x is measured from the sidebar's leading edge, never from the
 /// centre of the current width, so a sub-frame mismatch between the AppKit
@@ -109,8 +111,7 @@ struct SidebarMorphMetrics: Equatable {
     /// edge, the row's leading padding, then half the tile slot
     /// (`SidebarListRowChrome.glyphSlotWidth`, the sidebar tile's side).
     var sidebarTileCenterX: CGFloat { listMinX + dials.rowLeadingPadding + dials.sidebarTileSize / 2 }
-    /// The rail centres everything (`SidebarRailView.columnPadding` is
-    /// symmetric).
+    /// The rail centres everything: tiles, chips, glyphs and the column.
     var railTileCenterX: CGFloat { railWidth / 2 }
 
     // MARK: Interpolated
@@ -124,8 +125,16 @@ struct SidebarMorphMetrics: Equatable {
 
     /// Row title, subtitle, header name, chevron and count: fully visible
     /// expanded, gone by the midpoint, where `isCollapsedPresentation`
-    /// flips.
-    var labelOpacity: Double { Double(max(0, 1 - progress * 2)) }
+    /// flips. Its timing is the label's own (`MorphLabelFade`), not the
+    /// panel's: an animated toggle writes the end value, so this only
+    /// shapes the held steps (`applyMorphStep`).
+    var labelOpacity: Double { Self.labelOpacity(progress) }
+    static func labelOpacity(_ progress: CGFloat) -> Double { Double(min(max(1 - progress * 2, 0), 1)) }
+
+    /// How far the tile column travels, sidebar to rail: every tile, chip
+    /// and glyph is laid out in its sidebar slot and drawn this much
+    /// further right, scaled by progress (`MorphTravel`).
+    var tileTravel: CGFloat { railTileCenterX - sidebarTileCenterX }
 
     /// How far a context's chip reaches past its tile on each side when it
     /// is the wider of the two (`RailProjectColumn.chipOverhang`); a header
@@ -136,7 +145,7 @@ struct SidebarMorphMetrics: Equatable {
 
     /// The expanded group card: the list, widened past each edge by the card
     /// inset less the row's leading padding, plus the chip's overhang
-    /// (`ExpandedGroupCard.horizontalOutset`).
+    /// (`ProjectGroupCard.horizontalOutset`).
     func sidebarCard(hasRows: Bool) -> Card {
         let outset = dials.groupCardInset - dials.rowLeadingPadding
             + sideOverhang(tile: dials.sidebarTileSize, chip: dials.sidebarChipSize, hasRows: hasRows)
@@ -172,6 +181,191 @@ struct SidebarMorphMetrics: Equatable {
             verticalInset: lerp(from.verticalInset, to.verticalInset),
             cornerRadius: lerp(from.cornerRadius, to.cornerRadius)
         )
+    }
+}
+
+// MARK: - Leaves
+
+/// The progress the leaves draw at: an override (the crossfade's two
+/// trees, each held at its own end) or the live `SidebarWidthModel.morph`.
+private struct SidebarMorphOverrideKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    /// Holds every morph leaf below at this progress, whatever
+    /// `SidebarWidthModel.morph` says: 0 for the expanded tree and 1 for the
+    /// rail tree while `SidebarCollapseCrossfade` fades between them (the
+    /// task-first and Projects-tabs layouts, which don't morph). Nil, the
+    /// leaves follow the model.
+    var sidebarMorphOverride: CGFloat? {
+        get { self[SidebarMorphOverrideKey.self] }
+        set { self[SidebarMorphOverrideKey.self] = newValue }
+    }
+}
+
+extension SidebarWidthModel {
+    /// This model's metrics at `progress` (the live dials).
+    func metrics(_ progress: CGFloat) -> SidebarMorphMetrics {
+        SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: progress)
+    }
+}
+
+/// The tile column's horizontal travel: render-only, so a frame of the
+/// morph moves pixels, not layout.
+struct MorphTravel: GeometryEffect {
+    /// The full travel, at progress 1 (`SidebarMorphMetrics.tileTravel`).
+    var distance: CGFloat
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(translationX: distance * progress, y: 0))
+    }
+}
+
+/// A frame height between two ends: the project header, which grows with
+/// its tile on the rail.
+struct MorphHeight: ViewModifier, Animatable {
+    var from: CGFloat
+    var to: CGFloat
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.frame(height: SidebarMorphMetrics.lerp(from, to, progress))
+    }
+}
+
+/// A row's leading slot: the status glyph and its chip, each drawn at its
+/// size for this frame of the morph, centred in the sidebar's tile slot
+/// (the layout never changes; `MorphTravel` moves it).
+struct MorphGlyphSlot<Glyph: View>: View, Animatable {
+    var progress: CGFloat
+    /// The slot's laid-out width: the sidebar tile's side.
+    let slotWidth: CGFloat
+    let glyphSizes: (from: CGFloat, to: CGFloat)
+    let chipSizes: (from: CGFloat, to: CGFloat)
+    let isActive: Bool
+    let isHovered: Bool
+    let chipID: String
+    @ViewBuilder let glyph: (CGFloat) -> Glyph
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let glyphSize = SidebarMorphMetrics.lerp(glyphSizes.from, glyphSizes.to, progress)
+        glyph(glyphSize)
+            .frame(width: glyphSize, height: glyphSize)
+            .frame(width: slotWidth)
+            .background {
+                SidebarRowChipBackground(
+                    size: SidebarMorphMetrics.lerp(chipSizes.from, chipSizes.to, progress),
+                    isActive: isActive, isHovered: isHovered, redlineID: chipID
+                )
+                .morphIdentityProbe(chipID)
+            }
+    }
+}
+
+/// Fades row and header labels out on the way to the rail and back in on
+/// the way out of it, on their own direction-aware timing (motion spec §1):
+/// collapse fades in 90ms with a 4pt drift left, expand fades in over 140ms
+/// after 100 + 12·i ms. Reduce Motion: a 120ms fade, no drift. Off the
+/// expanded sidebar, labels take no clicks.
+struct MorphLabelFade: ViewModifier {
+    /// The row's place in its section, for the expand stagger.
+    var staggerIndex: Int = 0
+
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @Environment(\.sidebarMorphOverride) private var override
+
+    func body(content: Content) -> some View {
+        let progress = override ?? widthModel.morph
+        let opacity = SidebarMorphMetrics.labelOpacity(progress)
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        content
+            .opacity(opacity)
+            .offset(x: reduceMotion || opacity > 0 ? 0 : WorkspaceLayout.sidebarRowLabelCollapseTravel)
+            .animation(
+                WorkspaceLayout.sidebarLabelAnimation(appearing: opacity > 0, rowIndex: staggerIndex, reduceMotion: reduceMotion),
+                value: opacity
+            )
+            .allowsHitTesting(progress == 0)
+    }
+}
+
+/// The rail's own adornments (a folded project's count badge): the label
+/// fade reversed, so they arrive as the labels leave.
+struct MorphRailOnlyFade: ViewModifier {
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @Environment(\.sidebarMorphOverride) private var override
+
+    func body(content: Content) -> some View {
+        let progress = override ?? widthModel.morph
+        let opacity = Double(min(max(progress * 2 - 1, 0), 1))
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        content
+            .opacity(opacity)
+            .animation(
+                WorkspaceLayout.sidebarLabelAnimation(appearing: opacity > 0, rowIndex: 0, reduceMotion: reduceMotion),
+                value: opacity
+            )
+    }
+}
+
+/// The space the tray takes under the list: the horizontal bar's on the
+/// sidebar, the rail's taller stack on the rail, changing with the tray's
+/// own axis flip (`isCollapsedPresentation`) on the panel's transaction.
+struct MorphTrayReserve: View {
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @Environment(\.sidebarMorphOverride) private var override
+    /// The rail's width as the tray reads it (`EnvironmentValues.sidebarRailWidth`),
+    /// so the reservation and the rail tray's pills agree.
+    @Environment(\.sidebarRailWidth) private var railWidth
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
+    var body: some View {
+        let vertical = (override ?? widthModel.morph) >= 0.5
+        Color.clear
+            .frame(height: SidebarTray.reservedHeight(isVertical: vertical, railWidth: railWidth))
+            .accessibilityHidden(true)
+    }
+}
+
+/// Hosts the one sidebar tree for every morph step: laid out at the
+/// expanded width always, leading-anchored, and clipped to the current
+/// width, so nothing re-lays out as the panel narrows; only the leaves'
+/// own sizes and offsets move. The list column always pads for the pinned
+/// gutter (its layout is the expanded sidebar's, at every step).
+struct SidebarMorphFrame<Content: View>: View {
+    @ObservedObject var model: SidebarWidthModel
+    let content: Content
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
+    var body: some View {
+        content
+            .environment(\.sidebarTrailingGutter, WorkspaceLayout.sidebarTrailingGutter(for: .pinned))
+            .frame(width: model.expandedWidth)
+            // Every frame top-leading: a frame narrower than its child
+            // centres it by default, which would slide the whole list left
+            // as the panel narrows.
+            .frame(maxHeight: .infinity, alignment: .topLeading)
+            .frame(width: model.width, alignment: .topLeading)
+            // The group card reaches a little past the column's trailing
+            // edge on the expanded sidebar; nothing else draws past it.
+            .clipShape(Rectangle().inset(by: -ProjectGroupCard.trailingBleed()))
     }
 }
 

@@ -70,7 +70,7 @@ struct SidebarMorphMetricsTests {
     }
 
     /// The ends agree with what the settled views draw today, at non-default
-    /// dials too: the expanded card's outset (`ExpandedGroupCard`) and the
+    /// dials too: the expanded card's outset (`ProjectGroupCard`) and the
     /// rail column's width (`RailProjectColumn.columnWidth`).
     @Test func endsAgreeWithTheSettledViews() {
         withDials({ d in
@@ -81,7 +81,7 @@ struct SidebarMorphMetricsTests {
             d.set(18.0, forKey: SidebarDialTuning.railThreadTileIconKey)
         }) {
             let expanded = SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: 0)
-            let outset = ExpandedGroupCard.horizontalOutset(
+            let outset = ProjectGroupCard.horizontalOutset(
                 cardInset: SidebarDialTuning.groupCardInset(),
                 rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
                 chipOverhang: RailProjectColumn.sideOverhang(anchorCount: 2, context: .sidebar)

@@ -29,17 +29,12 @@ enum RedlineID {
     /// its glyph slot `<id>.glyph`, its title and subtitle `<id>.label`, and a
     /// grouped row's chip `<id>.chip`.
     static func row(_ id: UUID) -> String { "row.\(id.uuidString)" }
-    /// The expanded list's selected group card (`ExpandedGroupCard`).
+    /// The selected group's card, and on the rail its column
+    /// (`ProjectGroupCard`).
     static let groupCard = "group.card"
-    /// The rail's project column (`RailGroupColumn`).
-    static let railColumn = "rail.column"
     /// A one-view project header; its tile is `<id>.tile`, its name
     /// `<id>.label`, its chevron frame `<id>.chevron`.
     static func header(_ groupId: String) -> String { "header.\(groupId)" }
-    /// A project's monogram tile on the rail.
-    static func railTile(_ groupId: String) -> String { "rail.tile.\(groupId)" }
-    /// A grouped rail row's chip.
-    static func railChip(_ id: UUID) -> String { "rail.chip.\(id.uuidString)" }
     /// One tray button's cell; its hover chip is `<id>.chip`.
     static func trayCell(_ itemId: String) -> String { "tray.cell.\(itemId)" }
 }
@@ -328,10 +323,6 @@ final class RedlineOverlayView: NSView {
                 .map(\.value.maxX)
                 .max()
             appendEnclosureBands(card, marks: Array(marks.values), trailing: rowsMaxX.map(TrailingEdge.at) ?? .omitted, into: &bands)
-        }
-        if let column = rects[RedlineID.railColumn] {
-            let marks = rects.filter { key, _ in key.hasPrefix("rail.tile.") || key.hasPrefix("rail.chip.") }
-            appendEnclosureBands(column, marks: Array(marks.values), into: &bands)
         }
     }
 

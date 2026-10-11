@@ -480,6 +480,9 @@ struct SessionPopoverAnchor: NSViewRepresentable {
             view.sessionId = sessionId
             controller.register(anchor: view, for: sessionId)
         }
+        // The same row is on the sidebar and the rail; only the rail's
+        // card names the session.
+        view.showsName = showsName
         view.controller = controller
     }
 
@@ -520,7 +523,7 @@ struct SessionPopoverAnchor: NSViewRepresentable {
 
 extension View {
     /// Shows the session popover while the pointer rests over this view.
-    /// `showsName`: the rail shows ghosts only, so its card names the session.
+    /// `showsName`: the rail shows glyphs only, so its card names the session.
     func sessionPopoverAnchor(sessionId: UUID, controller: SessionPopoverController, showsName: Bool = false) -> some View {
         background(SessionPopoverAnchor(sessionId: sessionId, controller: controller, showsName: showsName))
     }

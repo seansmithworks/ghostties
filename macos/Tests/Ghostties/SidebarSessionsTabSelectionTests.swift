@@ -63,7 +63,7 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
             let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
             defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
             tabSuite.set(SidebarTab.sessions.rawValue, forKey: "ghostties.sidebarTab")
-            let column = rail ? AnyView(SidebarRailView()) : AnyView(VStack(spacing: 0) {
+            let column = rail ? AnyView(SidebarRailColumn().asRail(width: width)) : AnyView(VStack(spacing: 0) {
                 RecentsListView()
                 Spacer(minLength: 0)
             })
