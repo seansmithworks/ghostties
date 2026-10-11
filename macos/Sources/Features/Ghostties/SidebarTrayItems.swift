@@ -186,10 +186,11 @@ enum TrayGlassStyle {
     /// darkens what scrolls under it. No white specular (0 = not drawn): any
     /// white gradient lifts the fill above the chrome, and Sean's 0.6 from
     /// below turned the pill's lower half pale grey and dropped the icons
-    /// to 1.1:1. The rim stays faint for the same reason; the edge reads
-    /// through the rim and the chromatic stroke. Icons (`textSecondaryDark`)
-    /// measure 5.45:1 on the rendered fill. A deeper shadow than light's,
-    /// since an 8% black shadow vanishes on dark chrome.
+    /// to 1.1:1. The rim at 0.15 is a taste choice, not a measured limit: the
+    /// rim draws only at the edge and never lifts the fill, so its dial is
+    /// free to go higher. Icons (`textSecondaryDark`) measure 5.45:1 on the
+    /// rendered fill. A deeper shadow than light's, since an 8% black
+    /// shadow vanishes on dark chrome.
     static let dark = Look(
         variant: .identity,
         tintOpacity: 0.7,
@@ -290,6 +291,16 @@ enum TrayGlassStyle {
     static func rimColor(_ look: Look) -> Color {
         Color.white.opacity(look.rimOpacity)
     }
+
+    /// The opaque fallback's dark edge (Reduce Transparency / pre-26). That
+    /// path draws no glass rim or chromatic stroke, and its chrome-coloured
+    /// fill sits on the chrome, so without this hairline only a shadow,
+    /// invisible on dark chrome, separated the pill. White at 0.35 lands the
+    /// edge at about #717171 on the #242424 chrome: 3:1, the WCAG non-text
+    /// minimum, on the setting that asks for more contrast. An edge, not a
+    /// fill: the pill itself stays at the chrome's lightness.
+    static let opaqueDarkEdgeColor = Color.white.opacity(0.35)
+    static let opaqueDarkEdgeWidth: CGFloat = 1
 
 
     /// Canvas icon fill `#636363` = `textSecondaryLight`.
@@ -512,6 +523,11 @@ struct TrayGlassSurface: ViewModifier {
         } else {
             content
                 .background(shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme)))
+                .overlay {
+                    if colorScheme == .dark {
+                        shape.strokeBorder(TrayGlassStyle.opaqueDarkEdgeColor, lineWidth: TrayGlassStyle.opaqueDarkEdgeWidth)
+                    }
+                }
                 .shadow(
                     color: Color.black.opacity(look.shadowOpacity),
                     radius: look.shadowRadius,
