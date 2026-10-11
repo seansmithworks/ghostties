@@ -258,15 +258,6 @@ class AppDelegate: NSObject,
             // keep whatever value they have persisted.
             "ghostties.sidebarViewMode": "projectFirst",
         ])
-
-        #if DEBUG
-        // Matches `buildInfoBadgeDefaultEnabled` in BuildInfoBadgeView.swift
-        // (DEBUG default ON) so the View menu checkmark reads correctly
-        // before the user ever touches the toggle.
-        UserDefaults.standard.register(defaults: [
-            buildInfoBadgeStorageKey: true,
-        ])
-        #endif
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -881,12 +872,15 @@ class AppDelegate: NSObject,
         // MARK: - End Ghostties fork fence (color scheme reaches every surface)
 
         #if DEBUG
-        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 12)
+        // Directly under "About Ghostties" in the app menu.
+        if let aboutItem = menuAbout, let appMenu = aboutItem.menu {
+            appMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: appMenu.index(of: aboutItem) + 1)
+        }
         #endif
     }
 
     #if DEBUG
-    // MARK: - Dev build-info badge toggle (View menu, DEBUG only)
+    // MARK: - Dev build-info badge toggle (app menu, DEBUG only)
 
     /// Builds the "Show Build Info" checkbox item that toggles the same
     /// `buildInfoBadgeStorageKey` `@AppStorage` key `BuildInfoBadgeView`

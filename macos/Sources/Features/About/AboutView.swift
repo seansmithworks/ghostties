@@ -41,6 +41,8 @@ struct AboutView: View {
         }
     }
 
+    private let buildInfo = BuildInfoSnapshot.current
+
     private var versionConfig: VersionConfig { VersionConfig(version: version) }
 
     private var copyright: String? { Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String }
@@ -107,6 +109,10 @@ struct AboutView: View {
                     if let commit, commit != "",
                        let url = githubURL?.appendingPathComponent("/commits/\(commit)") {
                         PropertyRow(label: "Commit", text: commit, url: url)
+                    }
+                    // Dev build facts (Debug/Dev/Demo builds only; nil on Release).
+                    ForEach(buildInfo.aboutRows, id: \.label) { row in
+                        PropertyRow(label: row.label, text: row.text)
                     }
                 }
                 .frame(maxWidth: .infinity)
