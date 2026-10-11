@@ -358,8 +358,6 @@ enum CaptureFixture {
     /// Invented card content for the target session — never the fixture
     /// project's real temp-directory path or any real session data.
     struct PopoverOverride {
-        let title: String
-        let project: String
         let approval: ClaudeState?
         var summary: SessionSummary? = nil
         var indicator: SessionIndicatorState? = nil
@@ -379,22 +377,22 @@ enum CaptureFixture {
         }
         switch scenario {
         case .needsBash:
-            return PopoverOverride(title: "DAB", project: "dab", approval: permission(
+            return PopoverOverride(approval: permission(
                 tool: "Bash",
                 input: ToolInputSummary(command: "rm -rf build/", description: "Clean stale artifacts before rebuild")
             ))
         case .needsEdit:
-            return PopoverOverride(title: "DAB", project: "dab", approval: permission(
+            return PopoverOverride(approval: permission(
                 tool: "Edit",
                 input: ToolInputSummary(description: "Raise the request timeout to 30s", filePath: "src/server/config.ts")
             ))
         case .running:
-            return PopoverOverride(title: "DAB", project: "dab", approval: nil, summary: SessionSummary(
+            return PopoverOverride(approval: nil, summary: SessionSummary(
                 prompt: "fix the flaky router tests",
                 currentStep: "running npm test"
             ), indicator: .processing)
         case .done:
-            return PopoverOverride(title: "DAB", project: "dab", approval: nil, summary: SessionSummary(
+            return PopoverOverride(approval: nil, summary: SessionSummary(
                 prompt: "fix the flaky router tests",
                 isDone: true
             ), indicator: .idle)

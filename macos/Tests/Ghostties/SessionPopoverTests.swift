@@ -30,14 +30,10 @@ final class SessionPopoverTests: XCTestCase {
         indicator: SessionIndicatorState,
         approval: ClaudeState?,
         summary: SessionSummary? = nil,
-        rail: Bool = false,
         at date: Date? = nil
     ) -> SessionPopoverContent? {
         SessionPopoverContent.make(
             sessionId: sessionId,
-            name: "DAB",
-            project: "dab",
-            showsName: rail,
             indicator: indicator,
             approval: approval,
             summary: summary,
@@ -115,7 +111,6 @@ final class SessionPopoverTests: XCTestCase {
     func testNeedsBashMapsToCommandAndDescription() {
         let card = content(indicator: .needsAttention, approval: derive(bashPermission))
         XCTAssertEqual(card?.isApproval, true)
-        XCTAssertNil(card?.nameLine)
         XCTAssertEqual(card?.block, .command(command: "rm -rf build/", description: "Clean stale artifacts before rebuild"))
     }
 
@@ -162,17 +157,6 @@ final class SessionPopoverTests: XCTestCase {
         XCTAssertNil(content(indicator: .processing, approval: nil, summary: nil))
         // Mid-turn events with no prompt seen (app relaunched): still no card.
         XCTAssertNil(content(indicator: .processing, approval: nil, summary: ingest([bashEvent, editDone("e1")])))
-    }
-
-    func testRailAddsTheNameLineAndExpandedDoesNot() {
-        let approval = derive(bashPermission)
-        let rail = content(indicator: .needsAttention, approval: approval, rail: true)
-        XCTAssertEqual(rail?.nameLine, .init(name: "DAB", project: "dab"))
-        XCTAssertNil(content(indicator: .needsAttention, approval: approval, rail: false)?.nameLine)
-        let running = content(indicator: .processing, approval: nil, summary: ingest([promptEvent]), rail: true)
-        XCTAssertEqual(running?.nameLine, .init(name: "DAB", project: "dab"))
-        // No block, no card, even in the rail.
-        XCTAssertNil(content(indicator: .idle, approval: nil, rail: true))
     }
 
     // MARK: - (c) Staleness
@@ -388,14 +372,6 @@ final class SessionPopoverTests: XCTestCase {
         XCTAssertNil(controller.currentSessionIdForTesting)
     }
 
-    func testControllerCarriesTheRailNameLine() {
-        let (controller, _, _, dir, write) = makeController()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        write(bashPermission)
-        controller.openForTesting(sessionId: sessionId, showsName: true)
-        XCTAssertEqual(controller.contentForTesting?.nameLine, .init(name: "DAB", project: "dab"))
-    }
-
     func testRefreshDismissesWhenTheSessionIsRemoved() {
         let (controller, workspace, _, dir, write) = makeController()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -484,11 +460,10 @@ final class SessionPopoverTests: XCTestCase {
     /// the first differ from the second.
     private func contentVsMarginPixels(
         _ block: SessionPopoverContent.Block,
-        nameLine: SessionPopoverContent.NameLine? = nil,
         appearance: NSAppearance.Name
     ) -> (content: NSColor, margin: NSColor)? {
         let model = SessionPopoverModel()
-        model.content = SessionPopoverContent(sessionId: sessionId, nameLine: nameLine, block: block)
+        model.content = SessionPopoverContent(sessionId: sessionId, block: block)
         let view = SessionPopoverCard(model: model, onHover: { _ in })
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(x: 0, y: 0, width: 400, height: 400)
@@ -525,24 +500,6 @@ final class SessionPopoverTests: XCTestCase {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for block in blocks {
                 let p = try XCTUnwrap(contentVsMarginPixels(block, appearance: appearance))
-                XCTAssertEqual(p.content.redComponent, p.margin.redComponent, accuracy: 0.01, "\(appearance) \(block)")
-                XCTAssertEqual(p.content.greenComponent, p.margin.greenComponent, accuracy: 0.01, "\(appearance) \(block)")
-                XCTAssertEqual(p.content.blueComponent, p.margin.blueComponent, accuracy: 0.01, "\(appearance) \(block)")
-            }
-        }
-    }
-
-    /// Rail mode adds a name line above the content; it must not bring the
-    /// grey block back either.
-    func testPopoverCardWithNameLineHasNoInnerBlock() throws {
-        let nameLine = SessionPopoverContent.NameLine(name: "DAB", project: "dab")
-        let blocks: [SessionPopoverContent.Block] = [
-            .command(command: "rm -rf build/", description: "Clean stale artifacts"),
-            .running(prompt: "Fix the build", step: "Reading files"),
-        ]
-        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-            for block in blocks {
-                let p = try XCTUnwrap(contentVsMarginPixels(block, nameLine: nameLine, appearance: appearance))
                 XCTAssertEqual(p.content.redComponent, p.margin.redComponent, accuracy: 0.01, "\(appearance) \(block)")
                 XCTAssertEqual(p.content.greenComponent, p.margin.greenComponent, accuracy: 0.01, "\(appearance) \(block)")
                 XCTAssertEqual(p.content.blueComponent, p.margin.blueComponent, accuracy: 0.01, "\(appearance) \(block)")

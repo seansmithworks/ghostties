@@ -375,10 +375,6 @@ enum WorkspaceLayout {
     /// inset; with the block gone, content keeps the same 24pt it sat at.
     static let sessionPopoverContentPadding: CGFloat = 24
 
-    /// Gap between the popover's rail-mode name line and the content under it
-    /// (the content's top padding when a name line is present).
-    static let sessionPopoverNameGap: CGFloat = 6
-
     // MARK: - Sidebar DialKit Tunables (sidebar-presence, session-8 brief)
     //
     // Named constants lifted from prior inline literals so `SidebarDialTuning`

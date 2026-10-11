@@ -58,10 +58,7 @@ struct SessionPopoverCard: View {
 
     private func card(_ content: SessionPopoverContent) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let nameLine = content.nameLine {
-                self.nameLine(nameLine)
-            }
-            blockView(content.block, hasNameLine: content.nameLine != nil)
+            blockView(content.block)
         }
         .frame(width: SessionPopoverLayout.width)
         .background(surface)
@@ -75,32 +72,8 @@ struct SessionPopoverCard: View {
         .onHover(perform: onHover)
     }
 
-    /// Rail mode only: the rail shows ghosts, so the card says whose it is.
-    private func nameLine(_ line: SessionPopoverContent.NameLine) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(line.name)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(primaryText)
-                .lineLimit(1)
-            if let project = line.project {
-                Text(project)
-                    .font(.system(size: 11))
-                    .foregroundStyle(secondaryText)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(EdgeInsets(
-            top: WorkspaceLayout.sessionPopoverContentPadding / 2,
-            leading: WorkspaceLayout.sessionPopoverContentPadding,
-            bottom: 0,
-            trailing: WorkspaceLayout.sessionPopoverContentPadding
-        ))
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     @ViewBuilder
-    private func blockView(_ content: SessionPopoverContent.Block, hasNameLine: Bool) -> some View {
+    private func blockView(_ content: SessionPopoverContent.Block) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             switch content {
             case let .command(command, description):
@@ -133,9 +106,7 @@ struct SessionPopoverCard: View {
         .truncationMode(.tail)
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, WorkspaceLayout.sessionPopoverContentPadding)
-        .padding(.bottom, WorkspaceLayout.sessionPopoverContentPadding)
-        .padding(.top, hasNameLine ? WorkspaceLayout.sessionPopoverNameGap : WorkspaceLayout.sessionPopoverContentPadding)
+        .padding(WorkspaceLayout.sessionPopoverContentPadding)
     }
 
     @ViewBuilder

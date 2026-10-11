@@ -234,8 +234,9 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     /// `WorkspaceLayout.expandLabelDelay`.
     var staggerIndex: Int = 0
     let redlineID: String
-    /// The session whose hover card this row shows, if any. On the rail
-    /// the card names the session, since the row's title is gone.
+    /// The session whose hover card this row shows, if any. Sidebar only:
+    /// on the rail, resting the pointer reveals the whole sidebar instead
+    /// (`RailHoverReveal`).
     var popover: (sessionId: UUID, controller: SessionPopoverController)? = nil
     /// The tooltip the row shows on the rail, where its labels are gone.
     var railHelp: String? = nil
@@ -299,8 +300,8 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         .onHover { isHovered = $0 }
         .help(progress >= 0.5 ? (railHelp ?? "") : "")
         .background {
-            if let popover {
-                Color.clear.sessionPopoverAnchor(sessionId: popover.sessionId, controller: popover.controller, showsName: progress >= 0.5)
+            if let popover, progress < 0.5 {
+                Color.clear.sessionPopoverAnchor(sessionId: popover.sessionId, controller: popover.controller)
             }
         }
         // Mid-morph the row is in flight: no clicks, drags or drops land.
