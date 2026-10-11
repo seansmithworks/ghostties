@@ -8,10 +8,10 @@ import GhosttiesCore
 /// rail alike, outside the scrolling area. (The "History placement" dial
 /// and its `afterActive` option were removed at the vnext lock.)
 ///
-/// Geometry is read off pixels: History is selected (Tint + shimmer, its
-/// rim off so only the tint fill marks the card), so its card is the one
-/// marked run down the card's leading edge, and the opaque tray is the first
-/// marked pixel row below it. Dials are set only in a private suite bound
+/// Geometry is read off pixels: History is selected, so both the rail and
+/// the expanded list mark it with the option D chip behind its glyph (the
+/// rail's centred on the rail); the opaque tray is the first marked pixel
+/// row below it. Dials are set only in a private suite bound
 /// around each render (`withDials`).
 @MainActor
 final class SidebarHistoryPlacementTests: XCTestCase {
@@ -47,9 +47,10 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     }
 
     /// The sidebar column as the app composes it: the expanded Sessions list
-    /// (mirroring `WorkspaceSidebarView`: titlebar band, list, spacer, the
-    /// tray's reserved space) or the rail, with the opaque tray overlaid at
-    /// the bottom the way the sidebar root hosts it.
+    /// (mirroring `WorkspaceSidebarView`: titlebar band, then the list,
+    /// which runs to the bottom and insets itself for the tray) or the rail,
+    /// with the opaque tray overlaid at the bottom the way the sidebar root
+    /// hosts it.
     ///
     /// The dials are set in a private suite bound around the render
     /// (`withDials`), so no other test reads or clears them.
@@ -92,13 +93,11 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let width = rail ? try railWidth() : 260
         let column: AnyView
         if rail {
-            column = AnyView(SidebarRailView())
+            column = AnyView(SidebarRailColumn().asRail(width: width))
         } else {
             column = AnyView(VStack(spacing: 0) {
                 Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
                 RecentsListView()
-                Spacer(minLength: 0)
-                Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: false))
             })
         }
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
@@ -164,23 +163,32 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         return runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
     }
 
-    /// The x of a selected card's leading edge plus its corner radius: past
-    /// the corner curve, so the card's full height is marked there, and
-    /// still clear of the title ink.
-    private func cardProbeX(rail: Bool) -> CGFloat {
-        SidebarDialTuning.windowMargin() + (rail ? 0 : SidebarDialTuning.contentPaddingLeading())
-            + WorkspaceLayout.sidebarRowCornerRadiusResting
-    }
-
-    /// The selected card: the marked run one row tall, above the tray (a
-    /// tray capsule can be one row tall too).
+    /// The selected row's extent, top to bottom. Both the rail and the
+    /// expanded list mark it with the option D chip behind the glyph, centred
+    /// in the row: the chip-sized marked run centred on History's row as the
+    /// footer lays it out (the row gap above the tray's reserved space),
+    /// grown to the row's height about its centre. A project header's tile
+    /// is chip-sized too, so any other run fails the test rather than
+    /// standing in for History.
     private func selectedCard(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let rowHeight = SidebarDialTuning.rowHeight()
         let trayHeight = SidebarTray.reservedHeight(isVertical: rail) - (rail ? 0 : SidebarDialTuning.listToTrayGap())
-        let cards = runsDown(r, atX: cardProbeX(rail: rail)).filter {
-            abs(($0.upperBound - $0.lowerBound) - rowHeight) <= 1.5 && $0.upperBound <= r.height - trayHeight
+        let chip = RailProjectColumn.chipSize(rail ? .rail : .sidebar)
+        // The rail's reserved space holds no list-to-tray gap, so its footer
+        // adds all of the History-to-tray gap (`MorphHistoryFooterGap`); the
+        // expanded list's reserved space already holds the list-to-tray gap.
+        let historyBottom = r.height - SidebarTray.reservedHeight(isVertical: rail)
+            - (SidebarSessionSections.historyToTrayGap() - (rail ? 0 : SidebarDialTuning.listToTrayGap()))
+        let historyMid = historyBottom - rowHeight / 2
+        let chips = runsDown(r, atX: chipCentreX(r, rail: rail) - chip / 2 + 8).filter {
+            abs(($0.upperBound - $0.lowerBound) - chip) <= 1.5 && $0.upperBound <= r.height - trayHeight
         }
-        return try XCTUnwrap(cards.first, "no selected card found (rail: \(rail))")
+        let found = try XCTUnwrap(
+            chips.first { abs(($0.lowerBound + $0.upperBound) / 2 - historyMid) <= 1.0 },
+            "no selected chip centred on History's row at y \(historyMid) (rail: \(rail)); chip runs: \(chips)"
+        )
+        let mid = (found.lowerBound + found.upperBound) / 2
+        return mid - rowHeight / 2...mid + rowHeight / 2
     }
 
     /// The tray's top edge: the first pixel row below `y` lifted off the
@@ -239,7 +247,11 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     func testFirstRowSitsAtTheSameYInExpandedAndRail() throws {
         let e = try selectedChip(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
         let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
-        XCTAssertEqual((e.lowerBound + e.upperBound) / 2, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
+        // Any difference between the rail's and the sidebar's project header
+        // heights moves the row under it; both are 40 at the defaults
+        // (keyframe spec D1), so the row keeps its y.
+        let headerGrowth = ProjectAccordionHeader.height(.rail) - ProjectAccordionHeader.height(.sidebar)
+        XCTAssertEqual((e.lowerBound + e.upperBound) / 2 + headerGrowth, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
     }
 
     /// The x of the selected chip's centre: the rail's centre, or, in the
@@ -268,7 +280,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let chipOverCardDrop = base * (1 - (1 - cardAlpha) * (1 - chipAlpha))
         let lowerBound = (cardDrop + chipOverCardDrop) / 2
         let upperBound = chipOverCardDrop + (chipOverCardDrop - lowerBound)
-        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize / 2 + 4) * r.scale)
+        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4) * r.scale)
         var runs: [(Int, Int)] = []
         for y in 0..<r.rep.pixelsHigh {
             guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
@@ -277,7 +289,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             if let last = runs.last, y - last.1 <= 1 { runs[runs.count - 1].1 = y } else { runs.append((y, y)) }
         }
         let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
-            .filter { abs(($0.upperBound - $0.lowerBound) - RailProjectColumn.chipSize) <= 4 }
+            .filter { abs(($0.upperBound - $0.lowerBound) - RailProjectColumn.chipSize(rail ? .rail : .sidebar)) <= 4 }
         return try XCTUnwrap(chips.first, "no selected chip found (rail: \(rail))")
     }
 }

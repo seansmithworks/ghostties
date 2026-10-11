@@ -34,9 +34,6 @@ struct RecentsRowView: View, Equatable {
     /// Nil keeps the project name.
     var subtitle: String? = nil
     let isActive: Bool
-    /// A one-view grouped row (option D): selection is a tile-sized chip
-    /// behind the glyph, inside the group card, not the wide row card.
-    var inProjectColumn: Bool = false
     var isEditing: Bool = false
     @Binding var editingName: String
     var isRenameFocused: FocusState<Bool>.Binding
@@ -44,10 +41,11 @@ struct RecentsRowView: View, Equatable {
     var onCommitRename: () -> Void = {}
     var onCancelRename: () -> Void = {}
 
-    /// This row's position within its rendered section (Pinned/Active/
-    /// Inactive) — decorative only, feeds the Flow 05 expand stagger
-    /// (`WorkspaceLayout.expandLabelDelay`). Defaults to 0 so every other
-    /// call site (unaffected by the stagger) is unchanged.
+    /// This row's place in the expand cascade: one index through every
+    /// section and project header in reading order (`SidebarLabelCascade`)
+    /// — decorative only, feeds `WorkspaceLayout.expandLabelDelay`. Defaults
+    /// to 0 so every other call site (unaffected by the stagger) is
+    /// unchanged.
     var staggerIndex: Int = 0
 
     /// `SidebarDialTuning.epoch()` at construction — DEBUG-tuning-only.
@@ -74,7 +72,6 @@ struct RecentsRowView: View, Equatable {
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.subtitle == rhs.subtitle
             && lhs.isActive == rhs.isActive
-            && lhs.inProjectColumn == rhs.inProjectColumn
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
             && lhs.dialEpoch == rhs.dialEpoch
@@ -82,14 +79,15 @@ struct RecentsRowView: View, Equatable {
 
     var body: some View {
         // The row's visuals (layout, padding, height, selected surface,
-        // hover, Flow 05 label choreography) live in `SidebarListRowChrome`,
-        // shared with the History row so the two can never drift.
+        // hover, and its part in the sidebar ⇄ rail morph) live in
+        // `SidebarListRowChrome`, shared with the History row so the two
+        // can never drift.
         SidebarListRowChrome(
             subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
             isActive: isActive,
-            selection: inProjectColumn ? .chip : .card,
             staggerIndex: staggerIndex,
-            redlineID: RedlineID.row(session.id)
+            redlineID: RedlineID.row(session.id),
+            popover: (session.id, coordinator.sessionPopover)
         ) {
             if isEditing {
                 TextField("Session name", text: $editingName)
@@ -111,21 +109,17 @@ struct RecentsRowView: View, Equatable {
             } else {
                 SidebarListRowTitle(text: session.name, isActive: isActive)
             }
-        } glyph: {
+        } glyph: { size in
             // No timestamp — Flow 07 round 6 drops the relative-time label
             // from the row entirely. `relativeLabel` is kept (it still backs
             // the accessibility label below); only the visible `Text` is gone.
 
             // Per-session status glyph (spinner / ? / check / x) in the
-            // leading slot, under its project's tile (option D, 2026-10-09).
-            // Selection is the row's card or chip, not a glyph tint. The
-            // collapsed rail (`RailSessionRow`) draws the same glyph centered
-            // in the rail, so across the pinned⇄rail transition the glyph
-            // moves from this slot to the center (it snaps under Reduce Motion).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
-                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+            // leading slot, under its project's tile (option D, 2026-10-09),
+            // at the "Thread tile icon" size of this step of the morph.
+            // Selection is the row's chip, not a glyph tint.
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: size)
         }
-        .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
         .onTapGesture {
             guard !isEditing else { return }
             onTap()
@@ -138,19 +132,32 @@ struct RecentsRowView: View, Equatable {
     // MARK: - Accessibility
 
     private var accessibilityLabel: String {
+        Self.accessibilityLabel(
+            name: session.name, projectName: projectName, kind: indicatorState.statusGlyphKind,
+            hookUnconfirmed: hookUnconfirmed, lastOutput: session.displayTimestamp, isActive: isActive
+        )
+    }
+
+    /// The row's VoiceOver label, on the sidebar and the rail alike (the
+    /// rail shows only the glyph, so the label carries the name): name,
+    /// project, spoken status, the hook hint, last output, active.
+    static func accessibilityLabel(
+        name: String, projectName: String, kind: SessionStatusGlyphKind,
+        hookUnconfirmed: Bool = false, lastOutput: Date? = nil, isActive: Bool
+    ) -> String {
         // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
         // renders from — this row previously stated no status at all.
-        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
+        var parts = [name, "in \(projectName)", kind.spokenStatus]
         if hookUnconfirmed {
             parts.append("Approve the Ghostties hook in Codex")
         }
-        if let ts = session.displayTimestamp {
+        if let ts = lastOutput {
             // "last output" — not a bare relative token — so a screen reader
             // has a noun for what this measures. Browsing (focus/selection)
             // no longer advances this value; without the noun, "2m" reads as
             // an event the user didn't cause. A11y string only — the visual
             // row keeps the bare relative label. See RecentsRowView.body.
-            parts.append("last output \(Self.relativeLabel(ts))")
+            parts.append("last output \(relativeLabel(ts))")
         }
         if isActive { parts.append("active") }
         return parts.joined(separator: ", ")
@@ -210,53 +217,63 @@ struct SidebarListRowTitle: View {
     }
 }
 
-/// How a sidebar list row shows selection and hover.
-enum SidebarRowSelection: Equatable {
-    /// The wide row card (`SidebarRowCardBackground`): flat lists (the
-    /// Sessions tab, Pinned, History).
-    case card
-    /// A tile-sized chip behind the glyph (`SidebarRowChipBackground`): a
-    /// one-view grouped row, inside its project's group card (option D).
-    case chip
-}
-
-/// The visual shell of a sidebar list row (option D, 2026-10-09) — one glyph
-/// in the leading status slot, the column the one-view tiles sit in, then
-/// title over subtitle; the row height and padding dials, the selected
-/// surface, hover fill, and the Flow 05 label choreography. Shared by
-/// session rows (`RecentsRowView`) and the History row (`HistoryRowView`) so
-/// both render identically by construction. Callers add tap, popover and
-/// accessibility on top.
+/// The visual shell of a sidebar list row (option D, 2026-10-09), on the
+/// expanded sidebar and the rail alike — one glyph in the leading status
+/// slot, the column the one-view tiles sit in, then title over subtitle; the
+/// row height and padding dials, the selected chip, hover, and the row's
+/// part in the sidebar ⇄ rail morph: the glyph and chip grow and travel to
+/// the rail's centre with the tile column (`MorphGlyphSlot`, `MorphTravel`)
+/// while the labels fade (`MorphLabelFade`). Shared by session rows
+/// (`RecentsRowView`) and the History row (`HistoryRowView`) so both render
+/// identically by construction. Callers add tap and accessibility on top.
 struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     let subtitle: String
     let isActive: Bool
-    var selection: SidebarRowSelection = .card
-    /// Position within the rendered section — feeds the Flow 05 expand
-    /// stagger (`WorkspaceLayout.expandLabelDelay`).
+    /// The row's place in the expand cascade, one index across every
+    /// section and header (`SidebarLabelCascade`) — feeds
+    /// `WorkspaceLayout.expandLabelDelay`.
     var staggerIndex: Int = 0
     let redlineID: String
+    /// The session whose hover card this row shows, if any. On the rail
+    /// the card names the session, since the row's title is gone.
+    var popover: (sessionId: UUID, controller: SessionPopoverController)? = nil
+    /// The tooltip the row shows on the rail, where its labels are gone.
+    var railHelp: String? = nil
     @ViewBuilder let title: () -> Title
-    @ViewBuilder let glyph: () -> Glyph
+    /// The status glyph at a given side (the morph's size for this frame).
+    @ViewBuilder let glyph: (CGFloat) -> Glyph
 
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
+    @Environment(\.sidebarMorphOverride) private var morphOverride
+    @Environment(\.sidebarMorphDials) private var morphDials
     @State private var isHovered = false
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
     /// The leading status slot: the monogram tile's width, so a row's
     /// glyph centres under its project's tile.
-    static var glyphSlotWidth: CGFloat { RailProjectTile.size }
+    static var glyphSlotWidth: CGFloat { RailProjectTile.size(.sidebar) }
 
     var body: some View {
+        let progress = morphOverride ?? widthModel.morph
+        let metrics = widthModel.metrics(progress, dials: morphDials)
+        let dials = metrics.dials
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            glyph()
-                .frame(width: Self.glyphSlotWidth)
-                .background {
-                    if selection == .chip {
-                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
-                    }
-                }
-                .redlineFrame(redlineID + ".glyph")
+            // Selection and hover are a tile-sized chip behind the glyph in
+            // every list (option D): one rule; the group card is drawn only
+            // around a project group.
+            MorphGlyphSlot(
+                progress: progress,
+                slotWidth: dials.sidebarTileSize,
+                glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
+                chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                isActive: isActive,
+                isHovered: isHovered,
+                chipID: redlineID + ".chip",
+                glyph: glyph
+            )
+            .redlineFrame(redlineID + ".glyph")
+            .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
 
             // Title + subtitle stacked
             VStack(alignment: .leading, spacing: 1) {
@@ -268,8 +285,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     .lineLimit(1)
             }
             .redlineFrame(redlineID + ".label")
-            .opacity(labelOpacity)
-            .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
+            .modifier(MorphLabelFade(staggerIndex: staggerIndex))
 
             Spacer(minLength: 4)
         }
@@ -279,80 +295,15 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch.
         .frame(height: SidebarDialTuning.rowHeight())
         .redlineFrame(redlineID)
-        .background {
-            if selection == .card {
-                rowBackground
-            }
-        }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-    }
-
-    // MARK: - Flow 05 Content Choreography (sidebar-presence)
-    //
-    // `widthModel.isCollapsedPresentation` is injected into every sidebar
-    // content tree (not just the transitional pinned⇄collapsed cross-fade
-    // `WorkspaceViewContainer` mounts mid-transition), so these resolve
-    // correctly at rest too: while steady-state pinned it's always `false`,
-    // which is exactly this row's normal (label visible, glyph resting,
-    // corner radius 8) appearance — nothing below changes existing behavior
-    // outside an active transition.
-
-    private var choreographyEnabled: Bool {
-        WorkspaceLayout.sidebarRowChoreographyEnabled(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-    }
-
-    /// Label (name/subtitle/timestamp) opacity — 1 while expanded, 0 while
-    /// collapsed. Reduce Motion skips the windowed fade below and lets only
-    /// the container-level cross-fade (120ms, Flow 05 "Reduced Motion") show
-    /// the change; the label still ends at the right value, just without
-    /// this row's own animation layered on top.
-    private var labelOpacity: Double {
-        widthModel.isCollapsedPresentation ? 0 : 1
-    }
-
-    /// COLLAPSE: labels fade fast (0-100ms of the 260ms window) with no
-    /// delay — "labels leave first." EXPAND: labels fade in only after
-    /// their glyph has landed, staggered per row — see `expandLabelDelay`.
-    private var labelAnimation: Animation? {
-        guard choreographyEnabled else { return nil }
-        if widthModel.isCollapsedPresentation {
-            return .easeOut(duration: WorkspaceLayout.sidebarRowLabelCollapseFadeDuration)
+        .help(progress >= 0.5 ? (railHelp ?? "") : "")
+        .background {
+            if let popover {
+                Color.clear.sessionPopoverAnchor(sessionId: popover.sessionId, controller: popover.controller, showsName: progress >= 0.5)
+            }
         }
-        let delay = WorkspaceLayout.expandLabelDelay(
-            rowIndex: staggerIndex,
-            glyphLandDuration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration()
-        )
-        return .easeOut(duration: WorkspaceLayout.sidebarRowLabelExpandFadeDuration).delay(delay)
-    }
-
-    /// Row-background (corner radius) timing. COLLAPSE: waits for the label
-    /// to mostly clear (60ms delay), then runs for the rest of the 260ms
-    /// window. EXPAND: runs immediately over the whole expand window — every
-    /// row starts together; only labels are staggered.
-    private var glyphAnimation: Animation? {
-        guard choreographyEnabled else { return nil }
-        if widthModel.isCollapsedPresentation {
-            return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphCollapseTravelDuration)
-                .delay(WorkspaceLayout.sidebarRowGlyphCollapseTravelDelay)
-        }
-        return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration())
-    }
-
-    // MARK: - Row Background
-
-    /// Hover and selected share one footprint (`SidebarRowCardBackground`):
-    /// the row frame, at `rowCornerRadius`.
-    private var rowBackground: some View {
-        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: rowCornerRadius)
-            .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
-    }
-
-    /// Row corner radius — the canvas's "8 → 16px" row, same window as the
-    /// glyph travel above.
-    private var rowCornerRadius: CGFloat {
-        widthModel.isCollapsedPresentation
-            ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
-            : WorkspaceLayout.sidebarRowCornerRadiusResting
+        // Mid-morph the row is in flight: no clicks, drags or drops land.
+        .allowsHitTesting(!widthModel.isMorphing)
     }
 }

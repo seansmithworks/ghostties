@@ -1557,7 +1557,17 @@ class AppDelegate: NSObject,
 
     /// Sync the appearance of our app with the theme specified in the config.
     private func syncAppearance(config: Ghostty.Config) {
+        // MARK: - Ghostties fork fence (DEBUG appearance preview)
+        #if DEBUG
+        // The inspector's forced light/dark outranks the config's window-theme;
+        // the preview records the config's value to hand back on `auto`.
+        // Always reached on the main thread (config sync hops to main first).
+        let configured = NSAppearance(ghosttyConfig: config)
+        MainActor.assumeIsolated { SidebarAppearancePreview.applyAppAppearance(configured: configured) }
+        #else
         NSApplication.shared.appearance = .init(ghosttyConfig: config)
+        #endif
+        // MARK: - End Ghostties fork fence (DEBUG appearance preview)
     }
 
     private func updateAppIcon(from config: Ghostty.Config) {

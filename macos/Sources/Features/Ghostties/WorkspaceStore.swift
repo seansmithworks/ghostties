@@ -525,7 +525,7 @@ final class WorkspaceStore: ObservableObject {
 
     /// Pinned + Active sessions, in the same order `RecentsListView` renders
     /// them (Pinned above Active) — the source for the collapsed rail's
-    /// per-session status glyphs (`SidebarRailView`). Deliberately NOT
+    /// per-session order (Cmd+1-9). Deliberately NOT
     /// filtered by `hasLiveSurface` like `sessionsInVisualOrder(coordinator:)`
     /// above — that filter exists for Cmd+Shift+[/] cycling, not for "what
     /// should render": a pinned session with a closed terminal (or, in

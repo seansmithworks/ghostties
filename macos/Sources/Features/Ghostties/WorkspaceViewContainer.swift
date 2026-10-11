@@ -19,19 +19,32 @@ import GhosttiesCore
 final class SidebarWidthModel: ObservableObject {
     @Published var width: CGFloat
 
+    /// The sidebar ⇄ rail morph's progress: 0 = the expanded sidebar, 1 =
+    /// the rail (`SidebarMorphMetrics`). `WorkspaceViewContainer.transitionTo`
+    /// writes it, with `width`, inside ONE `withAnimation` on the panel's
+    /// curve, so every leaf that reads it (tile, chip, glyph, card, header
+    /// height) interpolates on the same frames as the AppKit width.
+    /// `applyMorphStep` holds it at any value in between, un-animated.
+    @Published var morph: CGFloat
+
+    /// The sidebar's width when expanded (the pinned width, dragged or
+    /// clamped). The one tree is laid out at this width at every step of
+    /// the morph (`SidebarMorphFrame`); `width` only clips it.
+    @Published var expandedWidth: CGFloat
+
+    /// True while a pinned ⇄ rail transition is in flight: rows and headers
+    /// take no clicks, drags or drops until it lands.
+    @Published var isMorphing = false
+
     /// Flow 05 content choreography (sidebar-presence): which "presentation"
     /// the pinned⇄collapsed row content should render toward — `true` once a
     /// collapse has landed/is landing, `false` once an expand has
-    /// landed/is landing. Written by `WorkspaceViewContainer.transitionTo`
-    /// inside the SAME `withAnimation` block that drives the SwiftUI-side
-    /// cross-fade, so `RecentsRowView`/the transitional ZStack observe a
-    /// SINGLE change and let SwiftUI's own animation system interpolate the
-    /// resulting opacity/offset modifiers — never driven by a hand-rolled
-    /// per-frame progress value. Read unconditionally by `RecentsRowView`
-    /// (injected into every sidebar content tree, not just the transitional
-    /// one) so steady-state rendering (not mid-transition) still resolves to
-    /// the correct static appearance for whichever mode is settled.
-    @Published var isCollapsedPresentation: Bool
+    /// landed/is landing. Derived from `morph`. Read unconditionally by
+    /// `RecentsRowView` (injected into every sidebar content tree, not just
+    /// the transitional one) so steady-state rendering (not mid-transition)
+    /// still resolves to the correct static appearance for whichever mode is
+    /// settled.
+    var isCollapsedPresentation: Bool { morph >= 0.5 }
 
     /// The collapsed rail's width (`WorkspaceLayout.collapsedRailWidth(in:)`),
     /// kept current in every mode, not only while collapsed. The rail tray
@@ -41,9 +54,60 @@ final class SidebarWidthModel: ObservableObject {
     /// vertical, and animates through every width on the way.
     @Published var railWidth: CGFloat = WorkspaceLayout.sidebarRailWidth
 
-    init(width: CGFloat, isCollapsedPresentation: Bool = false) {
+    init(width: CGFloat, morph: CGFloat = 0, expandedWidth: CGFloat? = nil) {
         self.width = width
-        self.isCollapsedPresentation = isCollapsedPresentation
+        self.morph = morph
+        self.expandedWidth = expandedWidth ?? width
+    }
+}
+
+/// The sidebar ⇄ rail morph's one clock: the width AppKit is animating.
+///
+/// AppKit's width group and a SwiftUI animation each start a clock of their
+/// own, and neither can be told when: AppKit's starts in the toggle's
+/// runloop turn, SwiftUI's at the first frame it renders after that turn,
+/// 15–45ms later and never by the same amount. On the drawer curve, which
+/// covers half its distance in the first 30ms, that put the card's edge up
+/// to 90pt ahead of the panel's, cutting the header's count and the tray.
+/// So the morph plays on AppKit's clock alone: `SidebarMorphClockAnimation`
+/// reads this progress on every frame SwiftUI renders and lands when
+/// AppKit's group does. The terminal lays out no more often than before.
+@MainActor
+final class SidebarMorphClock: Hashable {
+    private weak var constraint: NSLayoutConstraint?
+    private let from: CGFloat
+    private let to: CGFloat
+    private var landed = false
+
+    /// Reads `constraint` from its current constant, the morph's start, to
+    /// `to`, the constant AppKit is animating it to.
+    init(constraint: NSLayoutConstraint, to: CGFloat) {
+        self.constraint = constraint
+        self.from = constraint.constant
+        self.to = to
+    }
+
+    /// 0 at the start width, 1 at the target; nil once landed.
+    var progress: Double? {
+        guard !landed, let constraint, from != to else { return nil }
+        return Double(min(max((from - constraint.constant) / (from - to), 0), 1))
+    }
+
+    /// AppKit's group finished, or a newer toggle took over.
+    func land() { landed = true }
+
+    nonisolated static func == (lhs: SidebarMorphClock, rhs: SidebarMorphClock) -> Bool { lhs === rhs }
+    nonisolated func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+}
+
+/// Plays a SwiftUI transaction at `SidebarMorphClock`'s progress.
+@available(macOS 14, *)
+struct SidebarMorphClockAnimation: CustomAnimation {
+    let clock: SidebarMorphClock
+
+    func animate<V: VectorArithmetic>(value: V, time _: TimeInterval, context _: inout AnimationContext<V>) -> V? {
+        guard let progress = MainActor.assumeIsolated({ clock.progress }) else { return nil }
+        return value.scaled(by: progress)
     }
 }
 
@@ -131,10 +195,13 @@ private struct SidebarHostRoot: View {
         let vertical = trayIsVertical ?? model.isCollapsedPresentation
         let trailingGutter = WorkspaceLayout.sidebarTrailingGutter(for: gutterMode)
         content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Leading: the sidebar's content is anchored at its leading
+            // edge, so a sub-frame mismatch between the AppKit width and
+            // `model.width` mid-morph moves nothing.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .overlay(alignment: .bottom) {
                 if vertical || showsTrayWhenExpanded {
-                    SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch())
+                    SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch(), panelWidth: model.width)
                 }
             }
             .environment(\.sidebarTrailingGutter, trailingGutter)
@@ -197,6 +264,25 @@ class WorkspaceViewContainer: NSView {
     #if DEBUG
     /// Test-only: the container's own coordinator, for seeding live surfaces.
     var coordinatorForTesting: SessionCoordinator { coordinator }
+    /// The sidebar's mount and body counters (`MorphProbe`), read by the
+    /// morph gates.
+    let morphProbe = MorphProbe()
+    var redlineRegistryForTesting: RedlineRegistry { redlineOverlay.registry }
+
+    /// Holds the sidebar at one step of the sidebar ⇄ rail morph, with no
+    /// animation: the AppKit width and the SwiftUI width at
+    /// lerp(sidebar, rail, `progress`), and `widthModel.morph` at
+    /// `progress`. The sidebar mode is left alone. Drives the morph gates
+    /// and `GHOSTTIES_CAPTURE_MORPH_STEPS`.
+    func applyMorphStep(_ progress: CGFloat) {
+        let p = min(max(progress, 0), 1)
+        isMorphStepHeld = true
+        let width = SidebarMorphMetrics.lerp(widthModel.expandedWidth, WorkspaceLayout.collapsedRailWidth(in: self), p)
+        sidebarWidthConstraint.constant = width
+        widthModel.width = width
+        widthModel.morph = p
+        layoutSubtreeIfNeeded()
+    }
     #endif
 
     /// v0 task-first sidebar store. Loads `.ghostties/tasks/*.md` fixtures once.
@@ -461,6 +547,10 @@ class WorkspaceViewContainer: NSView {
     /// traffic-lights-over-terminal / narrow-card glitch caught in review.
     private var sidebarTransitionGeneration = 0
 
+    /// The in-flight morph's clock (`beginSidebarMorph`), landed by the
+    /// transition's completion or by the next morph.
+    private var morphClock: SidebarMorphClock?
+
     /// True while `applyCollapseCrossfadeSidebarView` has both
     /// `fullSidebarContent()` and `railSidebarContent()` mounted at once
     /// (Flow 05's pinned⇄collapsed cross-fade). Cleared by `transitionTo`'s
@@ -470,6 +560,11 @@ class WorkspaceViewContainer: NSView {
     /// `hostingView.rootView` a second time on a rapid re-toggle mid-flight
     /// — see that method's doc comment.
     private var isCollapseCrossfadeHosted = false
+
+    /// True while `applyMorphStep` holds the sidebar between its modes
+    /// (DEBUG captures and gates): `layout()`'s width reclamp would put the
+    /// mode's own width back. Any transition releases it.
+    private var isMorphStepHeld = false
 
     /// Test seam: what the pinned rows would render toward right now.
     var isCollapsedPresentationForTesting: Bool { widthModel.isCollapsedPresentation }
@@ -562,23 +657,14 @@ class WorkspaceViewContainer: NSView {
     private var activeTrackingArea: NSTrackingArea?
 
     private var isLightAppearance: Bool {
-        #if DEBUG
-        // The inspector's "Preview appearance" repaints the chrome behind the
-        // sidebar too, so the forced glass is judged on its real background.
-        if let forced = SidebarAppearancePreview.forcedAppearance {
-            return forced.bestMatch(from: [.aqua, .darkAqua]) == .aqua
-        }
-        #endif
         return effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
     }
 
-    /// `sidebarHostingView`'s appearance: the DEBUG preview when one is
-    /// forced; otherwise pinned to the overlay fill's luminance in overlay
-    /// mode, and nil (follow the window) in every other mode.
+    /// `sidebarHostingView`'s appearance: pinned to the overlay fill's
+    /// luminance in overlay mode, and nil (follow the window) in every other
+    /// mode. (The DEBUG appearance preview sets the whole app's appearance,
+    /// so the window carries it here.)
     private var sidebarAppearanceOverride: NSAppearance? {
-        #if DEBUG
-        if let forced = SidebarAppearancePreview.forcedAppearance { return forced }
-        #endif
         return sidebarMode == .overlay
             ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
             : nil
@@ -727,22 +813,7 @@ class WorkspaceViewContainer: NSView {
             name: SidebarDialTuning.didChangeNotification,
             object: nil
         )
-
-        #if DEBUG
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(sidebarAppearancePreviewChanged),
-            name: SidebarAppearancePreview.didChangeNotification,
-            object: nil
-        )
-        #endif
     }
-
-    #if DEBUG
-    @objc private func sidebarAppearancePreviewChanged() {
-        applyChromeColor()
-    }
-    #endif
 
     @objc private func sidebarDialsChanged() {
         // Constraints are main-thread only; the panel posts from the main
@@ -1004,6 +1075,26 @@ class WorkspaceViewContainer: NSView {
                 self?.toggleSidebar()
             }
         }
+        if let steps = CaptureFixture.morphSteps, CaptureFixture.claimHook("morphSteps") {
+            // After the window has taken its capture size (0.5s, above).
+            let log = CaptureFixture.harnessStateDir?.appendingPathComponent("morph-steps.log")
+            if let log { try? Data().write(to: log) }
+            let start = Date()
+            for index in 0..<steps.count {
+                let progress = CGFloat(index) / CGFloat(steps.count - 1)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5 + Double(index) * steps.hold) { [weak self] in
+                    guard let self else { return }
+                    self.applyMorphStep(progress)
+                    // Let SwiftUI commit the step before announcing it.
+                    DispatchQueue.main.async {
+                        guard let log, let handle = try? FileHandle(forWritingTo: log) else { return }
+                        handle.seekToEndOfFile()
+                        handle.write(Data(String(format: "%d %.4f %.3f\n", index, progress, Date().timeIntervalSince(start)).utf8))
+                        try? handle.close()
+                    }
+                }
+            }
+        }
         if let seconds = CaptureFixture.sidebarRailClosePinAfter, CaptureFixture.claimHook("sidebarRailClosePin") {
             // Cmd+S (pinned -> rail), Cmd+Shift+S (rail -> closed), then
             // Cmd+Shift+S again (closed -> pinned).
@@ -1145,7 +1236,7 @@ class WorkspaceViewContainer: NSView {
         // also bail outright while a mode-transition animation is in
         // flight — the animation itself is already driving the constraint
         // to the right place.
-        if sidebarMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating {
+        if sidebarMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating && !isMorphStepHeld {
             let inset = SidebarDialTuning.windowMargin()
             let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
             let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
@@ -1153,6 +1244,7 @@ class WorkspaceViewContainer: NSView {
             if reclamped != widthModel.width {
                 sidebarWidthConstraint.constant = reclamped
                 widthModel.width = reclamped
+                widthModel.expandedWidth = reclamped
             }
         }
 
@@ -1232,7 +1324,7 @@ class WorkspaceViewContainer: NSView {
         // drives `sidebarWidthConstraint` through intermediate values every
         // frame, and reclamping against those would fight the open/collapse
         // animation.
-        if sidebarMode == .collapsed && !isSidebarTransitionAnimating {
+        if sidebarMode == .collapsed && !isSidebarTransitionAnimating && !isMorphStepHeld {
             if abs(sidebarWidthConstraint.constant - railWidth) > 0.5 {
                 sidebarWidthConstraint.constant = railWidth
                 widthModel.width = railWidth
@@ -1254,17 +1346,32 @@ class WorkspaceViewContainer: NSView {
         // writes this flag mid-animation, but it is the only other writer,
         // so a path that never crossfades (rail -> closed -> pinned) would
         // otherwise leave the previous mode's value behind.
-        widthModel.isCollapsedPresentation = sidebarMode == .collapsed
+        widthModel.morph = sidebarMode == .collapsed ? 1 : 0
 
-        // Collapsed rail (Flow 01, sidebar-presence §02) replaces whichever
-        // view mode (project-first/task-first) is otherwise active — it's a
-        // width state, not a third view mode, so it takes priority here.
+        // One view and the Sessions list morph: one tree, hosted the same
+        // in both modes, held at the mode's end; the tray follows the
+        // model's presentation. The layouts that don't morph (task-first,
+        // the Projects tab's tabs layout) host the rail as the same session
+        // list held at the rail's end (`SidebarRailColumn`), and crossfade.
+        if sidebarBodyMorphs {
+            hostingView.rootView = hostRoot(content: fullSidebarContent(), trayIsVertical: nil)
+            return
+        }
         if sidebarMode == .collapsed {
             hostingView.rootView = hostRoot(content: railSidebarContent(), trayIsVertical: true)
             return
         }
 
         hostingView.rootView = hostRoot(content: fullSidebarContent(), trayIsVertical: false)
+    }
+
+    /// Whether the sidebar's current body is one that morphs between the
+    /// expanded list and the rail (`SidebarBodyKind.oneViewAccordion`,
+    /// `.sessionsList`), rather than crossfading.
+    private var sidebarBodyMorphs: Bool {
+        guard currentSidebarViewMode != "taskFirst" else { return false }
+        let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+        return SidebarBodyKind.resolve(tab: tab, dial: SidebarDialTuning.projectsLayout()) != .projectsList
     }
 
     /// Wraps sidebar content in `SidebarHostRoot` — see that type for why
@@ -1280,25 +1387,25 @@ class WorkspaceViewContainer: NSView {
         .environmentObject(store)
         .environmentObject(coordinator)
         #if DEBUG
-        return AnyView(root.environment(\.redlineRegistry, redlineOverlay.registry))
+        return AnyView(root
+            .environment(\.redlineRegistry, redlineOverlay.registry)
+            .environment(\.morphProbe, morphProbe))
         #else
         return AnyView(root)
         #endif
     }
 
-    /// The collapsed rail's content (Flow 01, sidebar-presence §02),
-    /// extracted from `applySidebarView()` so the Flow 05 transitional
-    /// cross-fade (`applyCollapseCrossfadeSidebarView`) can mount the same
-    /// content alongside `fullSidebarContent()` during a pinned⇄collapsed
-    /// transition, instead of `applySidebarView()`'s instant single-tree
-    /// swap.
+    /// The rail for the layouts that don't morph (`SidebarRailColumn`):
+    /// hosted settled on the rail, and mounted alongside
+    /// `fullSidebarContent()` by the cross-fade
+    /// (`applyCollapseCrossfadeSidebarView`).
     private func railSidebarContent() -> AnyView {
-        let content = SidebarRailView()
+        let content = SidebarRailColumn()
             .environmentObject(store)
             .environmentObject(coordinator)
             .environmentObject(widthModel)
             .ignoresSafeArea(.container, edges: .top)
-        return AnyView(SidebarWidthFrame(model: widthModel, content: content))
+        return AnyView(SidebarMorphFrame(model: widthModel, content: content))
     }
 
     /// The pinned sidebar's content — whichever view mode (project-first/
@@ -1348,16 +1455,66 @@ class WorkspaceViewContainer: NSView {
                 .environmentObject(coordinator)
                 .environmentObject(widthModel)
                 .ignoresSafeArea(.container, edges: .top)
-            // Pin to a concrete width via `SidebarWidthFrame` so the nested
-            // LazyVStack inside WorkspaceSidebarView receives a definite
-            // cross-axis proposal. Without this the hosting view proposes
-            // .infinity, which sends LazyVStack.sizeThatFits into infinite
-            // measurement recursion — the same root cause fixed for taskFirst
-            // in sidebar-layout-hang-v0 (commit 11530667b). The wrapper reads
+            // Pin to a concrete width via `SidebarMorphFrame` (the expanded
+            // width, clipped to the current one) so the nested LazyVStack
+            // inside WorkspaceSidebarView receives a definite cross-axis
+            // proposal. Without this the hosting view proposes .infinity,
+            // which sends LazyVStack.sizeThatFits into infinite measurement
+            // recursion — the same root cause fixed for taskFirst in
+            // sidebar-layout-hang-v0 (commit 11530667b). The wrapper reads
             // `widthModel` so the user-resizable drag handle continues to
             // work without rebuilding this tree on every tick.
-            let view = SidebarWidthFrame(model: widthModel, content: content)
+            let view = SidebarMorphFrame(model: widthModel, content: content)
             return AnyView(view)
+        }
+    }
+
+    /// The one-object pinned ⇄ rail morph (motion spec §1): the sidebar
+    /// stays one tree; `morph` and `width` move together in ONE
+    /// `withAnimation` played on the AppKit width group `transitionTo` runs
+    /// next (`SidebarMorphClock`), so the panel's edge and the card's are on
+    /// the same frame every frame. Every leaf interpolates its own size and
+    /// position from `morph`; labels keep their own timing
+    /// (`MorphLabelFade`). Reduce Motion: the geometry snaps and the labels
+    /// fade over 120ms. Before macOS 14 (no `CustomAnimation`) the morph
+    /// plays on its own copy of the panel's curve and duration.
+    ///
+    /// Re-entrant: a second toggle mid-flight writes new targets and lands
+    /// the old clock.
+    private func beginSidebarMorph(to newMode: SidebarMode, timing: WorkspaceLayout.SidebarTransitionTiming, reduceMotion: Bool) {
+        guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
+        coordinator.sessionPopover.dismiss()
+        NotificationCenter.default.post(name: .workspaceSidebarWillMorph, object: window)
+        isCollapseCrossfadeHosted = false
+        // The same tree, rebuilt for the new mode's gutter: every view type
+        // matches, so nothing remounts.
+        hostingView.rootView = hostRoot(content: fullSidebarContent(), trayIsVertical: nil)
+
+        let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
+        widthModel.railWidth = railWidth
+        if newMode == .pinned {
+            widthModel.expandedWidth = currentSidebarWidth
+        }
+        let targetMorph: CGFloat = newMode == .collapsed ? 1 : 0
+        let targetWidth = newMode == .collapsed ? railWidth : currentSidebarWidth
+        widthModel.isMorphing = true
+        if WorkspaceLayout.sidebarGeometryDuration(reduceMotion: reduceMotion, timing: timing) == 0 {
+            widthModel.morph = targetMorph
+            widthModel.width = targetWidth
+        } else {
+            morphClock?.land()
+            let animation: Animation
+            if #available(macOS 14, *) {
+                let clock = SidebarMorphClock(constraint: sidebarWidthConstraint, to: targetWidth)
+                morphClock = clock
+                animation = Animation(SidebarMorphClockAnimation(clock: clock))
+            } else {
+                animation = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
+            }
+            withAnimation(animation) {
+                widthModel.morph = targetMorph
+                widthModel.width = targetWidth
+            }
         }
     }
 
@@ -1390,9 +1547,10 @@ class WorkspaceViewContainer: NSView {
         let targetIsCollapsed = newMode == .collapsed
 
         if !isCollapseCrossfadeHosted {
+            // Each tree held at its own end: the fade is the transition.
             let view = SidebarCollapseCrossfade(
                 model: widthModel,
-                full: fullSidebarContent(),
+                full: AnyView(fullSidebarContent().environment(\.sidebarMorphOverride, 0)),
                 rail: railSidebarContent()
             )
             hostingView.rootView = hostRoot(content: AnyView(view), trayIsVertical: nil)
@@ -1401,14 +1559,14 @@ class WorkspaceViewContainer: NSView {
             // directly (not animated) so the cross-fade animates FROM the
             // correct starting opacities, not from whatever the model was
             // last left at.
-            widthModel.isCollapsedPresentation = previousMode == .collapsed
+            widthModel.morph = previousMode == .collapsed ? 1 : 0
         }
 
         let animation = reduceMotion
             ? Animation.easeInOut(duration: WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: timing))
             : WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
         withAnimation(animation) {
-            widthModel.isCollapsedPresentation = targetIsCollapsed
+            widthModel.morph = targetIsCollapsed ? 1 : 0
         }
     }
 
@@ -1444,6 +1602,7 @@ class WorkspaceViewContainer: NSView {
             case .pinned, .overlay:
                 sidebarWidthConstraint.animator().constant = currentSidebarWidth
                 widthModel.width = currentSidebarWidth
+                widthModel.expandedWidth = currentSidebarWidth
             case .collapsed:
                 let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
                 sidebarWidthConstraint.animator().constant = railWidth
@@ -1698,6 +1857,7 @@ class WorkspaceViewContainer: NSView {
         // documented render-cost history (two shipped 100%-CPU beachballs).
         sidebarWidthConstraint.constant = target.width
         currentSidebarWidth = target.width
+        widthModel.expandedWidth = target.width
         widthModel.width = target.width
     }
 
@@ -1896,6 +2056,7 @@ class WorkspaceViewContainer: NSView {
         let now = CACurrentMediaTime()
         guard now - lastTransitionTime > 0.25 else { return }
         lastTransitionTime = now
+        isMorphStepHeld = false
         let previousMode = sidebarMode
         sidebarMode = newMode
 
@@ -1908,17 +2069,26 @@ class WorkspaceViewContainer: NSView {
         let inset = SidebarDialTuning.windowMargin()
 
         // Content differs by mode (rail vs. full sidebar). The pinned⇄
-        // collapsed pair — the ONLY pair Flow 05's content choreography
-        // covers — cross-fades both trees together instead of swapping
-        // instantly (see `applyCollapseCrossfadeSidebarView`'s doc
-        // comment); the timing/reduceMotion args mirror what's computed
-        // for the AppKit animation just below, so both stay in lockstep.
-        // Every other pair (anything through `.closed`/`.overlay`) keeps
-        // the original instant single-tree mount — the brief's "reveal
-        // overlay keeps its current animation."
+        // collapsed pair is the only one with content motion. One view and
+        // the Sessions list morph: one tree, every element interpolated
+        // between its two ends on the panel's curve (`beginSidebarMorph`).
+        // The layouts that don't morph cross-fade two trees instead (see
+        // `applyCollapseCrossfadeSidebarView`'s doc comment); the
+        // timing/reduceMotion args mirror what's computed for the AppKit
+        // animation just below, so both stay in lockstep. Every other pair
+        // (anything through `.closed`/`.overlay`) keeps the original
+        // instant single-tree mount — the brief's "reveal overlay keeps its
+        // current animation."
         let isCollapsePair = (previousMode == .pinned && newMode == .collapsed)
             || (previousMode == .collapsed && newMode == .pinned)
-        if isCollapsePair {
+        let morphs = isCollapsePair && sidebarBodyMorphs
+        if morphs {
+            beginSidebarMorph(
+                to: newMode,
+                timing: WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode),
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            )
+        } else if isCollapsePair {
             let timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
             applyCollapseCrossfadeSidebarView(
                 previousMode: previousMode,
@@ -1984,6 +2154,9 @@ class WorkspaceViewContainer: NSView {
         let animationCompletion: () -> Void = { [weak self] in
             guard let self, self.sidebarTransitionGeneration == generation else { return }
             self.isSidebarTransitionAnimating = false
+            self.widthModel.isMorphing = false
+            self.morphClock?.land()
+            self.morphClock = nil
             // A Window margin change made mid-transition was skipped.
             self.applyWindowMargin()
             // Settle the Flow 05 collapse cross-fade (if this transition
@@ -2019,7 +2192,7 @@ class WorkspaceViewContainer: NSView {
             // explicit `layoutSubtreeIfNeeded()` right after is the ONE
             // atomic layout pass that guarantees a clean settle. The alpha
             // half still animates on its own 120ms cross-fade.
-            applyTransitionConstraints(for: newMode, inset: inset, animated: false)
+            applyTransitionConstraints(for: newMode, inset: inset, animated: false, updatesWidthModel: !morphs)
             layoutSubtreeIfNeeded()
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: timing)
@@ -2030,7 +2203,7 @@ class WorkspaceViewContainer: NSView {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = timing.duration
                 context.timingFunction = timing.curve.mediaTimingFunction
-                applyTransitionConstraints(for: newMode, inset: inset)
+                applyTransitionConstraints(for: newMode, inset: inset, updatesWidthModel: !morphs)
                 applyTransitionAlphas(for: newMode)
             }, completionHandler: animationCompletion)
         }
@@ -2118,7 +2291,11 @@ class WorkspaceViewContainer: NSView {
     /// animated group covering geometry + alpha together) and the reduced-
     /// motion path (geometry snaps at duration 0, alpha cross-fades
     /// separately over 120ms) share one implementation instead of drifting.
-    private func applyTransitionConstraints(for newMode: SidebarMode, inset: CGFloat, animated: Bool = true) {
+    /// `updatesWidthModel: false` for a morph, which has already written
+    /// `widthModel.width` inside its own SwiftUI animation
+    /// (`beginSidebarMorph`); writing it here, un-animated, would snap the
+    /// SwiftUI side while AppKit glides.
+    private func applyTransitionConstraints(for newMode: SidebarMode, inset: CGFloat, animated: Bool = true, updatesWidthModel: Bool = true) {
         // `.animator()` on an `NSLayoutConstraint` only produces a reliable
         // Auto Layout animation inside a real (non-zero-duration) animation
         // context — an `NSAnimationContext` with `duration = 0` wrapping a
@@ -2142,7 +2319,8 @@ class WorkspaceViewContainer: NSView {
         switch newMode {
         case .pinned:
             set(sidebarWidthConstraint, currentSidebarWidth)
-            widthModel.width = currentSidebarWidth
+            widthModel.expandedWidth = currentSidebarWidth
+            if updatesWidthModel { widthModel.width = currentSidebarWidth }
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .pinned, margin: inset))
@@ -2162,7 +2340,7 @@ class WorkspaceViewContainer: NSView {
         case .collapsed:
             let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
             set(sidebarWidthConstraint, railWidth)
-            widthModel.width = railWidth
+            if updatesWidthModel { widthModel.width = railWidth }
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .collapsed, margin: inset))
@@ -2207,6 +2385,7 @@ class WorkspaceViewContainer: NSView {
             }
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
+            widthModel.expandedWidth = currentSidebarWidth
             // Terminal floats as a carded, inset canvas — same outer inset
             // as pinned/closed. The sidebar (z-order above the card) floats
             // over its left edge rather than sharing space with it.

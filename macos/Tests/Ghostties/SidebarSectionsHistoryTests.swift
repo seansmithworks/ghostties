@@ -330,12 +330,13 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     private let width: CGFloat = 220
     private let rowHeight: CGFloat = 48
 
-    private func render<V: View>(_ row: V) -> NSBitmapImageRep? {
-        let framed = row
-            .environmentObject(SidebarWidthModel(width: width))
+    /// `asRail`: the same row held at the rail's end, on a rail `width` wide.
+    private func render<V: View>(_ row: V, asRail: Bool = false) -> NSBitmapImageRep? {
+        let padded = row
             .environmentObject(SessionCoordinator())
             .padding(.leading, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingTrailing())
+        let framed = (asRail ? AnyView(padded.asRail(width: width)) : AnyView(padded.environmentObject(SidebarWidthModel(width: width))))
             .frame(width: width, height: rowHeight)
             .background(Color.white)
         let hosting = NSHostingView(rootView: framed)
@@ -406,22 +407,39 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     }
 
     func testRailHistoryClockIsCentredOnTheRail() throws {
-        let rail = try XCTUnwrap(render(RailHistoryRow(subtitle: "3 sessions", isActive: false, onTap: {})))
+        let rail = try XCTUnwrap(render(HistoryRowView(subtitle: "3 sessions", isActive: false, onTap: {}), asRail: true))
         let clock = try XCTUnwrap(ink(rail, fromX: 0, toX: width), "rail clock")
-        XCTAssertEqual((clock.minX + clock.maxX) / 2, width / 2, accuracy: 0.5)
+        // The clock's frame is centred on the rail; its ink is not centred
+        // in its frame (the symbol's arrow side is heavier), so the
+        // expectation is the same glyph alone, at the rail's size, centred
+        // in the same row.
+        let size = RailProjectColumn.chipGlyphSize(.rail)
+        let alone = try XCTUnwrap(render(HistoryGlyph(size: size).frame(maxWidth: .infinity)))
+        let reference = try XCTUnwrap(ink(alone, fromX: 0, toX: width), "lone clock")
+        XCTAssertEqual((clock.minX + clock.maxX) / 2, (reference.minX + reference.maxX) / 2, accuracy: 0.5, "clock centred on the rail")
         XCTAssertEqual((clock.minY + clock.maxY) / 2, rowHeight / 2, accuracy: 1.0)
     }
 
     // MARK: - No section titles
 
-    /// "No more section titles": the first row of the expanded list sits where
-    /// a bare row would, directly under the list's top padding. A "Pinned" or
-    /// "Active" header above it would push its ink down by the header's height
-    /// (about 25pt). Tested for a pinned first row and for an active first row.
+    /// "No more section titles": the list's first element (here the
+    /// project's accordion header, the Projects tab being one view) sits
+    /// where a bare header would, directly under the list's top padding. A
+    /// "Pinned" or "Active" title above it would push its ink down by the
+    /// title's height (about 25pt). Tested for a pinned first row and for an
+    /// active first row. (Was measured against a bare session row, which
+    /// matched the 32pt header within the tolerance; the 40pt header,
+    /// keyframe spec D1, centres its ink 4pt lower.)
     func testExpandedListRendersNoSectionTitles() throws {
-        let bare = try XCTUnwrap(render(SessionRowHarness()))
-        let bareInk = try XCTUnwrap(ink(bare, fromX: 0, toX: width - 60), "bare row ink")
-        let expectedTop = SidebarDialTuning.contentPaddingTop() + bareInk.minY
+        let headerHeight = ProjectAccordionHeader.height(.sidebar)
+        let bare = try XCTUnwrap(render(
+            ProjectAccordionHeader(
+                name: "3 sessions · last 2h ago",
+                monogram: ProjectMonogram.monograms(for: ["3 sessions · last 2h ago"]).first ?? "?", count: 1, isCollapsed: false, onToggle: {})
+        ))
+        let bareInk = try XCTUnwrap(ink(bare, fromX: 0, toX: width - 60), "bare header ink")
+        // `render` centres the header in a row-high frame.
+        let expectedTop = SidebarDialTuning.contentPaddingTop() + bareInk.minY - (rowHeight - headerHeight) / 2
 
         for pinned in [true, false] {
             let project = Project(name: "3 sessions · last 2h ago", rootPath: "~/Code/x")

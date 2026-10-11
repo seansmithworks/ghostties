@@ -282,54 +282,28 @@ struct SidebarPresenceTests {
         #expect(pinnedGap == collapsedGap && collapsedGap == closedGap)
     }
 
-    // MARK: - Flow 05 Content Choreography — Row-Level
+    // MARK: - Label choreography (motion spec §1)
 
-    /// The canvas's own reopen note: "session glyphs fade in 40ms apart,
-    /// labels land 60ms after their glyph." Every row's glyph travels the
-    /// same full expand window (they all start together); the FIRST row's
-    /// label starts exactly `glyphLandDuration + 60ms` after the glyph
-    /// starts — no extra stagger for row 0.
-    @Test func expandLabelDelayForFirstRowIsGlyphLandPlusSixtyMs() {
-        let delay = WorkspaceLayout.expandLabelDelay(rowIndex: 0, glyphLandDuration: 0.24)
-        #expect(delay == 0.3)
+    /// Expanding, the first label starts 90ms into the 240ms expand and
+    /// each one below 16ms later, capped at the sixth, so a long list lands
+    /// its last label by 290ms (keyframe spec; was 100 + 12·i to the ninth).
+    @Test func expandLabelDelayStartsAtNinetyMsAndStaggersSixteenPerRowToTheSixth() {
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 0).isApproximatelyEqual(to: 0.09))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 1).isApproximatelyEqual(to: 0.106))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 5).isApproximatelyEqual(to: 0.17))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 20) == WorkspaceLayout.expandLabelDelay(rowIndex: 5))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: -3) == WorkspaceLayout.expandLabelDelay(rowIndex: 0))
+        let lastLands = WorkspaceLayout.expandLabelDelay(rowIndex: 5) + WorkspaceLayout.sidebarRowLabelExpandFadeDuration
+        #expect(lastLands.isApproximatelyEqual(to: 0.29))
     }
 
-    /// Each subsequent row adds another 40ms — the "40ms apart" stagger.
-    @Test func expandLabelDelayStaggersFortyMsPerRow() {
-        let glyphLand: TimeInterval = 0.24
-        let first = WorkspaceLayout.expandLabelDelay(rowIndex: 0, glyphLandDuration: glyphLand)
-        let second = WorkspaceLayout.expandLabelDelay(rowIndex: 1, glyphLandDuration: glyphLand)
-        let third = WorkspaceLayout.expandLabelDelay(rowIndex: 2, glyphLandDuration: glyphLand)
-        #expect((second - first).isApproximatelyEqual(to: 0.04))
-        #expect((third - second).isApproximatelyEqual(to: 0.04))
-    }
-
-    /// The stagger schedule must track whatever the expand transition's own
-    /// duration actually is (`sidebarTransitionTiming(from: .collapsed, to:
-    /// .pinned)`), not a hardcoded literal — this is the one seam that would
-    /// silently desync the label stagger from the glyph travel if either
-    /// duration were retuned independently.
-    @Test func expandLabelDelayUsesTheRealExpandTransitionDuration() {
-        let realExpandDuration = WorkspaceLayout.sidebarTransitionTiming(from: .collapsed, to: .pinned).duration
-        let delay = WorkspaceLayout.expandLabelDelay(rowIndex: 0, glyphLandDuration: realExpandDuration)
-        #expect(delay == realExpandDuration + 0.06)
-    }
-
-    /// A negative or out-of-range row index (shouldn't occur, but a bucket
-    /// with a stale/renumbered index is cheap to guard) never produces a
-    /// delay smaller than the flat 60ms floor.
-    @Test func expandLabelDelayClampsNegativeRowIndexToZero() {
-        let delay = WorkspaceLayout.expandLabelDelay(rowIndex: -3, glyphLandDuration: 0.24)
-        #expect(delay == 0.3)
-    }
-
-    /// Row-level choreography (label fade window, glyph travel, stagger)
-    /// runs only with motion enabled — Reduce Motion drops it entirely and
-    /// relies solely on the container-level 120ms cross-fade (Flow 05
-    /// "Reduced Motion: drop the translate entirely... layout snaps").
-    @Test func rowChoreographyIsDisabledUnderReducedMotion() {
-        #expect(WorkspaceLayout.sidebarRowChoreographyEnabled(reduceMotion: true) == false)
-        #expect(WorkspaceLayout.sidebarRowChoreographyEnabled(reduceMotion: false) == true)
+    /// Leaving is faster than arriving, and never delayed: 90ms and a 4pt
+    /// drift left, against a 120ms arrival.
+    @Test func labelsLeaveFasterThanTheyArrive() {
+        #expect(WorkspaceLayout.sidebarRowLabelCollapseFadeDuration == 0.09)
+        #expect(WorkspaceLayout.sidebarRowLabelExpandFadeDuration == 0.12)
+        #expect(WorkspaceLayout.sidebarRowLabelCollapseTravel == -4)
+        #expect(WorkspaceLayout.sidebarRowLabelCollapseFadeDuration < WorkspaceLayout.sidebarRowLabelExpandFadeDuration)
     }
 
     /// The SwiftUI-side content cross-fade animation must share its

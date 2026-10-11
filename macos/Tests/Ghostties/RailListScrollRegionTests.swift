@@ -6,9 +6,10 @@ import SwiftUI
 import Testing
 @testable import Ghostty
 
-/// On a short window the rail's list scrolls inside the region between the
-/// titlebar and the tray, clipped to it (Sean's Dev pass, 2026-10-08: rows
-/// drew under the tray and a glyph sat above the traffic lights).
+/// On a short window the rail's list scrolls in the region from below the
+/// titlebar to the panel's bottom, under the floating tray (Flow 07), with
+/// a bottom inset of the tray's reserve so the last tile rests clear of it
+/// (Sean's Dev pass, 2026-10-08: a glyph sat above the traffic lights).
 ///
 /// Hosts a real `WorkspaceViewContainer` collapsed to the rail, in a short
 /// full-size-content window like the app's, on a persistence-disabled
@@ -54,7 +55,7 @@ struct RailListScrollRegionTests {
         }
     }
 
-    @Test func railListScrollsBetweenTheTitlebarAndTheTray() throws {
+    @Test func railListScrollsFromTheTitlebarUnderTheTray() throws {
         let (container, window) = makeShortRail(height: 500)
         defer {
             window.contentView = nil
@@ -71,10 +72,30 @@ struct RailListScrollRegionTests {
         let lights = close.convert(close.bounds, to: nil)
         #expect(region.maxY <= lights.minY, "list region top \(region.maxY) is below the traffic lights' bottom \(lights.minY)")
 
-        // Above the tray (window coordinates run bottom-up).
-        let trayTop = rail.minY + SidebarTray.reservedHeight(isVertical: true, railWidth: rail.width)
-        #expect(region.minY >= trayTop - 0.5, "list region bottom \(region.minY) is above the tray's top \(trayTop)")
+        // Runs to the panel's bottom, under the tray (window coordinates
+        // run bottom-up).
+        #expect(region.minY <= rail.minY + 0.5, "list region bottom \(region.minY) reaches the panel's bottom \(rail.minY)")
         #expect(region.height > 0, "the list region has room")
+
+        // Its content is inset by the tray's reserve at the rail's end, at
+        // the rail width the tray sizes its pills from.
+        let reserve = MorphTrayReserve.height(progress: 1, railWidth: WorkspaceLayout.collapsedRailWidth(in: container))
+        #expect(abs(scrollView.contentInsets.bottom - reserve) <= 0.5,
+                "content bottom inset \(scrollView.contentInsets.bottom) is the tray's reserve \(reserve)")
+
+        // So scrolled to the end, the last tile rests above the tray's top.
+        let document = try #require(scrollView.documentView)
+        let end = document.isFlipped
+            ? NSRect(x: 0, y: document.bounds.maxY - 1, width: 1, height: 1)
+            : NSRect(x: 0, y: 0, width: 1, height: 1)
+        for _ in 0..<5 {
+            document.scrollToVisible(end)
+            container.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        let documentBottom = document.convert(document.bounds, to: nil).minY
+        let trayTop = rail.minY + reserve
+        #expect(documentBottom >= trayTop - 0.5, "content's end \(documentBottom) rests above the tray's top \(trayTop)")
 
         // The content overflows the region, so it scrolls.
         let content = try #require(scrollView.documentView).frame.height

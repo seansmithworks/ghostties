@@ -10,19 +10,6 @@ import GhosttiesCore
 /// selected row still draws (no blank). Uses private suites only.
 @MainActor
 final class SidebarRetiredDialsTests: XCTestCase {
-    func testTintShimmerDarkIntensityDefaultsToLightAndRoundTrips() {
-        let name = "com.seansmithdesign.ghostties.tests.tint-shimmer-dark"
-        let d = UserDefaults(suiteName: name)!
-        d.removePersistentDomain(forName: name)
-        defer { d.removePersistentDomain(forName: name) }
-        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensityKey, "ghostties.sidebarDial.tintShimmerDarkIntensity")
-        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), TrayGlassStyle.light.chromaticIntensity)
-        XCTAssertGreaterThan(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), 0)
-        d.set(0.65, forKey: SidebarDialTuning.tintShimmerDarkIntensityKey)
-        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), 0.65)
-        XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.tintShimmerDarkIntensityKey))
-    }
-
     /// "Reset sidebar" clears the retired keys too, so a stale value can't
     /// linger in a Dev domain.
     func testResetClearsRetiredKeys() {
@@ -79,7 +66,7 @@ final class SidebarRetiredDialsTests: XCTestCase {
             XCTAssertEqual(differingPixels(survivor, migrated), 0, "stored removed options changed the render (rail: \(rail))")
             // The rail marks the selected session with a tile-sized chip in
             // its project column (`RailProjectColumn`), not a row-tall card.
-            let minimum = rail ? RailProjectColumn.chipSize - 10 : SidebarDialTuning.rowHeight() - 8
+            let minimum = rail ? RailProjectColumn.chipSize(.rail) - 10 : SidebarDialTuning.rowHeight() - 8
             XCTAssertGreaterThan(longestTintRun(migrated, width: rail ? 80 : 260, rail: rail), minimum, "the selected row is not blank (rail: \(rail))")
         }
     }
@@ -122,12 +109,11 @@ final class SidebarRetiredDialsTests: XCTestCase {
             let width: CGFloat = rail ? 80 : 260
             let height: CGFloat = 480
             let column: AnyView = rail
-                ? AnyView(SidebarRailView())
+                ? AnyView(SidebarRailColumn().asRail(width: width))
                 : AnyView(VStack(spacing: 0) {
                     Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
+                    // Runs to the bottom and insets itself for the tray.
                     RecentsListView()
-                    Spacer(minLength: 0)
-                    Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: false))
                 })
             let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
             let root = column
@@ -178,7 +164,7 @@ final class SidebarRetiredDialsTests: XCTestCase {
         guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB) else { return 0 }
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         let scale = CGFloat(rep.pixelsWide) / width
-        let x = rail ? width / 2 - RailProjectColumn.chipSize / 2 + 4 : SidebarDialTuning.windowMargin() + 6
+        let x = rail ? width / 2 - RailProjectColumn.chipSize(.rail) / 2 + 4 : SidebarDialTuning.windowMargin() + 6
         let px = Int(x * scale)
         let floor: CGFloat = rail ? 0.12 : 0.08
         var longest = 0, run = 0

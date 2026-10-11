@@ -3,18 +3,12 @@ import SwiftUI
 import GhosttiesCore
 @testable import Ghostty
 
-/// The selected row card occupies exactly the hover card's footprint, in the
-/// rail and the expanded list (Sean, 2026-10-07: "the size of the hover feels
-/// good to me, filling the space").
-///
-/// The hover fill is the row frame's own background, a
-/// `RoundedRectangle(cornerRadius: sidebarRowCornerRadiusResting)` filling the
-/// row card (the column's content width × `rowHeight`). So "selected = hover
-/// footprint" is asserted on pixels: the selected surface spans that whole
-/// card, top to bottom and edge to edge, and its corner is the hover's radius
-/// (a pixel 2.5pt in from the card corner is filled, one 0.5pt in is not).
-/// Rendered with the selected row's rim off (its blur softens the edges), so
-/// the Tint + shimmer fill alone marks the footprint.
+/// The selected row is the option D chip, in the rail and the expanded list
+/// alike (one piece in both modes): a tile-sized, flat 10% ink chip behind
+/// the glyph, the hover's own footprint (`SidebarRowChipBackground` draws
+/// both), never a row-wide card. Asserted on pixels: the selected surface is
+/// chip-tall and chip-wide, centred on the glyph slot (the rail's centre in
+/// the rail), and nothing marks the row card's corner.
 @MainActor
 final class SelectedRowFootprintTests: XCTestCase {
     private let height: CGFloat = 100
@@ -66,71 +60,57 @@ final class SelectedRowFootprintTests: XCTestCase {
         return tint > 0.06
     }
 
-    /// The single run of surface pixels along one line, in points.
-    private func surfaceSpan(_ rep: NSBitmapImageRep, scale: CGFloat, alongX: Bool, at fixed: CGFloat) throws -> ClosedRange<CGFloat>? {
-        let count = alongX ? rep.pixelsWide : rep.pixelsHigh
-        var lo = Int.max, hi = -1
-        for i in 0..<count {
-            let p = CGFloat(i) / scale
-            if try isSurface(rep, scale: scale, x: alongX ? p : fixed, y: alongX ? fixed : p) {
-                lo = min(lo, i); hi = max(hi, i)
-            }
-        }
-        return hi >= 0 ? CGFloat(lo) / scale...CGFloat(hi + 1) / scale : nil
-    }
-
-    /// Asserts the selected surface fills `card` (points) with the hover's
-    /// corner radius.
-    private func assertFillsHoverCard(_ rep: NSBitmapImageRep, scale: CGFloat, card: CGRect, _ name: String) throws {
-        let across = try XCTUnwrap(try surfaceSpan(rep, scale: scale, alongX: true, at: card.midY), "\(name): no selected surface across the row")
-        let down = try XCTUnwrap(try surfaceSpan(rep, scale: scale, alongX: false, at: card.midX), "\(name): no selected surface down the row")
-        XCTAssertEqual(across.lowerBound, card.minX, accuracy: 1.0, "\(name): selected leading edge = hover leading edge")
-        XCTAssertEqual(across.upperBound, card.maxX, accuracy: 1.0, "\(name): selected trailing edge = hover trailing edge")
-        XCTAssertEqual(down.lowerBound, card.minY, accuracy: 1.0, "\(name): selected top = hover top")
-        XCTAssertEqual(down.upperBound, card.maxY, accuracy: 1.0, "\(name): selected bottom = hover bottom")
-        // Hover's corner radius (6): 2.5pt in on the diagonal is inside the
-        // curve, 0.5pt in is outside it. A larger radius leaves 2.5pt empty.
-        XCTAssertEqual(WorkspaceLayout.sidebarRowCornerRadiusResting, 6)
-        for (cx, cy, dx, dy) in [(card.minX, card.minY, 1.0, 1.0), (card.maxX, card.maxY, -1.0, -1.0)] {
-            XCTAssertTrue(try isSurface(rep, scale: scale, x: cx + 2.5 * dx, y: cy + 2.5 * dy), "\(name): corner at hover radius is filled")
-            XCTAssertFalse(try isSurface(rep, scale: scale, x: cx + 0.5 * dx, y: cy + 0.5 * dy), "\(name): corner is rounded")
-        }
+    /// Asserts the selected surface is the chip of `side` centred at
+    /// (`midX`, `midY`), probed down a line 8pt inside its leading edge (past
+    /// its corner curve) and across the row there, and that the row card's
+    /// corner (`rowMinX`, top) is unmarked.
+    private func assertIsChip(_ rep: NSBitmapImageRep, scale: CGFloat, side chip: CGFloat, midX: CGFloat, midY: CGFloat, rowMinX: CGFloat, _ name: String) throws {
+        let probe = CGPoint(x: midX - chip / 2 + 8, y: midY)
+        let down = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: false, through: probe), "\(name): no chip down the slot")
+        XCTAssertEqual(down.upperBound - down.lowerBound, chip, accuracy: 1.0, "\(name): selected surface is chip-tall, not row-tall")
+        XCTAssertEqual((down.lowerBound + down.upperBound) / 2, midY, accuracy: 1.0, "\(name): chip centred in the row")
+        let across = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: true, through: probe), "\(name): no chip across the slot")
+        XCTAssertEqual(across.lowerBound, midX - chip / 2, accuracy: 1.0, "\(name): chip leading edge")
+        XCTAssertEqual(across.upperBound, midX + chip / 2, accuracy: 1.0, "\(name): chip trailing edge")
+        XCTAssertFalse(try isSurface(rep, scale: scale, x: rowMinX + 3, y: 3), "\(name): no row card")
     }
 
     // MARK: - Rail
 
-    func testRailSelectedCardFillsTheHoverFootprint() throws {
+    /// A rail row outside any project column (a Pinned or Sessions-tab row)
+    /// selects with the rail chip, centred on the rail: the expanded row,
+    /// held at the rail's end.
+    func testRailSelectedRowIsTheChip() throws {
         let width = try railWidth()
         let column = VStack(spacing: 0) {
-            RailSessionRow(sessionId: UUID(), name: "Claude Code 6", projectName: "atlas-api", indicatorState: .inactive, isActive: true, onTap: {})
+            ExpandedHarness()
         }
-            .modifier(SidebarRailView.columnPadding)
-            .environment(\.sidebarTrailingGutter, 0)
+            .modifier(SidebarColumnPadding())
             .environmentObject(SessionCoordinator())
+            .asRail(width: width)
         let (rep, scale) = try render(column, width: width)
-        let margin = SidebarDialTuning.windowMargin()
-        let card = CGRect(x: margin, y: SidebarDialTuning.contentPaddingTop(), width: width - 2 * margin, height: SidebarDialTuning.rowHeight())
-        try assertFillsHoverCard(rep, scale: scale, card: card, "rail")
+        try assertIsChip(
+            rep, scale: scale, side: RailProjectColumn.chipSize(.rail),
+            midX: width / 2, midY: SidebarDialTuning.contentPaddingTop() + SidebarDialTuning.rowHeight() / 2,
+            rowMinX: SidebarDialTuning.windowMargin(), "rail"
+        )
     }
 
-    func testRailHistorySelectedCardFillsTheHoverFootprint() throws {
+    /// History in the rail selects with the same chip; the clock's ink sits
+    /// inside it, so the chip's runs stay contiguous.
+    func testRailHistorySelectedRowIsTheChip() throws {
         let width = try railWidth()
         let column = VStack(spacing: 0) {
-            RailHistoryRow(subtitle: "3 sessions", isActive: true, onTap: {})
+            HistoryRowView(subtitle: "3 sessions", isActive: true, onTap: {})
         }
-            .modifier(SidebarRailView.columnPadding)
-            .environment(\.sidebarTrailingGutter, 0)
+            .modifier(SidebarColumnPadding())
+            .asRail(width: width)
         let (rep, scale) = try render(column, width: width)
-        let margin = SidebarDialTuning.windowMargin()
-        let card = CGRect(x: margin, y: SidebarDialTuning.contentPaddingTop(), width: width - 2 * margin, height: SidebarDialTuning.rowHeight())
-        // The clock glyph sits in the middle; the span check samples the
-        // row's centre lines, so measure down a column clear of it.
-        let down = try XCTUnwrap(try surfaceSpan(rep, scale: scale, alongX: false, at: card.minX + 8), "history: no selected surface")
-        XCTAssertEqual(down.lowerBound, card.minY, accuracy: 1.0, "history: selected top = hover top")
-        XCTAssertEqual(down.upperBound, card.maxY, accuracy: 1.0, "history: selected bottom = hover bottom")
-        let across = try XCTUnwrap(try surfaceSpan(rep, scale: scale, alongX: true, at: card.minY + 4), "history: no selected surface across")
-        XCTAssertEqual(across.lowerBound, card.minX, accuracy: 1.0, "history: selected leading edge = hover leading edge")
-        XCTAssertEqual(across.upperBound, card.maxX, accuracy: 1.0, "history: selected trailing edge = hover trailing edge")
+        try assertIsChip(
+            rep, scale: scale, side: RailProjectColumn.chipSize(.rail),
+            midX: width / 2, midY: SidebarDialTuning.contentPaddingTop() + SidebarDialTuning.rowHeight() / 2,
+            rowMinX: SidebarDialTuning.windowMargin(), "history"
+        )
     }
 
     // MARK: - Expanded
@@ -157,7 +137,10 @@ final class SelectedRowFootprintTests: XCTestCase {
         }
     }
 
-    func testExpandedSelectedCardFillsTheHoverFootprint() throws {
+    /// Expanded list (option D, one rule): the selected row is the
+    /// tile-sized chip behind the leading glyph slot, the hover's own
+    /// footprint (`SidebarRowChipBackground` draws both), not a row card.
+    func testExpandedSelectedRowIsTheChipBehindTheGlyphSlot() throws {
         let width: CGFloat = 220
         let inset: CGFloat = 10
         let row = ExpandedHarness()
@@ -165,18 +148,34 @@ final class SelectedRowFootprintTests: XCTestCase {
             .environmentObject(SidebarWidthModel(width: width))
             .environmentObject(SessionCoordinator())
         let (rep, scale) = try render(row, width: width)
-        let card = CGRect(x: inset, y: 0, width: width - 2 * inset, height: SidebarDialTuning.rowHeight())
-        // Title/subtitle ink sits mid-row on the leading side; the trailing
-        // half is clear (stopped glyph draws nothing), so sample there.
-        let across = try XCTUnwrap(try surfaceSpan(rep, scale: scale, alongX: true, at: card.minY + 4), "expanded: no selected surface across")
-        XCTAssertEqual(across.lowerBound, card.minX, accuracy: 1.0, "expanded: selected leading edge = hover leading edge")
-        XCTAssertEqual(across.upperBound, card.maxX, accuracy: 1.0, "expanded: selected trailing edge = hover trailing edge")
-        let down = try XCTUnwrap(try surfaceSpan(rep, scale: scale, alongX: false, at: card.maxX - 12), "expanded: no selected surface down")
-        XCTAssertEqual(down.lowerBound, card.minY, accuracy: 1.0, "expanded: selected top = hover top")
-        XCTAssertEqual(down.upperBound, card.maxY, accuracy: 1.0, "expanded: selected bottom = hover bottom")
-        for (cx, cy, dx, dy) in [(card.minX, card.minY, 1.0, 1.0), (card.maxX, card.maxY, -1.0, -1.0)] {
-            XCTAssertTrue(try isSurface(rep, scale: scale, x: cx + 2.5 * dx, y: cy + 2.5 * dy), "expanded: corner at hover radius is filled")
-            XCTAssertFalse(try isSurface(rep, scale: scale, x: cx + 0.5 * dx, y: cy + 0.5 * dy), "expanded: corner is rounded")
+        let chip = RailProjectColumn.chipSize(.sidebar)
+        let slotMidX = inset + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
+        let rowMidY = SidebarDialTuning.rowHeight() / 2
+        // Down a line 8pt inside the chip (past its corner curve; the
+        // stopped glyph draws nothing), and across the row's centre line
+        // from there: contiguous runs, so the title ink can't join in.
+        let down = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: false, through: CGPoint(x: slotMidX - chip / 2 + 8, y: rowMidY)), "expanded: no chip down the slot")
+        XCTAssertEqual(down.upperBound - down.lowerBound, chip, accuracy: 1.0, "expanded: selected surface is chip-tall, not row-tall")
+        XCTAssertEqual((down.lowerBound + down.upperBound) / 2, rowMidY, accuracy: 1.0, "expanded: chip centred in the row")
+        let across = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: true, through: CGPoint(x: slotMidX - chip / 2 + 8, y: rowMidY)), "expanded: no chip across the slot")
+        XCTAssertEqual(across.lowerBound, slotMidX - chip / 2, accuracy: 1.0, "expanded: chip leading edge")
+        XCTAssertEqual(across.upperBound, slotMidX + chip / 2, accuracy: 1.0, "expanded: chip trailing edge")
+        // Nothing at the row card's corner: no wide card is drawn.
+        XCTAssertFalse(try isSurface(rep, scale: scale, x: inset + 3, y: 3), "expanded: no row card")
+    }
+
+    /// The contiguous run of surface pixels along one line through `point`.
+    private func surfaceRun(_ rep: NSBitmapImageRep, scale: CGFloat, alongX: Bool, through point: CGPoint) throws -> ClosedRange<CGFloat>? {
+        let count = alongX ? rep.pixelsWide : rep.pixelsHigh
+        let start = Int((alongX ? point.x : point.y) * scale)
+        func hit(_ i: Int) throws -> Bool {
+            let p = CGFloat(i) / scale
+            return try isSurface(rep, scale: scale, x: alongX ? p : point.x, y: alongX ? point.y : p)
         }
+        guard start >= 0, start < count, try hit(start) else { return nil }
+        var lo = start, hi = start
+        while lo > 0, try hit(lo - 1) { lo -= 1 }
+        while hi < count - 1, try hit(hi + 1) { hi += 1 }
+        return CGFloat(lo) / scale...CGFloat(hi + 1) / scale
     }
 }
