@@ -21,7 +21,7 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **Hover a session in the full list to see what it needs or is doing.** A session that needs approval shows what it wants to run and why. A running session shows your last prompt and the current step. Esc dismisses it while your pointer is on the card.
 - **Resume a past session from Cmd+T.** In the composer, press ↓ to list your past sessions under Resume, then your Templates below them; typing filters both. Each section shows three rows, then a "Show N more" row. Return on a past session resumes it.
 - **View → Refresh Appearance** re-applies the current light or dark appearance to every terminal, for a window that still shows the wrong colors.
-- **Templates are managed in Project settings.** Create, edit, duplicate, pin and delete templates in a Templates section there. Templates are shared across projects, and changes apply immediately, without Save or Cancel.
+- **Templates are managed in Project settings.** Right-click a project, in the list or the rail, and choose Settings…. Create, edit, duplicate, pin and delete templates in a Templates section there. Templates are shared across projects, and changes apply immediately, without Save or Cancel.
 - **Rail buttons are announced by VoiceOver** with the session name, project and status.
 
 ### Changed
@@ -53,6 +53,7 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **Typing a project's name in the composer now reaches that project.**
 - **The first Return on a new branch creates its worktree.** Under load it could be rejected, and you had to press Return a second time.
 - **Deleting a template that sessions use now names those sessions** in the warning (the first three, then "and N more").
+- **Closing the embedded browser no longer crashes the app.**
 
 ---
 
