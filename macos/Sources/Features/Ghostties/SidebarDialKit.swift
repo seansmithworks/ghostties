@@ -426,11 +426,16 @@ enum SidebarDialTuning {
     static func trayGlassCornerStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.CornerStyle {
         choice(trayGlassCornerStyleKey, default: TrayGlassStyle.cornerStyle, defaults: defaults)
     }
-    /// The tray pills' radius ("radius" corner style): concentric with the
-    /// window corner at the window margin they sit inside
-    /// (`WorkspaceLayout.concentricCornerRadius`), like the canvas card.
-    static func trayCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        WorkspaceLayout.concentricCornerRadius(margin: windowMargin(defaults: defaults))
+    /// The tray pills' radius ("radius" corner style) in `mode`: concentric
+    /// with the surface they sit in (`WorkspaceLayout.trayParentCornerRadius`),
+    /// the window margin in from its edges — the tray's own leading, trailing
+    /// and bottom padding in every mode.
+    static func trayCornerRadius(for mode: SidebarMode = .pinned, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        let margin = windowMargin(defaults: defaults)
+        return WorkspaceLayout.concentricRadius(
+            parent: WorkspaceLayout.trayParentCornerRadius(for: mode, margin: margin),
+            inset: margin
+        )
     }
 
     static func rowHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {

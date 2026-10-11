@@ -162,11 +162,27 @@ enum WorkspaceLayout {
     /// measured on 2026-10-08 read too tight).
     static let windowCornerRadius: CGFloat = 20
 
-    /// A surface inset `margin` from the window's edges is concentric with
-    /// the window corner: its radius is the window's less the margin (Sean,
-    /// 2026-10-08). The one rule for the canvas card and the tray pills.
+    /// Radii nest (Sean, 2026-10-11): a surface inset `inset` from its
+    /// parent surface's edges is concentric with the parent's corner — its
+    /// radius is the parent's less the inset, clamped at 0. The one rule for
+    /// every card, pill and chip.
+    static func concentricRadius(parent: CGFloat, inset: CGFloat) -> CGFloat {
+        max(0, parent - inset)
+    }
+
+    /// A surface whose parent is the window, inset `margin` from its edges:
+    /// the terminal, browser, History and overlay cards, and the tray pills
+    /// outside overlay.
     static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
-        max(0, windowCornerRadius - margin)
+        concentricRadius(parent: windowCornerRadius, inset: margin)
+    }
+
+    /// The corner of the surface the tray pills sit in. Overlay: the
+    /// overlay card (itself the window margin in from the window). Every
+    /// other mode: the window — the pinned sidebar and the rail draw no
+    /// card around the tray.
+    static func trayParentCornerRadius(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
+        mode == .overlay ? concentricCornerRadius(margin: margin) : windowCornerRadius
     }
 
     /// Corner radius on the floating terminal panel (all four corners), and
@@ -914,17 +930,19 @@ private struct SidebarRailWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
 }
 
-private struct TrayShadowStateKey: EnvironmentKey {
-    static let defaultValue: SidebarDialTuning.TrayShadowState = .sidebar
+private struct SidebarModeKey: EnvironmentKey {
+    static let defaultValue: SidebarMode = .pinned
 }
 
 extension EnvironmentValues {
-    /// The sidebar state whose tray shadow dials the tray draws
-    /// (`SidebarDialTuning.trayGlass(for:state:)`), injected at the sidebar
-    /// root (`SidebarHostRoot`). The sidebar's outside it.
-    var trayShadowState: SidebarDialTuning.TrayShadowState {
-        get { self[TrayShadowStateKey.self] }
-        set { self[TrayShadowStateKey.self] = newValue }
+    /// The sidebar's mode, injected at the sidebar root (`SidebarHostRoot`)
+    /// from `store.sidebarMode` — the target mode from the start of a
+    /// transition, so a morph switches once. The tray reads it for its
+    /// pills' corner (`TrayGlassStyle.pillCornerRadius(for:)`) and shadow
+    /// (`SidebarDialTuning.trayGlass(for:state:)`). Pinned outside it.
+    var sidebarMode: SidebarMode {
+        get { self[SidebarModeKey.self] }
+        set { self[SidebarModeKey.self] = newValue }
     }
 
     /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected
