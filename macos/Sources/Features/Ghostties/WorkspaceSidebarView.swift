@@ -36,7 +36,6 @@ struct WorkspaceSidebarView: View {
     /// Tracks which projects are expanded (per-window, not persisted).
     @State private var expandedProjectIds: Set<UUID> = []
 
-    @AppStorage("ghostties.hasSeenOnboarding") private var hasSeenOnboarding = false
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
 
     var body: some View {
@@ -166,14 +165,6 @@ struct WorkspaceSidebarView: View {
             expandedProjectIds.insert(projectId)
         }
         .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
-        .sheet(isPresented: Binding(
-            get: { !hasSeenOnboarding },
-            set: { _ in }
-        )) {
-            OnboardingSheet {
-                hasSeenOnboarding = true
-            }
-        }
     }
 
     // MARK: - Titlebar Toolbar
