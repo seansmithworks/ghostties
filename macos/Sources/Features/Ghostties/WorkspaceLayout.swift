@@ -196,11 +196,6 @@ enum WorkspaceLayout {
     /// outer edge, so every outer gutter in the window stays one value.
     static let terminalInset: CGFloat = 8
 
-    /// Width of the invisible hover trigger strip at the left edge (closed mode).
-    /// Flow 01 (sidebar-presence): 10 → 24 — the hot zone is invisible in the
-    /// app; the `#ffffff08` fill on the design canvas is a diagram device only.
-    static let overlayTriggerWidth: CGFloat = 24
-
     /// Minimum width for the browser panel when visible.
     static let browserMinWidth: CGFloat = 320
 
@@ -611,13 +606,6 @@ enum WorkspaceLayout {
     static func sidebarTransitionAlphaDuration(reduceMotion: Bool, timing: SidebarTransitionTiming) -> TimeInterval {
         reduceMotion ? sidebarReducedMotionCrossfadeDuration : timing.duration
     }
-
-    /// Delay before the closed-state 24pt hot zone starts accepting hover
-    /// (Flow 05: "hot zone hidden → 24px at 180ms, step") — installed only
-    /// once the full-close animation has actually finished, not the instant
-    /// the toggle fires, so a fast mouse can't trigger the reveal overlay
-    /// before the card has reached the edge.
-    static let closedHotZoneActivationDelay: TimeInterval = 0.18
 
     /// Rail hover-reveal (`RailHoverReveal`): how long the pointer rests on
     /// the rail before the full sidebar reveals over the terminal, and how
