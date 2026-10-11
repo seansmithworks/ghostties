@@ -23,6 +23,8 @@ Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action it
 - `VERIFY_EXPAND_PROJECT=<project>`: expands and selects that project (implies `TAB=projects`).
 - `VERIFY_COMPOSER=open|prefilled:<project>[:delay=<s>]`: `open` is the tray +, `prefilled:` is a project row's +. Fires 1s after the window appears unless `:delay=` says otherwise.
 - `VERIFY_PROJECT_SETTINGS=<project>[:templates-edit|:templates-delete]`: opens that project's settings popover; a suffix also opens the template edit sheet or delete alert for the first user template (first template if none; a built-in gets "Duplicate and Edit...", as its menu offers). Implies `TAB=projects`.
+- `VERIFY_FIXTURE_PROJECTS=none`: seeds 0 projects and 0 sessions (contract X3: with any project the Run row accepts any text). `VERIFY_COMPOSER=open` still works. Don't combine with hooks that name a project.
+- `VERIFY_FIXTURE_TEMPLATE_IN_USE=1`: seeds one user template, "Mine", used by two trove sessions ("build fix", "release notes"). With `VERIFY_PROJECT_SETTINGS=<project>:templates-delete` the alert reads "Used by build fix and release notes. Sessions using "Mine" will keep...". Templates are global, so any project's settings show it (contract T6).
 - `VERIFY_SIDEBAR_TOGGLE_AFTER=<s>`: runs Cmd+S's action after N s (pinned to rail), again after 2N s (back).
 `up` launches the binary directly (not `open`, which only focuses a running Dev build sharing the bundle id), strips `GHOSTTIES_SESSION_ID`/`GHOSTTIES_LAUNCHER`, sets `GHOSTTIES_STATE_DIR` to the evidence dir, records the pid, and records the old `ghostties.sidebarTab` value if a tab was requested. Mode is fixed at launch: one flow = one `up`/`down` cycle.
 

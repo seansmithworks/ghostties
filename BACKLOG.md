@@ -12,7 +12,7 @@
   - CEF browser-close fix `fix/cef-app-protocol` @ b552deadb: own PR after Sean's open/close click.
   - Refresh Appearance View-menu position check, after #205 merges.
 - Motion spec gaps (spec committed at `docs/design/sidebar-vnext/motion-spec.html`, not built):
-  - [ ] Single-object morph (group card narrows into the rail column, glyphs ride +22pt).
+  - [ ] Single-object morph (group card narrows into the rail column, glyphs ride +22pt). → built on `feat/sidebar-morph` @ a2f8afe13, UNVERIFIED; see 2026-10-10 evening below.
   - [ ] `sidebarSnap` / `sidebarPop` / `sidebarFade` animation tokens.
   - [ ] 60ms toggle debounce (replaces the 250ms guard that drops a second Cmd+S).
   - [ ] Label stagger cap (100 + 12·i ms, i ≤ 8).
@@ -23,11 +23,23 @@
   - [ ] Instant rail auto-scroll on keyboard selection.
   - [ ] Flow 01 opaque overlay (state 04) not built.
 - [x] Test parallelism: `fix/vnext-suite-contention` 9010b8d88 merged into #205 as b755b9829. Full run 1679 passed / 1 failed / 1 skipped / 1681; sole failure `WorkspacePersistenceTests.stateDirOverrideUnsetUsesBundleDerivedDirectory` (fix on `fix/persistence-test-capture-bundle` 62da4d8f3, awaiting Sean's OK to fold into #205).
-- [ ] Rail/sidebar tile-size + content dials and whole-app Preview appearance — in progress on `feat/rail-tile-size-dial`.
-- [ ] Sessions tab + pinned/history rows adopt Option D chip selection — strawman on `feat/sessions-view-option-d`; 3 forks for Sean in `~/.ghostties-evidence/vnext/sessions-port/port-spec.md`.
-- [ ] Worktree-launch tests await completion instead of 12s wall-clock polls — in progress on `test/worktree-launch-await-completion`.
+- [ ] Rail/sidebar tile-size + content dials and whole-app Preview appearance — in progress on `feat/rail-tile-size-dial`. → built on `integrate/vnext-dials-sessions` @ bd6f9e90e, reviewed APPROVE; fold on Sean's OK (see evening below).
+- [ ] Sessions tab + pinned/history rows adopt Option D chip selection — strawman on `feat/sessions-view-option-d`; 3 forks for Sean in `~/.ghostties-evidence/vnext/sessions-port/port-spec.md`. → built in `integrate/vnext-dials-sessions` @ bd6f9e90e (Sessions/Pinned/History chip); see evening below.
+- [ ] Worktree-launch tests await completion instead of 12s wall-clock polls — in progress on `test/worktree-launch-await-completion`. → done @ e5ba34499, reviewed APPROVE; fold on Sean's OK (see evening below).
 - [ ] Hover popover shows only for working / needs-approval sessions (`SessionPopoverContent.swift` make); Sean to confirm on a working session; design fork: show something for idle sessions?
 - [ ] DialKit inspector runs from `~/Code/_tools/dialkit-macos` @ cc305b4: `swift run dialkit-macos` in a separate terminal.
+
+### 2026-10-10 evening — wrap-continue
+
+- [ ] (carried) #205 is green: 031386a3a, full run 1680 passed / 0 failed / 1 skipped / 1681. Next: Sean's Dev pass, then fold reviewed branches below into #205 on his OK, then Sean merges.
+- [ ] (carried) Fold into #205 on Sean's OK: `integrate/vnext-dials-sessions` bd6f9e90e (tile dials x8, whole-app Preview appearance, Sessions/Pinned/History chip; reviewed APPROVE; full 1684/1/1686, sole fail = stateDir, fixed on #205) and `test/worktree-launch-await-completion` e5ba34499 (await completion instead of 12s polls + TESTING.md serial note; reviewed APPROVE).
+- [ ] (carried) `feat/sidebar-morph` a2f8afe13 - one view tree morphs sidebar<->rail; rail tile/chip 40, monogram 18/16, glyph 26; plan `~/.ghostties-evidence/vnext/morph/plan.md`; evidence morph.mov / morph-strip.png / rail-size-compare.png in `~/.ghostties-evidence/vnext/morph/`. UNVERIFIED: independent verifier confirmed gates RED at 5843f17a0 (path + single-mount) but was permission-blocked before running gates at a2f8afe13 and the full suite. Worktrees verify-prefix / verify-head are built and ready. Static review: no blockers.
+- [ ] (carried) DialKit tile sliders not saving on the morph Dev build: no `sidebarTile.*` / `railColumn.tile*` keys ever written to `com.seansmithdesign.ghostties.dev` though inspector is connected and the write path (`SidebarDialKit.swift` setIfChanged ~:1104/:1196) is wired. Suspect inspector (`~/Code/_tools/dialkit-macos`, started 10:xx before the new panels) holding a stale control schema. Sean restarts inspector; if still broken, trace.
+- [ ] (carried) DECIDE OR KILL: rail project header grows to 40pt with the tile (+10pt per group), rows slide under the tray sooner in short windows. Strawman: keep 40 (Sean asked for bigger rail tiles); alternative 32.
+- [ ] (parked, beta.27) Durable pinned threads: pinning is OFF on #205 (`SessionPinning.isAvailable=false`, `Models/AgentSession.swift:348`). Strawman: exempt isPinned from `pruneStaleSessionsAtLaunch` (WorkspaceStore ~262-340); clicking a non-live pin -> `relaunch(mode: .resume)` (SessionCoordinator ~471, ResumePlan claude/cco/codex --resume in remembered cwd/worktree); Cmd+1..9 include pinned rows (WorkspaceViewContainer ~2497-2530 drops hasLiveSurface filter for pins). Limit: pin resumes only if its agent fired a hook once. ~4-6 files.
+- [ ] (parked) Morph follow-ups: slice 5 toggle guard 0.25s->60ms + retargeting test; Reduce Motion fade for card/badge (snaps today); dark-mode rail diff; animated path not gated by any test (gates use held steps).
+- [ ] (parked) Cleanup on Sean's go (permission-blocked for agents): `git worktree remove .claude/worktrees/sidebar-spacing && git branch -D fix/sidebar-spacing && git push origin --delete fix/sidebar-spacing trial/vnext-with-spacing` (Sean said "sure"); also worktrees verify-prefix, verify-head, sessions-capture, vnext-spacing once no Dev runs from them.
+- [x] `fix/persistence-test-capture-bundle` folded into #205 as 031386a3a (Sean OK'd).
 
 ## 2026-10-10 — IDEA (beta.27 candidate): project overview canvas (session 7b48d66f)
 

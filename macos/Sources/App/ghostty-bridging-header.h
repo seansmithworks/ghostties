@@ -4,4 +4,5 @@
 #import "VibrantLayer.h"
 #import "CEFBridge.h"
 #import "CEFBrowserView.h"
+#import "GhosttiesApplication.h"
 
