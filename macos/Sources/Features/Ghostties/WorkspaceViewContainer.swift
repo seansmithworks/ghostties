@@ -2113,7 +2113,9 @@ class WorkspaceViewContainer: NSView {
         guard sidebarMode == .overlay else { return }
         updateTrackingAreas()
         if !pointerIsInOverlayZone {
-            transitionTo(.closed)
+            // Not debounced: a drag can end within the guard's 0.25s of the
+            // overlay opening, and this close must not be dropped.
+            transitionTo(.closed, debounced: false)
         }
     }
 
@@ -2313,14 +2315,23 @@ class WorkspaceViewContainer: NSView {
     private var lastTransitionTime: CFTimeInterval = 0
 
     /// Centralized state transition. All sidebar mode changes go through here.
-    private func transitionTo(_ newMode: SidebarMode) {
+    /// `debounced: false` skips the oscillation guard, for a transition that
+    /// is a deliberate one-off rather than a hover flicker (the close at the
+    /// end of an overlay drag).
+    private func transitionTo(_ newMode: SidebarMode, debounced: Bool = true) {
         guard newMode != sidebarMode else { return }
         let now = CACurrentMediaTime()
-        guard now - lastTransitionTime > 0.25 else { return }
+        guard !debounced || now - lastTransitionTime > 0.25 else { return }
         lastTransitionTime = now
         isMorphStepHeld = false
         let previousMode = sidebarMode
         sidebarMode = newMode
+        // An overlay drag ends with the overlay: a later overlay must never
+        // inherit a drag whose mouse-up was lost (`mouseExited` holds an
+        // overlay open while one is in progress).
+        if previousMode == .overlay {
+            sidebarDragPointerWidth = nil
+        }
 
         // Leaving the rail ends any hover reveal. Cmd+S while revealed pins
         // it: the sidebar is already out at the pinned width, so it stays
@@ -3080,6 +3091,12 @@ class WorkspaceViewContainer: NSView {
     // MARK: - Window Focus
 
     @objc private func windowDidResignKey() {
+        // A drag whose mouse-up never arrives (the window lost key mid-drag)
+        // ends here, so it can't hold any overlay open later.
+        if sidebarDragPointerWidth != nil {
+            sidebarDragPointerWidth = nil
+            persistSidebarWidth()
+        }
         if sidebarMode == .overlay {
             transitionTo(.closed)
         }
