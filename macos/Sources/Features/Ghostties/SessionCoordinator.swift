@@ -1912,6 +1912,22 @@ final class SessionCoordinator: ObservableObject {
         #endif
     }
 
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_SELECT_SEQUENCE`: moves the selection `offset` rows
+    /// along `sessions` (wrapping) the way a row click selects, minus the
+    /// terminal swap — fixture sessions have no surface tree, so
+    /// `focusSession` returns early for them.
+    func selectAdjacentForCapture(offset: Int, in sessions: [AgentSession]) -> AgentSession? {
+        guard CaptureFixture.isActive, !sessions.isEmpty else { return nil }
+        let current = sessions.firstIndex(where: { $0.id == activeSessionId }) ?? (offset > 0 ? -1 : 0)
+        let target = sessions[((current + offset) % sessions.count + sessions.count) % sessions.count]
+        isHistoryPresented = false
+        activeSessionId = target.id
+        sidebarItemActivated.send()
+        return target
+    }
+    #endif
+
     /// Test-only: current count of live name-sync subscriptions, so tests
     /// can assert the dictionary shrinks after teardown without reaching
     /// into a `private` property directly.

@@ -38,6 +38,10 @@ struct WorkspaceSidebarView: View {
 
     @AppStorage("ghostties.hasSeenOnboarding") private var hasSeenOnboarding = false
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE` in One view: the fold the accordion reads.
+    @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var captureCollapsedRaw = ""
+    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -239,23 +243,34 @@ struct WorkspaceSidebarView: View {
         selectedProjectId = project.id
     }
 
-    /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE`: the project header's click action
-    /// (`ProjectDisclosureRow`: the fold spring around `isExpanded.toggle()`),
-    /// repeated on a timer. Projects tab only.
+    /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE`: the project header's click action,
+    /// repeated on a timer. Projects tab only. One view (the shipped layout)
+    /// folds through `ProjectAccordionState` as `headerClicked` does; the tabs
+    /// layout toggles `expandedProjectIds`. The project is selected once, up
+    /// front: selecting it again per tick would not fold it, but it moves the
+    /// selection under the clip.
     private func applyCaptureFoldToggleIfNeeded() {
         guard sidebarTab == .projects,
               let hook = CaptureFixture.foldToggle,
               let project = store.projects.first(where: { $0.name == hook.projectName }),
               CaptureFixture.claimHook("foldToggle") else { return }
         let binding = expandedBinding(for: project.id)
+        let collapsedRaw = $captureCollapsedRaw
         let projectId = project.id
+        selectedProjectId = projectId
         _Concurrency.Task { @MainActor in
             for _ in 0..<CaptureFixture.foldToggleCycles {
                 try? await _Concurrency.Task.sleep(nanoseconds: UInt64(hook.interval * 1_000_000_000))
-                withAnimation(SidebarUISpring.fold.animation(entering: !binding.wrappedValue)) {
-                    binding.wrappedValue.toggle()
+                if SidebarDialTuning.projectsLayout() == .oneView {
+                    let unfolding = ProjectAccordionState.decode(collapsedRaw.wrappedValue).contains(projectId)
+                    withAnimation(ProjectAccordionState.toggleAnimation(unfolding: unfolding)) {
+                        collapsedRaw.wrappedValue = ProjectAccordionState.toggled(collapsedRaw.wrappedValue, projectId)
+                    }
+                } else {
+                    withAnimation(SidebarUISpring.fold.animation(entering: !binding.wrappedValue)) {
+                        binding.wrappedValue.toggle()
+                    }
                 }
-                selectedProjectId = projectId
             }
         }
     }

@@ -1191,15 +1191,18 @@ class WorkspaceViewContainer: NSView {
             }
         }
         if let sequence = CaptureFixture.selectSequence, CaptureFixture.claimHook("selectSequence") {
-            // Cmd+Shift+] / [ (`handleSelectNextSession`), repeating; the
-            // shortcut order follows the mounted sidebar, so it works pinned
-            // and on the rail.
+            // Cmd+Shift+] / [ order over the rows the mounted sidebar lists
+            // (`railSessions`), repeating, so it works pinned and on the rail.
+            // Fixture sessions have no terminal, so the shortcut's own path
+            // (`focusAdjacentLiveSession`, live surfaces only) finds nothing:
+            // select through `activeSessionId`, which every row's chip reads.
             func tick(_ remaining: Int) {
                 guard remaining > 0 else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
                     guard let self else { return }
-                    let sessions = self.shortcutSessions()
-                    self.focusShortcutTarget(self.coordinator.focusAdjacentLiveSession(offset: sequence.steps, in: sessions))
+                    let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab))
+                    self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
                     tick(remaining - 1)
                 }
             }
