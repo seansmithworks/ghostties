@@ -26,3 +26,5 @@ Branch `design/onboarding-revamp` · draft PR #209 (green, no review comments, d
 3. Fix bugs 1–3 on a new branch from `main`; verify with the `verify` skill.
 
 Open: on-device onboarding funnel counting — yes or no.
+
+The `.pen` source (`onboarding-20-concepts.pen`) lives in iCloud at `~/Library/Mobile Documents/com~apple~CloudDocs/Ghostties/onboarding/`, gitignored and kept out of the public repo.
