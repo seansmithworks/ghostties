@@ -2956,25 +2956,25 @@ class WorkspaceViewContainer: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        // Only the closed strip's own tracking area reveals. Subviews
+        // Only the closed strip's own tracking area (installed from
+        // `WorkspaceLayout.closedRevealZone(in:)`) reveals. Subviews
         // forward their mouseEntered up the responder chain to here — the
         // terminal's SurfaceView calls `super.mouseEntered` from a
-        // whole-surface tracking area — so without these checks entering
+        // whole-surface tracking area — so without this check entering
         // the terminal anywhere opened the overlay.
         guard sidebarMode == .closed,
-              let area = activeTrackingArea, event.trackingArea === area,
-              WorkspaceLayout.isInClosedRevealZone(
-                  point: convert(event.locationInWindow, from: nil),
-                  bounds: bounds
-              )
+              let area = activeTrackingArea, event.trackingArea === area
         else { return }
         transitionTo(.overlay)
     }
 
     override func mouseExited(with event: NSEvent) {
-        if sidebarMode == .overlay {
-            transitionTo(.closed)
-        }
+        // Same rule: only the overlay's own tracking area closes it, never
+        // an exit forwarded up from a subview.
+        guard sidebarMode == .overlay,
+              let area = activeTrackingArea, event.trackingArea === area
+        else { return }
+        transitionTo(.closed)
     }
 
     // MARK: - Window Focus

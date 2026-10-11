@@ -209,17 +209,11 @@ enum WorkspaceLayout {
     static let overlayTriggerWidth: CGFloat = 24
 
     /// The closed-mode reveal strip: `overlayTriggerWidth` wide at the
-    /// leading edge, full height. The one definition of the zone — the
-    /// container's tracking area is installed from it and its
-    /// `mouseEntered` re-checks against it, so the two can't disagree.
+    /// leading edge, full height. The one definition of the zone: the
+    /// container installs its closed-mode tracking area from it, and only
+    /// that area's own events reveal the sidebar.
     static func closedRevealZone(in bounds: CGRect) -> CGRect {
         CGRect(x: bounds.minX, y: bounds.minY, width: overlayTriggerWidth, height: bounds.height)
-    }
-
-    /// True only when `point` (in the container's coordinates) lies in
-    /// `closedRevealZone(in:)`.
-    static func isInClosedRevealZone(point: CGPoint, bounds: CGRect) -> Bool {
-        closedRevealZone(in: bounds).contains(point)
     }
 
     /// Minimum width for the browser panel when visible.
