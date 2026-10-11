@@ -8,8 +8,7 @@
 4. Agents can read deploy state from a terminal today through the CLI (`vercel logs`, `--format=json`) and the official remote MCP (`mcp.vercel.com`). Both are **pull-only**. Nothing pushes live state to a local surface.
 5. Existing menu-bar tools are hobby-scale (9 to 31 stars) and all **poll** with a personal token. Only one of them (DeployBar) covers multiple providers. I found no Vercel TUI.
 6. Every peer (Netlify, Cloudflare, Railway, Render, Fly) has an official MCP. Each one handles deploy *events* differently, so there is no common event model.
-7. Design leadership may be changing. Both named leaders (Head of Product Design, VP Design) have LinkedIn headlines pointing to other companies. **Verify before tailoring an application.**
-8. An open role, **Product Designer, Marketplace**, is scoped to "developers *and agents*" discovering and connecting services across the dashboard, CLI, API and v0. That overlaps directly with a Ghostties-shaped project.
+7. Marketplace is where developers *and agents* discover and connect services across the dashboard, CLI, API and v0, which overlaps directly with a Ghostties-shaped project.
 
 ## Product map
 
@@ -94,22 +93,14 @@ Every one of these tools asks for a long-lived personal token. After the April O
 
 The takeaway: MCP is table stakes everywhere. How each platform delivers *events* is fragmented five ways (webhook, signed webhook, queue, Pro-gated webhook, none). A normalized local event model is open ground.
 
-## Design org
-
-- **Hannah Hearth**, Head of Product Design (Senior Director). Previously Director at Webflow and HashiCorp. She marked 90 days in the role on Mar 16, 2026 ([her site](https://www.hannahhearth.com/), [TheOrg](https://theorg.com/org/vercel/org-chart/hannah-hearth)). Her LinkedIn headline now reads "Anthropic" ([LinkedIn](https://www.linkedin.com/in/hannah-hearth-771a0a22/)). **Unverified whether she left.** She talks publicly about portfolios and design careers in the AI era ([Dive Club](https://www.dive.club/deep-dives/hannah-hearth)).
-- **Manuel Muñoz Solera**, VP Design since Aug 2024, previously at GitHub and Microsoft ([X](https://x.com/mamuso/status/1819190853963075996)). His LinkedIn headline now reads "Designer at SpaceXAI" ([LinkedIn](https://www.linkedin.com/in/mamuso/)). **Unverified whether he left.**
-- Vercel's "design engineer" era came from Glenn Hitchcock (design director, 2022–24) with Rauno Freiberg and Emil Kowalski ([glenn.me](https://glenn.me/vercel)). Emil and, reportedly, Rauno are now at Linear ([brainy.ink](https://brainy.ink/paper/design-engineering-role)). Rauno's move is inferred from that single source.
-- Vercel frames design engineering as the design team owning the polish engineering backlogs drop: no dropped frames, cross-browser consistency, a11y, Geist font, docs playgrounds ([blog](https://vercel.com/blog/design-engineering-at-vercel)). **Geist** is the public system, with a Figma kit and the Geist Sans/Mono fonts ([Geist](https://vercel.com/geist/introduction)).
-- Open roles: Senior Product Designer ($156–234K), **Product Designer, Marketplace** ($172–258K, owns Marketplace and Connect, "developers and agents," "prototype with coding agents"), Senior PD Growth, and Design Engineer, Product ([Marketplace role](https://vercel.com/careers/product-designer-marketplace-6160974004), [Senior PD](https://jobs.generalcatalyst.com/companies/vercel/jobs/64936345-senior-product-designer), [DE](https://vercel.com/careers/design-engineer-product-uk-us-5056771004)).
-
 ## Gaps I'd bet on
 
 1. **Live deploy state pushed to where the agent runs.** The MCP and CLI are pull-only, webhooks need a public receiver, and every menu-bar app polls. Meanwhile agents cause >50% of deploys ([MCP docs](https://vercel.com/docs/agent-resources/vercel-mcp), [DeployBar](https://github.com/snapre/DeployBar), [digitalapplied](https://www.digitalapplied.com/blog/vercel-ship-2026-agents-half-of-deployments-enterprise-stack)). A terminal workspace that shows "this session's deploy is building / ready / failed" beside the agent is unclaimed.
 2. **Linking a deploy back to the agent session that caused it.** Vercel counts agent-triggered deploys, but its Agent surfaces live in the dashboard and Slack ([Vercel Agent docs](https://vercel.com/docs/agent)). Nothing local ties a preview URL to the thread and prompt that produced it. This is inferred from the absence of any such tool in the inventory above.
 3. **One normalized event model across providers.** Five peers use five event mechanisms (see Peers). The only multi-provider tool has 9 stars. An open schema and adapter layer with Vercel as the reference implementation fits the "open, Vercel as star" brief.
 4. **Approval-gated agent actions surfaced locally.** eve and Vercel Agent both build in human-in-the-loop approvals, but they surface in Slack and the dashboard ([eve](https://vercel.com/blog/introducing-eve), [Slack Agent](https://vercel.com/blog/introducing-vercel-for-slack)). A native macOS approval queue across parallel agent sessions is the missing surface.
-5. **Marketplace and Connect discovery from the terminal, for agents.** The CLI can already install integrations as JSON, and Vercel is hiring a designer specifically for "developers and agents" across CLI, API and v0 ([role](https://vercel.com/careers/product-designer-marketplace-6160974004)). A shipped Ghostties prototype of that flow doubles as the application portfolio piece.
+5. **Marketplace and Connect discovery from the terminal, for agents.** The CLI can already install integrations as JSON. A shipped Ghostties prototype of that flow is the proof.
 
 ## Sources
 
-Inline above. Primary sources used: vercel.com/blog (ship-2026-recap, agentic-infrastructure, introducing-eve, introducing-vercel-for-slack, x402-mcp, design-engineering-at-vercel, ai-agents-and-services-on-the-vercel-marketplace), vercel.com/changelog, vercel.com/docs (agent-resources/vercel-mcp, agent, workflows, cli, botid, integrations billing), vercel.com/careers, TechCrunch (Apr 13 and Jul 6, 2026), InfoQ (Aug 2026), bex.co (Sep 5, 2026), peer docs as linked.
+Inline above. Primary sources used: vercel.com/blog (ship-2026-recap, agentic-infrastructure, introducing-eve, introducing-vercel-for-slack, x402-mcp, design-engineering-at-vercel, ai-agents-and-services-on-the-vercel-marketplace), vercel.com/changelog, vercel.com/docs (agent-resources/vercel-mcp, agent, workflows, cli, botid, integrations billing), TechCrunch (Apr 13 and Jul 6, 2026), InfoQ (Aug 2026), bex.co (Sep 5, 2026), peer docs as linked.

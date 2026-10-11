@@ -11,10 +11,6 @@ both on `main`. Concept-lab checkout restored at `ghostties-concept-lab/` with c
 prod attribution — deploy → merge → PR → the session that wrote it. Live deploy metadata on
 ghostties.org already carries the `Claude-Session:` trailer, so that join is a read.
 
-**Vercel angle.** Marketplace + Connect designer is the fit; #29 consent card is the portfolio
-piece; Growth needs analytics the site doesn't have; Design Engineer is AI Gateway (weak fit);
-both named design leaders appear to have left as of 2026-09-30.
-
 **Open.** Sean's review round (`sess_5e6d1d44a1be`, 0 comments); push/spike/analytics nods;
 #40 media previewer captured from Sean's ask. All in `BACKLOG.md` 2026-09-30.
 

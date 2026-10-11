@@ -231,8 +231,8 @@ Claude Code v2.1.277+ can read `AGENTS.md`; `~/.claude/settings.json` is now set
 Page: `docs/plans/vnext-avenues-2026-09-29.html` (`834ce6564`), 20 avenues #24–#43, 10 mockups, adversarial review folded in. Research: `docs/plans/vnext-research-2026-09-29/`. Concept-lab restored at `ghostties-concept-lab/` with the round-2 concepts (`ef7eaf5`, local only).
 
 - [ ] **Review round** — comment on the page (`html-review` session `sess_5e6d1d44a1be`) and decide bet 1: page recommends the #24 prod-trail spike (deploy → merge → PR → session via the `Claude-Session:` trailer). **Decide or kill.**
-- [ ] **Held for a nod:** push docs commits to `origin/main` · run the #24 read-only spike (script, no app code) · enable Vercel Web Analytics on ghostties.org (free tier; Growth-role gap — site has no analytics).
-- [ ] **#29 consent card on the application track** — page recommends building it BEFORE applying to Vercel Marketplace; Ship SF Oct 15 / Next.js Conf Oct 22 as timing. Decide role: Marketplace (page) vs Design Engineer/AI Gateway (roles doc ranks it 2nd). Verify who leads Vercel design first — both named leaders appear gone as of 2026-09-30.
+- [ ] **Held for a nod:** push docs commits to `origin/main` · run the #24 read-only spike (script, no app code) · enable Vercel Web Analytics on ghostties.org (free tier; the site has no analytics).
+- [ ] **#29 consent card** — page orders it after #24 and #28; Ship SF Oct 15 / Next.js Conf Oct 22 as timing.
 - [ ] **Unverified still:** does Vercel's GitHub status count as a CI check (if yes, Claude Desktop auto-fix already covers #25's preview half)? Vercel Sandbox endpoints for #42.
 - [ ] **Image/media previewer (#40)** — Sean 2026-09-30: "if I click on one of these, why does finder need to open?" Hook is `Ghostty.App.swift` `openURL` → OSC 8 → `openUntrustedURL`; default shape = `QLPreviewPanel` (large, resizable), setting `media-preview = panel | popover | pane` only if asked. Concept-lab ranks it 17/20, 2nd overall.
 - [ ] **Concept-lab** `ef7eaf5` not pushed/deployed; #26/#39 site sketches use placeholder copy.
@@ -1489,9 +1489,8 @@ gaps that made that necessary.
   Every synced row therefore carries no `project-path`, so clicking it launches the
   template without landing in the repo — the main thing that makes a synced row useful.
   **Decide or kill:** strawman is to seed it with the mappings the current Linear
-  projects imply — `Ghostties` → `~/Code/ghostties`, `Brukas Launch` → `~/Code/Pico Focus`,
-  `SeanSmithDesign.com` → the site repo — and leave non-code projects (Career Ops, Job
-  Search) unmapped on purpose.
+  projects imply — `Ghostties` → `~/Code/ghostties`, `SeanSmithDesign.com` → the site
+  repo — and leave non-code projects unmapped on purpose.
 - [ ] **The checked-out release binary was 2 tools behind source** (10 vs `allTools()`'s 12)
   and `create_task` lacked `source_id`, which is what the sync dedup contract keys on.
   Rebuilt this session, but nothing prevents the drift recurring. *Parked* — the install
