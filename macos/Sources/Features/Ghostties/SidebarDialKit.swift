@@ -391,9 +391,9 @@ enum SidebarDialTuning {
     static func sidebarThreadTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(sidebarThreadTileSizeKey, default: RailProjectColumn.defaultThreadTileSize, defaults: defaults)
     }
-    /// See `sidebarThreadTileIconKey`. Unset, it follows "Row ghost size".
+    /// See `sidebarThreadTileIconKey`. Defaults to `RailProjectColumn.defaultSidebarThreadTileIcon`.
     static func sidebarThreadTileIcon(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(sidebarThreadTileIconKey, default: rowGhostSize(defaults: defaults), defaults: defaults)
+        cgFloat(sidebarThreadTileIconKey, default: RailProjectColumn.defaultSidebarThreadTileIcon, defaults: defaults)
     }
 
 

@@ -185,9 +185,9 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             XCTAssertEqual(RailProjectColumn.chipCornerRadius, RailProjectTile.cornerRadius)
             XCTAssertEqual(RailProjectColumn.columnCornerRadius, 12)
             XCTAssertEqual(RailProjectTile.size(.rail), 40)
-            XCTAssertEqual(RailProjectTile.size(.sidebar), 30)
+            XCTAssertEqual(RailProjectTile.size(.sidebar), 32)
             XCTAssertEqual(RailProjectColumn.chipSize(.rail), 40)
-            XCTAssertEqual(RailProjectColumn.chipSize(.sidebar), 30)
+            XCTAssertEqual(RailProjectColumn.chipSize(.sidebar), 32)
             XCTAssertEqual(RailProjectColumn.selectedTileFill, 1)
             // The column fits the rail's content width (the real rail,
             // hugging a titled window's traffic lights, less the window
@@ -236,7 +236,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             XCTAssertEqual(RailProjectColumn.chipOverhang(.rail), 0)
             XCTAssertEqual(ProjectGroupCard.horizontalOutset(cardInset: 6, rowLeadingPadding: 4, chipOverhang: 0), 2)
             XCTAssertEqual(RailProjectColumn.columnWidth(anchorCount: 5, inset: RailProjectColumn.columnInset), 48)
-            assertGroupCardAndColumnInsetOnAllSides(chipSize: 30, railChipSize: 40)
+            assertGroupCardAndColumnInsetOnAllSides(chipSize: 32, railChipSize: 40)
             // Fills: tile 10%, selected chip 10%, card/column 6%.
             XCTAssertEqual(RailProjectTile.tintOpacity, 0.10)
             XCTAssertEqual(RailProjectTile.cornerRadius, 8)
@@ -273,7 +273,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         }
         let (header, lastRow) = anchors(.sidebar)
         let union = header.union(lastRow)
-        XCTAssertEqual(union.maxY, 238, file: file, line: line)
+        XCTAssertEqual(union.maxY, 240, file: file, line: line)
         let anchorCount = 1 + rows
         // The visual marks: the tile centred in the header, the chip in the row.
         let tileSize = RailProjectTile.size(.sidebar)
@@ -398,12 +398,11 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let defaults: [CGFloat] = withDials {
             XCTAssertEqual(RailProjectTile.textSize(.sidebar, letters: 2), 11)
             XCTAssertEqual(RailProjectTile.textSize(.rail, letters: 2), 16)
-            XCTAssertEqual(SidebarListRowChrome<Text, Text>.glyphSlotWidth, 30)
+            XCTAssertEqual(SidebarListRowChrome<Text, Text>.glyphSlotWidth, 32)
             XCTAssertEqual(RailProjectColumn.columnWidth(anchorCount: 5, inset: RailProjectColumn.columnInset), 48)
             return probes.map { $0.read() }
         }
-        let ghost = withDials { SidebarDialTuning.rowGhostSize() }
-        XCTAssertEqual(defaults, [30, 13, 30, ghost, 40, 18, 40, 26])
+        XCTAssertEqual(defaults, [32, 13, 32, 16, 40, 18, 40, 24])
 
         for (index, probe) in probes.enumerated() {
             let written: CGFloat = 23
@@ -420,7 +419,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         // The rail's project tile drives the column; the sidebar's the row slot.
         withDials({ $0.set(36.0, forKey: SidebarDialTuning.railProjectTileSizeKey) }) {
             XCTAssertEqual(RailProjectColumn.columnWidth(anchorCount: 1, inset: RailProjectColumn.columnInset), 44)
-            XCTAssertEqual(SidebarListRowChrome<Text, Text>.glyphSlotWidth, 30)
+            XCTAssertEqual(SidebarListRowChrome<Text, Text>.glyphSlotWidth, 32)
         }
         withDials({ $0.set(36.0, forKey: SidebarDialTuning.sidebarProjectTileSizeKey) }) {
             XCTAssertEqual(SidebarListRowChrome<Text, Text>.glyphSlotWidth, 36)
@@ -432,11 +431,11 @@ final class SidebarProjectsLayoutTests: XCTestCase {
     /// A project tile past the 30pt header grows the header that hosts it
     /// (in its own context only), so the group card and the rail column,
     /// measured from the header's frame, still enclose the tile with their
-    /// inset on every side. Unset, the sidebar's header stays 30 and the
+    /// inset on every side. Unset, the sidebar's header stays 32 and the
     /// rail's grows to its 40pt tile.
     func testABigProjectTileGrowsItsHeaderAndStaysInsideTheCard() {
         withDials {
-            XCTAssertEqual(ProjectAccordionHeader.height(.sidebar), 30)
+            XCTAssertEqual(ProjectAccordionHeader.height(.sidebar), 32)
             XCTAssertEqual(ProjectAccordionHeader.height(.rail), 40)
         }
         for context in [SidebarTileContext.sidebar, .rail] {
@@ -444,7 +443,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             withDials({ $0.set(44.0, forKey: key) }) {
                 let other: SidebarTileContext = context == .sidebar ? .rail : .sidebar
                 XCTAssertEqual(ProjectAccordionHeader.height(context), 44, "\(context)")
-                XCTAssertEqual(ProjectAccordionHeader.height(other), other == .sidebar ? 30 : 40, "\(context) moved \(other)")
+                XCTAssertEqual(ProjectAccordionHeader.height(other), other == .sidebar ? 32 : 40, "\(context) moved \(other)")
                 let tile = RailProjectTile.size(context)
                 XCTAssertEqual(tile, 44)
 

@@ -121,16 +121,16 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.rowLeadingPadding(defaults: d) == 4)
         #expect(SidebarDialTuning.rowTrailingPadding(defaults: d) == 20)
         #expect(SidebarDialTuning.groupCardInset(defaults: d) == 6)
-        // Tiles: the sidebar's at option D's 30, the rail's a third larger
-        // (Sean, 2026-10-10).
-        #expect(SidebarDialTuning.sidebarProjectTileSize(defaults: d) == 30)
+        // Tiles on the 8pt grid (Sean, 2026-10-10): sidebar 32 / glyph 16,
+        // rail 40 / glyph 24.
+        #expect(SidebarDialTuning.sidebarProjectTileSize(defaults: d) == 32)
         #expect(SidebarDialTuning.sidebarProjectTileText(defaults: d) == 13)
-        #expect(SidebarDialTuning.sidebarThreadTileSize(defaults: d) == 30)
-        #expect(SidebarDialTuning.sidebarThreadTileIcon(defaults: d) == 20)
+        #expect(SidebarDialTuning.sidebarThreadTileSize(defaults: d) == 32)
+        #expect(SidebarDialTuning.sidebarThreadTileIcon(defaults: d) == 16)
         #expect(SidebarDialTuning.railProjectTileSize(defaults: d) == 40)
         #expect(SidebarDialTuning.railProjectTileText(defaults: d) == 18)
         #expect(SidebarDialTuning.railThreadTileSize(defaults: d) == 40)
-        #expect(SidebarDialTuning.railThreadTileIcon(defaults: d) == 26)
+        #expect(SidebarDialTuning.railThreadTileIcon(defaults: d) == 24)
         #expect(SidebarDialTuning.railTrayPillSize(defaults: d) == 48)
         #expect(SidebarDialTuning.railTrayIconGap(defaults: d) == 30)
         #expect(SidebarDialTuning.trayHoverInset(defaults: d) == 4)

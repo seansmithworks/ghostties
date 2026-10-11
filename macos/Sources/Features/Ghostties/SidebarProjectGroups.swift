@@ -498,8 +498,8 @@ struct MorphTileFace: View, Animatable {
 /// A project tile's dials and look, shared by the expanded header and the
 /// rail (the tile itself is `ProjectAccordionHeader`'s, in both).
 enum RailProjectTile {
-    /// Option D's 30pt tile: what the sidebar's tile-size dial reads unset.
-    static let defaultSize: CGFloat = 30
+    /// The sidebar's tile, unset (Sean, 2026-10-10: the 8pt grid).
+    static let defaultSize: CGFloat = 32
     /// The rail's tile, unset (Sean, 2026-10-10: the rail's tiles grow a third
     /// as the sidebar shrinks to it, on the 8pt grid).
     static let defaultRailSize: CGFloat = 40

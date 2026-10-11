@@ -21,10 +21,10 @@ struct SidebarMorphMetricsTests {
 
     @Test func expandedEndMatchesOptionD() {
         let m = metrics(0)
-        #expect(m.tileCenterX == 27, "tile at x 12, 30 wide")
-        #expect(m.tileSize == 30)
-        #expect(m.chipSize == 30)
-        #expect(m.glyphSize == 20)
+        #expect(m.tileCenterX == 28, "tile at x 12, 32 wide")
+        #expect(m.tileSize == 32)
+        #expect(m.chipSize == 32)
+        #expect(m.glyphSize == 16)
         #expect(m.labelOpacity == 1)
         let card = m.card(hasRows: true)
         #expect(card.minX == 6, "list x 8, card 2pt past it")
@@ -34,13 +34,13 @@ struct SidebarMorphMetricsTests {
     }
 
     /// Option D's rail, with the rail's tiles a third larger (Sean,
-    /// 2026-10-10): 40pt tile and chip, 26pt glyph.
+    /// 2026-10-10): 40pt tile and chip, 24pt glyph.
     @Test func railEndMatchesOptionD() {
         let m = metrics(1)
         #expect(m.tileCenterX == 49, "centred on the 98pt rail")
         #expect(m.tileSize == 40)
         #expect(m.chipSize == 40)
-        #expect(m.glyphSize == 26)
+        #expect(m.glyphSize == 24)
         #expect(m.labelOpacity == 0)
         let column = m.card(hasRows: true)
         #expect(column.width == 48, "tile ±4")
@@ -52,7 +52,7 @@ struct SidebarMorphMetricsTests {
     @Test func midpointIsHalfwayOnEveryValue() {
         let a = metrics(0), b = metrics(1), m = metrics(0.5)
         #expect(m.tileCenterX == (a.tileCenterX + b.tileCenterX) / 2)
-        #expect(m.tileCenterX == 38)
+        #expect(m.tileCenterX == 38.5)
         #expect(m.tileSize == (a.tileSize + b.tileSize) / 2)
         #expect(m.chipSize == (a.chipSize + b.chipSize) / 2)
         #expect(m.glyphSize == (a.glyphSize + b.glyphSize) / 2)
