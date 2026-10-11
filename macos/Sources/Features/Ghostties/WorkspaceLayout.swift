@@ -589,7 +589,7 @@ enum WorkspaceLayout {
     /// "overshoot belongs to entrances only; never bounce a close".
     static let sidebarMorphCollapseSpring = SidebarSpring(response: 0.30, bounce: 0)
 
-    /// The morph's spring for this direction, from the "Motion" dials.
+    /// The morph's spring for this direction, from the "Morph springs" dials.
     static func sidebarMorphSpring(collapsing: Bool, defaults: UserDefaults = SidebarDialTuning.store) -> SidebarSpring {
         collapsing
             ? SidebarSpring(response: SidebarDialTuning.motionCollapseResponse(defaults: defaults),

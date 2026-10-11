@@ -229,6 +229,12 @@ private struct ProjectGroupCardShape: View, Animatable {
 /// the expanded list and the rail alike: a tile-sized chip behind its glyph,
 /// flat (`RailProjectColumn.selectedChipTintOpacity`), no chromatic rim;
 /// hover is the row's hover tint.
+///
+/// Motion (`SidebarUISpring`): hover fades in and out on the hover spring,
+/// never overshooting; a new selection's chip travels from the previously
+/// selected row on the `.move` spring when the list provides a namespace
+/// (`sidebarSelectionChipNamespace`), else it appears in place. Reduce
+/// Motion: both snap.
 struct SidebarRowChipBackground: View {
     /// The chip's container: the rail's chip side (`RailProjectColumn.chipSize`).
     let size: CGFloat
@@ -243,19 +249,52 @@ struct SidebarRowChipBackground: View {
 
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.sidebarSelectionChipNamespace) private var selectionNamespace
 
     var body: some View {
-        // Hover keeps the row hover's `.primary` tint; selection is the
-        // canvas's alpha on solid ink.
-        let fill = isActive
-            ? RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.selectedChipTintOpacity)
-            : Color.primary.opacity(isHovered ? RailProjectColumn.hoverChipTintOpacity : 0)
-        RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
-            .fill(fill)
+        let shape = RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
+        ZStack {
+            // Hover keeps the row hover's `.primary` tint, under the
+            // selection. Carries the Redlines tag: always present, same
+            // frame as the selection.
+            // A tint: it settles on either change, never riding the
+            // selection's bounce.
+            face(shape.fill(Color.primary.opacity(isHovered && !isActive ? RailProjectColumn.hoverChipTintOpacity : 0)), redlineID: redlineID)
+                .animation(SidebarUISpring.hover.settle(), value: isHovered)
+                .animation(SidebarUISpring.move.settle(), value: isActive)
+            // Selection: the canvas's alpha on solid ink. Matched outside
+            // the morph's scale, so the travel is exact at any scale. Only
+            // its geometry bounces; its fade in and out settles.
+            if isActive {
+                face(shape.fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.selectedChipTintOpacity)), redlineID: nil)
+                    .modifier(SelectionChipTravel(namespace: selectionNamespace))
+                    .transition(AnyTransition.opacity.animation(SidebarUISpring.move.settle()))
+            }
+        }
+        .animation(SidebarUISpring.move.animation(), value: isActive)
+    }
+
+    private func face(_ fill: some View, redlineID: String?) -> some View {
+        fill
             .frame(width: size, height: size)
             // Inside the scale, so Redlines reports the drawn chip.
             .redlineFrame(redlineID)
             .scaleEffect(scale)
+    }
+}
+
+/// The selected chip's travel between rows: one matched geometry across the
+/// list's rows, so the chip leaving the old row and the one arriving in the
+/// new row are one moving chip.
+private struct SelectionChipTravel: ViewModifier {
+    let namespace: Namespace.ID?
+
+    func body(content: Content) -> some View {
+        if let namespace {
+            content.matchedGeometryEffect(id: SidebarUISpring.selectionChipID, in: namespace)
+        } else {
+            content
+        }
     }
 }
 

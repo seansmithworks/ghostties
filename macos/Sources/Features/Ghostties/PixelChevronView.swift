@@ -35,12 +35,9 @@ struct PixelChevronView: View {
         .frame(width: 8, height: 8)
         .frame(width: 16, height: 16)
         .rotationEffect(.degrees(isExpanded ? 0 : -90))
-        .animation(
-            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                ? nil
-                : .easeInOut(duration: 0.2),
-            value: isExpanded
-        )
+        // The fold's spring: opening overshoots, closing settles
+        // (`SidebarUISpring.fold`). Reduce Motion: instant.
+        .animation(SidebarUISpring.fold.animation(entering: isExpanded), value: isExpanded)
         .accessibilityHidden(true)
     }
 
