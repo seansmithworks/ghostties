@@ -67,9 +67,39 @@ enum TrayGlassStyle {
         case capsule, radius
     }
 
-    /// Colour stops for the chromatic rim.
+    /// Colour stops for the chromatic rim. `pastel` and `rainbow` are the
+    /// canvas's own; the rest are built from `WorkspaceLayout` tokens
+    /// (`chromaticColors(_:for:)` lists each stop and its token).
     enum ChromaticPalette: String, CaseIterable {
         case pastel, rainbow
+        /// Terracotta warming into the chrome/canvas creams.
+        case ember
+        /// Warm grey into the chrome/canvas creams: a brushed-metal edge.
+        case chrome
+        /// One graphite tone all the way round: a plain hairline ring.
+        case mono
+        /// The session-status colours: your-turn blue, decision gold,
+        /// long-running orange.
+        case signal
+    }
+
+    /// A system material drawn under the surface layer: a real blur of
+    /// whatever sits behind the pill (the list scrolling under the tray).
+    /// The native `Glass` has no blur amount of its own, only its variant,
+    /// so these steps are the blur control. `none` draws no layer at all.
+    enum BackdropMaterial: String, CaseIterable {
+        case none, ultraThin, thin, regular, thick, ultraThick
+
+        var material: Material? {
+            switch self {
+            case .none: return nil
+            case .ultraThin: return .ultraThinMaterial
+            case .thin: return .thinMaterial
+            case .regular: return .regularMaterial
+            case .thick: return .thickMaterial
+            case .ultraThick: return .ultraThickMaterial
+            }
+        }
     }
 
     /// The expanded tray's width. `fill`: the Create capsule stretches across
@@ -148,35 +178,47 @@ enum TrayGlassStyle {
         /// Direction the light comes from, in degrees (0 = from the right,
         /// 90 = from the top).
         var specularAngle: Double
+        // The blur dials. Each defaults to "not drawn", so `light` and
+        // `dark` (and every `Look(...)` that omits them) keep today's look.
+        /// Material blurring what's behind the pill, under the surface
+        /// layer. Only shows where the surface layer lets it through.
+        var backdropMaterial: BackdropMaterial = .none
+        /// The backdrop material's opacity, 0–1.
+        var backdropOpacity: Double = 1
+        /// Gaussian blur on the surface layer, clipped to the pill: the
+        /// layer thins toward the edge and the backdrop shows there. 0 =
+        /// not blurred.
+        var surfaceBlur: CGFloat = 0
     }
 
-    /// Light: the canvas (pen.dev `CnDfN`) values, unchanged from before the
-    /// light/dark split.
+    /// Light: tuned in the Dev DialKit (re-baked 2026-10-11 from Dev's stored
+    /// dials). The base was the canvas (pen.dev `CnDfN`) values; the white
+    /// layer, rim, chromatic edge and specular are now stronger than the canvas.
     static let light = Look(
         variant: .identity,
-        // 0 = untinted: the white comes from `surfaceOpacity`, since a native
-        // `.tint(white 0.8)` blends far weaker than the canvas's 80% white
-        // and reads grey.
-        tintOpacity: 0.15,
-        // Canvas base fill `#ffffffcc`.
-        surfaceOpacity: 0.7,
-        // Canvas `u_edgeWidth` 3px.
-        rimWidth: 1.25,
-        rimOpacity: 0.25,
+        // The white comes mostly from `surfaceOpacity`, since a native
+        // `.tint(white)` blends far weaker than the canvas's white fill
+        // and reads grey; the tint adds the rest.
+        tintOpacity: 0.35,
+        // Canvas base fill was `#ffffffcc` (0.8); tuned to 0.9.
+        surfaceOpacity: 0.9,
+        // Canvas `u_edgeWidth` was 3px (1.25pt); tuned to 1.5pt.
+        rimWidth: 1.5,
+        rimOpacity: 0.5,
         // Option D (`ab279`): 15%, blur 16, y 3. A canvas blur is twice a
         // SwiftUI shadow radius, as on the canvas card (blur 16 = radius 8).
         shadowOpacity: 0.15,
         shadowRadius: 8,
         shadowYOffset: 3,
-        // Tuned in the Dev DialKit (locked for beta.26).
-        chromaticIntensity: 0.3,
-        chromaticWidth: 2.25,
-        chromaticRotation: 202.7,
-        chromaticBlur: 1.7,
+        // Tuned in the Dev DialKit (re-baked 2026-10-11).
+        chromaticIntensity: 0.4,
+        chromaticWidth: 2.75,
+        chromaticRotation: 220,
+        chromaticBlur: 2.2,
         chromaticPalette: .pastel,
         chromaticBlend: .normal,
-        specularStrength: 0.5,
-        specularAngle: 189
+        specularStrength: 0.6,
+        specularAngle: 270
     )
 
     /// Dark: Sean's tuned dark structure (2026-10-11 export: 1.5pt rim,
@@ -308,8 +350,37 @@ enum TrayGlassStyle {
         colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
     }
 
-    static func chromaticColors(_ palette: ChromaticPalette) -> [Color] {
+    /// The rim's gradient stops, swept round the pill from
+    /// `chromaticRotation`. The token palettes resolve their neutral stops
+    /// per appearance: in dark they are the dark chrome/canvas greys, the
+    /// glass's own colour, so they add next to nothing under the dark
+    /// look's `plusLighter` blend and only the accent stops show.
+    static func chromaticColors(_ palette: ChromaticPalette, for colorScheme: ColorScheme = .light) -> [Color] {
+        let dark = colorScheme == .dark
+        let chrome = Color(dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight)
+        let canvas = Color(dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight)
+        let graphite = dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
         switch palette {
+        case .ember:
+            // waitingTerracotta → chromeBackground → canvasBackground → chromeBackground → waitingTerracotta
+            let accent = WorkspaceLayout.waitingTerracotta
+            return [accent, chrome, canvas, chrome, accent]
+        case .chrome:
+            // textSecondary → chromeBackground → canvasBackground → chromeBackground → textSecondary
+            return [graphite, chrome, canvas, chrome, graphite]
+        case .mono:
+            // textSecondary, one tone.
+            return [graphite, graphite]
+        case .signal:
+            // statusYourTurnBlue → statusNeedsDecisionGold → statusLongRunningOrange → statusYourTurnBlue.
+            // Dark puts chromeBackgroundDark between them, so the bright
+            // gold and orange are short arcs instead of the whole rim.
+            let blue = WorkspaceLayout.statusYourTurnBlue
+            let gold = WorkspaceLayout.statusNeedsDecisionGold
+            let orange = WorkspaceLayout.statusLongRunningOrange
+            return dark
+                ? [blue, chrome, gold, chrome, orange, chrome, blue]
+                : [blue, gold, orange, blue]
         case .pastel:
             // Cool on one side of the split, warm on the other (canvas CnDfN).
             return [
@@ -464,13 +535,14 @@ struct RailTrayGeometry: Equatable {
 struct TrayChromaticRim: View {
     let look: TrayGlassStyle.Look
     let shape: RoundedRectangle
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if look.chromaticIntensity > 0 {
             shape
                 .strokeBorder(
                     AngularGradient(
-                        colors: TrayGlassStyle.chromaticColors(look.chromaticPalette),
+                        colors: TrayGlassStyle.chromaticColors(look.chromaticPalette, for: colorScheme),
                         center: .center,
                         angle: .degrees(look.chromaticRotation)
                     ),
@@ -509,7 +581,8 @@ struct TrayGlassSurface: ViewModifier {
                 content
                     .background {
                         ZStack {
-                            shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
+                            backdrop(look)
+                            surface(look)
                             specular(look)
                         }
                     }
@@ -521,8 +594,17 @@ struct TrayGlassSurface: ViewModifier {
             // draws its shadow as its own layer, outside the pill only.
             .background { TrayPillShadow(shape: shape, look: look) }
         } else {
+            // Pre-26 the material still blurs; under Reduce Transparency
+            // (and `forceOpaque`) the system would flatten it to an opaque
+            // grey, so it is left out and the surface alone draws.
+            let translucent = !reduceTransparency && !forceOpaque
             content
-                .background(shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme)))
+                .background {
+                    ZStack {
+                        if translucent { backdrop(look) }
+                        surface(look)
+                    }
+                }
                 .overlay {
                     if colorScheme == .dark {
                         shape.strokeBorder(TrayGlassStyle.opaqueDarkEdgeColor, lineWidth: TrayGlassStyle.opaqueDarkEdgeWidth)
@@ -550,6 +632,33 @@ struct TrayGlassSurface: ViewModifier {
 
     private func chromaticRim(_ look: TrayGlassStyle.Look) -> some View {
         TrayChromaticRim(look: look, shape: shape)
+    }
+
+    /// The backdrop material (`Look.backdropMaterial`). Not in the tree at
+    /// `none` or opacity 0.
+    @ViewBuilder
+    private func backdrop(_ look: TrayGlassStyle.Look) -> some View {
+        if let material = look.backdropMaterial.material, look.backdropOpacity > 0 {
+            shape
+                .fill(material)
+                .opacity(look.backdropOpacity)
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// The white (light) or canvas-grey (dark) layer. With `surfaceBlur`,
+    /// blurred and clipped back to the pill; at 0 the plain fill it has
+    /// always been.
+    @ViewBuilder
+    private func surface(_ look: TrayGlassStyle.Look) -> some View {
+        let fill = shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
+        if look.surfaceBlur > 0 {
+            fill
+                .blur(radius: look.surfaceBlur)
+                .clipShape(shape)
+        } else {
+            fill
+        }
     }
 
     /// White highlight clipped to the pill. Not in the tree at strength 0.
