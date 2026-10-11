@@ -61,6 +61,56 @@ final class SidebarWidthModel: ObservableObject {
     }
 }
 
+/// The sidebar ⇄ rail morph's one clock: the width AppKit is animating.
+///
+/// AppKit's width group and a SwiftUI animation each start a clock of their
+/// own, and neither can be told when: AppKit's starts in the toggle's
+/// runloop turn, SwiftUI's at the first frame it renders after that turn,
+/// 15–45ms later and never by the same amount. On the drawer curve, which
+/// covers half its distance in the first 30ms, that put the card's edge up
+/// to 90pt ahead of the panel's, cutting the header's count and the tray.
+/// So the morph plays on AppKit's clock alone: `SidebarMorphClockAnimation`
+/// reads this progress on every frame SwiftUI renders and lands when
+/// AppKit's group does. The terminal lays out no more often than before.
+@MainActor
+final class SidebarMorphClock: Hashable {
+    private weak var constraint: NSLayoutConstraint?
+    private let from: CGFloat
+    private let to: CGFloat
+    private var landed = false
+
+    /// Reads `constraint` from its current constant, the morph's start, to
+    /// `to`, the constant AppKit is animating it to.
+    init(constraint: NSLayoutConstraint, to: CGFloat) {
+        self.constraint = constraint
+        self.from = constraint.constant
+        self.to = to
+    }
+
+    /// 0 at the start width, 1 at the target; nil once landed.
+    var progress: Double? {
+        guard !landed, let constraint, from != to else { return nil }
+        return Double(min(max((from - constraint.constant) / (from - to), 0), 1))
+    }
+
+    /// AppKit's group finished, or a newer toggle took over.
+    func land() { landed = true }
+
+    nonisolated static func == (lhs: SidebarMorphClock, rhs: SidebarMorphClock) -> Bool { lhs === rhs }
+    nonisolated func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+}
+
+/// Plays a SwiftUI transaction at `SidebarMorphClock`'s progress.
+@available(macOS 14, *)
+struct SidebarMorphClockAnimation: CustomAnimation {
+    let clock: SidebarMorphClock
+
+    func animate<V: VectorArithmetic>(value: V, time _: TimeInterval, context _: inout AnimationContext<V>) -> V? {
+        guard let progress = MainActor.assumeIsolated({ clock.progress }) else { return nil }
+        return value.scaled(by: progress)
+    }
+}
+
 /// Observable model backing the composer overlay's titlebar hit-test band.
 /// PR #132 removed `horizontalOffset` — the composer
 /// now centers on the whole window instead of the terminal card, so there is
@@ -495,6 +545,10 @@ class WorkspaceViewContainer: NSView {
     /// of old/new geometry at rest. This is the mechanism behind the
     /// traffic-lights-over-terminal / narrow-card glitch caught in review.
     private var sidebarTransitionGeneration = 0
+
+    /// The in-flight morph's clock (`beginSidebarMorph`), landed by the
+    /// transition's completion or by the next morph.
+    private var morphClock: SidebarMorphClock?
 
     /// True while `applyCollapseCrossfadeSidebarView` has both
     /// `fullSidebarContent()` and `railSidebarContent()` mounted at once
@@ -1416,14 +1470,16 @@ class WorkspaceViewContainer: NSView {
 
     /// The one-object pinned ⇄ rail morph (motion spec §1): the sidebar
     /// stays one tree; `morph` and `width` move together in ONE
-    /// `withAnimation` on the panel's curve and duration, the same as the
-    /// AppKit width group `transitionTo` runs next, so they land on the same
-    /// frame. Every leaf interpolates its own size and position from
-    /// `morph`; labels keep their own timing (`MorphLabelFade`). Reduce
-    /// Motion: the geometry snaps and the labels fade over 120ms.
+    /// `withAnimation` played on the AppKit width group `transitionTo` runs
+    /// next (`SidebarMorphClock`), so the panel's edge and the card's are on
+    /// the same frame every frame. Every leaf interpolates its own size and
+    /// position from `morph`; labels keep their own timing
+    /// (`MorphLabelFade`). Reduce Motion: the geometry snaps and the labels
+    /// fade over 120ms. Before macOS 14 (no `CustomAnimation`) the morph
+    /// plays on its own copy of the panel's curve and duration.
     ///
-    /// Re-entrant: a second toggle mid-flight writes new targets, and
-    /// SwiftUI retargets each leaf from where it is.
+    /// Re-entrant: a second toggle mid-flight writes new targets and lands
+    /// the old clock.
     private func beginSidebarMorph(to newMode: SidebarMode, timing: WorkspaceLayout.SidebarTransitionTiming, reduceMotion: Bool) {
         guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
         coordinator.sessionPopover.dismiss()
@@ -1445,7 +1501,16 @@ class WorkspaceViewContainer: NSView {
             widthModel.morph = targetMorph
             widthModel.width = targetWidth
         } else {
-            withAnimation(WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)) {
+            morphClock?.land()
+            let animation: Animation
+            if #available(macOS 14, *) {
+                let clock = SidebarMorphClock(constraint: sidebarWidthConstraint, to: targetWidth)
+                morphClock = clock
+                animation = Animation(SidebarMorphClockAnimation(clock: clock))
+            } else {
+                animation = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
+            }
+            withAnimation(animation) {
                 widthModel.morph = targetMorph
                 widthModel.width = targetWidth
             }
@@ -2089,6 +2154,8 @@ class WorkspaceViewContainer: NSView {
             guard let self, self.sidebarTransitionGeneration == generation else { return }
             self.isSidebarTransitionAnimating = false
             self.widthModel.isMorphing = false
+            self.morphClock?.land()
+            self.morphClock = nil
             // A Window margin change made mid-transition was skipped.
             self.applyWindowMargin()
             // Settle the Flow 05 collapse cross-fade (if this transition
