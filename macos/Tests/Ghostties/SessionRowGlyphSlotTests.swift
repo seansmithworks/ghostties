@@ -458,22 +458,22 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         )
     }
 
-    /// Tray hover, Finder's toolbar rule: the chip is the button's cell
-    /// inset by the "Hover inset" dial on every side, its corner concentric
-    /// with the pill's: pill radius less the chip's distance from the pill
-    /// edge. A sole button is its capsule, so that distance is the inset; a
-    /// button in a grouped pill sits the capsule padding inside the pill, so
-    /// it is padding + inset. Checked for an expanded (square) cell and a
-    /// rail stacked (short) cell, each grouped and sole. Pixels: the band
-    /// between the cell edge and the chip stays background on all four
-    /// sides, the chip's inside is tinted, and a point 2.4pt in along the
-    /// chip's corner diagonal is tinted for the grouped chip's small corner
-    /// (r 3, curve within ~1pt of the corner) but background for the sole
-    /// chip's large one (r 13, ~3.8pt), so the corner rendered is the one
-    /// the rule picks. Off-default dials (margin 0 → pill radius 16, inset 3,
-    /// padding 10) so the dials, not constants, drive it and the two radii
-    /// sit far apart.
-    func testTrayHoverChipIsTheCellInsetByTheDialWithAConcentricCorner() throws {
+    /// Tray hover (Sean, 2026-10-11). A sole button is its capsule and
+    /// hovers full bleed: the chip is the cell, its corner the pill's. A
+    /// button in a grouped pill keeps a chip inset by the "Hover inset" dial
+    /// on every side, its corner concentric with the pill's (pill radius less
+    /// padding + inset) but never under `hoverMinimumCornerRadius`. Checked
+    /// for an expanded (square) cell and a rail stacked (short) cell, each
+    /// grouped and sole. Off-default dials (margin 0 → pill radius 16, inset
+    /// 3, padding 10) so the dials, not constants, drive it: the grouped
+    /// concentric value is 3, so the 6pt minimum is what renders. Pixels:
+    /// grouped, the band between the cell edge and the chip stays background
+    /// on all four sides; sole, the tint reaches the cell edge on all four.
+    /// Corners: a point 1.4pt in along the grouped chip's corner diagonal is
+    /// background (inside an r3 corner's fill, outside r6's curve) and 3pt in
+    /// is tinted; the sole chip's cell corner is background 2.4pt in (r16
+    /// curves ~4.7pt in) and tinted 7pt in.
+    func testTrayHoverChipIsFullBleedWhenSoleAndInsetWithAVisibleCornerWhenGrouped() throws {
         let configure: (UserDefaults) -> Void = {
             $0.set(3.0, forKey: SidebarDialTuning.trayHoverInsetKey)
             $0.set(0.0, forKey: SidebarDialTuning.windowMarginKey)
@@ -494,10 +494,17 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                 XCTAssertEqual(inset, 3, tag)
                 XCTAssertEqual(padding, 10, tag)
                 XCTAssertEqual(pillRadius, 16, tag)
-                let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: cell), soleInCapsule: sole)
-                XCTAssertEqual(chip.frame, CGRect(origin: .zero, size: cell).insetBy(dx: inset, dy: inset), tag)
-                XCTAssertEqual(chip.cornerRadius, sole ? 13 : 3, accuracy: 0.001, tag)
-                XCTAssertEqual(chip.cornerRadius, pillRadius - (sole ? 0 : padding) - inset, accuracy: 0.001, tag)
+                let cellRect = CGRect(origin: .zero, size: cell)
+                let chip = TrayGlassStyle.hoverChip(cell: cellRect, soleInCapsule: sole)
+                if sole {
+                    XCTAssertEqual(chip.frame, cellRect, tag)
+                    XCTAssertEqual(chip.cornerRadius, pillRadius, accuracy: 0.001, tag)
+                } else {
+                    XCTAssertEqual(chip.frame, cellRect.insetBy(dx: inset, dy: inset), tag)
+                    XCTAssertEqual(pillRadius - padding - inset, 3, accuracy: 0.001, "concentric value is under the minimum (\(tag))")
+                    XCTAssertEqual(chip.cornerRadius, TrayGlassStyle.hoverMinimumCornerRadius, accuracy: 0.001, tag)
+                    XCTAssertEqual(chip.cornerRadius, 6, accuracy: 0.001, tag)
+                }
 
                 let hosting = NSHostingView(rootView: TrayIconButton(
                     systemName: "plus", label: "New Session", isVertical: vertical,
@@ -522,7 +529,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                 }
                 let midX = cell.width / 2, midY = cell.height / 2
                 let band = inset / 2, inside = inset + 1.5
-                // (point in the band, point just inside the chip), per side.
+                // (point in the grouped chip's band, point just inside it), per side.
                 let sides: [(String, (CGFloat, CGFloat), (CGFloat, CGFloat))] = [
                     ("top", (midX, band), (midX, inside)),
                     ("bottom", (midX, cell.height - band), (midX, cell.height - inside)),
@@ -530,18 +537,35 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                     ("trailing", (cell.width - band, midY), (cell.width - inside, midY)),
                 ]
                 for (side, out, inn) in sides {
-                    XCTAssertGreaterThan(try sum(out.0, out.1), 2.95, "\(side) band outside the chip is untinted (\(tag))")
+                    if sole {
+                        XCTAssertLessThan(try sum(out.0, out.1), 2.85, "\(side) tint fills the band, no inset (\(tag))")
+                    } else {
+                        XCTAssertGreaterThan(try sum(out.0, out.1), 2.95, "\(side) band outside the chip is untinted (\(tag))")
+                    }
                     XCTAssertLessThan(try sum(inn.0, inn.1), 2.85, "\(side) inside the chip is tinted (\(tag))")
                 }
-                // 2.4pt in along the chip's top-leading corner diagonal:
-                // inside a r3 corner, outside a r13 one.
-                let probe = try sum(chip.frame.minX + 2.4, chip.frame.minY + 2.4)
                 if sole {
-                    XCTAssertGreaterThan(probe, 2.95, "sole chip's corner is the large concentric radius (\(tag))")
+                    // The tint reaches the cell's edge on every side.
+                    let edge: CGFloat = 0.5
+                    for (side, x, y) in [
+                        ("top", midX, edge), ("bottom", midX, cell.height - edge),
+                        ("leading", edge, midY), ("trailing", cell.width - edge, midY),
+                    ] {
+                        XCTAssertLessThan(try sum(x, y), 2.85, "\(side) tint reaches the cell edge (\(tag))")
+                    }
+                    XCTAssertGreaterThan(try sum(2.4, 2.4), 2.95, "sole chip's corner is the pill radius (\(tag))")
+                    XCTAssertLessThan(try sum(7, 7), 2.85, "sole chip fills in past its corner curve (\(tag))")
                 } else {
-                    XCTAssertLessThan(probe, 2.85, "grouped chip's corner is the small concentric radius (\(tag))")
+                    XCTAssertGreaterThan(
+                        try sum(chip.frame.minX + 1.4, chip.frame.minY + 1.4), 2.95,
+                        "grouped chip's corner is the 6pt minimum, not the 3pt concentric value (\(tag))"
+                    )
+                    XCTAssertLessThan(
+                        try sum(chip.frame.minX + 3, chip.frame.minY + 3), 2.85,
+                        "grouped chip fills in past its corner curve (\(tag))"
+                    )
                 }
-                // Just inside the chip frame's corner, outside either rounded corner.
+                // Just inside the chip frame's corner: background either way.
                 XCTAssertGreaterThan(try sum(chip.frame.minX + 0.25, chip.frame.minY + 0.25), 2.95, "chip corner is rounded (\(tag))")
             }
         }

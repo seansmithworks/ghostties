@@ -288,6 +288,9 @@ enum TrayGlassStyle {
     /// The hover chip's inset from its button cell on every side, Finder's
     /// toolbar rule. Read it through `SidebarDialTuning.trayHoverInset()`.
     static let hoverInset: CGFloat = 4
+    /// The smallest corner a grouped pill's hover chip takes (Sean,
+    /// 2026-10-11): below 6pt the chip reads square.
+    static let hoverMinimumCornerRadius: CGFloat = 6
     /// Gap between the expanded bar's buttons (option D: none, the square
     /// cells abut). The rail's follows from its cells (`RailTrayGeometry.itemGap`).
     static let horizontalItemGap: CGFloat = 0
@@ -412,18 +415,17 @@ enum TrayGlassStyle {
         }
     }
 
-    /// Tray button hover highlight, Finder's toolbar rule (Sean,
-    /// 2026-10-09): a rounded chip, the button's cell inset by `inset` on
-    /// every side, so adjacent chips in a grouped pill sit `2 × inset`
-    /// apart and a chip never touches its pill's edge. Its corner is
-    /// concentric with the pill's: the pill radius less the chip's distance
-    /// from the pill edge, clamped at 0 (a capsule pill's radius clamps the
-    /// chip to a capsule too). That distance is the chip's inset plus the
-    /// cell's own inset in its pill: none for the sole button, which is its
-    /// capsule (`fillsCapsule`), and the capsule padding (`innerPadding`)
-    /// for a button in a grouped pill, the same concentric step
-    /// `buttonHitShape` takes. One rule for grouped and single pills, on
-    /// both axes.
+    /// Tray button hover highlight (Sean, 2026-10-11). A sole button in
+    /// its capsule (`fillsCapsule`, the sidebar toggle) hovers full bleed,
+    /// like a macOS toolbar button: the chip is the whole cell, which is the
+    /// capsule, with the pill's corner radius. A button in a grouped pill
+    /// keeps an inset chip, the cell inset by `inset` on every side, so
+    /// adjacent chips sit `2 × inset` apart and a chip never touches its
+    /// pill's edge. Its corner is concentric with the pill's (the pill
+    /// radius less the capsule padding `innerPadding` and `inset`, the same
+    /// concentric step `buttonHitShape` takes) but never under
+    /// `hoverMinimumCornerRadius`, so it always reads rounded. A capsule
+    /// pill's radius makes either chip a capsule.
     struct HoverChip: Equatable {
         let frame: CGRect
         let cornerRadius: CGFloat
@@ -436,11 +438,14 @@ enum TrayGlassStyle {
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding(),
         pillCornerRadius: CGFloat = TrayGlassStyle.pillCornerRadius()
     ) -> HoverChip {
+        if soleInCapsule {
+            return HoverChip(frame: cell, cornerRadius: max(0, pillCornerRadius))
+        }
         let inset = max(0, inset)
-        let cellInset = soleInCapsule ? 0 : max(0, innerPadding)
+        let concentric = pillCornerRadius - max(0, innerPadding) - inset
         return HoverChip(
             frame: cell.insetBy(dx: inset, dy: inset),
-            cornerRadius: max(0, pillCornerRadius - cellInset - inset)
+            cornerRadius: max(concentric, hoverMinimumCornerRadius)
         )
     }
 
