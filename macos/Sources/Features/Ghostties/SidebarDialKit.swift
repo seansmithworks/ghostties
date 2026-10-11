@@ -90,12 +90,16 @@ enum SidebarDialTuning {
         let chromaticBlend: String
         let specularStrength: String
         let specularAngle: String
+        let backdropMaterial: String
+        let backdropOpacity: String
+        let surfaceBlur: String
 
         var all: [String] {
             [variant, tintOpacity, surfaceOpacity, rimWidth, rimOpacity,
              shadowOpacity, shadowRadius, shadowYOffset,
              chromaticIntensity, chromaticWidth, chromaticRotation, chromaticBlur,
-             chromaticPalette, chromaticBlend, specularStrength, specularAngle]
+             chromaticPalette, chromaticBlend, specularStrength, specularAngle,
+             backdropMaterial, backdropOpacity, surfaceBlur]
         }
     }
 
@@ -119,7 +123,10 @@ enum SidebarDialTuning {
         chromaticPalette: "ghostties.sidebarDial.trayGlass.chromaticPalette",
         chromaticBlend: "ghostties.sidebarDial.trayGlass.chromaticBlend",
         specularStrength: "ghostties.sidebarDial.trayGlass.specularStrength",
-        specularAngle: "ghostties.sidebarDial.trayGlass.specularAngle"
+        specularAngle: "ghostties.sidebarDial.trayGlass.specularAngle",
+        backdropMaterial: "ghostties.sidebarDial.trayGlass.backdropMaterial",
+        backdropOpacity: "ghostties.sidebarDial.trayGlass.backdropOpacity",
+        surfaceBlur: "ghostties.sidebarDial.trayGlass.surfaceBlur"
     )
 
     /// Dark keeps its two pre-split dark-only keys (warm tint, rim opacity);
@@ -140,7 +147,10 @@ enum SidebarDialTuning {
         chromaticPalette: "ghostties.sidebarDial.trayGlass.dark.chromaticPalette",
         chromaticBlend: "ghostties.sidebarDial.trayGlass.dark.chromaticBlend",
         specularStrength: "ghostties.sidebarDial.trayGlass.dark.specularStrength",
-        specularAngle: "ghostties.sidebarDial.trayGlass.dark.specularAngle"
+        specularAngle: "ghostties.sidebarDial.trayGlass.dark.specularAngle",
+        backdropMaterial: "ghostties.sidebarDial.trayGlass.dark.backdropMaterial",
+        backdropOpacity: "ghostties.sidebarDial.trayGlass.dark.backdropOpacity",
+        surfaceBlur: "ghostties.sidebarDial.trayGlass.dark.surfaceBlur"
     )
 
     static func glassKeys(for colorScheme: ColorScheme) -> GlassKeys {
@@ -325,7 +335,10 @@ enum SidebarDialTuning {
             chromaticPalette: choice(keys.chromaticPalette, default: base.chromaticPalette, defaults: defaults),
             chromaticBlend: choice(keys.chromaticBlend, default: base.chromaticBlend, defaults: defaults),
             specularStrength: double(keys.specularStrength, default: base.specularStrength, defaults: defaults),
-            specularAngle: double(keys.specularAngle, default: base.specularAngle, defaults: defaults)
+            specularAngle: double(keys.specularAngle, default: base.specularAngle, defaults: defaults),
+            backdropMaterial: choice(keys.backdropMaterial, default: base.backdropMaterial, defaults: defaults),
+            backdropOpacity: double(keys.backdropOpacity, default: base.backdropOpacity, defaults: defaults),
+            surfaceBlur: cgFloat(keys.surfaceBlur, default: base.surfaceBlur, defaults: defaults)
         )
     }
     /// The selected expanded row's title weight (`TrayGlassStyle.SelectedTitleWeight`).
@@ -634,6 +647,9 @@ struct SidebarDialKitGlassModel: Codable, Equatable {
     var chromaticBlend: String
     var specularStrength: Double
     var specularAngle: Double
+    var backdropMaterial: String
+    var backdropOpacity: Double
+    var surfaceBlur: Double
 
     init(_ look: TrayGlassStyle.Look) {
         variant = look.variant.rawValue
@@ -649,6 +665,9 @@ struct SidebarDialKitGlassModel: Codable, Equatable {
         chromaticBlend = look.chromaticBlend.rawValue
         specularStrength = look.specularStrength
         specularAngle = look.specularAngle
+        backdropMaterial = look.backdropMaterial.rawValue
+        backdropOpacity = look.backdropOpacity
+        surfaceBlur = Double(look.surfaceBlur)
     }
 }
 
@@ -857,6 +876,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
             setStringIfChanged(keys.chromaticBlend, old.chromaticBlend, new.chromaticBlend)
             setIfChanged(keys.specularStrength, old.specularStrength, new.specularStrength)
             setIfChanged(keys.specularAngle, old.specularAngle, new.specularAngle)
+            setStringIfChanged(keys.backdropMaterial, old.backdropMaterial, new.backdropMaterial)
+            setIfChanged(keys.backdropOpacity, old.backdropOpacity, new.backdropOpacity)
+            setIfChanged(keys.surfaceBlur, old.surfaceBlur, new.surfaceBlur)
         }
         setBoolIfChanged(SidebarDialTuning.redlinesKey, previous.redlines, model.redlines)
         setIfChanged(SidebarDialTuning.windowMarginKey, previous.windowMargin, model.windowMargin)
@@ -897,6 +919,18 @@ final class SidebarDialKitCoordinator: ObservableObject {
                     label: prefix == "dark" ? "Glass warm tint" : "Glass white tint", range: 0...1, step: 0.05),
             .slider("\(prefix)SurfaceOpacity", keyPath: glass.appending(path: \.surfaceOpacity),
                     label: prefix == "dark" ? "Grey layer opacity" : "White layer opacity", range: 0...1, step: 0.05),
+            // Blur. The native glass has no blur amount (only its variant:
+            // `regular` frosts, `clear` barely does, `identity` is no glass),
+            // so the blur is a system material under the layer above. It
+            // shows only where that layer is below 1.
+            .select("\(prefix)BackdropMaterial", keyPath: glass.appending(path: \.backdropMaterial),
+                    label: "Backdrop blur (thicker = more)",
+                    options: TrayGlassStyle.BackdropMaterial.allCases.map(\.rawValue)),
+            .slider("\(prefix)BackdropOpacity", keyPath: glass.appending(path: \.backdropOpacity),
+                    label: "Backdrop blur opacity", range: 0...1, step: 0.05),
+            .slider("\(prefix)SurfaceBlur", keyPath: glass.appending(path: \.surfaceBlur),
+                    label: prefix == "dark" ? "Grey layer edge blur" : "White layer edge blur",
+                    range: 0...16, step: 0.5, unit: "pt"),
             .slider("\(prefix)RimWidth", keyPath: glass.appending(path: \.rimWidth), label: "Rim width", range: 0...4, step: 0.25, unit: "pt"),
             .slider("\(prefix)RimOpacity", keyPath: glass.appending(path: \.rimOpacity), label: "Rim opacity", range: 0...1, step: 0.02),
             .slider("\(prefix)ChromaticIntensity", keyPath: glass.appending(path: \.chromaticIntensity), label: "Chromatic rim intensity", range: 0...1, step: 0.05),

@@ -160,5 +160,13 @@ struct SidebarLockedDefaultsTests {
             chromaticPalette: .pastel, chromaticBlend: .plusLighter,
             specularStrength: 0.1, specularAngle: 270
         ))
+
+        // The blur dials draw nothing until moved: no backdrop material, no
+        // surface blur, in both appearances.
+        for look in [light, dark] {
+            #expect(look.backdropMaterial == .none)
+            #expect(look.backdropOpacity == 1)
+            #expect(look.surfaceBlur == 0)
+        }
     }
 }
