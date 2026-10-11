@@ -172,6 +172,7 @@ struct RailHoverRevealTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         #expect(RailHoverReveal.Settings.current(defaults: defaults) == .init(isEnabled: true, dwell: 1.2, exitGrace: 0.3))
+        #expect(SidebarDialTuning.hoverRevealStyle(defaults: defaults) == .push)
         defaults.set(false, forKey: SidebarDialTuning.hoverRevealEnabledKey)
         defaults.set(2.0, forKey: SidebarDialTuning.hoverRevealDwellKey)
         defaults.set(0.5, forKey: SidebarDialTuning.hoverRevealExitGraceKey)
@@ -180,8 +181,9 @@ struct RailHoverRevealTests {
 }
 
 /// The reveal on a real `WorkspaceViewContainer`, on a persistence-disabled
-/// store: the full sidebar comes out over the terminal card without moving
-/// or resizing it, goes back to the rail, and Cmd+S pins it in place.
+/// store. Overlay: the full sidebar comes out over the terminal card without
+/// moving or resizing it. Push: the card narrows exactly as on Cmd+S and
+/// comes back on collapse. Either way Cmd+S pins it in place.
 @MainActor
 @Suite(.serialized)
 struct RailHoverRevealContainerTests {
@@ -199,6 +201,13 @@ struct RailHoverRevealContainerTests {
             window.contentView = nil
             window.orderOut(nil)
             window.close()
+        }
+    }
+
+    /// Starts a reveal in `style` (the style is read once, as it starts).
+    private func reveal(_ container: WorkspaceViewContainer, _ style: RailRevealStyle) {
+        withDials({ $0.set(style.rawValue, forKey: SidebarDialTuning.hoverRevealStyleKey) }) {
+            container.railHoverForTesting.revealNow()
         }
     }
 
@@ -251,7 +260,7 @@ struct RailHoverRevealContainerTests {
         let card = container.cardFrameForTesting
         let rail = container.sidebarFrameForTesting.width
 
-        container.railHoverForTesting.revealNow()
+        reveal(container, .overlay)
         for _ in 0..<20 {
             spin(0.02)
             #expect(container.cardFrameForTesting == card)
@@ -279,7 +288,7 @@ struct RailHoverRevealContainerTests {
         let rig = makeRig()
         defer { rig.close() }
         let container = rig.container
-        container.railHoverForTesting.revealNow()
+        reveal(container, .overlay)
         spin(0.4)
         let revealedSidebar = container.sidebarFrameForTesting
 
@@ -295,5 +304,52 @@ struct RailHoverRevealContainerTests {
         spin(0.5)
         #expect(container.sidebarModeForTesting == .pinned)
         #expect(container.cardFrameForTesting.minX >= revealedSidebar.maxX)
+    }
+
+    /// Push: the card narrows with the sidebar as on Cmd+S, ending the
+    /// pinned gutter past it, and returns to its exact rail frame.
+    @Test func pushRevealNarrowsTheCardAndRestoresItOnCollapse() {
+        let rig = makeRig()
+        defer { rig.close() }
+        let container = rig.container
+        let card = container.cardFrameForTesting
+        let rail = container.sidebarFrameForTesting.width
+
+        reveal(container, .push)
+        spin(0.5)
+        let sidebar = container.sidebarFrameForTesting
+        let pushed = container.cardFrameForTesting
+        #expect(container.isRailRevealedForTesting)
+        #expect(container.sidebarModeForTesting == .collapsed)
+        #expect(sidebar.width > rail + 100)
+        #expect(abs(pushed.minX - (sidebar.maxX + SidebarDialTuning.windowMargin())) < 0.5)
+        #expect(abs(pushed.maxX - card.maxX) < 0.5)
+        #expect(pushed.width < card.width - 100)
+
+        container.railHoverForTesting.dismiss(pointerInside: false)
+        spin(0.5)
+        #expect(!container.isRailRevealedForTesting)
+        #expect(abs(container.sidebarFrameForTesting.width - rail) < 0.5)
+        #expect(container.cardFrameForTesting == card)
+    }
+
+    /// Push: already the pinned geometry, so Cmd+S changes nothing on screen.
+    @Test func toggleWhilePushRevealedPinsWithNoVisualChange() {
+        let rig = makeRig()
+        defer { rig.close() }
+        let container = rig.container
+        reveal(container, .push)
+        spin(0.5)
+        let sidebar = container.sidebarFrameForTesting
+        let card = container.cardFrameForTesting
+
+        container.toggleSidebar()
+        for _ in 0..<20 {
+            spin(0.02)
+            #expect(container.sidebarFrameForTesting == sidebar)
+            #expect(container.cardFrameForTesting == card)
+        }
+        #expect(container.sidebarModeForTesting == .pinned)
+        #expect(!container.isRailRevealedForTesting)
     }
 }

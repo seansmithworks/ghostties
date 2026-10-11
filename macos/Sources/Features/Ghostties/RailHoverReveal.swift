@@ -1,6 +1,14 @@
 import AppKit
 import Foundation
 
+/// How a rail hover reveal makes room ("Reveal style" dial). Push runs the
+/// Cmd+S toggle's geometry, terminal card narrowing with it; overlay draws
+/// the sidebar over the terminal, card untouched.
+enum RailRevealStyle: String, CaseIterable {
+    case push
+    case overlay
+}
+
 /// Rail hover-reveal's timing (Sean, 2026-10-11): on the rail, a pointer
 /// that rests over the sidebar for `dwell` reveals the full sidebar over the
 /// terminal; leaving it starts `exitGrace`, after which it morphs back.

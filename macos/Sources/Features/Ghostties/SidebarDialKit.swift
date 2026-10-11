@@ -194,6 +194,7 @@ enum SidebarDialTuning {
     static let hoverRevealEnabledKey = "ghostties.sidebarDial.hoverReveal.enabled"
     static let hoverRevealDwellKey = "ghostties.sidebarDial.hoverReveal.dwell"
     static let hoverRevealExitGraceKey = "ghostties.sidebarDial.hoverReveal.exitGrace"
+    static let hoverRevealStyleKey = "ghostties.sidebarDial.hoverReveal.style"
 
     // MARK: Retired (sidebar vnext lock, 2026-10-08)
     // Dials whose losing options were removed. Nothing reads them, so a
@@ -475,6 +476,11 @@ enum SidebarDialTuning {
         double(hoverRevealExitGraceKey, default: WorkspaceLayout.railHoverRevealExitGrace, defaults: defaults)
     }
 
+    /// See `RailRevealStyle`. Push by default.
+    static func hoverRevealStyle(defaults: UserDefaults = SidebarDialTuning.store) -> RailRevealStyle {
+        choice(hoverRevealStyleKey, default: .push, defaults: defaults)
+    }
+
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
     /// width — see that function's own doc comment. Not folded into
     /// `WorkspaceLayout.railExtraWidth` (the compiled default both this and
@@ -545,7 +551,7 @@ enum SidebarDialTuning {
         sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         historyInSidebarKey, projectsLayoutKey,
-        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey
+        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey
     ] + railKeys
 
     /// The keys the Rail panel owns (`RailDialPanel`): its own
@@ -568,7 +574,7 @@ enum SidebarDialTuning {
         trayHorizontalButtonSizeKey, trayGroupGapKey, trayWidthKey,
         contentPaddingLeadingKey, contentPaddingTrailingKey, groupCardInsetKey,
         sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
-        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey
+        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey
     ]
 
     /// Posted after either panel's Reset, so the other panel re-reads the
@@ -745,6 +751,7 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var hoverRevealEnabled: Bool
     var hoverRevealDwell: Double
     var hoverRevealExitGrace: Double
+    var hoverRevealStyle: String
 }
 
 /// The Rail panel's model: every knob that only changes the collapsed rail.
@@ -1244,7 +1251,8 @@ enum SidebarListDialPanel: FocusedDialPanel {
             sidebarThreadTileIcon: Double(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults)),
             hoverRevealEnabled: SidebarDialTuning.hoverRevealEnabled(defaults: defaults),
             hoverRevealDwell: SidebarDialTuning.hoverRevealDwell(defaults: defaults),
-            hoverRevealExitGrace: SidebarDialTuning.hoverRevealExitGrace(defaults: defaults)
+            hoverRevealExitGrace: SidebarDialTuning.hoverRevealExitGrace(defaults: defaults),
+            hoverRevealStyle: SidebarDialTuning.hoverRevealStyle(defaults: defaults).rawValue
         )
     }
 
@@ -1265,6 +1273,7 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.hoverRevealEnabledKey, previous.hoverRevealEnabled, model.hoverRevealEnabled)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealDwellKey, previous.hoverRevealDwell, model.hoverRevealDwell)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealExitGraceKey, previous.hoverRevealExitGrace, model.hoverRevealExitGrace)
+        setIfChanged(defaults, SidebarDialTuning.hoverRevealStyleKey, previous.hoverRevealStyle, model.hoverRevealStyle)
     }
 
     static var controls: [DialControl<SidebarListDialKitTuningModel>] {
@@ -1305,6 +1314,8 @@ enum SidebarListDialPanel: FocusedDialPanel {
             // terminal (`RailHoverReveal`).
             .group("hoverReveal", label: "Hover reveal", children: [
                 .toggle("hoverRevealEnabled", keyPath: \.hoverRevealEnabled, label: "Reveal on hover"),
+                .select("hoverRevealStyle", keyPath: \.hoverRevealStyle, label: "Reveal style",
+                        options: RailRevealStyle.allCases.map(\.rawValue)),
                 .slider("hoverRevealDwell", keyPath: \.hoverRevealDwell, label: "Dwell", range: 0.3...3.0, step: 0.1, unit: "s"),
                 .slider("hoverRevealExitGrace", keyPath: \.hoverRevealExitGrace, label: "Exit grace", range: 0...1.0, step: 0.05, unit: "s"),
             ]),
