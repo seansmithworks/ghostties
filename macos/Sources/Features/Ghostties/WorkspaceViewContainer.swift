@@ -2990,10 +2990,13 @@ class WorkspaceViewContainer: NSView {
         let hit = super.hitTest(point)
         guard let hit else { return hit }
         let local = convert(point, from: superview)
-        // The overlay card, likewise over the card: its drag handle sits
-        // in the card's gutter, above the terminal, so it is hit first.
+        // The overlay card's drag handle sits in the card's gutter, over the
+        // terminal card. Only a hit the terminal or browser would otherwise
+        // take goes to it; anything layered above them (the composer) keeps
+        // its click.
         if sidebarMode == .overlay, !sidebarDragHandle.isHidden,
-           sidebarDragHandle.frame.contains(local) {
+           sidebarDragHandle.frame.contains(local),
+           [terminalShadowHost, browserShadowHost].contains(where: { hit === $0 || hit.isDescendant(of: $0) }) {
             return sidebarDragHandle.hitTest(local) ?? hit
         }
         guard railRevealOverlays else { return hit }
