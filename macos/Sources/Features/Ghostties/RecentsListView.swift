@@ -37,6 +37,9 @@ struct RecentsListView: View {
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    /// One selection chip across every row and History: a new selection's
+    /// chip travels from the old row (`SidebarRowChipBackground`).
+    @Namespace private var selectionChipNamespace
 
     #if DEBUG
     /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).
@@ -99,11 +102,10 @@ struct RecentsListView: View {
     /// without animation, when this is true (item 5).
     private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
-    /// Short, critically-damped spring for the live-reflow gap — DESIGN.md
-    /// defines no motion tokens for this repo, so this targets ~200ms per
-    /// the brief. `nil` under Reduce Motion (item 5).
+    /// The live-reflow gap: rows travelling to make room, on the `.move`
+    /// spring (`SidebarUISpring`). `nil` under Reduce Motion (item 5).
     private var reflowAnimation: Animation? {
-        reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 1.0)
+        SidebarUISpring.move.animation(reduceMotion: reduceMotion)
     }
 
     var body: some View {
@@ -177,6 +179,7 @@ struct RecentsListView: View {
             }
         }
         .background(.clear)
+        .environment(\.sidebarSelectionChipNamespace, selectionChipNamespace)
         .onChange(of: dragState.isDragging || projectDragState.isDragging) { isDragging in
             if isDragging {
                 installDragEndMonitors()

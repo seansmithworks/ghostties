@@ -191,6 +191,12 @@ enum SidebarDialTuning {
 
     // MARK: Hover reveal (`RailHoverReveal`): on the rail, resting the
     // pointer reveals the full sidebar over the terminal.
+    // MARK: UI springs: the sidebar's small motion (`SidebarUISpring`).
+    // Bounce 0 is critically damped: no overshoot.
+    static let uiSpringResponseKey = "ghostties.sidebarDial.uiSpring.response"
+    static let uiSpringBounceKey = "ghostties.sidebarDial.uiSpring.bounce"
+    static let uiSpringHoverResponseKey = "ghostties.sidebarDial.uiSpring.hoverResponse"
+
     static let hoverRevealEnabledKey = "ghostties.sidebarDial.hoverReveal.enabled"
     static let hoverRevealDwellKey = "ghostties.sidebarDial.hoverReveal.dwell"
     static let hoverRevealExitGraceKey = "ghostties.sidebarDial.hoverReveal.exitGrace"
@@ -457,6 +463,20 @@ enum SidebarDialTuning {
         choice(projectsLayoutKey, default: SidebarProjectsLayout.shipped, defaults: defaults)
     }
 
+    /// `SidebarUISpring.fold` and `.move`'s response, in seconds.
+    static func uiSpringResponse(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(uiSpringResponseKey, default: SidebarUISpring.defaultResponse, defaults: defaults)
+    }
+    /// Every `SidebarUISpring`'s overshoot on an entrance or travel; 0 is
+    /// no overshoot.
+    static func uiSpringBounce(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(uiSpringBounceKey, default: SidebarUISpring.defaultBounce, defaults: defaults)
+    }
+    /// `SidebarUISpring.hover`'s response, in seconds.
+    static func uiSpringHoverResponse(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(uiSpringHoverResponseKey, default: SidebarUISpring.defaultHoverResponse, defaults: defaults)
+    }
+
     /// See `hoverRevealEnabledKey`. On by default.
     static func hoverRevealEnabled(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
         switch defaults.object(forKey: hoverRevealEnabledKey) {
@@ -551,7 +571,8 @@ enum SidebarDialTuning {
         sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         historyInSidebarKey, projectsLayoutKey,
-        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey
+        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
+        uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
     ] + railKeys
 
     /// The keys the Rail panel owns (`RailDialPanel`): its own
@@ -574,7 +595,8 @@ enum SidebarDialTuning {
         trayHorizontalButtonSizeKey, trayGroupGapKey, trayWidthKey,
         contentPaddingLeadingKey, contentPaddingTrailingKey, groupCardInsetKey,
         sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
-        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey
+        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
+        uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
     ]
 
     /// Posted after either panel's Reset, so the other panel re-reads the
@@ -752,6 +774,9 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var hoverRevealDwell: Double
     var hoverRevealExitGrace: Double
     var hoverRevealStyle: String
+    var uiSpringResponse: Double
+    var uiSpringBounce: Double
+    var uiSpringHoverResponse: Double
 }
 
 /// The Rail panel's model: every knob that only changes the collapsed rail.
@@ -1252,7 +1277,10 @@ enum SidebarListDialPanel: FocusedDialPanel {
             hoverRevealEnabled: SidebarDialTuning.hoverRevealEnabled(defaults: defaults),
             hoverRevealDwell: SidebarDialTuning.hoverRevealDwell(defaults: defaults),
             hoverRevealExitGrace: SidebarDialTuning.hoverRevealExitGrace(defaults: defaults),
-            hoverRevealStyle: SidebarDialTuning.hoverRevealStyle(defaults: defaults).rawValue
+            hoverRevealStyle: SidebarDialTuning.hoverRevealStyle(defaults: defaults).rawValue,
+            uiSpringResponse: SidebarDialTuning.uiSpringResponse(defaults: defaults),
+            uiSpringBounce: SidebarDialTuning.uiSpringBounce(defaults: defaults),
+            uiSpringHoverResponse: SidebarDialTuning.uiSpringHoverResponse(defaults: defaults)
         )
     }
 
@@ -1274,6 +1302,9 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.hoverRevealDwellKey, previous.hoverRevealDwell, model.hoverRevealDwell)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealExitGraceKey, previous.hoverRevealExitGrace, model.hoverRevealExitGrace)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealStyleKey, previous.hoverRevealStyle, model.hoverRevealStyle)
+        setIfChanged(defaults, SidebarDialTuning.uiSpringResponseKey, previous.uiSpringResponse, model.uiSpringResponse)
+        setIfChanged(defaults, SidebarDialTuning.uiSpringBounceKey, previous.uiSpringBounce, model.uiSpringBounce)
+        setIfChanged(defaults, SidebarDialTuning.uiSpringHoverResponseKey, previous.uiSpringHoverResponse, model.uiSpringHoverResponse)
     }
 
     static var controls: [DialControl<SidebarListDialKitTuningModel>] {
@@ -1318,6 +1349,14 @@ enum SidebarListDialPanel: FocusedDialPanel {
                         options: RailRevealStyle.allCases.map(\.rawValue)),
                 .slider("hoverRevealDwell", keyPath: \.hoverRevealDwell, label: "Dwell", range: 0.3...3.0, step: 0.1, unit: "s"),
                 .slider("hoverRevealExitGrace", keyPath: \.hoverRevealExitGrace, label: "Exit grace", range: 0...1.0, step: 0.05, unit: "s"),
+            ]),
+            // The small motion's springs (`SidebarUISpring`): fold, chip,
+            // reflow, hover. Bounce 0 = no overshoot (critically damped);
+            // closes and fades never overshoot at any bounce.
+            .group("uiSprings", label: "UI springs", children: [
+                .slider("uiSpringResponse", keyPath: \.uiSpringResponse, label: "Response", range: 0.1...0.8, step: 0.01, unit: "s"),
+                .slider("uiSpringBounce", keyPath: \.uiSpringBounce, label: "Bounce", range: 0...0.5, step: 0.01),
+                .slider("uiSpringHoverResponse", keyPath: \.uiSpringHoverResponse, label: "Hover response", range: 0.05...0.6, step: 0.01, unit: "s"),
             ]),
         ]
     }

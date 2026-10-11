@@ -337,10 +337,9 @@ private struct ProjectDisclosureRowContent: View, Equatable {
 
     private var projectHeader: some View {
         Button {
-            let animation: Animation? = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                ? nil
-                : .easeInOut(duration: 0.2)
-            withAnimation(animation) {
+            // The fold's spring: unfolding overshoots, folding settles
+            // (`SidebarUISpring.fold`). Reduce Motion: instant.
+            withAnimation(SidebarUISpring.fold.animation(entering: !isExpanded)) {
                 isExpanded.toggle()
             }
             selectedProjectId = project.id
@@ -586,10 +585,9 @@ private struct SessionGroupHeader: View {
     var body: some View {
         Button {
             guard isCollapsible else { return }
-            let animation: Animation? = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                ? nil
-                : .easeInOut(duration: 0.2)
-            withAnimation(animation) {
+            // The fold's spring: unfolding overshoots, folding settles
+            // (`SidebarUISpring.fold`). Reduce Motion: instant.
+            withAnimation(SidebarUISpring.fold.animation(entering: !isExpanded)) {
                 isExpanded.toggle()
             }
         } label: {

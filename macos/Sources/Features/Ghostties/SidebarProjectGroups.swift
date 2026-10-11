@@ -170,8 +170,11 @@ enum ProjectAccordionState {
         return encode(ids)
     }
 
-    static var toggleAnimation: Animation? {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeInOut(duration: 0.2)
+    /// The fold's spring (`SidebarUISpring.fold`): unfolding is an
+    /// entrance and overshoots by the Bounce dial; folding is a close and
+    /// settles without one. Reduce Motion: instant.
+    static func toggleAnimation(unfolding: Bool) -> Animation? {
+        SidebarUISpring.fold.animation(entering: unfolding)
     }
 
     /// What a click on a project's header (list) or monogram tile (rail)
@@ -184,7 +187,8 @@ enum ProjectAccordionState {
             select(projectId)
             return
         }
-        withAnimation(toggleAnimation) {
+        let unfolding = decode(collapsedRaw.wrappedValue).contains(projectId)
+        withAnimation(toggleAnimation(unfolding: unfolding)) {
             collapsedRaw.wrappedValue = toggled(collapsedRaw.wrappedValue, projectId)
         }
     }
@@ -588,6 +592,15 @@ struct MorphTileFace: View, Animatable {
                     .background(Capsule().fill(style.fill))
                     .modifier(MorphRailOnlyFade())
                     .offset(x: 5 - cornerInset, y: -5 + cornerInset)
+                    // Folding is a close, but the badge arriving with it
+                    // is an entrance: it pops in on the fold spring's
+                    // bounce, and leaves on an unfold without one.
+                    .transition(.asymmetric(
+                        insertion: AnyTransition.scale(scale: RailCountBadge.popFromScale)
+                            .combined(with: .opacity)
+                            .animation(SidebarUISpring.fold.animation()),
+                        removal: AnyTransition.opacity.animation(SidebarUISpring.fold.settle())
+                    ))
             }
         }
     }
@@ -598,6 +611,9 @@ struct MorphTileFace: View, Animatable {
 /// ring, the same on a selected (ink) tile as on a plain one, where it
 /// still separates from the ink.
 enum RailCountBadge {
+    /// The scale the badge pops in from when its project folds.
+    static let popFromScale: CGFloat = 0.6
+
     struct Style {
         var fill: Color
         var text: Color

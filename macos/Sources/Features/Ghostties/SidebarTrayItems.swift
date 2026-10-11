@@ -988,6 +988,10 @@ struct TrayIconButton: View {
                 // own `.interactive()` reacts to press, not hover. Reduce
                 // Motion suppresses it like every other animation here.
                 .scaleEffect(!reduceMotion && showsHover ? 1.06 : 1.0)
+                // The lift is an entrance on hover-in, overshooting on the
+                // hover spring; hover-out settles without one
+                // (`SidebarUISpring.hover`).
+                .animation(SidebarUISpring.hover.animation(entering: showsHover, reduceMotion: reduceMotion), value: showsHover)
                 // One flexible frame for both widths, so flipping
                 // `fillsWidth` (the pinned⇄rail morph) animates the cell's
                 // width instead of swapping modifiers. min = ideal = max =
@@ -1011,6 +1015,9 @@ struct TrayIconButton: View {
                         // is where the chip is drawn.
                         RoundedRectangle(cornerRadius: chip.cornerRadius, style: .continuous)
                             .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
+                            // A tint: fades on the hover spring, never
+                            // overshooting.
+                            .animation(SidebarUISpring.hover.settle(reduceMotion: reduceMotion), value: showsHover)
                             .frame(width: chip.frame.width, height: chip.frame.height)
                             .redlineFrame(itemId.map { RedlineID.trayCell($0) + ".chip" })
                             .position(x: chip.frame.midX, y: chip.frame.midY)
@@ -1022,7 +1029,6 @@ struct TrayIconButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: showsHover)
         .help(label)
         .accessibilityLabel(label)
     }
