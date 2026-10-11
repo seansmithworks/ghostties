@@ -32,19 +32,19 @@ final class SidebarRetiredDialsTests: XCTestCase {
         let d = UserDefaults(suiteName: name)!
         d.removePersistentDomain(forName: name)
         defer { d.removePersistentDomain(forName: name) }
-        XCTAssertEqual(WorkspaceLayout.windowCornerRadius, 16, "measured on macOS 27, 2026-10-08")
-        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 8, "16 − the 8pt window margin")
+        XCTAssertEqual(WorkspaceLayout.windowCornerRadius, 20, "Sean, 2026-10-11")
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 12, "20 − the 8pt window margin")
         d.set(20.0, forKey: SidebarDialTuning.retiredTrayCornerRadiusKey)
-        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 8, "the retired dial is ignored")
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 12, "the retired dial is ignored")
         for margin in [0.0, 4.0, 12.0, 24.0] {
             d.set(margin, forKey: SidebarDialTuning.windowMarginKey)
-            XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), max(0, 16 - CGFloat(margin)), "margin \(margin)")
+            XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), max(0, 20 - CGFloat(margin)), "margin \(margin)")
         }
         withDials {
             XCTAssertEqual(WorkspaceLayout.terminalCornerRadius, SidebarDialTuning.trayCornerRadius(), "card and pills share the rule")
         }
         withDials({ $0.set(4.0, forKey: SidebarDialTuning.windowMarginKey) }) {
-            XCTAssertEqual(WorkspaceLayout.terminalCornerRadius, 12, "the card follows the margin dial")
+            XCTAssertEqual(WorkspaceLayout.terminalCornerRadius, 16, "the card follows the margin dial")
         }
     }
 

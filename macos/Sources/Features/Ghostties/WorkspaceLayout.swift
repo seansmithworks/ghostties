@@ -157,11 +157,10 @@ enum WorkspaceLayout {
     /// Height of the session-name title bar inside the terminal card.
     static let terminalTitleBarHeight: CGFloat = 28
 
-    /// The window's own corner radius: a titled Ghostties window on macOS
-    /// 26+ (no toolbar), measured from an uncropped capture on macOS 27
-    /// (2026-10-08), the same value `TerminalWindow` uses for this titlebar
-    /// style.
-    static let windowCornerRadius: CGFloat = 16
+    /// The window's own corner radius. Sean (2026-10-11): the main window is
+    /// 20, so the inset cards and tray pills are 20 − 8 = 12 (the 16
+    /// measured on 2026-10-08 read too tight).
+    static let windowCornerRadius: CGFloat = 20
 
     /// A surface inset `margin` from the window's edges is concentric with
     /// the window corner: its radius is the window's less the margin (Sean,

@@ -988,6 +988,7 @@ class WorkspaceViewContainer: NSView {
         terminalContainer.layer?.cornerRadius = radius
         terminalShadowHost.layer?.cornerRadius = radius
         historyHostingView.layer?.cornerRadius = radius
+        sidebarOverlayBackground.layer?.cornerRadius = radius
         if sidebarMode != .overlay {
             browserShadowHost.layer?.cornerRadius = radius
         }
@@ -1444,8 +1445,8 @@ class WorkspaceViewContainer: NSView {
         if !backgroundEffectView.bounds.isEmpty {
             backgroundEffectView.layer?.shadowPath = CGPath(
                 roundedRect: backgroundEffectView.bounds,
-                cornerWidth: 18,
-                cornerHeight: 18,
+                cornerWidth: WorkspaceLayout.terminalCornerRadius,
+                cornerHeight: WorkspaceLayout.terminalCornerRadius,
                 transform: nil
             )
         }
@@ -3619,11 +3620,13 @@ class WorkspaceViewContainer: NSView {
         // to the static canvas token before a surface is observed. This
         // initial value is immediately superseded by `applyChromeColor()`
         // below, which is the real source of truth and repaints on every
-        // session swap and theme reload. Radius 18, 1pt stroke `#00000026`,
+        // session swap and theme reload. Concentric with the window corner
+        // at the window margin it sits inside, like the terminal card
+        // (`applyWindowMargin` keeps it live); 1pt stroke `#00000026`,
         // clipped to the rounded rect.
         sidebarOverlayBackground.wantsLayer = true
         sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
-        sidebarOverlayBackground.layer?.cornerRadius = 18
+        sidebarOverlayBackground.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
         sidebarOverlayBackground.layer?.masksToBounds = true
         sidebarOverlayBackground.layer?.borderWidth = 1
         sidebarOverlayBackground.layer?.borderColor = NSColor.black.withAlphaComponent(CGFloat(0x26) / 255.0).cgColor

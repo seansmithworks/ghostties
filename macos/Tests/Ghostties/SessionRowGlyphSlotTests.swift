@@ -493,10 +493,10 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                 let pillRadius = TrayGlassStyle.pillCornerRadius()
                 XCTAssertEqual(inset, 3, tag)
                 XCTAssertEqual(padding, 10, tag)
-                XCTAssertEqual(pillRadius, 16, tag)
+                XCTAssertEqual(pillRadius, 20, tag)
                 let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: cell), soleInCapsule: sole)
                 XCTAssertEqual(chip.frame, CGRect(origin: .zero, size: cell).insetBy(dx: inset, dy: inset), tag)
-                XCTAssertEqual(chip.cornerRadius, sole ? 13 : 3, accuracy: 0.001, tag)
+                XCTAssertEqual(chip.cornerRadius, sole ? 17 : 7, accuracy: 0.001, tag)
                 XCTAssertEqual(chip.cornerRadius, pillRadius - (sole ? 0 : padding) - inset, accuracy: 0.001, tag)
 
                 let hosting = NSHostingView(rootView: TrayIconButton(
@@ -534,7 +534,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                     XCTAssertLessThan(try sum(inn.0, inn.1), 2.85, "\(side) inside the chip is tinted (\(tag))")
                 }
                 // 2.4pt in along the chip's top-leading corner diagonal:
-                // inside a r3 corner, outside a r13 one.
+                // inside a r7 corner, outside a r17 one.
                 let probe = try sum(chip.frame.minX + 2.4, chip.frame.minY + 2.4)
                 if sole {
                     XCTAssertGreaterThan(probe, 2.95, "sole chip's corner is the large concentric radius (\(tag))")
