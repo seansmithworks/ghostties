@@ -157,17 +157,24 @@ enum WorkspaceLayout {
     /// Height of the session-name title bar inside the terminal card.
     static let terminalTitleBarHeight: CGFloat = 28
 
-    /// The window's own corner radius: a titled Ghostties window on macOS
-    /// 26+ (no toolbar), measured from an uncropped capture on macOS 27
-    /// (2026-10-08), the same value `TerminalWindow` uses for this titlebar
-    /// style.
-    static let windowCornerRadius: CGFloat = 16
+    /// The window's own corner radius. Sean (2026-10-11): the main window is
+    /// 20, so the inset cards and tray pills are 20 − 8 = 12 (the 16
+    /// measured on 2026-10-08 read too tight).
+    static let windowCornerRadius: CGFloat = 20
 
-    /// A surface inset `margin` from the window's edges is concentric with
-    /// the window corner: its radius is the window's less the margin (Sean,
-    /// 2026-10-08). The one rule for the canvas card and the tray pills.
+    /// Radii nest (Sean, 2026-10-11): a surface inset `inset` from its
+    /// parent surface's edges is concentric with the parent's corner — its
+    /// radius is the parent's less the inset, clamped at 0. The one rule for
+    /// every card, pill and chip.
+    static func concentricRadius(parent: CGFloat, inset: CGFloat) -> CGFloat {
+        max(0, parent - inset)
+    }
+
+    /// A surface whose parent is the window, inset `margin` from its edges:
+    /// the terminal, browser and History cards, and the tray pills (the
+    /// pinned sidebar and the rail draw no card around the tray).
     static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
-        max(0, windowCornerRadius - margin)
+        concentricRadius(parent: windowCornerRadius, inset: margin)
     }
 
     /// Corner radius on the floating terminal panel (all four corners), and

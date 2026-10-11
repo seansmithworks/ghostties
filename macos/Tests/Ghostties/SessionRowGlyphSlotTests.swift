@@ -468,9 +468,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// between the cell edge and the chip stays background on all four
     /// sides, the chip's inside is tinted, and a point 2.4pt in along the
     /// chip's corner diagonal is tinted for the grouped chip's small corner
-    /// (r 3, curve within ~1pt of the corner) but background for the sole
-    /// chip's large one (r 13, ~3.8pt), so the corner rendered is the one
-    /// the rule picks. Off-default dials (margin 0 → pill radius 16, inset 3,
+    /// (r 7, curve within ~2pt of the corner) but background for the sole
+    /// chip's large one (r 17, ~5pt), so the corner rendered is the one
+    /// the rule picks. Off-default dials (margin 0 → pill radius 20, inset 3,
     /// padding 10) so the dials, not constants, drive it and the two radii
     /// sit far apart.
     func testTrayHoverChipIsTheCellInsetByTheDialWithAConcentricCorner() throws {
@@ -493,10 +493,10 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                 let pillRadius = TrayGlassStyle.pillCornerRadius()
                 XCTAssertEqual(inset, 3, tag)
                 XCTAssertEqual(padding, 10, tag)
-                XCTAssertEqual(pillRadius, 16, tag)
+                XCTAssertEqual(pillRadius, 20, tag)
                 let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: cell), soleInCapsule: sole)
                 XCTAssertEqual(chip.frame, CGRect(origin: .zero, size: cell).insetBy(dx: inset, dy: inset), tag)
-                XCTAssertEqual(chip.cornerRadius, sole ? 13 : 3, accuracy: 0.001, tag)
+                XCTAssertEqual(chip.cornerRadius, sole ? 17 : 7, accuracy: 0.001, tag)
                 XCTAssertEqual(chip.cornerRadius, pillRadius - (sole ? 0 : padding) - inset, accuracy: 0.001, tag)
 
                 let hosting = NSHostingView(rootView: TrayIconButton(
@@ -534,7 +534,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                     XCTAssertLessThan(try sum(inn.0, inn.1), 2.85, "\(side) inside the chip is tinted (\(tag))")
                 }
                 // 2.4pt in along the chip's top-leading corner diagonal:
-                // inside a r3 corner, outside a r13 one.
+                // inside a r7 corner, outside a r17 one.
                 let probe = try sum(chip.frame.minX + 2.4, chip.frame.minY + 2.4)
                 if sole {
                     XCTAssertGreaterThan(probe, 2.95, "sole chip's corner is the large concentric radius (\(tag))")
