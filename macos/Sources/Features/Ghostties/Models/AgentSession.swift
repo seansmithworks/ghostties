@@ -27,7 +27,7 @@ struct AgentResume: Codable, Hashable {
     /// `resume` does not restore cwd on its own — `ResumePlan` passes this
     /// explicitly via `-C`.
     var cwd: String?
-    /// `$GHOSTTIES_LAUNCHER` at spawn time (e.g. `cco`, `ccob`), or nil for
+    /// `$GHOSTTIES_LAUNCHER` at spawn time (e.g. `cco`, `devdesk`), or nil for
     /// a shell-hosted `claude` with no wrapper. Only meaningful for
     /// `.claude` — Codex has no equivalent wrapper convention.
     var launcher: String?

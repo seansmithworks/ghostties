@@ -12,34 +12,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [0.1.0-beta.26] — 2026-10-05
 
-The sidebar gets a third state, a narrow rail, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row in the full list, and are centered in the rail. There is now one composer, a centered single line. Ghostties also moves onto the latest upstream Ghostty.
+The sidebar gets a third state, a narrow rail, a glass tray, and one list of projects, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row in the full list, and are centered in the rail. There is now one composer, a centered single line, and Cmd+T can resume a past session from it. Ghostties also moves onto the latest upstream Ghostty.
 
 ### Added
 
-- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a narrow rail of session icons, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on). In the rail, status glyphs and section chevrons are centered, and the bottom tray is a narrow centered pill (Liquid Glass, solid when Reduce Transparency is on) with New Session, New Project, Settings and the sidebar toggle.
+- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a narrow rail of session icons, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on). In the rail, status glyphs are centered. Session shortcuts (Cmd+W, Cmd+1–9, next and previous session and project) work there too.
 - **Hover a session to see what it needs or is doing.** A session that needs approval shows what it wants to run and why. A running session shows your last prompt and the current step. The rail also shows the session name. Esc dismisses it while your pointer is on the card.
+- **Resume a past session from Cmd+T.** In the composer, press ↓ to list your past sessions under Resume, then your Templates below them; typing filters both. Each section shows three rows, then a "Show N more" row. Return on a past session resumes it.
+- **View → Refresh Appearance** re-applies the current light or dark appearance to every terminal, for a window that still shows the wrong colors.
 - **Templates are managed in Project settings.** Create, edit, duplicate, pin and delete templates in a Templates section there. Templates are shared across projects, and changes apply immediately, without Save or Cancel.
 - **Rail buttons are announced by VoiceOver** with the session name, project and status.
 
 ### Changed
 
 - **Status glyphs are back on session rows**, on the right edge: a spinner while a session is working, `?` when it needs you, a check when it's done, a cross on error, and nothing when it has stopped. Sessions listed under a project in the Projects tab show the same glyphs instead of a ghost.
-- **There is now one composer.** Every + opens the same centered single-line composer. A project row's + opens it with that project already filled in. Option-clicking a project's + still creates a session straight away when the project has a default template.
+- **There is now one composer.** The New Session button in the tray and Cmd+T open the same centered single-line composer.
 - **Cmd+Shift+E no longer toggles the sidebar.** Cmd+S toggles it (it already worked as a hidden shortcut), and Cmd+Shift+S closes it completely.
-- **The sidebar is wider by default**, 244pt instead of 220pt.
+- **The sidebar is wider by default**, 256pt instead of 220pt.
 - **The default theme now follows macOS.** With no theme set, Ghostties uses Apple System Colors and switches between light and dark with your system appearance. A theme in your config still wins.
 - **Ghostties now builds on the latest upstream Ghostty** (Zig 0.16), bringing in its fixes, including word selection that stops at hard line breaks and a crash fix for tmux `list-windows`.
-- **New Session moved to a + button in a tray at the bottom of the sidebar**, shared by the full list and the rail. The tray now also has a New Project button (a folder icon) between New Session and Settings. It opens the folder picker, then the composer for the new project.
+- **New Session moved to a + button in a glass tray at the bottom of the sidebar**, shared by the full list and the rail. The tray is two Liquid Glass capsules (solid when Reduce Transparency is on): New Session and New Project (a folder icon) in one, the sidebar toggle in the other. New Project opens the folder picker, then the composer for the new project. Hovering a button highlights it with an inset chip, like a Finder toolbar.
+- **Projects are one list by default.** Each project is a header with a monogram tile, its name and its session count; click it to fold the project, or drag it to reorder projects. A project with no live sessions shows dimmed with a count of 0. Sessions is still its own view (Cmd+Shift+2). In the rail, each project's sessions sit in a column headed by its monogram.
+- **The selected session row is tinted**, with a faint shimmering rim, in the full list and in the rail.
 - **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win.
 
 ### Removed
 
 - **The zero-chrome composer style and the old template card** are gone. A saved composer style setting is ignored.
 - **The "Experimental Composer Field" item in the View menu is removed.** The single-line composer is the only composer, so there is nothing left to switch.
+- **Pinning sessions is turned off.** The sidebar no longer offers to pin a session, and sessions you pinned before show in their project like the rest. Pinned templates in the composer are unchanged.
 
 ### Fixed
 
 - **Release builds no longer ship with code-coverage instrumentation.** The app no longer drops stray `default.profraw` files into the folder it ran from.
+- **Every terminal follows macOS light and dark.** Sessions in the background, and windows that were hidden, kept the old colors after you switched appearance.
+- **A session moves to the project whose folder it is working in.** When you `cd` into another project's directory, its sidebar row follows.
+- **Typing a project's name in the composer now reaches that project.**
+- **The first Return on a new branch creates its worktree.** Under load it could be rejected, and you had to press Return a second time.
+- **Deleting a template that sessions use now names those sessions** in the warning (the first three, then "and N more").
 
 ---
 

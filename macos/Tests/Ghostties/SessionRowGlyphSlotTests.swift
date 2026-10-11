@@ -334,6 +334,30 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// way `SidebarHostRoot` does (`WorkspaceLayout.sidebarTrailingGutter`).
     /// The rail's width (`sidebarRailWidth`) is the canvas width on the rail.
     private func renderTray(vertical: Bool, size: CGSize, gutter: CGFloat = 0) throws -> (NSBitmapImageRep, CGFloat) {
+        // These are geometry tests: `capsuleSpans` finds a capsule by its fill
+        // lifting over the chrome (> 0.06). The shipped light look is a 0.6
+        // blurred fill that lifts only 0.03-0.09, so render with a
+        // detection-friendly look (0.9 fill, no blur, no backdrop) through the
+        // scoped dial store. Shipped defaults are untouched.
+        let keys = SidebarDialTuning.glassKeys(for: .light)
+        let detectable: (UserDefaults) -> Void = {
+            $0.set(0.9, forKey: keys.surfaceOpacity)
+            $0.set(0.0, forKey: keys.surfaceBlur)
+            $0.set(TrayGlassStyle.BackdropMaterial.none.rawValue, forKey: keys.backdropMaterial)
+        }
+        // Inside a caller's `withDials` scope, add to that private suite
+        // (a fresh nested scope would drop the caller's dials); otherwise
+        // open one. Never touches the shared store.
+        if let scoped = SidebarDialTuning.scopedStore {
+            detectable(scoped)
+            return try renderTrayUnderCurrentDials(vertical: vertical, size: size, gutter: gutter)
+        }
+        return try withDials(detectable) {
+            try renderTrayUnderCurrentDials(vertical: vertical, size: size, gutter: gutter)
+        }
+    }
+
+    private func renderTrayUnderCurrentDials(vertical: Bool, size: CGSize, gutter: CGFloat) throws -> (NSBitmapImageRep, CGFloat) {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
         let hosting = NSHostingView(rootView: SidebarTray(
             isVertical: vertical,
