@@ -476,13 +476,14 @@ enum WorkspaceLayout {
     /// Width of the sidebar drag handle, whose trailing edge always sits on
     /// the card's leading edge. Pinned: the sidebar-to-card gap it sits in
     /// (`sidebarTrailingGutter`). Collapsed: `railDragHandleHitWidth`, over
-    /// the rail, so the handle never depends on the gap. Overlay/closed: 0
-    /// (the handle is hidden there).
+    /// the rail, so the handle never depends on the gap. Overlay: the same
+    /// gutter as pinned, between the column and the overlay card's edge.
+    /// Closed: 0 (the handle is hidden there).
     static func sidebarDragHandleWidth(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
         switch mode {
-        case .pinned: return sidebarTrailingGutter(for: .pinned, margin: margin)
+        case .pinned, .overlay: return sidebarTrailingGutter(for: mode, margin: margin)
         case .collapsed: return railDragHandleHitWidth
-        case .closed, .overlay: return 0
+        case .closed: return 0
         }
     }
 

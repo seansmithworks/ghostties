@@ -708,6 +708,12 @@ class WorkspaceViewContainer: NSView {
     private var overlayPanelLeadingConstraint: NSLayoutConstraint!
     private var overlayPanelBottomConstraint: NSLayoutConstraint!
     private var overlayPanelTrailingConstraint: NSLayoutConstraint!
+    /// The sidebar drag handle's trailing edge — mutually exclusive, like
+    /// the card's leading pair. Pinned/collapsed: on the card's leading
+    /// edge. Overlay: on the overlay card's trailing edge, so the handle
+    /// fills the pinned gutter inside the card.
+    private var sidebarDragHandleTrailingToCard: NSLayoutConstraint!
+    private var sidebarDragHandleTrailingToPanel: NSLayoutConstraint!
 
     /// Whether the browser panel is currently visible (expanded).
     private var isBrowserVisible = false
@@ -2042,6 +2048,14 @@ class WorkspaceViewContainer: NSView {
         let inset = SidebarDialTuning.windowMargin()
         let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
         let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
+        // Overlay only resizes: no snapping to the rail, no pinning. It
+        // writes the same width pinned uses.
+        if sidebarMode == .overlay {
+            guard !isSidebarTransitionAnimating else { return }
+            applyDraggedSidebarWidth(min(max(pointer, WorkspaceLayout.sidebarMinWidth), upperBound))
+            return
+        }
+
         let target = Self.sidebarDragTarget(
             pointerWidth: pointer,
             railWidth: WorkspaceLayout.collapsedRailWidth(in: self),
@@ -2063,7 +2077,11 @@ class WorkspaceViewContainer: NSView {
         // animation is driving the width constraint — writing it mid-flight
         // would fight the animator. The next tick after it settles catches up.
         guard target.mode == .pinned, !isSidebarTransitionAnimating else { return }
+        applyDraggedSidebarWidth(target.width)
+    }
 
+    /// Writes a dragged sidebar width — pinned's and overlay's one path.
+    private func applyDraggedSidebarWidth(_ width: CGFloat) {
         // Single source of truth: writing through `currentSidebarWidth` updates
         // the same stored value `applySidebarView()` reads when it next runs,
         // and writing `widthModel.width` updates the live SwiftUI
@@ -2075,15 +2093,35 @@ class WorkspaceViewContainer: NSView {
         // TaskSidebarView + environment objects) and was previously invoked on
         // every mouseDragged tick at 60-120Hz — the sidebar subtree has a
         // documented render-cost history (two shipped 100%-CPU beachballs).
-        sidebarWidthConstraint.constant = target.width
-        currentSidebarWidth = target.width
-        widthModel.expandedWidth = target.width
-        widthModel.width = target.width
+        sidebarWidthConstraint.constant = width
+        currentSidebarWidth = width
+        widthModel.expandedWidth = width
+        widthModel.width = width
     }
 
     private func endSidebarDrag() {
         sidebarDragPointerWidth = nil
         persistSidebarWidth()
+        // The overlay held open through the drag (`mouseExited`). Its hover
+        // zone follows the new width, and a drag that ended outside it
+        // closes the overlay as any exit does: the exit AppKit may still
+        // deliver belongs to the replaced tracking area, so it's ignored.
+        guard sidebarMode == .overlay else { return }
+        updateTrackingAreas()
+        if !pointerIsInOverlayZone {
+            transitionTo(.closed)
+        }
+    }
+
+    /// Whether the pointer is inside the open overlay's hover zone.
+    private var pointerIsInOverlayZone: Bool {
+        guard let window else { return false }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        return WorkspaceLayout.overlayRevealZone(
+            in: bounds,
+            sidebarWidth: currentSidebarWidth,
+            margin: SidebarDialTuning.windowMargin()
+        ).contains(point)
     }
 
     /// Persist the drag-resized width to this view mode's UserDefaults key.
@@ -2350,6 +2388,13 @@ class WorkspaceViewContainer: NSView {
             shadowHostLeadingToSidebar.isActive = false
             shadowHostLeadingToSuperview.isActive = true
         }
+        if newMode == .overlay {
+            sidebarDragHandleTrailingToCard.isActive = false
+            sidebarDragHandleTrailingToPanel.isActive = true
+        } else {
+            sidebarDragHandleTrailingToPanel.isActive = false
+            sidebarDragHandleTrailingToCard.isActive = true
+        }
 
         // 2. Z-ordering for overlay mode. A pinned reveal keeps the sidebar
         // above the card until the card has slid out from under it.
@@ -2372,9 +2417,9 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Sidebar drag handle: active while pinned or collapsed — dragging
-        // snaps between the two. Hidden in closed mode (sidebar isn't there)
-        // and in overlay mode (transient hover state — not a resize target).
-        sidebarDragHandle.isHidden = !(newMode == .pinned || newMode == .collapsed)
+        // snaps between the two — and in overlay, where it only resizes.
+        // Hidden in closed mode (sidebar isn't there).
+        sidebarDragHandle.isHidden = newMode == .closed
 
         // 4. Animate constraints, widths, alphas — duration/curve come from
         // the Flow 05 named-transition table (`WorkspaceLayout.
@@ -2670,6 +2715,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarHostLeadingConstraint, inset)
             set(sidebarHostBottomConstraint, -inset)
             applyOverlayPanelInsets(inset)
+            set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .overlay, margin: inset))
             // Terminal floats as a carded, inset canvas — same outer inset
             // as pinned/closed. The sidebar (z-order above the card) floats
             // over its left edge rather than sharing space with it.
@@ -2938,8 +2984,15 @@ class WorkspaceViewContainer: NSView {
     /// the panel are routed to it here.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        guard railRevealOverlays, let hit else { return hit }
+        guard let hit else { return hit }
         let local = convert(point, from: superview)
+        // The overlay card, likewise over the card: its drag handle sits
+        // in the card's gutter, above the terminal, so it is hit first.
+        if sidebarMode == .overlay, !sidebarDragHandle.isHidden,
+           sidebarDragHandle.frame.contains(local) {
+            return sidebarDragHandle.hitTest(local) ?? hit
+        }
+        guard railRevealOverlays else { return hit }
         guard railRevealBacking.frame.contains(local) else { return hit }
         let underPanel = [terminalShadowHost, browserShadowHost, sidebarDragHandle, browserDragHandle]
             .contains { hit === $0 || hit.isDescendant(of: $0) }
@@ -3008,9 +3061,11 @@ class WorkspaceViewContainer: NSView {
 
     override func mouseExited(with event: NSEvent) {
         // Same rule: only the overlay's own tracking area closes it, never
-        // an exit forwarded up from a subview.
+        // an exit forwarded up from a subview. A sidebar drag holds it
+        // open; `endSidebarDrag` closes it if the drag ends outside.
         guard sidebarMode == .overlay,
-              let area = activeTrackingArea, event.trackingArea === area
+              let area = activeTrackingArea, event.trackingArea === area,
+              sidebarDragPointerWidth == nil
         else { return }
         transitionTo(.closed)
     }
@@ -3595,6 +3650,8 @@ class WorkspaceViewContainer: NSView {
         overlayPanelLeadingConstraint = sidebarOverlayBackground.leadingAnchor.constraint(equalTo: leadingAnchor)
         overlayPanelBottomConstraint = sidebarOverlayBackground.bottomAnchor.constraint(equalTo: bottomAnchor)
         overlayPanelTrailingConstraint = sidebarOverlayBackground.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor)
+        sidebarDragHandleTrailingToCard = sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor)
+        sidebarDragHandleTrailingToPanel = sidebarDragHandle.trailingAnchor.constraint(equalTo: sidebarOverlayBackground.trailingAnchor)
 
         // Closed launches with the same 8pt card margin as every other
         // mode (Sean's closed-state layout call — see `transitionTo`'s
@@ -3715,7 +3772,7 @@ class WorkspaceViewContainer: NSView {
             sidebarDragHandle.topAnchor.constraint(equalTo: sidebarHostingView.topAnchor),
             sidebarDragHandle.bottomAnchor.constraint(equalTo: sidebarHostingView.bottomAnchor),
             sidebarDragHandleWidthConstraint,
-            sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
+            sidebarDragHandleTrailingToCard,
 
             // Build-info badge: top-right corner of the whole window, on top
             // of sidebar and terminal alike. Trailing inset clears the DEBUG
