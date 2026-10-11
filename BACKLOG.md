@@ -3311,7 +3311,7 @@ Done: all four fix branches merged (appearance → main as #204; others into vne
 State: `feat/sidebar-morph` @ 41d5c842d pushed. Stacked on integrate/vnext-dials-sessions → feat/sidebar-vnext (#205 head b5577ba9b). Full suite on 67699f7b9 (Light): 1710 pass / 1 fail (env-only stateDir test, fixed on `fix/statedir-test-capture-bundle` a94f5428a, pushed, no PR) / 1 skip. 41d5c842d: targeted tray suites only (9/9).
 
 - [ ] Sean's Dev pass on 41d5c842d (Dev running from .build-morph, DialKit open); checklist in session scratchpad pr205/dev-pass.md. | carried
-- [ ] Fold into #205 on Sean's OK: ff feat/sidebar-vnext → feat/sidebar-morph + cherry-pick a94f5428a; full suite on the folded head; post the drafted PR body (scratchpad pr205/body.md; image placeholders → pr-assets branch). | carried
+- [ ] #205 MERGED 2026-10-11 at b5577ba9b without this work → open a NEW PR feat/sidebar-morph → main (merge origin/main first) + cherry-pick a94f5428a; full suite on the PR head; retarget the drafted body (scratchpad pr205/body.md). DECIDE OR KILL: beta.26 (tag waits) vs beta.27 — strawman beta.27. | carried
 - [ ] DECIDE OR KILL: Reduce-Transparency dark tray edge is now dark (canvasBackgroundDark, ~1.14:1 vs chrome; was white@0.35, 3.13:1) per Sean's "rim must be dark". Strawman: keep dark; icons still 5.45:1. | carried
 - [ ] DECIDE OR KILL: `ember` stroke palette uses waitingTerracotta, against DESIGN.md "terracotta reserved for waiting". Strawman: cut ember. | carried
 - [ ] One-clock: panel steps with AppKit's constraint ticks (6–10 steps/transition in Debug); confirm smoothness in Release. View-mode toggle mid-morph leaves morphClock un-landed (bounded; one-line `morphClock?.land()` where generation bumps). | parked
