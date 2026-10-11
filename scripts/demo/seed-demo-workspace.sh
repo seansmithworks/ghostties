@@ -78,6 +78,8 @@ for spec in "${DEMO_PROJECT_SPECS[@]}"; do
 
   if [[ -d "$cache_dir/.git" ]] && git -C "$cache_dir" cat-file -e "${sha}^{commit}" 2>/dev/null; then
     echo "    $name: cache hit @ ${sha:0:7} (no download)"
+    # Pin it to a ref so the shallow cache's `clone --local` carries it (below).
+    git -C "$cache_dir" branch -f demo-pin "$sha"
     continue
   fi
 
@@ -103,6 +105,12 @@ for spec in "${DEMO_PROJECT_SPECS[@]}"; do
     echo "ERROR: pinned sha $sha still not found in $repo after a direct fetch." >&2
     exit 1
   fi
+
+  # A sha fetched with `--depth 1` is reachable only from FETCH_HEAD. The cache
+  # is shallow, so the seeding `git clone --local` falls back to a normal
+  # transfer, which sends only ref-reachable objects and would drop the
+  # pinned commit's tree. A branch ref makes it travel.
+  git -C "$cache_dir" branch -f demo-pin "$sha"
 done
 echo ""
 
