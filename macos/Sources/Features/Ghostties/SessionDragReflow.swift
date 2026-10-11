@@ -155,17 +155,25 @@ struct SessionRowDropModifier: ViewModifier {
     @Binding var dragState: SessionDragState
     let draggedContext: (UUID) -> (section: SessionSection, isOpen: Bool)?
     let performDrop: (UUID, SessionDragReflow.GapPosition) -> Bool
+    /// Set only for one-view rows, which also take a dragged project group
+    /// (`ProjectSlotDropDelegate`).
+    var projectDrop: ProjectDropTarget? = nil
 
     func body(content: Content) -> some View {
         if isEnabled {
-            content.onDrop(of: [.text], delegate: SessionRowDropDelegate(
+            let sessionDelegate = SessionRowDropDelegate(
                 section: section,
                 sectionList: sectionList,
                 hoveredSession: hoveredSession,
                 dragState: $dragState,
                 draggedContext: draggedContext,
                 performDrop: performDrop
-            ))
+            )
+            if let projectDrop {
+                content.onDrop(of: [.text], delegate: ProjectSlotDropDelegate(target: projectDrop, session: sessionDelegate))
+            } else {
+                content.onDrop(of: [.text], delegate: sessionDelegate)
+            }
         } else {
             content
         }

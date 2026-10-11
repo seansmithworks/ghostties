@@ -16,6 +16,10 @@ import GhosttyKit
 // guarded separately via `isRunningUnderXCTest` lazy-var pattern in AppDelegate.
 let isRunningUnderXCTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
+// Hosted tests must be invisible: accessory policy, off-screen windows, no
+// activation. Must run before any window or state load.
+QuietTestHost.install()
+
 // Initialize Ghostty global state. We do this once right away because the
 // CLI APIs require it and it lets us ensure it is done immediately for the
 // rest of the app.

@@ -595,8 +595,7 @@ private struct SessionGroupHeader: View {
         } label: {
             HStack(spacing: 5) {
                 // Only Archive is collapsible — its chevron sits leading,
-                // matching the Sessions-tab section headers
-                // (`SessionSectionHeader`), not trailing.
+                // not trailing.
                 if isCollapsible {
                     PixelChevronView(isExpanded: isExpanded)
                         .frame(width: 10, height: 10)

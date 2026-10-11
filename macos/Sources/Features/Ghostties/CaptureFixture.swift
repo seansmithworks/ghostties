@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Marketing-capture fixture mode — the data source for automated screenshots
@@ -171,20 +172,52 @@ enum CaptureFixture {
         return dir.path
     }
 
-    static let projects: [Project] = fixtureProjects.map { fp in
-        Project(
-            id: fixedId(String(format: "%04d", fixtureProjects.firstIndex { $0.name == fp.name }! + 1)),
-            name: fp.name,
-            rootPath: fixtureWorkingDirectory(for: fp.name),
-            isPinned: fp.isPinned,
-            ghostCharacter: fp.ghost,
-            lastActiveAt: Date()
+    // MARK: - Opt-in seed knobs
+
+    /// Two opt-in variations on the seeded cast, for contract rows that need
+    /// a state the default cast can't show. Both are off unless set, and the
+    /// default cast is byte-for-byte the same with both off.
+    ///   - `VERIFY_FIXTURE_PROJECTS=none` -> `GHOSTTIES_CAPTURE_FIXTURE_PROJECTS=none`:
+    ///     0 projects and 0 sessions (X3: the Run row accepts any text once a
+    ///     project exists).
+    ///   - `VERIFY_FIXTURE_TEMPLATE_IN_USE=1` -> `GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE=1`:
+    ///     one user template, "Mine", used by two trove sessions (T6: the
+    ///     in-use delete alert).
+    struct SeedKnobs: Equatable {
+        var zeroProjects = false
+        var templateInUse = false
+    }
+
+    static func parseSeedKnobs(_ env: [String: String]) -> SeedKnobs {
+        SeedKnobs(
+            zeroProjects: env["GHOSTTIES_CAPTURE_FIXTURE_PROJECTS"] == "none",
+            templateInUse: env["GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE"] == "1"
         )
     }
 
-    private static func projectId(_ name: String) -> UUID {
-        projects.first { $0.name == name }!.id
+    static let seedKnobs: SeedKnobs = isActive ? parseSeedKnobs(ProcessInfo.processInfo.environment) : SeedKnobs()
+
+    /// The in-use user template. Fixed id so the sessions can reference it.
+    static let inUseTemplate = AgentTemplate(id: fixedId("9001"), name: "Mine", kind: .custom)
+
+    /// Fixture sessions that use `inUseTemplate` under the knob.
+    private static let inUseTemplateSessionNames: Set<String> = ["build fix", "release notes"]
+
+    static func seededProjects(_ knobs: SeedKnobs) -> [Project] {
+        if knobs.zeroProjects { return [] }
+        return fixtureProjects.map { fp in
+            Project(
+                id: fixedId(String(format: "%04d", fixtureProjects.firstIndex { $0.name == fp.name }! + 1)),
+                name: fp.name,
+                rootPath: fixtureWorkingDirectory(for: fp.name),
+                isPinned: fp.isPinned,
+                ghostCharacter: fp.ghost,
+                lastActiveAt: Date()
+            )
+        }
     }
+
+    static let projects: [Project] = seededProjects(seedKnobs)
 
     /// `(name, project, ghost, indicator state)` — mirrors the rebuild
     /// reference's session cast: switchboard has 4 live sessions (2 waiting,
@@ -214,7 +247,7 @@ enum CaptureFixture {
 
     /// Round 6 follow-up: the one session the fixture marks focused, so a
     /// capture actually exercises the sidebar's selected-row styling
-    /// (raised card — see `WorkspaceLayout.selectedRowCornerRadius`)
+    /// (`SidebarRowCardBackground`)
     /// instead of leaving every row in its resting state. The first entry ("Claude Code 4", switchboard, top of
     /// Active) — same row position Flow 07's own "portfolio" occupies.
     /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
@@ -224,20 +257,26 @@ enum CaptureFixture {
         sessions.first?.id
     }
 
-    static let sessions: [AgentSession] = fixtureSessions.enumerated().map { index, fs in
-        let now = Date()
-        return AgentSession(
-            id: fixedId(String(format: "%04d", 100 + index)),
-            name: fs.name,
-            templateId: AgentTemplate.claudeCode.id,
-            projectId: projectId(fs.project),
-            sortOrder: index,
-            lastActiveAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
-            lastOutputAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
-            isNamePinned: true,
-            ghostCharacter: fs.ghost
-        )
+    static func seededSessions(_ knobs: SeedKnobs, projects: [Project]) -> [AgentSession] {
+        if knobs.zeroProjects { return [] }
+        return fixtureSessions.enumerated().map { index, fs in
+            let now = Date()
+            let usesInUseTemplate = knobs.templateInUse && inUseTemplateSessionNames.contains(fs.name)
+            return AgentSession(
+                id: fixedId(String(format: "%04d", 100 + index)),
+                name: fs.name,
+                templateId: usesInUseTemplate ? inUseTemplate.id : AgentTemplate.claudeCode.id,
+                projectId: projects.first { $0.name == fs.project }!.id,
+                sortOrder: index,
+                lastActiveAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
+                lastOutputAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
+                isNamePinned: true,
+                ghostCharacter: fs.ghost
+            )
+        }
     }
+
+    static let sessions: [AgentSession] = seededSessions(seedKnobs, projects: projects)
 
     /// Build the seeded `WorkspaceStore` and apply the canned indicator
     /// states — indicator state is separate, ephemeral, non-persisted
@@ -255,14 +294,16 @@ enum CaptureFixture {
     /// a non-alive session; every other non-`.inactive` state reports
     /// `.running` (a real open terminal), landing in Active.
     @MainActor
-    static func makeStore() -> WorkspaceStore {
+    static func makeStore(knobs: SeedKnobs = seedKnobs) -> WorkspaceStore {
+        let seededProjects = seededProjects(knobs)
         let store = WorkspaceStore(
-            testingProjects: projects,
-            testingSessions: sessions,
+            testingProjects: seededProjects,
+            testingSessions: seededSessions(knobs, projects: seededProjects),
             hasShownPinMigrationNotice: true,
             hasDismissedPinMigrationNotice: true
         )
-        for (fs, session) in zip(fixtureSessions, sessions) {
+        if knobs.templateInUse { store.addTemplate(inUseTemplate) }
+        for (fs, session) in zip(fixtureSessions, store.sessions) {
             store.updateIndicatorState(id: session.id, state: fs.state)
             switch fs.state {
             case .inactive:
@@ -276,7 +317,18 @@ enum CaptureFixture {
         if let mode = initialSidebarMode {
             store.updateSidebarMode(mode)
         }
+        // Listed projects first, in the given order, through the same
+        // `moveProject` a header drop calls; the rest keep their order.
+        for name in projectOrder(ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_PROJECT_ORDER"]).reversed() {
+            guard let id = store.projects.first(where: { $0.name == name })?.id else { continue }
+            store.moveProject(id: id, before: store.projects.first?.id)
+        }
         return store
+    }
+
+    /// `GHOSTTIES_CAPTURE_PROJECT_ORDER`: comma-separated project names.
+    static func projectOrder(_ raw: String?) -> [String] {
+        (raw ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     // MARK: - Coordinator seeding (D2)
@@ -480,6 +532,12 @@ enum CaptureFixture {
         raw.flatMap(parsePositiveSeconds)
     }
 
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_RAIL_CLOSE_PIN_AFTER=<seconds>` — drives
+    /// pinned -> rail -> closed -> pinned, one step per interval.
+    static func parseSidebarRailClosePinAfter(_ raw: String?) -> TimeInterval? {
+        raw.flatMap(parsePositiveSeconds)
+    }
+
     private static func parsePositiveSeconds(_ raw: String) -> TimeInterval? {
         guard let value = Double(raw), value.isFinite, value > 0 else { return nil }
         return value
@@ -495,8 +553,58 @@ enum CaptureFixture {
         parseProjectSettingsHook(env("GHOSTTIES_CAPTURE_PROJECT_SETTINGS"))
     }
     static var expandProjectName: String? { parseExpandProject(env("GHOSTTIES_CAPTURE_EXPAND_PROJECT")) }
+    static var sidebarRailClosePinAfter: TimeInterval? {
+        parseSidebarRailClosePinAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_RAIL_CLOSE_PIN_AFTER"))
+    }
     static var sidebarToggleAfter: TimeInterval? {
         parseSidebarToggleAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER"))
+    }
+    /// `GHOSTTIES_CAPTURE_TRAY_HOVER=<SidebarTrayItem.id>` (e.g. `newSession`):
+    /// draws that tray button's hover highlight without a pointer, so the
+    /// hovered state can be captured without synthetic input.
+    static var trayHoverItemId: String? { env("GHOSTTIES_CAPTURE_TRAY_HOVER").flatMap { $0.isEmpty ? nil : $0 } }
+    /// `GHOSTTIES_CAPTURE_BACKGROUND=1`: the capture app never activates
+    /// itself (`suppressActivation`), and opens its first window at launch
+    /// instead of on first activation (`AppDelegate`), so a capture launched
+    /// with `open -g` never takes focus or keystrokes from the app in use.
+    static var staysInBackground: Bool { env("GHOSTTIES_CAPTURE_BACKGROUND") == "1" }
+
+    /// Turns every `NSApp.activate(ignoringOtherApps:)` into a no-op for
+    /// this process. Called once at launch, only when `staysInBackground`.
+    @MainActor static func suppressActivation() {
+        guard let original = class_getInstanceMethod(NSApplication.self, #selector(NSApplication.activate(ignoringOtherApps:))),
+              let replacement = class_getInstanceMethod(NSApplication.self, #selector(NSApplication.captureBackground_activate(ignoringOtherApps:)))
+        else { return }
+        method_exchangeImplementations(original, replacement)
+    }
+
+    /// `GHOSTTIES_CAPTURE_WINDOW_SIZE=<width>x<height>` (points, e.g.
+    /// `900x500`): the content size the first workspace window is set to
+    /// once it is up, so a capture can show a short window.
+    static var windowContentSize: CGSize? { parseWindowContentSize(env("GHOSTTIES_CAPTURE_WINDOW_SIZE")) }
+
+    static func parseWindowContentSize(_ raw: String?) -> CGSize? {
+        guard let parts = raw?.lowercased().split(separator: "x"), parts.count == 2,
+              let width = Double(parts[0]), let height = Double(parts[1]),
+              width > 0, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+    /// `GHOSTTIES_CAPTURE_APPEARANCE=light|dark`: the launch value of
+    /// `SidebarAppearancePreview`, so a capture can show either glass set
+    /// regardless of the terminal theme.
+    static var appearancePreview: String? { env("GHOSTTIES_CAPTURE_APPEARANCE") }
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_TAB=projects|sessions`: the sidebar tab
+    /// for this launch. Set in the process's volatile argument domain, which
+    /// outranks the persistent one and is never written to disk, so the
+    /// capture shows the tab without touching the Dev app's saved tab.
+    static func applySidebarTabOverride() {
+        guard isActive, let raw = env("GHOSTTIES_CAPTURE_SIDEBAR_TAB"),
+              let tab = SidebarTab(rawValue: raw) else { return }
+        var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        arguments["ghostties.sidebarTab"] = tab.rawValue
+        // Setting a volatile domain that already exists raises; replace it.
+        UserDefaults.standard.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
     }
 
     /// Each hook fires once per process. The views that host them re-appear
@@ -596,3 +704,10 @@ enum CaptureFixture {
         exec cat > /dev/null
         """#
 }
+
+#if DEBUG
+extension NSApplication {
+    /// `CaptureFixture.suppressActivation`: activation does nothing.
+    @objc fileprivate func captureBackground_activate(ignoringOtherApps flag: Bool) {}
+}
+#endif

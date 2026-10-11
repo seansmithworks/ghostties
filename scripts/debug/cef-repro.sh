@@ -23,7 +23,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-APP_PATH="${GHOSTTIES_DEV_APP:-$REPO_ROOT/macos/build/Build/Products/Debug/Ghostties Dev.app}"
+APP_PATH="${GHOSTTIES_DEV_APP:-$REPO_ROOT/.build-capture/Build/Products/Debug/Ghostties Dev.app}"
 TIMEOUT_SECONDS=30
 RUNS=1
 ALLOW_NON_DEV=0
@@ -34,7 +34,7 @@ Usage: cef-repro.sh [--runs N] [--timeout SECONDS] [--app PATH] [--allow-non-dev
 
   --runs N          Repeat the reproduction N times and report a tally (default 1).
   --timeout SEC     Seconds to wait for DIED/SURVIVED per run (default 30).
-  --app PATH        Path to the app bundle (default: macos/build/Build/Products/Debug/"Ghostties Dev.app").
+  --app PATH        Path to the app bundle (default: .build-capture/Build/Products/Debug/"Ghostties Dev.app").
   --allow-non-dev   Skip the Debug/".dev"-bundle-id refusal so a Release-signed
                     lab copy (built per reference_releaselocal-compiles-cef-out.md,
                     with GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER un-gated for Release)
@@ -73,7 +73,7 @@ INFO_PLIST="$APP_PATH/Contents/Info.plist"
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "ERROR: app bundle not found at: $APP_PATH" >&2
-  echo "Build it first: xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration Debug -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build" >&2
+  echo "Build it first: scripts/build-capture.sh" >&2
   exit 2
 fi
 
@@ -89,7 +89,7 @@ if [[ -z "$BUNDLE_ID" ]]; then
 fi
 
 # Refuse to run against a non-Debug build unless --allow-non-dev is passed.
-# Debug Dev builds carry the ".dev" bundle-id suffix (see CEFBridge.mm's
+# Debug Dev builds carry the ".dev" bundle-id suffix (or ".capture" for scripts/build-capture.sh builds, which is the default app here so launching never quits Sean's Dev) (see CEFBridge.mm's
 # cache-dir comment). GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER is no longer
 # compile-time Debug-only (see WorkspaceViewContainer.swift), so a
 # Release-signed lab copy can legitimately be driven by this harness too —
@@ -97,7 +97,7 @@ fi
 # the real gate: it fails closed if the symbol just isn't in the binary.
 if [[ "$ALLOW_NON_DEV" -eq 0 ]]; then
   case "$BUNDLE_ID" in
-    *.dev) ;;
+    *.dev|*.capture) ;;
     *)
       echo "ERROR: refusing to run against a non-Debug build (bundle id: $BUNDLE_ID)." >&2
       echo "Pass --allow-non-dev to drive a Release-signed lab copy instead." >&2

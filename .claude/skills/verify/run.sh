@@ -9,8 +9,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 TREE="$(cd "$HERE/../../.." && pwd)"
 HASH="$(printf %s "$TREE" | shasum | cut -c1-8)"
 EV="/tmp/verify-ghostties-$HASH"
-DEV_DOMAIN="com.seansmithdesign.ghostties.dev"
-APP="$TREE/macos/build/Build/Products/Debug/Ghostties Dev.app"
+# Capture build: own bundle ID (scripts/build-capture.sh, suffix .capture) so launching it never quits Sean's Dev.
+DEV_DOMAIN="com.seansmithdesign.ghostties.capture"
+APP="$TREE/.build-capture/Build/Products/Debug/Ghostties Dev.app"
 BIN="$APP/Contents/MacOS/ghostty"
 ENGINE="$TREE/macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal.a"
 
@@ -56,6 +57,12 @@ cmd_up() {
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then
     [[ "$VERIFY_SIDEBAR_TOGGLE_AFTER" =~ ^[0-9]+(\.[0-9]+)?$ ]] && [ "$VERIFY_SIDEBAR_TOGGLE_AFTER" != 0 ] || die "VERIFY_SIDEBAR_TOGGLE_AFTER must be seconds > 0"
   fi
+  if [ -n "${VERIFY_FIXTURE_PROJECTS:-}" ]; then
+    [ "$VERIFY_FIXTURE_PROJECTS" = none ] || die "VERIFY_FIXTURE_PROJECTS must be none"
+  fi
+  if [ -n "${VERIFY_FIXTURE_TEMPLATE_IN_USE:-}" ]; then
+    [ "$VERIFY_FIXTURE_TEMPLATE_IN_USE" = 1 ] || die "VERIFY_FIXTURE_TEMPLATE_IN_USE must be 1"
+  fi
   # Expanding a project and its settings popover live on the Projects tab.
   if [ -n "${VERIFY_EXPAND_PROJECT:-}${VERIFY_PROJECT_SETTINGS:-}" ]; then
     [ "${VERIFY_SIDEBAR_TAB:-projects}" = projects ] || die "VERIFY_EXPAND_PROJECT/VERIFY_PROJECT_SETTINGS need VERIFY_SIDEBAR_TAB=projects"
@@ -64,14 +71,14 @@ cmd_up() {
   alive && die "already running (pid $(pid)); run down first"
   [ -f "$EV/git-status.before" ] || status > "$EV/git-status.before"
   check_inputs
-  # Another Dev window at the default position occludes ours. Never kill it.
+  # Another capture build shares our bundle ID and would be quit by (or quit) ours. Sean's Dev is
+  # a different ID and is deliberately not matched. Never kill it.
   local other
-  other="$(ps -axo pid=,command= | grep "Ghostties Dev.app/Contents/MacOS" | grep -v grep | head -1 || true)"
-  [ -z "$other" ] || die "another Ghostties Dev is running ($other). Ask Sean to quit it; do not kill it"
+  other="$(ps -axo pid=,command= | grep "\.build-capture/Build/Products/Debug/Ghostties Dev.app/Contents/MacOS" | grep -v grep | head -1 || true)"
+  [ -z "$other" ] || die "another capture build is running ($other). Wait for its owner to run down; do not kill it"
   awake
   if [ -n "${VERIFY_BUILD:-1}" ] && [ "${VERIFY_BUILD:-1}" != 0 ]; then
-    ( cd "$TREE" && xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration Debug \
-        -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build ) > "$EV/build.log" 2>&1 \
+    "$TREE/scripts/build-capture.sh" > "$EV/build.log" 2>&1 \
       || { tail -20 "$EV/build.log"; die "build failed (full log $EV/build.log)"; }
     grep -q "BUILD SUCCEEDED" "$EV/build.log" || die "no BUILD SUCCEEDED in $EV/build.log"
   fi
@@ -92,6 +99,8 @@ cmd_up() {
   if [ -n "${VERIFY_COMPOSER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER=$VERIFY_COMPOSER"); fi
   if [ -n "${VERIFY_PROJECT_SETTINGS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_PROJECT_SETTINGS=$VERIFY_PROJECT_SETTINGS"); fi
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER=$VERIFY_SIDEBAR_TOGGLE_AFTER"); fi
+  if [ -n "${VERIFY_FIXTURE_PROJECTS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_FIXTURE_PROJECTS=$VERIFY_FIXTURE_PROJECTS"); fi
+  if [ -n "${VERIFY_FIXTURE_TEMPLATE_IN_USE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE=$VERIFY_FIXTURE_TEMPLATE_IN_USE"); fi
   if [ -n "${VERIFY_SCRIPT:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SCRIPT=$VERIFY_SCRIPT"); fi
   env -u GHOSTTIES_SESSION_ID -u GHOSTTIES_LAUNCHER \
     GHOSTTIES_CAPTURE_FIXTURE=1 GHOSTTIES_STATE_DIR="$EV/state" ${extra[@]+"${extra[@]}"} \

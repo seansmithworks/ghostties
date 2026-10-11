@@ -295,6 +295,14 @@ extension Notification.Name {
     static let ghosttyColorDidChange = Notification.Name("com.mitchellh.ghostty.ghosttyColorDidChange")
     static let GhosttyColorChangeKey = ghosttyColorDidChange.rawValue
 
+    // MARK: - Ghostties fork fence (color scheme reaches every surface)
+    /// The app's light/dark scheme changed. Object is the `Ghostty.App` whose
+    /// scheme changed; userInfo carries the new `ghostty_color_scheme_e` under
+    /// `GhosttyColorSchemeKey`. Every live surface of that app applies it.
+    static let ghosttyColorSchemeDidChange = Notification.Name("com.seansmithdesign.ghostties.colorSchemeDidChange")
+    static let GhosttyColorSchemeKey = ghosttyColorSchemeDidChange.rawValue
+    // MARK: - End Ghostties fork fence (color scheme reaches every surface)
+
     /// Goto tab. Has tab index in the userinfo.
     static let ghosttyMoveTab = Notification.Name("com.mitchellh.ghostty.moveTab")
     static let GhosttyMoveTabKey = ghosttyMoveTab.rawValue
