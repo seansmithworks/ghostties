@@ -122,10 +122,12 @@ enum TrayGlassStyle {
         var variant: Variant
         /// Tint on the native glass: white in light, the warm chrome
         /// (`WorkspaceLayout.chromeBackgroundDark`) in dark — never the
-        /// terracotta accent.
+        /// terracotta accent. The `.identity` variant draws no material, so
+        /// it ignores the tint; it only shows on `.regular`/`.clear`.
         var tintOpacity: Double
-        /// The layer laid over the glass: white in light, the dark canvas
-        /// token (`WorkspaceLayout.canvasBackgroundDark`) in dark.
+        /// The layer laid over the glass: white in light, the chrome
+        /// (`WorkspaceLayout.chromeBackgroundDark`) in dark, so dark glass
+        /// is never lighter than the chrome it floats on.
         var surfaceOpacity: Double
         /// White rim standing in for the shader's fresnel edge.
         var rimWidth: CGFloat
@@ -177,30 +179,34 @@ enum TrayGlassStyle {
         specularAngle: 189
     )
 
-    /// Dark: a half-opaque canvas-grey layer (`canvasBackgroundDark`
-    /// #2D2D2D over the #242424 chrome) on lightly warm-tinted identity
-    /// glass, a hairline white rim, a faint chromatic rim, and a deeper
-    /// shadow than light's, since an 8% black shadow vanishes on dark chrome.
-    /// Specular is kept faint: a strong white highlight on dark glass lifts
-    /// the background toward the grey text and icons and collapses their
-    /// contrast. Tuned in the Dev DialKit (locked for beta.26, 2026-10-08).
+    /// Dark: Sean's tuned dark structure (2026-10-11 export: 1.5pt rim,
+    /// pastel chromatic edge at 220°, light from below), drawn as dark
+    /// glass: a near-opaque chrome layer (`chromeBackgroundDark`, never the
+    /// lighter canvas grey), so the pill sits at the chrome's lightness, or
+    /// darkens what scrolls under it. No white specular (0 = not drawn): any
+    /// white gradient lifts the fill above the chrome, and Sean's 0.6 from
+    /// below turned the pill's lower half pale grey and dropped the icons
+    /// to 1.1:1. The rim stays faint for the same reason; the edge reads
+    /// through the rim and the chromatic stroke. Icons (`textSecondaryDark`)
+    /// measure 5.45:1 on the rendered fill. A deeper shadow than light's,
+    /// since an 8% black shadow vanishes on dark chrome.
     static let dark = Look(
         variant: .identity,
-        tintOpacity: 0.15,
-        surfaceOpacity: 0.45,
-        rimWidth: 0.25,
-        rimOpacity: 0.12,
+        tintOpacity: 0.7,
+        surfaceOpacity: 0.9,
+        rimWidth: 1.5,
+        rimOpacity: 0.15,
         // Light's lift, at the opacity dark chrome needs to show it.
         shadowOpacity: 0.4,
         shadowRadius: 12,
         shadowYOffset: 4,
-        chromaticIntensity: 0.15,
-        chromaticWidth: 0.5,
-        chromaticRotation: 72.9,
-        chromaticBlur: 1.4,
+        chromaticIntensity: 0.3,
+        chromaticWidth: 1.5,
+        chromaticRotation: 220,
+        chromaticBlur: 2.2,
         chromaticPalette: .pastel,
-        chromaticBlend: .plusLighter,
-        specularStrength: 0.1,
+        chromaticBlend: .normal,
+        specularStrength: 0,
         specularAngle: 270
     )
 
@@ -277,7 +283,7 @@ enum TrayGlassStyle {
     /// (pre-26 / Reduce Transparency / tests).
     static func surfaceFill(_ look: Look, for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
-            ? Color(WorkspaceLayout.canvasBackgroundDark).opacity(look.surfaceOpacity)
+            ? Color(WorkspaceLayout.chromeBackgroundDark).opacity(look.surfaceOpacity)
             : Color.white.opacity(look.surfaceOpacity)
     }
 

@@ -153,12 +153,12 @@ struct SidebarLockedDefaultsTests {
 
         let dark = SidebarDialTuning.trayGlass(for: .dark, defaults: d)
         #expect(dark == TrayGlassStyle.Look(
-            variant: .identity, tintOpacity: 0.15, surfaceOpacity: 0.45,
-            rimWidth: 0.25, rimOpacity: 0.12,
+            variant: .identity, tintOpacity: 0.7, surfaceOpacity: 0.9,
+            rimWidth: 1.5, rimOpacity: 0.15,
             shadowOpacity: 0.4, shadowRadius: 12, shadowYOffset: 4,
-            chromaticIntensity: 0.15, chromaticWidth: 0.5, chromaticRotation: 72.9, chromaticBlur: 1.4,
-            chromaticPalette: .pastel, chromaticBlend: .plusLighter,
-            specularStrength: 0.1, specularAngle: 270
+            chromaticIntensity: 0.3, chromaticWidth: 1.5, chromaticRotation: 220, chromaticBlur: 2.2,
+            chromaticPalette: .pastel, chromaticBlend: .normal,
+            specularStrength: 0, specularAngle: 270
         ))
     }
 }
