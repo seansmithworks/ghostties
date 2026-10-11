@@ -433,7 +433,7 @@ struct MorphLabelFade: ViewModifier {
         }
 
         func body(content: Content) -> some View {
-            let opacity = WorkspaceLayout.morphFadeOpacity(element: element, progress: progress, staggerIndex: staggerIndex)
+            let opacity = WorkspaceLayout.morphFadeOpacity(element: element, progress: progress, staggerIndex: staggerIndex, reduceMotion: reduceMotion)
             content
                 .offset(x: WorkspaceLayout.sidebarLabelDrift(opacity: opacity, reduceMotion: reduceMotion))
                 .opacity(opacity)
@@ -471,7 +471,7 @@ struct MorphRailOnlyFade: ViewModifier {
         }
 
         func body(content: Content) -> some View {
-            let opacity = WorkspaceLayout.morphFadeOpacity(element: .badge, progress: progress)
+            let opacity = WorkspaceLayout.morphFadeOpacity(element: .badge, progress: progress, reduceMotion: reduceMotion)
             let window = WorkspaceLayout.morphFadeWindow(element: .badge)
             let scale = reduceMotion ? 1 : window.scaleFrom + (window.scaleTo - window.scaleFrom) * CGFloat(opacity)
             content

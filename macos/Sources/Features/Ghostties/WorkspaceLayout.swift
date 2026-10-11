@@ -579,10 +579,11 @@ enum WorkspaceLayout {
 
     // MARK: - Springs (the sidebar ⇄ rail morph)
 
-    /// Rail -> sidebar (the Cmd+S expand and the hover reveal): a little
-    /// overshoot, Sean's "bounce/spring ... fluidity" (2026-10-11). Within
+    /// Rail -> sidebar (the Cmd+S expand and the hover reveal): a visible
+    /// overshoot (~4.6% of the travel), Sean's "bounce/spring ... fluidity"
+    /// (2026-10-11); 0.15 (~0.6%) read as no bounce at all. The top of
     /// emil's 0.1–0.3 "keep bounce subtle".
-    static let sidebarMorphOpenSpring = SidebarSpring(response: 0.35, bounce: 0.15)
+    static let sidebarMorphOpenSpring = SidebarSpring(response: 0.35, bounce: 0.3)
 
     /// Sidebar -> rail: crisper, and no overshoot — motion-standards:
     /// "overshoot belongs to entrances only; never bounce a close".
@@ -655,8 +656,11 @@ enum WorkspaceLayout {
     /// sixth, so on the way out of the rail they arrive in reading order and
     /// all have landed at 0. The count and chevron go a little sooner and
     /// arrive a little later. The folded count badge shows over 0.55–0.85,
-    /// growing 0.9 → 1.
-    static func morphFadeWindow(element: SidebarMorphElement, staggerIndex: Int = 0) -> MorphFadeWindow {
+    /// growing 0.9 → 1. Reduce Motion: the whole 0–1 for every element, no
+    /// cascade and no scale — the morph's progress then moves over the
+    /// 120ms crossfade, so each fade takes all of it.
+    static func morphFadeWindow(element: SidebarMorphElement, staggerIndex: Int = 0, reduceMotion: Bool = false) -> MorphFadeWindow {
+        if reduceMotion { return MorphFadeWindow(start: 0, end: 1) }
         let end = 0.5 - sidebarLabelCascadeStep * CGFloat(min(max(staggerIndex, 0), 5))
         switch element {
         case .names:
@@ -669,8 +673,8 @@ enum WorkspaceLayout {
     }
 
     /// `element`'s opacity at morph `progress`.
-    static func morphFadeOpacity(element: SidebarMorphElement, progress: CGFloat, staggerIndex: Int = 0) -> Double {
-        let window = morphFadeWindow(element: element, staggerIndex: staggerIndex)
+    static func morphFadeOpacity(element: SidebarMorphElement, progress: CGFloat, staggerIndex: Int = 0, reduceMotion: Bool = false) -> Double {
+        let window = morphFadeWindow(element: element, staggerIndex: staggerIndex, reduceMotion: reduceMotion)
         let t = Double(min(max((progress - window.start) / (window.end - window.start), 0), 1))
         return element == .badge ? t : 1 - t
     }

@@ -2417,7 +2417,9 @@ class WorkspaceViewContainer: NSView {
             applyTransitionAlphas(for: newMode)
             let targetWidth = targets.first { $0.0 === sidebarWidthConstraint }?.1 ?? sidebarWidthConstraint.constant
             let targetGap = targets.first { $0.0 === shadowHostLeadingToSidebar }?.1 ?? shadowHostLeadingToSidebar.constant
-            let cardFrom = terminalShadowHost.frame.minX
+            // From the constants, not the frame: the frame is a layout pass
+            // behind a spring that is still moving.
+            let cardFrom = sidebarWidthConstraint.constant + shadowHostLeadingToSidebar.constant
             let cardTo = targetWidth + targetGap
             setCardLeadingClamp(min(cardFrom, cardTo)...max(cardFrom, cardTo))
             let shadowFrom = Double(railRevealBacking.layer?.shadowOpacity ?? 0)
@@ -2732,7 +2734,7 @@ class WorkspaceViewContainer: NSView {
             ]
             if pushes {
                 targets.append((shadowHostLeadingToSidebar, cardGap))
-                let cardFrom = terminalShadowHost.frame.minX
+                let cardFrom = sidebarWidthConstraint.constant + shadowHostLeadingToSidebar.constant
                 let cardTo = targetWidth + cardGap
                 setCardLeadingClamp(min(cardFrom, cardTo)...max(cardFrom, cardTo))
             }

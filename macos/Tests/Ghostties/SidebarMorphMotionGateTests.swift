@@ -179,11 +179,21 @@ struct SidebarMorphMotionGateTests {
 
     // MARK: - Reduce Motion
 
-    /// Reduce Motion: the geometry snaps (no spring: the container takes
-    /// the snap path), the labels fade over the 120ms crossfade with no
-    /// drift. The fade length is the shared token.
+    /// Reduce Motion: the morph's progress moves over the 120ms crossfade
+    /// (the geometry snaps; there is no spring), and every label and the
+    /// badge fade across all of it — the whole 0–1 window, no cascade, no
+    /// drift — so nothing pops in a fraction of those 120ms.
     @Test func reduceMotionFadesIn120msWithNoDrift() {
         #expect(WorkspaceLayout.sidebarReducedMotionCrossfadeDuration == 0.12)
+        for element in [SidebarMorphElement.names, .trailingCluster, .badge] {
+            for index in 0..<8 {
+                let window = WorkspaceLayout.morphFadeWindow(element: element, staggerIndex: index, reduceMotion: true)
+                #expect(window.start == 0 && window.end == 1, "\(element) #\(index): \(window.start)–\(window.end)")
+                // Half way through the crossfade, half faded, every index alike.
+                let half = WorkspaceLayout.morphFadeOpacity(element: element, progress: 0.5, staggerIndex: index, reduceMotion: true)
+                #expect(abs(half - 0.5) < 0.0001, "\(element) #\(index) at 60ms: \(half)")
+            }
+        }
         for opacity in [0.0, 0.5, 1.0] {
             #expect(WorkspaceLayout.sidebarLabelDrift(opacity: opacity, reduceMotion: true) == 0)
         }

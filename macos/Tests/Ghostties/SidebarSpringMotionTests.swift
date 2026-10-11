@@ -29,10 +29,11 @@ struct SidebarSpringMotionTests {
         #expect(overshoot(SidebarSpring(response: 0.3, bounce: 0)) <= 0)
     }
 
-    /// The open spring overshoots, but only just: "subtle, not cartoony".
-    @Test func openSpringOvershootsSubtly() {
+    /// The open spring's overshoot is visible but not cartoony: a few
+    /// percent of the travel (bounce 0.3, about 4.6%).
+    @Test func openSpringOvershootsVisiblyButSubtly() {
         let peak = overshoot(WorkspaceLayout.sidebarMorphOpenSpring)
-        #expect(peak > 0 && peak < 0.05, "overshoot \(peak)")
+        #expect(peak > 0.02 && peak < 0.07, "overshoot \(peak)")
     }
 
     /// Stepping in one go or in many small frames lands in the same place:
@@ -67,6 +68,41 @@ struct SidebarSpringMotionTests {
         #expect(abs((width.constant - atRetarget) - expected) < 0.1, "moved \(width.constant - atRetarget)pt, expected \(expected)")
         #expect(speedBefore > 100, "test needs a moving spring: \(speedBefore)pt/s")
         #expect(abs(speedAfter - speedBefore) / speedBefore < 0.05, "speed \(speedBefore) -> \(speedAfter)")
+    }
+
+    /// A retarget that adds a constraint at rest (Cmd+S pinning an overlay
+    /// reveal mid-flight: the card's gap joins while the width is still
+    /// moving) keeps the running width's speed instead of restarting the
+    /// whole motion from rest.
+    @Test func retargetKeepsVelocityWhenAChannelJoinsAtRest() {
+        let driver = SidebarMotionDriver(view: nil)
+        let width = constraint(60), gap = constraint(-200)
+        driver.animate([(width, 256)], spring: WorkspaceLayout.sidebarMorphOpenSpring) {}
+        for _ in 0..<4 { driver.step(1.0 / 60) }
+        let before = width.constant
+        driver.step(0.001)
+        let speedBefore = (width.constant - before) / 0.001
+        let atRetarget = width.constant
+        // The joining gap travels further than what is left of the width.
+        driver.animate([(width, 256), (gap, 8)], spring: WorkspaceLayout.sidebarMorphOpenSpring) {}
+        driver.step(0.001)
+        let speedAfter = (width.constant - atRetarget) / 0.001
+        #expect(speedBefore > 100, "test needs a moving spring: \(speedBefore)pt/s")
+        #expect(abs(speedAfter - speedBefore) / speedBefore < 0.05, "speed \(speedBefore) -> \(speedAfter)")
+    }
+
+    /// A window closed mid-spring: once the driver is gone, the display
+    /// link and the backstop timer stop, rather than ticking forever.
+    @Test func tickerStopsWhenTheDriverGoesMidSpring() {
+        var driver: SidebarMotionDriver? = SidebarMotionDriver(view: NSView())
+        driver?.animate([(constraint(60), 256)], spring: WorkspaceLayout.sidebarMorphOpenSpring) {}
+        weak var ticker = driver?.tickerForTesting
+        weak var timer = ticker?.timerForTesting
+        #expect(ticker != nil && timer != nil && timer?.isValid == true)
+        driver = nil
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        #expect(timer == nil, "the timer is still scheduled")
+        #expect(ticker == nil, "the ticker is still retained (display link or timer)")
     }
 
     /// Constraints keep moving together on a retarget that names only some

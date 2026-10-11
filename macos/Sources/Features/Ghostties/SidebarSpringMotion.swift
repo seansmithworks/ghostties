@@ -79,14 +79,30 @@ final class SidebarMotionDriver {
 
     /// Settled when every channel is within this many points of its target
     /// and moving slower than `settleSpeed` points per second.
-    static let settleDistance: Double = 0.25
-    static let settleSpeed: Double = 3
+    ///
+    /// 0.5pt is a single pixel at 2x, and 20pt/s is a third of a point per
+    /// frame at 60Hz: below both the motion reads as done, so the final snap
+    /// is invisible, and the transition flag (which holds off the hover
+    /// reveal, label clicks and the resize reclamp) clears when the motion
+    /// looks finished rather than ~0.2s later in the sub-pixel tail.
+    static let settleDistance: Double = 0.5
+    static let settleSpeed: Double = 20
 
     /// `view` hosts the display link; nil drives nothing on its own (tests
     /// call `step`).
     init(view: NSView?) {
         self.view = view
     }
+
+    // A window closed mid-spring: stop the display link and the timer. The
+    // ticker also stops itself when its tick finds no driver.
+    deinit {
+        MainActor.assumeIsolated { ticker?.invalidate() }
+    }
+
+    #if DEBUG
+    var tickerForTesting: SidebarFrameTicker? { ticker }
+    #endif
 
     var isRunning: Bool { !channels.isEmpty }
 
@@ -106,7 +122,9 @@ final class SidebarMotionDriver {
         onFrame: ((Double) -> Void)? = nil,
         completion: @escaping () -> Void
     ) {
-        // Each running constraint's speed in points per second.
+        // Each running constraint's speed in points per second. Only these
+        // carry velocity into the retarget: a constraint joining now (the
+        // card's gap when Cmd+S pins a reveal) was at rest.
         var speeds: [ObjectIdentifier: Double] = [:]
         var merged: [(NSLayoutConstraint, CGFloat)] = []
         for channel in channels {
@@ -122,9 +140,10 @@ final class SidebarMotionDriver {
         }
         channels = merged.map { Channel(constraint: $0.0, from: $0.0.constant, to: $0.1) }
         progress = 0
-        // The velocity carried over, measured on the constraint that moves
-        // the furthest (they are all proportional within a segment).
-        if let lead = channels.max(by: { abs($0.span) < abs($1.span) }), abs(lead.span) > 0.01 {
+        // The velocity carried over, measured on the already-running
+        // constraint with the furthest still to go.
+        let running = channels.filter { speeds[ObjectIdentifier($0.constraint)] != nil && abs($0.span) > 0.01 }
+        if let lead = running.max(by: { abs($0.span) < abs($1.span) }) {
             velocity = (speeds[ObjectIdentifier(lead.constraint)] ?? 0) / Double(lead.span)
         } else {
             velocity = 0
@@ -176,7 +195,11 @@ final class SidebarMotionDriver {
 
     private func startTicking() {
         guard ticker == nil, let view else { return }
-        ticker = SidebarFrameTicker(view: view) { [weak self] dt in self?.step(dt) }
+        ticker = SidebarFrameTicker(view: view) { [weak self] dt in
+            guard let self else { return false }
+            self.step(dt)
+            return true
+        }
     }
 
     private func stopTicking() {
@@ -193,12 +216,17 @@ final class SidebarMotionDriver {
 /// timer alone, at 120Hz.
 @MainActor
 final class SidebarFrameTicker: NSObject {
-    private let tick: (Double) -> Void
+    /// False once its driver is gone: the ticker then invalidates itself.
+    private let tick: (Double) -> Bool
     private var displayLink: AnyObject?
     private var timer: Timer?
     private var last: CFTimeInterval?
 
-    init(view: NSView, tick: @escaping (Double) -> Void) {
+    #if DEBUG
+    var timerForTesting: Timer? { timer }
+    #endif
+
+    init(view: NSView, tick: @escaping (Double) -> Bool) {
         self.tick = tick
         super.init()
         var interval = 1.0 / 120
@@ -231,7 +259,7 @@ final class SidebarFrameTicker: NSObject {
         // The first frame advances one nominal frame, not zero.
         let dt = last.map { now - $0 } ?? (1.0 / 60)
         last = now
-        tick(dt)
+        if !tick(dt) { invalidate() }
     }
 
     func invalidate() {
