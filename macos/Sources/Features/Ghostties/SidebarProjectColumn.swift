@@ -257,13 +257,18 @@ struct SidebarRowChipBackground: View {
             // Hover keeps the row hover's `.primary` tint, under the
             // selection. Carries the Redlines tag: always present, same
             // frame as the selection.
+            // A tint: it settles on either change, never riding the
+            // selection's bounce.
             face(shape.fill(Color.primary.opacity(isHovered && !isActive ? RailProjectColumn.hoverChipTintOpacity : 0)), redlineID: redlineID)
                 .animation(SidebarUISpring.hover.settle(), value: isHovered)
+                .animation(SidebarUISpring.move.settle(), value: isActive)
             // Selection: the canvas's alpha on solid ink. Matched outside
-            // the morph's scale, so the travel is exact at any scale.
+            // the morph's scale, so the travel is exact at any scale. Only
+            // its geometry bounces; its fade in and out settles.
             if isActive {
                 face(shape.fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.selectedChipTintOpacity)), redlineID: nil)
                     .modifier(SelectionChipTravel(namespace: selectionNamespace))
+                    .transition(AnyTransition.opacity.animation(SidebarUISpring.move.settle()))
             }
         }
         .animation(SidebarUISpring.move.animation(), value: isActive)

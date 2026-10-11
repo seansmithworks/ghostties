@@ -3,6 +3,7 @@ import AppKit
 import Combine
 import DialkitmacOS
 import Foundation
+import GhosttiesCore
 import SwiftUI
 import Testing
 import XCTest
@@ -70,10 +71,27 @@ struct SidebarUISpringTests {
         }
     }
 
+    /// The drag-reflow gap never overshoots at any Bounce, at the hover
+    /// response; unset, it is the 0.2s critically damped spring it ran on
+    /// before.
+    @Test("The reflow gap settles at the hover response")
+    func reflowNeverOvershoots() {
+        withDials {
+            #expect(SidebarUISpring.reflow.animation(reduceMotion: false) == .spring(response: 0.2, dampingFraction: 1))
+        }
+        withDials({
+            $0.set(0.4, forKey: SidebarDialTuning.uiSpringBounceKey)
+            $0.set(0.15, forKey: SidebarDialTuning.uiSpringHoverResponseKey)
+        }) {
+            #expect(SidebarUISpring.reflow.animation(reduceMotion: false) == .spring(response: 0.15, dampingFraction: 1))
+            #expect(SidebarUISpring.reflow.animation(reduceMotion: false) == SidebarUISpring.reflow.settle(reduceMotion: false))
+        }
+    }
+
     @Test("Reduce Motion: no spring anywhere")
     func reduceMotionHasNoSpring() {
         withDials {
-            for spring in [SidebarUISpring.fold, .move, .hover] {
+            for spring in [SidebarUISpring.fold, .move, .hover, .reflow] {
                 #expect(spring.animation(reduceMotion: true) == nil)
                 #expect(spring.settle(reduceMotion: true) == nil)
                 #expect(spring.animation(entering: true, reduceMotion: true) == nil)
@@ -107,8 +125,13 @@ struct SidebarUISpringTests {
     }
 }
 
-/// The selection chip travels between rows: caught mid-flight on pixels,
-/// strictly between the old row and the new one, then at rest on the new.
+/// The selection chip travels between rows, read off rendered pixels.
+///
+/// Not a single timed snapshot (a loaded machine shifts when frames land):
+/// every frame from the selection change until it settles is sampled, and
+/// the chip must be exactly one chip-sized run on every frame (a crossfade
+/// between the rows draws two), at least one frame must catch it between
+/// the rows (a snap never does), and it must come to rest on the new row.
 @MainActor
 final class SelectionChipTravelTests: XCTestCase {
     private final class Selection: ObservableObject {
@@ -135,74 +158,147 @@ final class SelectionChipTravelTests: XCTestCase {
         }
     }
 
-    /// Every tinted run down the column's centre, in points from the top.
-    /// The threshold is low, so a chip fading in or out still counts: a
-    /// crossfade between two rows reads as two runs, a travelling chip as
-    /// one.
-    private func chipRuns(_ hosting: NSView) throws -> [ClosedRange<CGFloat>] {
+    /// Every tinted run down `x`, in points from the top. "Tinted" is any
+    /// drop below `base` from a sixth of the chip's tint up to twice it,
+    /// so a chip fading in or out still counts and text ink doesn't.
+    private func runs(_ hosting: NSView, x: CGFloat, base: NSColor) throws -> [ClosedRange<CGFloat>] {
         hosting.layoutSubtreeIfNeeded()
         let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         let scale = CGFloat(rep.pixelsHigh) / hosting.bounds.height
-        let x = Int(30 * scale)
-        var runs: [ClosedRange<Int>] = []
+        let base = try XCTUnwrap(base.usingColorSpace(.sRGB))
+        let baseSum = base.redComponent + base.greenComponent + base.blueComponent
+        let chipDrop = baseSum * RailProjectColumn.selectedChipTintOpacity
+        let px = Int(x * scale)
+        var found: [ClosedRange<Int>] = []
         var start: Int?
         for y in 0...rep.pixelsHigh {
             var tinted = false
-            if y < rep.pixelsHigh, let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) {
-                tinted = 3 - (c.redComponent + c.greenComponent + c.blueComponent) > 0.015
+            if y < rep.pixelsHigh, let c = rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) {
+                let drop = baseSum - (c.redComponent + c.greenComponent + c.blueComponent)
+                tinted = drop > chipDrop / 6 && drop < chipDrop * 2
             }
             if tinted, start == nil { start = y }
-            if !tinted, let s = start { runs.append(s...(y - 1)); start = nil }
+            if !tinted, let s = start { found.append(s...(y - 1)); start = nil }
         }
-        return runs.map { CGFloat($0.lowerBound) / scale...CGFloat($0.upperBound + 1) / scale }
+        return found.map { CGFloat($0.lowerBound) / scale...CGFloat($0.upperBound + 1) / scale }
     }
 
-    /// The one chip's run; fails when there isn't exactly one.
-    private func chip(_ hosting: NSView, _ moment: String) throws -> (centre: CGFloat, height: CGFloat) {
-        let runs = try chipRuns(hosting)
-        XCTAssertEqual(runs.count, 1, "\(moment): one chip, not \(runs.count) (\(runs))")
-        let run = try XCTUnwrap(runs.first, "\(moment): no chip")
-        return ((run.lowerBound + run.upperBound) / 2, run.upperBound - run.lowerBound)
+    /// Flips the selection and samples every frame until the chip settles.
+    private func assertTravels(
+        _ hosting: NSView, x: CGFloat, base: NSColor, chip: CGFloat,
+        from: CGFloat, to: CGFloat, flip: () -> Void
+    ) throws {
+        func centre(_ r: ClosedRange<CGFloat>) -> CGFloat { (r.lowerBound + r.upperBound) / 2 }
+        let before = try runs(hosting, x: x, base: base)
+        XCTAssertEqual(before.count, 1, "before: one chip, got \(before)")
+        XCTAssertEqual(before.first.map(centre) ?? -1, from, accuracy: 1, "before: on the old row")
+
+        flip()
+        var caughtBetween = false
+        var frames = 0
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.008))
+            let now = try runs(hosting, x: x, base: base)
+            frames += 1
+            guard now.count == 1, let run = now.first else {
+                XCTFail("frame \(frames): one chip, not \(now.count) (\(now))")
+                return
+            }
+            XCTAssertEqual(run.upperBound - run.lowerBound, chip, accuracy: 4, "frame \(frames): one chip's height")
+            let c = centre(run)
+            if c > min(from, to) + 5 && c < max(from, to) - 5 { caughtBetween = true }
+        }
+        XCTAssertTrue(caughtBetween, "no frame of \(frames) caught the chip between the rows: it snapped")
+        let after = try runs(hosting, x: x, base: base)
+        XCTAssertEqual(after.first.map(centre) ?? -1, to, accuracy: 1, "after: at rest on the new row")
     }
 
-    private func spin(_ seconds: TimeInterval) {
-        RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+    private func host<V: View>(_ view: V, size: NSSize) -> (NSHostingView<V>, NSWindow) {
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        return (hosting, window)
     }
 
     func testSelectionChipTravelsToTheNewRow() throws {
         try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion is on: the chip snaps by design")
         try withDials {
             let selection = Selection()
-            let hosting = NSHostingView(rootView: Harness(selection: selection))
-            hosting.frame = NSRect(x: 0, y: 0, width: 60, height: Harness.rowHeight * 2)
-            let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-            window.appearance = NSAppearance(named: .aqua)
-            window.contentView = hosting
-            window.orderFrontRegardless()
+            let (hosting, window) = host(Harness(selection: selection), size: NSSize(width: 60, height: Harness.rowHeight * 2))
             defer { window.orderOut(nil) }
-            spin(0.1)
+            try assertTravels(
+                hosting, x: 30, base: .white, chip: Harness.chip,
+                from: Harness.rowHeight / 2, to: Harness.rowHeight * 1.5
+            ) { selection.index = 1 }
+        }
+    }
 
-            let from = Harness.rowHeight / 2
-            let to = Harness.rowHeight * 1.5
-            let start = try chip(hosting, "before")
-            XCTAssertEqual(start.centre, from, accuracy: 1)
-            XCTAssertEqual(start.height, Harness.chip, accuracy: 2)
+    /// The real list: `RecentsListView` hands its rows the namespace, so a
+    /// selection change in the coordinator moves the chip from one session
+    /// row to the next instead of crossfading.
+    func testRealListRowsShareTheSelectionChip() throws {
+        try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion is on: the chip snaps by design")
+        try withDials {
+            let project = Project(name: "atlas-api", rootPath: "~/Code/atlas-api")
+            let sessions = (0..<3).map { i in
+                AgentSession(
+                    name: "Session \(i)", templateId: AgentTemplate.claudeCode.id, projectId: project.id,
+                    sortOrder: i, lastActiveAt: Date(), lastOutputAt: Date(), isNamePinned: true
+                )
+            }
+            let store = WorkspaceStore(
+                testingProjects: [project], testingSessions: sessions,
+                hasShownPinMigrationNotice: true, hasDismissedPinMigrationNotice: true
+            )
+            for s in sessions {
+                store.updateIndicatorState(id: s.id, state: .inactive)
+                store.updateSessionStatus(id: s.id, status: .running)
+            }
+            let coordinator = SessionCoordinator()
+            coordinator.setActiveSessionIdForTesting(sessions[0].id)
 
-            selection.index = 1
-            // About a third of the spring's response: well inside the travel.
-            spin(SidebarUISpring.defaultResponse * 0.3)
-            // One chip-sized chip between the rows: travelling, not a
-            // fade out of one row and into the other.
-            let midway = try chip(hosting, "mid-travel")
-            XCTAssertEqual(midway.height, Harness.chip, accuracy: 4, "mid-travel: one chip's height")
-            XCTAssertGreaterThan(midway.centre, from + 5, "the chip left the first row")
-            XCTAssertLessThan(midway.centre, to - 5, "the chip is still travelling, not already on the new row")
+            let width: CGFloat = 260
+            let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+            let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
+            let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
+            defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
+            tabSuite.set(SidebarTab.sessions.rawValue, forKey: "ghostties.sidebarTab")
+            let root = VStack(spacing: 0) {
+                RecentsListView()
+                Spacer(minLength: 0)
+            }
+                .frame(width: width, height: 400)
+                .environment(\.sidebarTrailingGutter, 0)
+                .environmentObject(store)
+                .environmentObject(coordinator)
+                .environmentObject(SidebarWidthModel(width: width))
+                .defaultAppStorage(tabSuite)
+                .background(Color(nsColor: chrome))
+            let (hosting, window) = host(root, size: NSSize(width: width, height: 400))
+            defer { window.orderOut(nil) }
 
-            spin(1.5)
-            let end = try chip(hosting, "after")
-            XCTAssertEqual(end.centre, to, accuracy: 1)
-            XCTAssertEqual(end.height, Harness.chip, accuracy: 2)
+            let chip = RailProjectColumn.chipSize(.sidebar)
+            let slotMidX = SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading()
+                + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
+            let x = slotMidX - chip / 2 + 8
+            // Where the rows' chips sit: render each selection at rest.
+            let first = try XCTUnwrap(try runs(hosting, x: x, base: chrome).first, "no chip on the first session")
+            coordinator.setActiveSessionIdForTesting(sessions[1].id)
+            RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+            let second = try XCTUnwrap(try runs(hosting, x: x, base: chrome).first, "no chip on the second session")
+            XCTAssertGreaterThan(second.lowerBound - first.lowerBound, 20, "the two rows' chips are apart")
+
+            try assertTravels(
+                hosting, x: x, base: chrome, chip: chip,
+                from: (second.lowerBound + second.upperBound) / 2, to: (first.lowerBound + first.upperBound) / 2
+            ) { coordinator.setActiveSessionIdForTesting(sessions[0].id) }
         }
     }
 }

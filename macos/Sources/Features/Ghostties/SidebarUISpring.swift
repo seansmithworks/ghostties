@@ -24,13 +24,20 @@ enum SidebarUISpring {
     /// The accordion's fold and unfold, its chevrons, the rail count badge.
     case fold
     /// Something travelling to a new place: the selection chip between
-    /// rows, the drag-reflow gap, a section reorder.
+    /// rows, a section reorder.
     case move
     /// Hover on a row chip, rail tile or tray button: snappier.
     case hover
+    /// The live drag-reflow gap: it follows the pointer, closing one slot as
+    /// it opens the next, so it never overshoots, at the hover response so
+    /// it keeps up with the drag (unset: the 0.2s critically damped spring
+    /// it ran on before).
+    case reflow
 
     static let defaultResponse: Double = 0.3
-    static let defaultBounce: Double = 0.15
+    /// About 2.8% overshoot at the default response: visible on a fold or
+    /// chip travel (0.15 was ~0.6%, invisible).
+    static let defaultBounce: Double = 0.25
     static let defaultHoverResponse: Double = 0.2
 
     /// The selection chip's `matchedGeometryEffect` id
@@ -56,6 +63,8 @@ enum SidebarUISpring {
         case .hover:
             Parameters(response: SidebarDialTuning.uiSpringHoverResponse(defaults: defaults),
                        bounce: SidebarDialTuning.uiSpringBounce(defaults: defaults))
+        case .reflow:
+            Parameters(response: SidebarDialTuning.uiSpringHoverResponse(defaults: defaults), bounce: 0)
         }
     }
 

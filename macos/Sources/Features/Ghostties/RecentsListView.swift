@@ -102,10 +102,11 @@ struct RecentsListView: View {
     /// without animation, when this is true (item 5).
     private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
-    /// The live-reflow gap: rows travelling to make room, on the `.move`
-    /// spring (`SidebarUISpring`). `nil` under Reduce Motion (item 5).
+    /// The live-reflow gap, on the `.reflow` spring (`SidebarUISpring`):
+    /// snappy, never overshooting, opening or closing. `nil` under Reduce
+    /// Motion (item 5).
     private var reflowAnimation: Animation? {
-        SidebarUISpring.move.animation(reduceMotion: reduceMotion)
+        SidebarUISpring.reflow.animation(reduceMotion: reduceMotion)
     }
 
     var body: some View {

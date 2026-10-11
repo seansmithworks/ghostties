@@ -988,9 +988,9 @@ struct TrayIconButton: View {
                 // own `.interactive()` reacts to press, not hover. Reduce
                 // Motion suppresses it like every other animation here.
                 .scaleEffect(!reduceMotion && showsHover ? 1.06 : 1.0)
-                // The lift is an entrance on hover-in, overshooting on the
-                // hover spring; hover-out settles without one
-                // (`SidebarUISpring.hover`).
+                // The lift rides the hover spring in and settles out
+                // (`SidebarUISpring.hover`); at 1.06 its overshoot is
+                // sub-pixel, so it reads as a quick ease, not a bounce.
                 .animation(SidebarUISpring.hover.animation(entering: showsHover, reduceMotion: reduceMotion), value: showsHover)
                 // One flexible frame for both widths, so flipping
                 // `fillsWidth` (the pinned⇄rail morph) animates the cell's
