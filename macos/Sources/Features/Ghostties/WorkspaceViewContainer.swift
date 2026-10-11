@@ -695,6 +695,20 @@ class WorkspaceViewContainer: NSView {
     private var sidebarDragHandleWidthConstraint: NSLayoutConstraint!
     private var shadowHostLeadingToSuperview: NSLayoutConstraint!
 
+    /// The sidebar column's leading and bottom insets from the window: 0,
+    /// except in overlay, where the column sits the window margin in so the
+    /// overlay card around it keeps the terminal card's margin and the
+    /// column's contents keep their pinned offsets from the card's edges.
+    private var sidebarHostLeadingConstraint: NSLayoutConstraint!
+    private var sidebarHostBottomConstraint: NSLayoutConstraint!
+    /// The overlay card (`sidebarOverlayBackground`): the window margin off
+    /// the window's top, leading and bottom edges, and the pinned gutter
+    /// past the sidebar column's trailing edge.
+    private var overlayPanelTopConstraint: NSLayoutConstraint!
+    private var overlayPanelLeadingConstraint: NSLayoutConstraint!
+    private var overlayPanelBottomConstraint: NSLayoutConstraint!
+    private var overlayPanelTrailingConstraint: NSLayoutConstraint!
+
     /// Whether the browser panel is currently visible (expanded).
     private var isBrowserVisible = false
 
@@ -946,6 +960,11 @@ class WorkspaceViewContainer: NSView {
         if railRevealTarget {
             railRevealBackingGutter.constant = WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset)
         }
+        applyOverlayPanelInsets(inset)
+        if sidebarMode == .overlay {
+            sidebarHostLeadingConstraint.constant = inset
+            sidebarHostBottomConstraint.constant = -inset
+        }
         // Overlay collapses the browser to zero insets; leave it there.
         if sidebarMode != .overlay {
             browserShadowHostTopConstraint.constant = inset
@@ -964,6 +983,15 @@ class WorkspaceViewContainer: NSView {
         }
         needsLayout = true
         invalidateIntrinsicContentSize()
+    }
+
+    /// The overlay card's frame constants at a window margin. Only visible
+    /// in overlay, so they're written outright rather than animated.
+    private func applyOverlayPanelInsets(_ inset: CGFloat) {
+        overlayPanelTopConstraint.constant = inset
+        overlayPanelLeadingConstraint.constant = inset
+        overlayPanelBottomConstraint.constant = -inset
+        overlayPanelTrailingConstraint.constant = WorkspaceLayout.sidebarTrailingGutter(for: .overlay, margin: inset)
     }
 
     @available(*, unavailable)
@@ -2565,6 +2593,8 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.expandedWidth = currentSidebarWidth
             if updatesWidthModel { widthModel.width = currentSidebarWidth }
+            set(sidebarHostLeadingConstraint, 0)
+            set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .pinned, margin: inset))
@@ -2585,6 +2615,8 @@ class WorkspaceViewContainer: NSView {
             let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
             set(sidebarWidthConstraint, railWidth)
             if updatesWidthModel { widthModel.width = railWidth }
+            set(sidebarHostLeadingConstraint, 0)
+            set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .collapsed, margin: inset))
@@ -2607,6 +2639,8 @@ class WorkspaceViewContainer: NSView {
             // this mode per the leading-constraint swap above). Never full
             // bleed — overrides Flow 05's own "card padding-left 8 → 0."
             set(sidebarWidthConstraint, 0)
+            set(sidebarHostLeadingConstraint, 0)
+            set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSuperview, inset)
             if !isBrowserVisible {
@@ -2630,6 +2664,12 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
             widthModel.expandedWidth = currentSidebarWidth
+            // The pinned sidebar, moved off the window edge by the card
+            // margin: same width and gutter as pinned, so the list, chips
+            // and tray keep their pinned insets inside the overlay card.
+            set(sidebarHostLeadingConstraint, inset)
+            set(sidebarHostBottomConstraint, -inset)
+            applyOverlayPanelInsets(inset)
             // Terminal floats as a carded, inset canvas — same outer inset
             // as pinned/closed. The sidebar (z-order above the card) floats
             // over its left edge rather than sharing space with it.
@@ -2932,13 +2972,12 @@ class WorkspaceViewContainer: NSView {
 
         case .overlay:
             // Install sidebar zone: covers sidebar width.
-            let sidebarRect = CGRect(
-                x: 0, y: 0,
-                width: currentSidebarWidth,
-                height: bounds.height
-            )
             let area = NSTrackingArea(
-                rect: sidebarRect,
+                rect: WorkspaceLayout.overlayRevealZone(
+                    in: bounds,
+                    sidebarWidth: currentSidebarWidth,
+                    margin: SidebarDialTuning.windowMargin()
+                ),
                 options: [.mouseEnteredAndExited, .activeInKeyWindow],
                 owner: self,
                 userInfo: nil
@@ -3548,12 +3587,21 @@ class WorkspaceViewContainer: NSView {
         sidebarDragHandle.isHidden = !occupiesSpace
 
         sidebarWidthConstraint = sidebarHostingView.widthAnchor.constraint(equalToConstant: initialWidth)
+        // Overlay is never the launch mode (it persists as closed), so the
+        // column starts flush with the window.
+        sidebarHostLeadingConstraint = sidebarHostingView.leadingAnchor.constraint(equalTo: leadingAnchor)
+        sidebarHostBottomConstraint = sidebarHostingView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        overlayPanelTopConstraint = sidebarOverlayBackground.topAnchor.constraint(equalTo: topAnchor)
+        overlayPanelLeadingConstraint = sidebarOverlayBackground.leadingAnchor.constraint(equalTo: leadingAnchor)
+        overlayPanelBottomConstraint = sidebarOverlayBackground.bottomAnchor.constraint(equalTo: bottomAnchor)
+        overlayPanelTrailingConstraint = sidebarOverlayBackground.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor)
 
         // Closed launches with the same 8pt card margin as every other
         // mode (Sean's closed-state layout call — see `transitionTo`'s
         // `applyTransitionConstraints(for:.closed:)` doc comment); it is
         // never full bleed.
         let inset: CGFloat = SidebarDialTuning.windowMargin()
+        applyOverlayPanelInsets(inset)
         // Inset constraints target the shadow host, not the terminal directly.
         shadowHostTopConstraint = terminalShadowHost.topAnchor.constraint(
             equalTo: topAnchor, constant: inset)
@@ -3613,24 +3661,22 @@ class WorkspaceViewContainer: NSView {
             railHoverZone.bottomAnchor.constraint(equalTo: bottomAnchor),
             railHoverZone.trailingAnchor.constraint(equalTo: railRevealBacking.trailingAnchor),
 
-            // Flow 01 §04: the overlay panel is inset 4pt from the window's
-            // top/left/bottom edges (its trailing edge isn't a window edge —
-            // it floats near the left, so it tracks the sidebar's own width
-            // instead, uninset).
-            backgroundEffectView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            backgroundEffectView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            backgroundEffectView.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
-            backgroundEffectView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-
-            // Overlay background tracks sidebar width via trailing edge.
-            sidebarOverlayBackground.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            sidebarOverlayBackground.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            sidebarOverlayBackground.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-            sidebarOverlayBackground.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
+            // The overlay card: the window margin off the window's
+            // top/left/bottom edges, like the terminal card, and the pinned
+            // gutter past the sidebar column (`applyOverlayPanelInsets`).
+            // The shadow host behind it shares its frame.
+            overlayPanelTopConstraint,
+            overlayPanelLeadingConstraint,
+            overlayPanelBottomConstraint,
+            overlayPanelTrailingConstraint,
+            backgroundEffectView.topAnchor.constraint(equalTo: sidebarOverlayBackground.topAnchor),
+            backgroundEffectView.leadingAnchor.constraint(equalTo: sidebarOverlayBackground.leadingAnchor),
+            backgroundEffectView.trailingAnchor.constraint(equalTo: sidebarOverlayBackground.trailingAnchor),
+            backgroundEffectView.bottomAnchor.constraint(equalTo: sidebarOverlayBackground.bottomAnchor),
 
             sidebarHostingView.topAnchor.constraint(equalTo: topAnchor),
-            sidebarHostingView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            sidebarHostingView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            sidebarHostLeadingConstraint,
+            sidebarHostBottomConstraint,
             sidebarWidthConstraint,
 
             shadowHostTopConstraint,

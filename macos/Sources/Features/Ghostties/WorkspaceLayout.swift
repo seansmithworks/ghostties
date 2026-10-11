@@ -209,6 +209,15 @@ enum WorkspaceLayout {
         CGRect(x: bounds.minX, y: bounds.minY, width: overlayTriggerWidth, height: bounds.height)
     }
 
+    /// The open overlay's hover zone: from the window's leading edge to the
+    /// overlay card's trailing edge — the window margin the card sits off
+    /// the window, the sidebar column, and the pinned gutter past it
+    /// (`sidebarTrailingGutter(for: .overlay)`). Full height.
+    static func overlayRevealZone(in bounds: CGRect, sidebarWidth: CGFloat, margin: CGFloat) -> CGRect {
+        let width = margin + sidebarWidth + sidebarTrailingGutter(for: .overlay, margin: margin)
+        return CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height)
+    }
+
     /// Minimum width for the browser panel when visible.
     static let browserMinWidth: CGFloat = 320
 
@@ -445,14 +454,17 @@ enum WorkspaceLayout {
     /// sat 8pt from the window edge but 16pt from the card. Collapsed (rail
     /// A2): 0, the card butts the rail, whose own width already ends a
     /// `leadingInset` past the traffic lights (`collapsedRailWidth`).
-    /// Overlay/closed: the column's trailing edge IS the panel edge, so 0.
+    /// Overlay: the same as pinned — the overlay card is the pinned sidebar
+    /// presented over the terminal, so its column keeps the pinned gutter
+    /// and the card's trailing edge sits that far past the column
+    /// (`overlayRevealZone`). Closed: no sidebar, 0.
     static func sidebarTrailingGutter(for mode: SidebarMode, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         sidebarTrailingGutter(for: mode, margin: SidebarDialTuning.windowMargin(defaults: defaults))
     }
 
     /// `sidebarTrailingGutter(for:)` at an explicit window margin.
     static func sidebarTrailingGutter(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
-        mode == .pinned ? margin : 0
+        mode == .pinned || mode == .overlay ? margin : 0
     }
 
     /// Hit width of the sidebar drag handle on the rail: a strip over the
