@@ -2921,13 +2921,8 @@ class WorkspaceViewContainer: NSView {
         switch sidebarMode {
         case .closed:
             // Install trigger zone: thin strip at left edge.
-            let triggerRect = CGRect(
-                x: 0, y: 0,
-                width: WorkspaceLayout.overlayTriggerWidth,
-                height: bounds.height
-            )
             let area = NSTrackingArea(
-                rect: triggerRect,
+                rect: WorkspaceLayout.closedRevealZone(in: bounds),
                 options: [.mouseEnteredAndExited, .activeInKeyWindow],
                 owner: self,
                 userInfo: nil
@@ -2960,9 +2955,19 @@ class WorkspaceViewContainer: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if sidebarMode == .closed {
-            transitionTo(.overlay)
-        }
+        // Only the closed strip's own tracking area reveals. Subviews
+        // forward their mouseEntered up the responder chain to here — the
+        // terminal's SurfaceView calls `super.mouseEntered` from a
+        // whole-surface tracking area — so without these checks entering
+        // the terminal anywhere opened the overlay.
+        guard sidebarMode == .closed,
+              let area = activeTrackingArea, event.trackingArea === area,
+              WorkspaceLayout.isInClosedRevealZone(
+                  point: convert(event.locationInWindow, from: nil),
+                  bounds: bounds
+              )
+        else { return }
+        transitionTo(.overlay)
     }
 
     override func mouseExited(with event: NSEvent) {
