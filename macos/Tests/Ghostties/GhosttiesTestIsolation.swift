@@ -88,7 +88,7 @@ struct SidebarDialIsolationTests {
 @Suite("Locked sidebar dial defaults")
 struct SidebarLockedDefaultsTests {
     /// The values tuned in the Dev DialKit, locked as the code defaults for
-    /// beta.26 (re-baked 2026-10-08 from Dev's stored dials, plus Sean's
+    /// beta.26 (re-baked 2026-10-08, light glass 2026-10-11, from Dev's stored dials, plus Sean's
     /// calls: Tint + shimmer selected row, One view, History hidden, A5
     /// Resume list). Read from an empty suite so nothing stored can mask them.
     @Test("Empty defaults read the locked, tuned values")
@@ -143,12 +143,12 @@ struct SidebarLockedDefaultsTests {
 
         let light = SidebarDialTuning.trayGlass(for: .light, defaults: d)
         #expect(light == TrayGlassStyle.Look(
-            variant: .identity, tintOpacity: 0.15, surfaceOpacity: 0.7,
-            rimWidth: 1.25, rimOpacity: 0.25,
+            variant: .identity, tintOpacity: 0.35, surfaceOpacity: 0.9,
+            rimWidth: 1.5, rimOpacity: 0.5,
             shadowOpacity: 0.15, shadowRadius: 8, shadowYOffset: 3,
-            chromaticIntensity: 0.3, chromaticWidth: 2.25, chromaticRotation: 202.7, chromaticBlur: 1.7,
+            chromaticIntensity: 0.4, chromaticWidth: 2.75, chromaticRotation: 220, chromaticBlur: 2.2,
             chromaticPalette: .pastel, chromaticBlend: .normal,
-            specularStrength: 0.5, specularAngle: 189
+            specularStrength: 0.6, specularAngle: 270
         ))
 
         let dark = SidebarDialTuning.trayGlass(for: .dark, defaults: d)

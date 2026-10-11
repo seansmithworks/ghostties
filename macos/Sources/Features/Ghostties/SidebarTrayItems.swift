@@ -148,33 +148,34 @@ enum TrayGlassStyle {
         var specularAngle: Double
     }
 
-    /// Light: the canvas (pen.dev `CnDfN`) values, unchanged from before the
-    /// light/dark split.
+    /// Light: tuned in the Dev DialKit (re-baked 2026-10-11 from Dev's stored
+    /// dials). The base was the canvas (pen.dev `CnDfN`) values; the white
+    /// layer, rim, chromatic edge and specular are now stronger than the canvas.
     static let light = Look(
         variant: .identity,
-        // 0 = untinted: the white comes from `surfaceOpacity`, since a native
-        // `.tint(white 0.8)` blends far weaker than the canvas's 80% white
-        // and reads grey.
-        tintOpacity: 0.15,
-        // Canvas base fill `#ffffffcc`.
-        surfaceOpacity: 0.7,
-        // Canvas `u_edgeWidth` 3px.
-        rimWidth: 1.25,
-        rimOpacity: 0.25,
+        // The white comes mostly from `surfaceOpacity`, since a native
+        // `.tint(white)` blends far weaker than the canvas's white fill
+        // and reads grey; the tint adds the rest.
+        tintOpacity: 0.35,
+        // Canvas base fill was `#ffffffcc` (0.8); tuned to 0.9.
+        surfaceOpacity: 0.9,
+        // Canvas `u_edgeWidth` was 3px (1.25pt); tuned to 1.5pt.
+        rimWidth: 1.5,
+        rimOpacity: 0.5,
         // Option D (`ab279`): 15%, blur 16, y 3. A canvas blur is twice a
         // SwiftUI shadow radius, as on the canvas card (blur 16 = radius 8).
         shadowOpacity: 0.15,
         shadowRadius: 8,
         shadowYOffset: 3,
-        // Tuned in the Dev DialKit (locked for beta.26).
-        chromaticIntensity: 0.3,
-        chromaticWidth: 2.25,
-        chromaticRotation: 202.7,
-        chromaticBlur: 1.7,
+        // Tuned in the Dev DialKit (re-baked 2026-10-11).
+        chromaticIntensity: 0.4,
+        chromaticWidth: 2.75,
+        chromaticRotation: 220,
+        chromaticBlur: 2.2,
         chromaticPalette: .pastel,
         chromaticBlend: .normal,
-        specularStrength: 0.5,
-        specularAngle: 189
+        specularStrength: 0.6,
+        specularAngle: 270
     )
 
     /// Dark: a half-opaque canvas-grey layer (`canvasBackgroundDark`
