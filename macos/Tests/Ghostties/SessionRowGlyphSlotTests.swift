@@ -214,7 +214,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             XCTAssertLessThanOrEqual(e.maxX - e.minX, SidebarDialTuning.rowGhostSize() + 0.6, "expanded glyph fits its box, \(state)")
             // Rail: ink center x == rail center x.
             XCTAssertEqual((r.minX + r.maxX) / 2, width / 2, accuracy: 0.5, "rail glyph center x, \(state)")
-            // The rail's glyph is larger (26 vs 20); the two share a centre.
+            // The rail's glyph is larger (rail glyph vs 16pt row glyph); the two share a centre.
             XCTAssertEqual((e.minY + e.maxY) / 2, (r.minY + r.maxY) / 2, accuracy: 1.0, "glyph centre y, \(state)")
         }
     }

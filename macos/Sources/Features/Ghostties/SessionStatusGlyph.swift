@@ -144,7 +144,7 @@ struct SessionStatusGlyph: View {
         colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
     }
 
-    /// Option D spec: `?` 16 semibold, `✓` 13 in the 20pt slot (scale 0.8 / 0.65).
+    /// Option D spec: `?` 16 semibold, `✓` 13 in a 20pt slot (scale 0.8 / 0.65; the slot is now 16pt, scales unchanged).
     private func glyph(
         _ symbol: String, color: Color, scale: CGFloat = 0.8, weight: Font.Weight = .medium
     ) -> some View {

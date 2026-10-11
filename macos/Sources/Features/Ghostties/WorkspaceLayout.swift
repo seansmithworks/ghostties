@@ -364,7 +364,7 @@ enum WorkspaceLayout {
     /// Render size of the per-session ghost glyph in `RecentsRowView` (Sessions
     /// tab). Smaller than `sidebarIconColumnWidth` — the ghost sits centered
     /// inside that column, not filling it.
-    static let sessionGhostSize: CGFloat = 20
+    static let sessionGhostSize: CGFloat = 16
 
     /// Padding between the session popover card's edge and its content. The
     /// card used to nest a grey block (14pt inner padding) inside a 10pt

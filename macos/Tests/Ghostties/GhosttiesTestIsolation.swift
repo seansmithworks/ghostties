@@ -117,7 +117,7 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.rowGap(defaults: d) == 4)
         #expect(SidebarDialTuning.rowTitleSize(defaults: d) == 14)
         #expect(SidebarDialTuning.rowSubtitleSize(defaults: d) == 11)
-        #expect(SidebarDialTuning.rowGhostSize(defaults: d) == 20)
+        #expect(SidebarDialTuning.rowGhostSize(defaults: d) == 16)
         #expect(SidebarDialTuning.rowLeadingPadding(defaults: d) == 4)
         #expect(SidebarDialTuning.rowTrailingPadding(defaults: d) == 20)
         #expect(SidebarDialTuning.groupCardInset(defaults: d) == 6)
