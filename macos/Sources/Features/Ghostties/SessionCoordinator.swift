@@ -25,7 +25,14 @@ final class SessionCoordinator: ObservableObject {
     /// Weak reference to the container NSView — used to find the window controller.
     weak var containerView: NSView?
 
-    /// The hover popover shown over a session row / rail ghost. Lazy because
+    /// Fires on every session or History selection made through
+    /// `focusSession(id:)` / `presentHistory()` — a row click, a project
+    /// tile, a session shortcut. The rail's hover reveal collapses on it
+    /// (`WorkspaceViewContainer`), so an item opened from the revealed
+    /// sidebar acts and then the sidebar goes back to the rail.
+    let sidebarItemActivated = PassthroughSubject<Void, Never>()
+
+    /// The hover popover shown over an expanded session row. Lazy because
     /// it needs `self`; owned here so it is one-per-window like the sidebar.
     private(set) lazy var sessionPopover = SessionPopoverController(coordinator: self)
 
@@ -55,6 +62,7 @@ final class SessionCoordinator: ObservableObject {
     /// (`WorkspaceViewContainer` observes `isHistoryPresented`).
     func presentHistory() {
         isHistoryPresented = true
+        sidebarItemActivated.send()
     }
 
     /// Closes the history browser and returns to the session selected
@@ -602,6 +610,7 @@ final class SessionCoordinator: ObservableObject {
     /// This is the "vertical tab" behavior — clicking a session in the sidebar
     /// replaces the terminal content with the target session's full split tree.
     func focusSession(id: UUID) {
+        defer { sidebarItemActivated.send() }
         // A selection that actually shows something replaces the history
         // browser (`isHistoryPresented = false` below, on each success path).
         // A session with nothing to show (e.g. a closed pinned row) leaves

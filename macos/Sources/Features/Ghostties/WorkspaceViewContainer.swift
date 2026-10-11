@@ -36,6 +36,11 @@ final class SidebarWidthModel: ObservableObject {
     /// take no clicks, drags or drops until it lands.
     @Published var isMorphing = false
 
+    /// True while the rail's hover reveal has the full sidebar out over the
+    /// terminal (`RailHoverReveal`). Rows show no hover card then: the
+    /// reveal is transient, and the card would sit outside it.
+    @Published var isOverlaid = false
+
     /// Flow 05 content choreography (sidebar-presence): which "presentation"
     /// the pinned⇄collapsed row content should render toward — `true` once a
     /// collapse has landed/is landing, `false` once an expand has
@@ -550,6 +555,65 @@ class WorkspaceViewContainer: NSView {
     /// transition's completion or by the next morph.
     private var morphClock: SidebarMorphClock?
 
+    // MARK: Rail hover reveal
+
+    /// Decides when the rail reveals the full sidebar and when it collapses
+    /// back (`RailHoverReveal`). Fed by `railHoverZone`, item activations,
+    /// outside clicks and window focus; plays `setRailRevealed`.
+    private lazy var railHover: RailHoverReveal = {
+        let reveal = RailHoverReveal()
+        reveal.onReveal = { [weak self] in self?.setRailRevealed(true) }
+        reveal.onCollapse = { [weak self] in self?.setRailRevealed(false) }
+        return reveal
+    }()
+
+    /// The reveal's target: true from the moment a reveal starts until its
+    /// collapse starts. The sidebar presents expanded while it is true,
+    /// though the mode stays `.collapsed`.
+    private var railRevealTarget = false
+
+    /// True from the start of a reveal until its collapse lands: the sidebar
+    /// is drawn over the card on `railRevealBacking`, and the card holds its
+    /// x on `shadowHostLeadingToSuperview` instead of following the
+    /// sidebar's trailing edge, so it never resizes.
+    private var isRailRevealPresented = false
+
+    /// The rail's width when the reveal started: where the card's x comes
+    /// from and where the collapse lands, so a reveal always returns to
+    /// exactly the rail it left.
+    private var railRevealRestingWidth: CGFloat = 0
+
+    /// The sidebar's surface while revealed: the chrome fill, out to the
+    /// pinned gutter past the sidebar, lifted off the terminal by the
+    /// DESIGN.md §6 overlay shadow. At the rail's width, chrome on chrome, it
+    /// is invisible, so the reveal grows out of the rail with no seam.
+    private let railRevealBacking: NSView = {
+        let view = NSView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.isHidden = true
+        return view
+    }()
+
+    /// `railRevealBacking`'s reach past the sidebar's trailing edge: 0 on
+    /// the rail, the pinned gutter once revealed. Animated with the width.
+    private var railRevealBackingGutter: NSLayoutConstraint!
+
+    /// The rail (and, once revealed, the whole revealed panel) as a hover
+    /// area. Never takes clicks.
+    private let railHoverZone = RailHoverZoneView()
+
+    /// Mouse-down monitor installed while revealed: a click outside the
+    /// revealed panel collapses it.
+    private var railRevealClickMonitor: Any?
+
+    /// Whether the sidebar draws as the rail: on the rail and not revealed.
+    private var presentsRail: Bool { sidebarMode == .collapsed && !railRevealTarget }
+
+    #if DEBUG
+    var isRailRevealedForTesting: Bool { railRevealTarget }
+    var railHoverForTesting: RailHoverReveal { railHover }
+    #endif
+
     /// True while `applyCollapseCrossfadeSidebarView` has both
     /// `fullSidebarContent()` and `railSidebarContent()` mounted at once
     /// (Flow 05's pinned⇄collapsed cross-fade). Cleared by `transitionTo`'s
@@ -841,7 +905,13 @@ class WorkspaceViewContainer: NSView {
         shadowHostTrailingToBrowser.constant = -inset
         shadowHostLeadingToSidebar.constant = WorkspaceLayout.sidebarTrailingGutter(for: sidebarMode, margin: inset)
         sidebarDragHandleWidthConstraint.constant = WorkspaceLayout.sidebarDragHandleWidth(for: sidebarMode, margin: inset)
-        shadowHostLeadingToSuperview.constant = inset
+        // Revealed, the card holds the x it had on the rail.
+        if !isRailRevealPresented {
+            shadowHostLeadingToSuperview.constant = inset
+        }
+        if railRevealTarget {
+            railRevealBackingGutter.constant = WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset)
+        }
         // Overlay collapses the browser to zero insets; leave it there.
         if sidebarMode != .overlay {
             browserShadowHostTopConstraint.constant = inset
@@ -1074,6 +1144,13 @@ class WorkspaceViewContainer: NSView {
                 self?.toggleSidebar()
             }
         }
+        if let seconds = CaptureFixture.railRevealAfter, CaptureFixture.claimHook("railReveal") {
+            // A completed hover dwell on the rail.
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                guard let self, self.sidebarMode == .collapsed else { return }
+                self.railHover.revealNow()
+            }
+        }
         if let steps = CaptureFixture.morphSteps, CaptureFixture.claimHook("morphSteps") {
             // After the window has taken its capture size (0.5s, above).
             let log = CaptureFixture.harnessStateDir?.appendingPathComponent("morph-steps.log")
@@ -1138,6 +1215,7 @@ class WorkspaceViewContainer: NSView {
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         // Browser card has no theme concept — always the light/dark fallback.
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
+        railRevealBacking.layer?.backgroundColor = canvasBackgroundCGColor
     }
 
     /// Zero out safe area insets so Auto Layout constraints measure from
@@ -1187,7 +1265,11 @@ class WorkspaceViewContainer: NSView {
     /// written when transitioning to `.closed`), which is fine because both
     /// consumers here gate on `sidebarMode == .pinned` anyway.
     private var resizableWidth: CGFloat {
-        let sidebarWidth = (sidebarMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
+        // Revealed from the rail, the sidebar floats over the card: the
+        // cards still share the window with the rail only.
+        let sidebarWidth: CGFloat = isRailRevealPresented
+            ? railRevealRestingWidth
+            : (sidebarMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
         let inset = SidebarDialTuning.windowMargin()
         // Three inset slots: leading of terminal, gap between panels, trailing of browser.
         return bounds.width - sidebarWidth - inset * 3
@@ -1296,6 +1378,10 @@ class WorkspaceViewContainer: NSView {
             )
         }
 
+        if !railRevealBacking.isHidden && !railRevealBacking.bounds.isEmpty {
+            railRevealBacking.layer?.shadowPath = CGPath(rect: railRevealBacking.bounds, transform: nil)
+        }
+
         // Re-derive toolbar row position from live close-button frame.
         // This survives macOS version bumps and upstream titlebar refactors.
         if let constant = WorkspaceLayout.titlebarRowTopAnchorConstant(in: self) {
@@ -1323,7 +1409,7 @@ class WorkspaceViewContainer: NSView {
         // drives `sidebarWidthConstraint` through intermediate values every
         // frame, and reclamping against those would fight the open/collapse
         // animation.
-        if sidebarMode == .collapsed && !isSidebarTransitionAnimating && !isMorphStepHeld {
+        if sidebarMode == .collapsed && !isSidebarTransitionAnimating && !isMorphStepHeld && !isRailRevealPresented {
             if abs(sidebarWidthConstraint.constant - railWidth) > 0.5 {
                 sidebarWidthConstraint.constant = railWidth
                 widthModel.width = railWidth
@@ -1345,7 +1431,7 @@ class WorkspaceViewContainer: NSView {
         // writes this flag mid-animation, but it is the only other writer,
         // so a path that never crossfades (rail -> closed -> pinned) would
         // otherwise leave the previous mode's value behind.
-        widthModel.morph = sidebarMode == .collapsed ? 1 : 0
+        widthModel.morph = presentsRail ? 1 : 0
 
         // One view and the Sessions list morph: one tree, hosted the same
         // in both modes, held at the mode's end; the tray follows the
@@ -1356,7 +1442,7 @@ class WorkspaceViewContainer: NSView {
             hostingView.rootView = hostRoot(content: fullSidebarContent(), trayIsVertical: nil)
             return
         }
-        if sidebarMode == .collapsed {
+        if presentsRail {
             hostingView.rootView = hostRoot(content: railSidebarContent(), trayIsVertical: true)
             return
         }
@@ -1381,7 +1467,9 @@ class WorkspaceViewContainer: NSView {
             content: content,
             trayIsVertical: trayIsVertical,
             showsTrayWhenExpanded: currentSidebarViewMode != "taskFirst",
-            gutterMode: sidebarMode
+            // Revealed from the rail, the sidebar lays out as pinned: the
+            // backing panel's trailing gutter stands in for the gap to the card.
+            gutterMode: railRevealTarget ? .pinned : sidebarMode
         )
         .environmentObject(store)
         .environmentObject(coordinator)
@@ -1578,6 +1666,9 @@ class WorkspaceViewContainer: NSView {
         // NEXT collapse-pair transition would wrongly believe a cross-fade
         // is already hosted and skip remounting it.
         isCollapseCrossfadeHosted = false
+        // A view-mode switch lands on the settled rail, not a reveal.
+        railHover.reset()
+        if isRailRevealPresented { endRailRevealPresentation() }
         applySidebarView()
 
         // Update width constraint + intrinsic size to reflect the new mode's
@@ -2059,6 +2150,20 @@ class WorkspaceViewContainer: NSView {
         let previousMode = sidebarMode
         sidebarMode = newMode
 
+        // Leaving the rail ends any hover reveal. Cmd+S while revealed pins
+        // it: the sidebar is already out at the pinned width, so it stays
+        // put and the card slides out from under it to its pinned place.
+        // Any other exit tears the reveal down first.
+        let pinsReveal = previousMode == .collapsed && newMode == .pinned && isRailRevealPresented
+        if previousMode == .collapsed {
+            railHover.pin()
+        }
+        if pinsReveal {
+            beginPinningRailReveal()
+        } else if isRailRevealPresented {
+            endRailRevealPresentation()
+        }
+
         // Re-derive the overlay's text/icon legibility override — only
         // overlay mode needs `sidebarHostingView`'s appearance pinned to
         // `overlayBackgroundNSColor`'s luminance; every other mode must
@@ -2110,9 +2215,12 @@ class WorkspaceViewContainer: NSView {
             shadowHostLeadingToSuperview.isActive = true
         }
 
-        // 2. Z-ordering for overlay mode.
-        let overlayZ: CGFloat = newMode == .overlay ? 100 : 0
-        sidebarHostingView.layer?.zPosition = overlayZ
+        // 2. Z-ordering for overlay mode. A pinned reveal keeps the sidebar
+        // above the card until the card has slid out from under it.
+        if !pinsReveal {
+            let overlayZ: CGFloat = newMode == .overlay ? 100 : 0
+            sidebarHostingView.layer?.zPosition = overlayZ
+        }
         sidebarOverlayBackground.layer?.zPosition = newMode == .overlay ? 99 : 0
 
         // 3. Toggle isHidden so inactive NSVisualEffectViews leave the compositing tree.
@@ -2156,6 +2264,8 @@ class WorkspaceViewContainer: NSView {
             self.widthModel.isMorphing = false
             self.morphClock?.land()
             self.morphClock = nil
+            // A pinned reveal's backing and z-order outlive its motion.
+            if !self.isRailRevealPresented { self.hideRailRevealLayers() }
             // A Window margin change made mid-transition was skipped.
             self.applyWindowMargin()
             // Settle the Flow 05 collapse cross-fade (if this transition
@@ -2205,6 +2315,13 @@ class WorkspaceViewContainer: NSView {
                 applyTransitionConstraints(for: newMode, inset: inset, updatesWidthModel: !morphs)
                 applyTransitionAlphas(for: newMode)
             }, completionHandler: animationCompletion)
+        }
+        if pinsReveal {
+            animateRailRevealShadow(
+                to: 0,
+                duration: WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: reduceMotion, timing: timing),
+                timingFunction: reduceMotion ? CAMediaTimingFunction(name: .easeInEaseOut) : timing.curve.mediaTimingFunction
+            )
         }
         // 5. Non-animatable properties.
         switch newMode {
@@ -2413,6 +2530,212 @@ class WorkspaceViewContainer: NSView {
         }
     }
 
+    // MARK: - Rail Hover Reveal
+
+    /// Plays the rail's hover reveal (`RailHoverReveal.onReveal`/`onCollapse`)
+    /// on the Cmd+S toggle's own motion: the same one-tree morph
+    /// (`beginSidebarMorph`, or the crossfade for layouts that don't morph),
+    /// on the same clock (`SidebarMorphClock`, which reads the width
+    /// constraint animated below), with the toggle's timing rows — rail ->
+    /// sidebar to reveal, sidebar -> rail to collapse — and its Reduce
+    /// Motion path (geometry snaps, labels fade 120ms).
+    ///
+    /// Unlike the toggle, the card never moves: it holds its x on its own
+    /// leading constraint while the sidebar grows over it
+    /// (`beginRailRevealPresentation`), so the terminal never resizes. The
+    /// mode stays `.collapsed` throughout and nothing is persisted.
+    private func setRailRevealed(_ reveal: Bool) {
+        guard sidebarMode == .collapsed, reveal != railRevealTarget else { return }
+        if reveal { beginRailRevealPresentation() }
+        railRevealTarget = reveal
+        widthModel.isOverlaid = reveal
+
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let from: SidebarMode = reveal ? .collapsed : .pinned
+        let to: SidebarMode = reveal ? .pinned : .collapsed
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: from, to: to)
+        let inset = SidebarDialTuning.windowMargin()
+        let targetWidth = reveal ? currentSidebarWidth : railRevealRestingWidth
+        let targetGutter = reveal ? WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset) : 0
+
+        let morphs = sidebarBodyMorphs
+        if morphs {
+            beginSidebarMorph(to: to, timing: timing, reduceMotion: reduceMotion)
+        } else {
+            applyCollapseCrossfadeSidebarView(previousMode: from, newMode: to, timing: timing, reduceMotion: reduceMotion)
+            if reveal { widthModel.expandedWidth = currentSidebarWidth }
+        }
+
+        if reveal { installRailRevealClickMonitor() } else { removeRailRevealClickMonitor() }
+
+        isSidebarTransitionAnimating = true
+        sidebarTransitionGeneration += 1
+        let generation = sidebarTransitionGeneration
+        let completion: () -> Void = { [weak self] in
+            guard let self, self.sidebarTransitionGeneration == generation else { return }
+            self.isSidebarTransitionAnimating = false
+            self.widthModel.isMorphing = false
+            self.morphClock?.land()
+            self.morphClock = nil
+            if !self.railRevealTarget { self.endRailRevealPresentation() }
+            if self.isCollapseCrossfadeHosted {
+                self.isCollapseCrossfadeHosted = false
+                self.applySidebarView()
+            }
+            self.applyWindowMargin()
+            self.needsLayout = true
+        }
+
+        let shadowOpacity = reveal ? WorkspaceLayout.railRevealShadowOpacity : 0
+        if reduceMotion {
+            // The toggle's Reduce Motion path: the geometry snaps in one
+            // layout pass, only the fades play.
+            sidebarWidthConstraint.constant = targetWidth
+            railRevealBackingGutter.constant = targetGutter
+            if !morphs { widthModel.width = targetWidth }
+            layoutSubtreeIfNeeded()
+            let fade = WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: timing)
+            animateRailRevealShadow(to: shadowOpacity, duration: fade, timingFunction: CAMediaTimingFunction(name: .easeInEaseOut))
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = fade
+            }, completionHandler: completion)
+        } else {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = timing.duration
+                context.timingFunction = timing.curve.mediaTimingFunction
+                sidebarWidthConstraint.animator().constant = targetWidth
+                railRevealBackingGutter.animator().constant = targetGutter
+                if !morphs { widthModel.width = targetWidth }
+            }, completionHandler: completion)
+            animateRailRevealShadow(to: shadowOpacity, duration: timing.duration, timingFunction: timing.curve.mediaTimingFunction)
+        }
+    }
+
+    /// Lifts the sidebar over the card for a reveal. The card moves from
+    /// the sidebar's trailing edge to a fixed leading at the x it already
+    /// has, so the sidebar can grow over it with no terminal relayout.
+    private func beginRailRevealPresentation() {
+        guard !isRailRevealPresented else { return }
+        isRailRevealPresented = true
+        railRevealRestingWidth = sidebarWidthConstraint.constant
+        let cardX = sidebarWidthConstraint.constant + shadowHostLeadingToSidebar.constant
+        shadowHostLeadingToSuperview.constant = cardX
+        shadowHostLeadingToSidebar.isActive = false
+        shadowHostLeadingToSuperview.isActive = true
+        // The rail's drag strip sits at the card's edge, under the panel.
+        sidebarDragHandle.isHidden = true
+        railRevealBacking.layer?.backgroundColor = canvasBackgroundCGColor
+        railRevealBacking.isHidden = false
+        railRevealBacking.layer?.zPosition = 99
+        sidebarHostingView.layer?.zPosition = 100
+    }
+
+    /// Cmd+S while revealed (`transitionTo`): the reveal becomes the pinned
+    /// sidebar. The card goes back on the sidebar's trailing edge at the x
+    /// it holds now (a negative gap), which `transitionTo` then animates to
+    /// the pinned gutter, so the card slides out from under the panel. The
+    /// backing and z-order stay until that lands (`hideRailRevealLayers`).
+    private func beginPinningRailReveal() {
+        let cardX = shadowHostLeadingToSuperview.constant
+        isRailRevealPresented = false
+        railRevealTarget = false
+        widthModel.isOverlaid = false
+        removeRailRevealClickMonitor()
+        shadowHostLeadingToSidebar.constant = cardX - sidebarWidthConstraint.constant
+        shadowHostLeadingToSuperview.isActive = false
+        shadowHostLeadingToSidebar.isActive = true
+    }
+
+    /// A reveal's collapse landed, or the sidebar left the rail another
+    /// way: the card goes back on the sidebar's trailing edge (on the rail)
+    /// and the reveal's layers go.
+    private func endRailRevealPresentation() {
+        guard isRailRevealPresented else { return }
+        isRailRevealPresented = false
+        railRevealTarget = false
+        widthModel.isOverlaid = false
+        removeRailRevealClickMonitor()
+        if sidebarMode == .collapsed {
+            // Already the rail's width when a collapse lands; a view-mode
+            // switch mid-reveal snaps it there.
+            sidebarWidthConstraint.constant = railRevealRestingWidth
+            widthModel.width = railRevealRestingWidth
+            shadowHostLeadingToSidebar.constant = WorkspaceLayout.sidebarTrailingGutter(for: .collapsed)
+            shadowHostLeadingToSuperview.isActive = false
+            shadowHostLeadingToSidebar.isActive = true
+            sidebarDragHandle.isHidden = false
+        }
+        hideRailRevealLayers()
+    }
+
+    /// Idempotent: safe from every transition's completion.
+    private func hideRailRevealLayers() {
+        guard !railRevealBacking.isHidden else { return }
+        railRevealBacking.layer?.removeAnimation(forKey: "railRevealShadow")
+        railRevealBacking.layer?.shadowOpacity = 0
+        railRevealBacking.layer?.zPosition = 0
+        railRevealBacking.isHidden = true
+        railRevealBackingGutter.constant = 0
+        if sidebarMode != .overlay { sidebarHostingView.layer?.zPosition = 0 }
+    }
+
+    /// The backing's shadow rides the reveal's curve, so it is never at
+    /// full strength on the narrow rail.
+    private func animateRailRevealShadow(to opacity: Float, duration: TimeInterval, timingFunction: CAMediaTimingFunction) {
+        guard let layer = railRevealBacking.layer else { return }
+        let from = layer.presentation()?.shadowOpacity ?? layer.shadowOpacity
+        layer.removeAnimation(forKey: "railRevealShadow")
+        layer.shadowOpacity = opacity
+        guard duration > 0, from != opacity else { return }
+        let animation = CABasicAnimation(keyPath: "shadowOpacity")
+        animation.fromValue = from
+        animation.toValue = opacity
+        animation.duration = duration
+        animation.timingFunction = timingFunction
+        layer.add(animation, forKey: "railRevealShadow")
+    }
+
+    /// Whether the pointer is over the rail's own width (where it lands
+    /// once a reveal collapses).
+    private var pointerIsOverRail: Bool {
+        guard let window else { return false }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        return bounds.contains(point) && point.x < WorkspaceLayout.collapsedRailWidth(in: self)
+    }
+
+    /// While revealed, a mouse-down anywhere outside the revealed panel
+    /// collapses it. The click still goes where it was aimed.
+    private func installRailRevealClickMonitor() {
+        guard railRevealClickMonitor == nil else { return }
+        railRevealClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            guard let self, event.window === self.window, self.railHover.isRevealed else { return event }
+            let point = self.convert(event.locationInWindow, from: nil)
+            if !self.railRevealBacking.frame.contains(point) {
+                self.railHover.dismiss(pointerInside: false)
+            }
+            return event
+        }
+    }
+
+    private func removeRailRevealClickMonitor() {
+        if let monitor = railRevealClickMonitor { NSEvent.removeMonitor(monitor) }
+        railRevealClickMonitor = nil
+    }
+
+    /// The revealed sidebar is drawn over the card (layer z-order) but sits
+    /// below it in the subview order AppKit hit-tests by, so clicks over
+    /// the panel are routed to it here.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard isRailRevealPresented, let hit else { return hit }
+        let local = convert(point, from: superview)
+        guard railRevealBacking.frame.contains(local) else { return hit }
+        let underPanel = [terminalShadowHost, browserShadowHost, sidebarDragHandle, browserDragHandle]
+            .contains { hit === $0 || hit.isDescendant(of: $0) }
+        guard underPanel else { return hit }
+        return sidebarHostingView.hitTest(local) ?? railRevealBacking
+    }
+
     // MARK: - Hover Tracking
 
     override func updateTrackingAreas() {
@@ -2482,6 +2805,11 @@ class WorkspaceViewContainer: NSView {
     @objc private func windowDidResignKey() {
         if sidebarMode == .overlay {
             transitionTo(.closed)
+        }
+        // Rail hover reveal: leaving the window collapses a reveal and
+        // cancels a pending dwell.
+        if sidebarMode == .collapsed {
+            railHover.dismiss(pointerInside: false)
         }
         // Blocker 3 (Phase 3 review round 3): the composer-dismiss clause
         // that used to live here is gone. Round 2's `NSApp.isActive` gate
@@ -2960,12 +3288,14 @@ class WorkspaceViewContainer: NSView {
         // Z-order: background material → overlay background → sidebar → sidebar drag handle → terminal → browser drag handle → browser → build-info badge (topmost).
         addSubview(backgroundEffectView)
         addSubview(sidebarOverlayBackground)
+        addSubview(railRevealBacking)
         addSubview(sidebarHostingView)
         addSubview(sidebarDragHandle)
         addSubview(terminalShadowHost)
         addSubview(browserDragHandle)
         addSubview(browserShadowHost)
         addSubview(buildInfoBadgeHostingView)
+        addSubview(railHoverZone)
         #if DEBUG
         addSubview(redlineOverlay)
         NSLayoutConstraint.activate([
@@ -3003,6 +3333,21 @@ class WorkspaceViewContainer: NSView {
         sidebarOverlayBackground.layer?.masksToBounds = true
         sidebarOverlayBackground.layer?.borderWidth = 1
         sidebarOverlayBackground.layer?.borderColor = NSColor.black.withAlphaComponent(CGFloat(0x26) / 255.0).cgColor
+
+        // Rail hover reveal's surface: chrome, with the overlay shadow off
+        // until a reveal fades it in (`setRailRevealed`).
+        railRevealBacking.wantsLayer = true
+        railRevealBacking.layer?.backgroundColor = canvasBackgroundCGColor
+        railRevealBacking.layer?.shadowColor = NSColor.black.cgColor
+        railRevealBacking.layer?.shadowOpacity = 0
+        railRevealBacking.layer?.shadowRadius = WorkspaceLayout.railRevealShadowRadius
+        railRevealBacking.layer?.shadowOffset = .zero
+        railHoverZone.translatesAutoresizingMaskIntoConstraints = false
+        railHoverZone.onHoverChanged = { [weak self] inside in
+            // Only the rail reveals; every other mode ignores the zone.
+            guard let self, self.sidebarMode == .collapsed else { return }
+            if inside { self.railHover.pointerEntered() } else { self.railHover.pointerExited() }
+        }
 
         // Terminal lives inside the shadow host. The host carries the shadow;
         // the terminal clips its own corners via masksToBounds.
@@ -3073,7 +3418,20 @@ class WorkspaceViewContainer: NSView {
         terminalTopConstraint = terminalContainer.topAnchor.constraint(
             equalTo: terminalShadowHost.topAnchor, constant: 0)
 
+        railRevealBackingGutter = railRevealBacking.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor)
+
         NSLayoutConstraint.activate([
+            // Rail hover reveal: the backing spans the sidebar plus its
+            // gutter, and the hover zone is exactly the backing.
+            railRevealBacking.topAnchor.constraint(equalTo: topAnchor),
+            railRevealBacking.leadingAnchor.constraint(equalTo: leadingAnchor),
+            railRevealBacking.bottomAnchor.constraint(equalTo: bottomAnchor),
+            railRevealBackingGutter,
+            railHoverZone.topAnchor.constraint(equalTo: topAnchor),
+            railHoverZone.leadingAnchor.constraint(equalTo: leadingAnchor),
+            railHoverZone.bottomAnchor.constraint(equalTo: bottomAnchor),
+            railHoverZone.trailingAnchor.constraint(equalTo: railRevealBacking.trailingAnchor),
+
             // Flow 01 §04: the overlay panel is inset 4pt from the window's
             // top/left/bottom edges (its trailing edge isn't a window edge —
             // it floats near the left, so it tracks the sidebar's own width
@@ -3283,6 +3641,18 @@ class WorkspaceViewContainer: NSView {
                 self?.applyHistoryPresentation()
             }
             .store(in: &cancellables)
+
+        // Rail hover reveal: an item opened from the revealed sidebar acts,
+        // then the sidebar goes back to the rail. On the rail itself the
+        // same click cancels a pending dwell.
+        coordinator.sidebarItemActivated
+            // After the click has finished acting, not inside its handler.
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self, self.sidebarMode == .collapsed else { return }
+                self.railHover.dismiss(pointerInside: self.pointerIsOverRail)
+            }
+            .store(in: &cancellables)
     }
 
     /// Mounts the history browser over the terminal, inside the canvas card,
@@ -3410,6 +3780,7 @@ class WorkspaceViewContainer: NSView {
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
         layer?.backgroundColor = canvasBackgroundCGColor
+        railRevealBacking.layer?.backgroundColor = canvasBackgroundCGColor
     }
 }
 

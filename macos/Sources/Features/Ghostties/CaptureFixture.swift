@@ -535,6 +535,13 @@ enum CaptureFixture {
     static var sidebarToggleAfter: TimeInterval? {
         parseSidebarToggleAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER"))
     }
+    /// `GHOSTTIES_CAPTURE_RAIL_REVEAL_AFTER=<seconds>`: on the rail, reveal
+    /// the sidebar as a completed hover dwell would (`RailHoverReveal.revealNow`),
+    /// so the revealed state can be captured without a pointer. Pair with
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_MODE=collapsed`.
+    static var railRevealAfter: TimeInterval? {
+        env("GHOSTTIES_CAPTURE_RAIL_REVEAL_AFTER").flatMap(parsePositiveSeconds)
+    }
     /// `GHOSTTIES_CAPTURE_TRAY_HOVER=<SidebarTrayItem.id>` (e.g. `newSession`):
     /// draws that tray button's hover highlight without a pointer, so the
     /// hovered state can be captured without synthetic input.

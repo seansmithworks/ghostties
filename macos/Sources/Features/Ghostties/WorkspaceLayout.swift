@@ -612,6 +612,18 @@ enum WorkspaceLayout {
     /// before the card has reached the edge.
     static let closedHotZoneActivationDelay: TimeInterval = 0.18
 
+    /// Rail hover-reveal (`RailHoverReveal`): how long the pointer rests on
+    /// the rail before the full sidebar reveals over the terminal, and how
+    /// long after it leaves the revealed sidebar before it morphs back.
+    /// Dial defaults ("Hover reveal" in the Sidebar panel).
+    static let railHoverRevealDwell: TimeInterval = 1.2
+    static let railHoverRevealExitGrace: TimeInterval = 0.3
+
+    /// The revealed sidebar's lift off the terminal it covers: DESIGN.md §6
+    /// "Overlay" (0.20, radius 12, no offset).
+    static let railRevealShadowOpacity: Float = 0.20
+    static let railRevealShadowRadius: CGFloat = 12
+
     /// The geometry's share of a sidebar ⇄ rail morph (width, tile, chip,
     /// card): the panel's own duration, or 0 under Reduce Motion, where the
     /// geometry snaps and only the fades play.

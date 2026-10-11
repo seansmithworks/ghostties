@@ -189,6 +189,12 @@ enum SidebarDialTuning {
     static let historyInSidebarKey = "ghostties.sidebarDial.historyInSidebar"
     static let projectsLayoutKey = "ghostties.sidebarDial.projectsLayout"
 
+    // MARK: Hover reveal (`RailHoverReveal`): on the rail, resting the
+    // pointer reveals the full sidebar over the terminal.
+    static let hoverRevealEnabledKey = "ghostties.sidebarDial.hoverReveal.enabled"
+    static let hoverRevealDwellKey = "ghostties.sidebarDial.hoverReveal.dwell"
+    static let hoverRevealExitGraceKey = "ghostties.sidebarDial.hoverReveal.exitGrace"
+
     // MARK: Retired (sidebar vnext lock, 2026-10-08)
     // Dials whose losing options were removed. Nothing reads them, so a
     // value stored under one changes nothing: the survivor (Tint + shimmer,
@@ -450,6 +456,25 @@ enum SidebarDialTuning {
         choice(projectsLayoutKey, default: SidebarProjectsLayout.shipped, defaults: defaults)
     }
 
+    /// See `hoverRevealEnabledKey`. On by default.
+    static func hoverRevealEnabled(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
+        switch defaults.object(forKey: hoverRevealEnabledKey) {
+        case let stored as Bool: return stored
+        // A launch argument arrives as a string.
+        case let argument as String: return (argument as NSString).boolValue
+        default: return true
+        }
+    }
+    /// Seconds the pointer rests on the rail before the sidebar reveals.
+    static func hoverRevealDwell(defaults: UserDefaults = SidebarDialTuning.store) -> TimeInterval {
+        double(hoverRevealDwellKey, default: WorkspaceLayout.railHoverRevealDwell, defaults: defaults)
+    }
+    /// Seconds after the pointer leaves the revealed sidebar before it
+    /// morphs back to the rail.
+    static func hoverRevealExitGrace(defaults: UserDefaults = SidebarDialTuning.store) -> TimeInterval {
+        double(hoverRevealExitGraceKey, default: WorkspaceLayout.railHoverRevealExitGrace, defaults: defaults)
+    }
+
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
     /// width — see that function's own doc comment. Not folded into
     /// `WorkspaceLayout.railExtraWidth` (the compiled default both this and
@@ -519,7 +544,8 @@ enum SidebarDialTuning {
         rowLeadingPaddingKey, rowTrailingPaddingKey, groupCardInsetKey,
         sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        historyInSidebarKey, projectsLayoutKey
+        historyInSidebarKey, projectsLayoutKey,
+        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey
     ] + railKeys
 
     /// The keys the Rail panel owns (`RailDialPanel`): its own
@@ -541,7 +567,8 @@ enum SidebarDialTuning {
         rowHeightKey, rowGapKey, selectedTitleWeightKey,
         trayHorizontalButtonSizeKey, trayGroupGapKey, trayWidthKey,
         contentPaddingLeadingKey, contentPaddingTrailingKey, groupCardInsetKey,
-        sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey
+        sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
+        hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey
     ]
 
     /// Posted after either panel's Reset, so the other panel re-reads the
@@ -715,6 +742,9 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var sidebarProjectTileText: Double
     var sidebarThreadTileSize: Double
     var sidebarThreadTileIcon: Double
+    var hoverRevealEnabled: Bool
+    var hoverRevealDwell: Double
+    var hoverRevealExitGrace: Double
 }
 
 /// The Rail panel's model: every knob that only changes the collapsed rail.
@@ -1211,7 +1241,10 @@ enum SidebarListDialPanel: FocusedDialPanel {
             sidebarProjectTileSize: Double(SidebarDialTuning.sidebarProjectTileSize(defaults: defaults)),
             sidebarProjectTileText: Double(SidebarDialTuning.sidebarProjectTileText(defaults: defaults)),
             sidebarThreadTileSize: Double(SidebarDialTuning.sidebarThreadTileSize(defaults: defaults)),
-            sidebarThreadTileIcon: Double(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults))
+            sidebarThreadTileIcon: Double(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults)),
+            hoverRevealEnabled: SidebarDialTuning.hoverRevealEnabled(defaults: defaults),
+            hoverRevealDwell: SidebarDialTuning.hoverRevealDwell(defaults: defaults),
+            hoverRevealExitGrace: SidebarDialTuning.hoverRevealExitGrace(defaults: defaults)
         )
     }
 
@@ -1229,6 +1262,9 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.sidebarProjectTileTextKey, previous.sidebarProjectTileText, model.sidebarProjectTileText)
         setIfChanged(defaults, SidebarDialTuning.sidebarThreadTileSizeKey, previous.sidebarThreadTileSize, model.sidebarThreadTileSize)
         setIfChanged(defaults, SidebarDialTuning.sidebarThreadTileIconKey, previous.sidebarThreadTileIcon, model.sidebarThreadTileIcon)
+        setIfChanged(defaults, SidebarDialTuning.hoverRevealEnabledKey, previous.hoverRevealEnabled, model.hoverRevealEnabled)
+        setIfChanged(defaults, SidebarDialTuning.hoverRevealDwellKey, previous.hoverRevealDwell, model.hoverRevealDwell)
+        setIfChanged(defaults, SidebarDialTuning.hoverRevealExitGraceKey, previous.hoverRevealExitGrace, model.hoverRevealExitGrace)
     }
 
     static var controls: [DialControl<SidebarListDialKitTuningModel>] {
@@ -1264,6 +1300,13 @@ enum SidebarListDialPanel: FocusedDialPanel {
             .group("sideMargins", label: "Side margins", children: [
                 .slider("contentPaddingLeading", keyPath: \.contentPaddingLeading, label: "Leading (inner)", range: 0...24, unit: "pt"),
                 .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Trailing (inner)", range: 0...24, unit: "pt"),
+            ]),
+            // On the rail, resting the pointer reveals this sidebar over the
+            // terminal (`RailHoverReveal`).
+            .group("hoverReveal", label: "Hover reveal", children: [
+                .toggle("hoverRevealEnabled", keyPath: \.hoverRevealEnabled, label: "Reveal on hover"),
+                .slider("hoverRevealDwell", keyPath: \.hoverRevealDwell, label: "Dwell", range: 0.3...3.0, step: 0.1, unit: "s"),
+                .slider("hoverRevealExitGrace", keyPath: \.hoverRevealExitGrace, label: "Exit grace", range: 0...1.0, step: 0.05, unit: "s"),
             ]),
         ]
     }

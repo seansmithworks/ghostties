@@ -300,7 +300,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         .onHover { isHovered = $0 }
         .help(progress >= 0.5 ? (railHelp ?? "") : "")
         .background {
-            if let popover, progress < 0.5 {
+            if let popover, progress < 0.5, !widthModel.isOverlaid {
                 Color.clear.sessionPopoverAnchor(sessionId: popover.sessionId, controller: popover.controller)
             }
         }
