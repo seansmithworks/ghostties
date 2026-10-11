@@ -120,6 +120,19 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// (`nextSegment(remainder:)`).
     var ghostFullPath: String
 
+    /// Which ← / → presses the parent takes instead of the caret (the A4
+    /// composer's column switch, `ComposerResumeLayout.columns`). Every
+    /// other caller keeps ordinary caret movement.
+    enum HorizontalArrowClaim: Equatable {
+        case none
+        /// → with the caret at the end of the text and nothing selected.
+        case rightAtEnd
+        /// ← anywhere.
+        case left
+    }
+
+    var horizontalArrowClaim: HorizontalArrowClaim = .none
+
     var onEvent: ((KeyboardEvent) -> Void)?
 
     init(
@@ -130,6 +143,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         focusTrigger: Binding<Bool>,
         hasSelection: Bool,
         ghostFullPath: String,
+        horizontalArrowClaim: HorizontalArrowClaim = .none,
         onEvent: ((KeyboardEvent) -> Void)? = nil
     ) {
         self._query = query
@@ -139,6 +153,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         self._focusTrigger = focusTrigger
         self.hasSelection = hasSelection
         self.ghostFullPath = ghostFullPath
+        self.horizontalArrowClaim = horizontalArrowClaim
         self.onEvent = onEvent
     }
 
@@ -848,6 +863,19 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
             case #selector(NSResponder.moveDown(_:)):
                 parent.onEvent?(.move(.down))
+                return true
+
+            case #selector(NSResponder.moveRight(_:)):
+                let selected = textView.selectedRange()
+                guard parent.horizontalArrowClaim == .rightAtEnd,
+                      selected.length == 0,
+                      selected.location == (textView.string as NSString).length else { return false }
+                parent.onEvent?(.move(.right))
+                return true
+
+            case #selector(NSResponder.moveLeft(_:)):
+                guard parent.horizontalArrowClaim == .left else { return false }
+                parent.onEvent?(.move(.left))
                 return true
 
             case #selector(NSResponder.insertTab(_:)):

@@ -70,6 +70,13 @@ struct WorkspacePersistence {
                 logger.error("GHOSTTIES_STATE_DIR override (\(expanded, privacy: .public)) unusable: \(error.localizedDescription) — falling back to default state directory")
             }
         }
+        // An XCTest host shares Dev's bundle id, so the default path below is
+        // Sean's real Dev state. Never resolve it under test: use a per-process
+        // temp directory instead.
+        if QuietTestHost.isActive(env: env) {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("ghostties-xctest-state-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        }
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(directoryName, isDirectory: true)
     }

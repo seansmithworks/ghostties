@@ -5,7 +5,7 @@ description: Verify a Ghostties (macOS Swift fork of Ghostty) sidebar or UI chan
 
 # verify (Ghostties)
 
-Surface: the macOS app, Debug "Ghostties Dev" (bundle id `com.seansmithdesign.ghostties.dev`, process name `ghostty`). Not simctl. Launched in fixture mode (`CaptureFixture.swift`): invented projects/sessions, canned terminal transcript, no real user data.
+Surface: the macOS app, Debug "Ghostties Dev" (built by `scripts/build-capture.sh` under its own bundle id `com.seansmithdesign.ghostties.capture`, so it never quits Sean's Dev; process name `ghostty`). Not simctl. Launched in fixture mode (`CaptureFixture.swift`): invented projects/sessions, canned terminal transcript, no real user data.
 
 All mechanics are in `.claude/skills/verify/run.sh`. Run it from the repo/worktree root.
 
@@ -23,6 +23,8 @@ Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action it
 - `VERIFY_EXPAND_PROJECT=<project>`: expands and selects that project (implies `TAB=projects`).
 - `VERIFY_COMPOSER=open|prefilled:<project>[:delay=<s>]`: `open` is the tray +, `prefilled:` is a project row's +. Fires 1s after the window appears unless `:delay=` says otherwise.
 - `VERIFY_PROJECT_SETTINGS=<project>[:templates-edit|:templates-delete]`: opens that project's settings popover; a suffix also opens the template edit sheet or delete alert for the first user template (first template if none; a built-in gets "Duplicate and Edit...", as its menu offers). Implies `TAB=projects`.
+- `VERIFY_FIXTURE_PROJECTS=none`: seeds 0 projects and 0 sessions (contract X3: with any project the Run row accepts any text). `VERIFY_COMPOSER=open` still works. Don't combine with hooks that name a project.
+- `VERIFY_FIXTURE_TEMPLATE_IN_USE=1`: seeds one user template, "Mine", used by two trove sessions ("build fix", "release notes"). With `VERIFY_PROJECT_SETTINGS=<project>:templates-delete` the alert reads "Used by build fix and release notes. Sessions using "Mine" will keep...". Templates are global, so any project's settings show it (contract T6).
 - `VERIFY_SIDEBAR_TOGGLE_AFTER=<s>`: runs Cmd+S's action after N s (pinned to rail), again after 2N s (back).
 `up` launches the binary directly (not `open`, which only focuses a running Dev build sharing the bundle id), strips `GHOSTTIES_SESSION_ID`/`GHOSTTIES_LAUNCHER`, sets `GHOSTTIES_STATE_DIR` to the evidence dir, records the pid, and records the old `ghostties.sidebarTab` value if a tab was requested. Mode is fixed at launch: one flow = one `up`/`down` cycle.
 
@@ -55,8 +57,8 @@ Needs a new launch hook (see `docs/plans/headless-smoke-harness.html`) or Sean: 
 
 ## Gotchas
 - **No synthetic input, ever**: no keystrokes, clicks, AX actions, System Events. An agent once typed into Sean's live session, and Cmd+Q once hit his real Ghostties. Stop Dev with `kill <pid>` only (`down` does this).
-- Never `killall ghostty`: that is also Sean's daily-driver process name. `up` refuses if another Dev is running (it would occlude yours); ask Sean to quit it.
-- Never touch `/Applications/Ghostties.app`, the `com.seansmithdesign.ghostties` (Release) domain, or `com.mitchellh.ghostty`. Only the `.dev` domain is read/written, only for the sidebar tab, and restored by `down`.
+- Never `killall ghostty`: that is also Sean's daily-driver process name. `up` refuses only if another capture build (`.build-capture`, same bundle id) is running; Sean's Dev has a different id and is not affected.
+- Never touch `/Applications/Ghostties.app`, the `com.seansmithdesign.ghostties` (Release) domain, or `com.mitchellh.ghostty`. Only the `.capture` domain is read/written, only for the sidebar tab, and restored by `down`.
 - Tests: if you run any, use `xcodebuild test ... -only-testing:GhosttyTests`. Never the UI test target: it raises a password prompt that blocks all testing. Swift Testing filters need a trailing `()`.
 - Display asleep gives black captures; `up`/`shot` check for it.
 - Seen once in a collapsed capture (1 of 2 runs): whole terminal pane rendered with a blue selection highlight. Did not reproduce; if you see it, retake before reporting it as a bug.

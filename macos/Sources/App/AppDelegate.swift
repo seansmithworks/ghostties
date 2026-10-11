@@ -285,6 +285,26 @@ class AppDelegate: NSObject,
         // Store our start time
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
 
+        #if DEBUG
+        CaptureFixture.applySidebarTabOverride()
+        // A background capture never activates, so the first window can't
+        // wait for `applicationDidBecomeActive` (`CaptureFixture.staysInBackground`).
+        if CaptureFixture.staysInBackground {
+            CaptureFixture.suppressActivation()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self, TerminalController.all.isEmpty else { return }
+                _ = TerminalController.newWindow(self.ghostty)
+            }
+        }
+        #endif
+
+        #if DEBUG
+        // Sidebar dial panel -> floating DialkitmacOS inspector (loopback only).
+        if #available(macOS 14, *) {
+            SidebarDialInspector.start()
+        }
+        #endif
+
         // Sweep stale per-session launcher scripts (>24h old) left behind by
         // crashes or force-quits that skipped normal session teardown. Each
         // script can carry session context, so they shouldn't accumulate.
@@ -402,17 +422,8 @@ class AppDelegate: NSObject,
         self.appearanceObserver = NSApplication.shared.observe(
             \.effectiveAppearance,
              options: [.new, .initial]
-        ) { _, change in
-            guard let appearance = change.newValue else { return }
-            guard let app = self.ghostty.app else { return }
-            let scheme: ghostty_color_scheme_e
-            if appearance.isDark {
-                scheme = GHOSTTY_COLOR_SCHEME_DARK
-            } else {
-                scheme = GHOSTTY_COLOR_SCHEME_LIGHT
-            }
-
-            ghostty_app_set_color_scheme(app, scheme)
+        ) { [weak self] _, _ in
+            self?.applyAppearanceToAllSurfaces(force: false)
         }
 
         // Setup our menu
@@ -859,8 +870,18 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(sidebarViewParent, at: 9)
         viewMenu.insertItem(NSMenuItem.separator(), at: 10)
 
+        // MARK: - Ghostties fork fence (color scheme reaches every surface)
+        let refreshAppearanceItem = NSMenuItem(
+            title: "Refresh Appearance",
+            action: #selector(refreshAppearance(_:)),
+            keyEquivalent: ""
+        )
+        refreshAppearanceItem.target = self
+        viewMenu.insertItem(refreshAppearanceItem, at: 11)
+        // MARK: - End Ghostties fork fence (color scheme reaches every surface)
+
         #if DEBUG
-        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 11)
+        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 12)
         #endif
     }
 
@@ -1115,7 +1136,7 @@ class AppDelegate: NSObject,
     /// overriding Ghostty's native `close_surface` binding (which closes the
     /// terminal surface with its own "Close Terminal?" confirmation and no
     /// notion of a sidebar session). Posts `.workspaceCloseSession`;
-    /// `WorkspaceSidebarView` observes it and calls
+    /// `WorkspaceViewContainer` observes it and calls
     /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`, which owns
     /// the confirm / focus-neighbor / close-window logic.
     private func setupCloseSessionShortcut() {
@@ -1136,9 +1157,9 @@ class AppDelegate: NSObject,
     /// (which act on real NSWindow tabs — irrelevant here, the sidebar IS
     /// the tab strip; see `TerminalController.relabelTabs()`). Posts
     /// `.workspaceFocusSessionAtIndex` with the pressed digit in `userInfo`;
-    /// `WorkspaceSidebarView` resolves it against whichever list the current
-    /// sidebar tab renders. ⌘9 always means "last visible session", not
-    /// literally the 9th.
+    /// `WorkspaceViewContainer` resolves it against whichever list the
+    /// mounted sidebar renders (the rail's rows when collapsed). ⌘9 always
+    /// means "last visible session", not literally the 9th.
     private func setupSessionIndexShortcuts() {
         _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
@@ -1649,6 +1670,45 @@ class AppDelegate: NSObject,
     @IBAction func reloadConfig(_ sender: Any?) {
         ghostty.reloadConfig()
     }
+
+    // MARK: - Ghostties fork fence (color scheme reaches every surface)
+    /// View > Refresh Appearance: re-push the system light/dark scheme to every
+    /// surface, ignoring each controller's cached "already applied" scheme.
+    @IBAction func refreshAppearance(_ sender: Any?) {
+        applyAppearanceToAllSurfaces(force: true)
+    }
+
+    /// Every terminal controller that can own surfaces: all windows (visible
+    /// or not) plus the quick terminal if it has been created.
+    var allSurfaceControllers: [BaseTerminalController] {
+        var controllers: [BaseTerminalController] = TerminalController.all
+        if case .initialized(let quick) = quickTerminalControllerState {
+            controllers.append(quick)
+        }
+        return controllers
+    }
+
+    /// Single entry point for "the system appearance changed" (the
+    /// `effectiveAppearance` observer) and View > Refresh Appearance.
+    /// The app-level call only re-themes the config and future surfaces, and
+    /// upstream pushes the scheme to a surface only when its window syncs, so
+    /// this also reaches every controller's tree directly and broadcasts for
+    /// the sidebar's off-window sessions. `force` bypasses each controller's
+    /// applied-scheme guard.
+    func applyAppearanceToAllSurfaces(force: Bool) {
+        guard let app = ghostty.app else { return }
+        let scheme = NSApplication.shared.effectiveAppearance.ghosttyColorScheme
+        ghostty_app_set_color_scheme(app, scheme)
+        NotificationCenter.default.post(
+            name: .ghosttyColorSchemeDidChange,
+            object: ghostty,
+            userInfo: [Notification.Name.GhosttyColorSchemeKey: scheme]
+        )
+        for controller in allSurfaceControllers {
+            controller.updateColorSchemeForSurfaceTree(force: force)
+        }
+    }
+    // MARK: - End Ghostties fork fence (color scheme reaches every surface)
 
     @IBAction func checkForUpdates(_ sender: Any?) {
         updateController.checkForUpdates()

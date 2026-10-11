@@ -223,13 +223,10 @@ via `GHOSTTIES_DEV_BUNDLE_SUFFIX`) instead of the shared `.dev` every worktree's
 Debug build otherwise uses — XCUITest's `launch()` quits any running app
 under the target bundle ID, and Ghostty is single-instance per bundle ID, so
 a capture run under the shared `.dev` ID would either kill or hijack
-whatever Dev build is already running elsewhere. The suffix must always end
-in `.dev`: `WorkspacePersistence.directory` falls back to a bundle-ID-derived
-state directory whenever `GHOSTTIES_STATE_DIR` is unusable, and that fallback
-routes to the real release workspace (`~/Library/Application Support/Ghostties`)
-unless the bundle ID itself ends in `.dev` or `.debug` — a suffix like
-`.democapture` alone would risk mutating Sean's real, running workspace if
-the override ever failed.
+whatever Dev build is already running elsewhere. State isolation comes from
+`GHOSTTIES_STATE_DIR`; if that override is unusable, `WorkspacePersistence.directory`
+falls back to a bundle-ID-derived folder, and a `.dev`-suffixed ID shares Sean's
+`Ghostties Dev` workspace (any other unknown ID gets its own `Ghostties (<bundleId>)` folder).
 
 The agent-facing entrypoint for producing marketing assets from the **real
 seeded fixture repos** — 7 real, public, cloned repos with real history and
