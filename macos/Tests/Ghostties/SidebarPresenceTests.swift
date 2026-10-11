@@ -284,24 +284,24 @@ struct SidebarPresenceTests {
 
     // MARK: - Label choreography (motion spec §1)
 
-    /// Expanding, the first label starts 100ms into the 240ms expand and
-    /// each row below 12ms later, capped at the ninth row, so a long list
-    /// lands its last label by ~310ms (was 300 + 40·i, uncapped).
-    @Test func expandLabelDelayStartsAtOneHundredMsAndStaggersTwelvePerRowToTheNinth() {
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 0) == 0.1)
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 1).isApproximatelyEqual(to: 0.112))
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 8).isApproximatelyEqual(to: 0.196))
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 20) == WorkspaceLayout.expandLabelDelay(rowIndex: 8))
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: -3) == 0.1)
-        let lastLands = WorkspaceLayout.expandLabelDelay(rowIndex: 8) + WorkspaceLayout.sidebarRowLabelExpandFadeDuration
-        #expect(lastLands < 0.35)
+    /// Expanding, the first label starts 90ms into the 240ms expand and
+    /// each one below 16ms later, capped at the sixth, so a long list lands
+    /// its last label by 290ms (keyframe spec; was 100 + 12·i to the ninth).
+    @Test func expandLabelDelayStartsAtNinetyMsAndStaggersSixteenPerRowToTheSixth() {
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 0).isApproximatelyEqual(to: 0.09))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 1).isApproximatelyEqual(to: 0.106))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 5).isApproximatelyEqual(to: 0.17))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 20) == WorkspaceLayout.expandLabelDelay(rowIndex: 5))
+        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: -3) == WorkspaceLayout.expandLabelDelay(rowIndex: 0))
+        let lastLands = WorkspaceLayout.expandLabelDelay(rowIndex: 5) + WorkspaceLayout.sidebarRowLabelExpandFadeDuration
+        #expect(lastLands.isApproximatelyEqual(to: 0.29))
     }
 
     /// Leaving is faster than arriving, and never delayed: 90ms and a 4pt
-    /// drift left, against a 140ms arrival.
+    /// drift left, against a 120ms arrival.
     @Test func labelsLeaveFasterThanTheyArrive() {
         #expect(WorkspaceLayout.sidebarRowLabelCollapseFadeDuration == 0.09)
-        #expect(WorkspaceLayout.sidebarRowLabelExpandFadeDuration == 0.14)
+        #expect(WorkspaceLayout.sidebarRowLabelExpandFadeDuration == 0.12)
         #expect(WorkspaceLayout.sidebarRowLabelCollapseTravel == -4)
         #expect(WorkspaceLayout.sidebarRowLabelCollapseFadeDuration < WorkspaceLayout.sidebarRowLabelExpandFadeDuration)
     }

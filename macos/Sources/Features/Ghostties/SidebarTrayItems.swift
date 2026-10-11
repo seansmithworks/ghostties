@@ -746,8 +746,12 @@ struct SidebarTray: View {
         .padding(.leading, isVertical ? rail.margin : SidebarDialTuning.windowMargin())
         .padding(.trailing, isVertical ? rail.margin : max(0, SidebarDialTuning.windowMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
-        // Leading in the expanded sidebar (layout B); centred on the rail.
-        .frame(maxWidth: .infinity, alignment: isVertical ? .center : .leading)
+        // Leading in the expanded sidebar (layout B); on the rail, centred
+        // on the rail's own width from the leading edge, not on the panel's
+        // current width, so mid-morph the stack lands straight on the rail's
+        // centre instead of sliding with the narrowing panel.
+        .frame(width: isVertical ? railWidth : nil)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .transaction { transaction in
             if reduceMotion { transaction.animation = nil }
         }

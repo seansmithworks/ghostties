@@ -45,8 +45,9 @@ struct SidebarMorphMetrics: Equatable {
             max((rail ? railTileText : sidebarTileText) - (letters > 1 ? 2 : 0), 1)
         }
 
-        /// The project header's height in each context: grows with its tile
-        /// (`ProjectAccordionHeader.height`).
+        /// The project header's height in each context: 40 in both (keyframe
+        /// spec D1), so the rows never reflow across the morph; only a tile
+        /// dialled past 40 grows it (`ProjectAccordionHeader.height`).
         var sidebarHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, sidebarTileSize) }
         var railHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, railTileSize) }
 
@@ -81,9 +82,10 @@ struct SidebarMorphMetrics: Equatable {
         }
     }
 
-    /// Option D's project header height, which a tile at or under 30pt
-    /// sits in (`ProjectAccordionHeader.baseHeight`).
-    static let headerBaseHeight: CGFloat = 30
+    /// The project header's height on the sidebar and the rail alike
+    /// (keyframe spec D1), which a tile at or under 40pt sits in
+    /// (`ProjectAccordionHeader.baseHeight`).
+    static let headerBaseHeight: CGFloat = 40
 
     /// The selected group's card in the expanded list and its column on the
     /// rail, as one shape: horizontal span, the inset above the tile and
@@ -125,6 +127,15 @@ struct SidebarMorphMetrics: Equatable {
 
     private func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
         Self.lerp(a, b, progress)
+    }
+
+    /// The width a project header's chevron and count are laid out at
+    /// through the morph: their resting width, at every step. The labels
+    /// fade on their own clock (`MorphLabelFade`, 0–60ms on collapse) while
+    /// the layout stays the expanded sidebar's, so nothing narrows or
+    /// truncates them mid-fade (keyframe spec, defect 5).
+    static func trailingClusterWidth(resting: CGFloat, progress _: CGFloat) -> CGFloat {
+        resting
     }
 
     // MARK: Ends
@@ -275,8 +286,21 @@ struct MorphTravel: GeometryEffect {
     }
 }
 
-/// A frame height between two ends: the project header, which grows with
-/// its tile on the rail.
+/// A tile's shape (the project tile, a row's chip) through the morph: one
+/// fixed square at the rail's size in both states, the shape scaled down to
+/// the sidebar's size (32 of 40, 0.8) and back up, so the container and the
+/// row never resize and the monogram or glyph inside stays its own size.
+enum MorphTileScale {
+    /// The shape's scale at `progress`: the size this frame draws
+    /// (`SidebarMorphMetrics.tileSize`/`chipSize`) over the container's.
+    static func scale(from: CGFloat, to: CGFloat, progress: CGFloat) -> CGFloat {
+        guard to > 0 else { return 0 }
+        return SidebarMorphMetrics.lerp(from, to, progress) / to
+    }
+}
+
+/// A frame height between two ends: the project header (40 at both ends
+/// at the defaults; a tile dialled past 40 grows it).
 struct MorphHeight: ViewModifier, Animatable {
     var from: CGFloat
     var to: CGFloat
@@ -292,9 +316,12 @@ struct MorphHeight: ViewModifier, Animatable {
     }
 }
 
-/// A row's leading slot: the status glyph and its chip, each drawn at its
-/// size for this frame of the morph, centred in the sidebar's tile slot
-/// (the layout never changes; `MorphTravel` moves it).
+/// A row's leading slot: the status glyph at its size for this frame of
+/// the morph (the "Thread tile icon" dials, 16 at both ends), over its chip,
+/// centred in the sidebar's tile slot (the layout never changes;
+/// `MorphTravel` moves it). The chip is one rail-sized square in both
+/// states, its shape scaled to this frame's size (`MorphTileScale`), so
+/// its frame never resizes and the glyph is never scaled with it.
 struct MorphGlyphSlot<Glyph: View>: View, Animatable {
     var progress: CGFloat
     /// The slot's laid-out width: the sidebar tile's side.
@@ -318,7 +345,8 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
             .frame(width: slotWidth)
             .background {
                 SidebarRowChipBackground(
-                    size: SidebarMorphMetrics.lerp(chipSizes.from, chipSizes.to, progress),
+                    size: chipSizes.to,
+                    scale: MorphTileScale.scale(from: chipSizes.from, to: chipSizes.to, progress: progress),
                     isActive: isActive, isHovered: isHovered, redlineID: chipID
                 )
                 .morphIdentityProbe(chipID)
@@ -327,12 +355,15 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
 }
 
 /// Fades row and header labels out on the way to the rail and back in on
-/// the way out of it, on their own direction-aware timing (motion spec §1):
-/// collapse fades in 90ms with a 4pt drift left, expand fades in over 140ms
-/// after 100 + 12·i ms. Reduce Motion: a 120ms fade, no drift. Off the
-/// expanded sidebar, labels take no clicks.
+/// the way out of it, on their own direction-aware clocks
+/// (`WorkspaceLayout.morphFadeWindow`): on collapse names fade 0–90ms and a
+/// header's count and chevron 0–60ms, drifting 4pt left; on expand each
+/// fades in place over 120ms on the cascade (`SidebarLabelCascade`).
+/// Reduce Motion: a 120ms fade, no drift. Off the expanded sidebar, labels
+/// take no clicks.
 struct MorphLabelFade: ViewModifier {
-    /// The row's place in its section, for the expand stagger.
+    var element: SidebarMorphElement = .names
+    /// The label's place in the cascade (`SidebarLabelCascade`).
     var staggerIndex: Int = 0
 
     @EnvironmentObject private var widthModel: SidebarWidthModel
@@ -341,22 +372,32 @@ struct MorphLabelFade: ViewModifier {
     func body(content: Content) -> some View {
         let progress = override ?? widthModel.morph
         let opacity = SidebarMorphMetrics.labelOpacity(progress)
+        let appearing = opacity > 0
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let window = WorkspaceLayout.morphFadeWindow(
+            element: element, direction: appearing ? .expand : .collapse,
+            reduceMotion: reduceMotion, staggerIndex: staggerIndex
+        )
+        let fade = WorkspaceLayout.morphFadeAnimation(window, reduceMotion: reduceMotion)
+        let drift = WorkspaceLayout.sidebarLabelDriftTravel(appearing: appearing, reduceMotion: reduceMotion)
         content
+            // The drift plays only where it is non-zero (collapse); on the
+            // way back the label returns to its place at once, hidden, and
+            // fades in there.
+            .offset(x: appearing ? 0 : drift)
+            .animation(drift == 0 ? nil : fade, value: appearing)
             .opacity(opacity)
-            .offset(x: reduceMotion || opacity > 0 ? 0 : WorkspaceLayout.sidebarRowLabelCollapseTravel)
-            .animation(
-                WorkspaceLayout.sidebarLabelAnimation(appearing: opacity > 0, rowIndex: staggerIndex, reduceMotion: reduceMotion),
-                value: opacity
-            )
+            .animation(fade, value: opacity)
             // `morph` is the target as soon as a toggle starts, so labels
             // fading back in stay unclickable until the morph has landed.
             .allowsHitTesting(progress == 0 && !widthModel.isMorphing)
     }
 }
 
-/// The rail's own adornments (a folded project's count badge): the label
-/// fade reversed, so they arrive as the labels leave.
+/// A folded project's count badge on its rail tile: the labels' fade
+/// reversed, on the badge's own clock (`WorkspaceLayout.morphFadeWindow`):
+/// it arrives 110–270ms into a collapse, growing 0.9 → 1, and leaves in the
+/// first 50ms of an expand.
 struct MorphRailOnlyFade: ViewModifier {
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var override
@@ -364,19 +405,25 @@ struct MorphRailOnlyFade: ViewModifier {
     func body(content: Content) -> some View {
         let progress = override ?? widthModel.morph
         let opacity = Double(min(max(progress * 2 - 1, 0), 1))
+        let appearing = opacity > 0
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let window = WorkspaceLayout.morphFadeWindow(element: .badge, direction: appearing ? .collapse : .expand, reduceMotion: reduceMotion)
+        let fade = WorkspaceLayout.morphFadeAnimation(window, reduceMotion: reduceMotion)
+        // The arrival's scale; leaving, the badge only fades, and is back
+        // at the arrival's start once hidden.
+        let arrival = WorkspaceLayout.morphFadeWindow(element: .badge, direction: .collapse, reduceMotion: reduceMotion)
         content
+            .scaleEffect(appearing ? arrival.scaleTo : arrival.scaleFrom)
+            .animation(appearing ? fade : nil, value: appearing)
             .opacity(opacity)
-            .animation(
-                WorkspaceLayout.sidebarLabelAnimation(appearing: opacity > 0, rowIndex: 0, reduceMotion: reduceMotion),
-                value: opacity
-            )
+            .animation(fade, value: opacity)
     }
 }
 
 /// The space the tray takes under the list: the horizontal bar's on the
-/// sidebar, the rail's taller stack on the rail, changing with the tray's
-/// own axis flip (`isCollapsedPresentation`) on the panel's transaction.
+/// sidebar, the rail's taller stack on the rail, following the morph's
+/// progress frame by frame (`height(progress:railWidth:)`), so it never
+/// jumps when a toggle writes its target at t=0 (keyframe spec, defect 2).
 struct MorphTrayReserve: View {
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var override
@@ -385,11 +432,36 @@ struct MorphTrayReserve: View {
     @Environment(\.sidebarRailWidth) private var railWidth
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
+    /// The reservation at `progress`: the horizontal tray's at 0, the rail
+    /// stack's at 1, on a straight line between.
+    static func height(progress: CGFloat, railWidth: CGFloat) -> CGFloat {
+        SidebarMorphMetrics.lerp(
+            SidebarTray.reservedHeight(isVertical: false, railWidth: railWidth),
+            SidebarTray.reservedHeight(isVertical: true, railWidth: railWidth),
+            min(max(progress, 0), 1)
+        )
+    }
+
     var body: some View {
-        let vertical = (override ?? widthModel.morph) >= 0.5
         Color.clear
-            .frame(height: SidebarTray.reservedHeight(isVertical: vertical, railWidth: railWidth))
+            .modifier(Frame(progress: override ?? widthModel.morph, railWidth: railWidth))
             .accessibilityHidden(true)
+    }
+
+    /// Interpolates `progress` on the toggle's transaction, so the height
+    /// is read per frame, not at the target.
+    private struct Frame: ViewModifier, Animatable {
+        var progress: CGFloat
+        let railWidth: CGFloat
+
+        var animatableData: CGFloat {
+            get { progress }
+            set { progress = newValue }
+        }
+
+        func body(content: Content) -> some View {
+            content.frame(height: MorphTrayReserve.height(progress: progress, railWidth: railWidth))
+        }
     }
 }
 

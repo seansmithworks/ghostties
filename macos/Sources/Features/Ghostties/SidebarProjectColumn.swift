@@ -230,9 +230,12 @@ private struct ProjectGroupCardShape: View, Animatable {
 /// flat (`RailProjectColumn.selectedChipTintOpacity`), no chromatic rim;
 /// hover is the row's hover tint.
 struct SidebarRowChipBackground: View {
-    /// The chip's side at this step of the morph (`RailProjectColumn.chipSize`
-    /// at either end).
+    /// The chip's container: the rail's chip side (`RailProjectColumn.chipSize`).
     let size: CGFloat
+    /// The shape's scale inside it at this step of the morph
+    /// (`MorphTileScale`): the sidebar's chip over the rail's at 0, 1 on the
+    /// rail.
+    var scale: CGFloat = 1
     let isActive: Bool
     let isHovered: Bool
     /// DEBUG Redlines tag for the chip's frame.
@@ -250,7 +253,9 @@ struct SidebarRowChipBackground: View {
         RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
             .fill(fill)
             .frame(width: size, height: size)
+            // Inside the scale, so Redlines reports the drawn chip.
             .redlineFrame(redlineID)
+            .scaleEffect(scale)
     }
 }
 

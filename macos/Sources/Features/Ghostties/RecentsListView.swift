@@ -254,10 +254,12 @@ struct RecentsListView: View {
             // comment above it) — `.equatable()` on `RecentsRowView`
             // in `sessionRow(for:)` is a body-re-execution perf gate
             // layered on top, not what makes rows fresh.
+            // The expand cascade runs on from Pinned's rows
+            // (`SidebarLabelCascade`).
             if SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView {
-                groupedActiveRows(sections.active)
+                groupedActiveRows(sections.active, cascadeStart: sections.pinned.count)
             } else {
-                sectionRows(sections.active, section: .active)
+                sectionRows(sections.active, section: .active, cascadeStart: sections.pinned.count)
             }
         case .activeEnd:
             endDropZone(section: .active, sectionList: sections.active)
@@ -268,11 +270,22 @@ struct RecentsListView: View {
             HistoryRowView(
                 subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),
                 isActive: coordinator.isHistoryPresented,
-                staggerIndex: sections.active.count,
+                staggerIndex: historyCascadeIndex(sections),
                 dialEpoch: SidebarDialTuning.epoch(),
                 onTap: { coordinator.presentHistory() }
             )
         }
+    }
+
+    /// The History row's place in the expand cascade: after every pinned
+    /// row and every Active header and row above it.
+    private func historyCascadeIndex(_ sections: SidebarSessionSections) -> Int {
+        guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else {
+            return sections.pinned.count + sections.active.count
+        }
+        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects)
+        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        return SidebarProjectGroupItem.cascade(items, start: sections.pinned.count).end
     }
 
     /// Production's real `ScrollView` — `sectionsContent` plus reflow
@@ -328,11 +341,14 @@ struct RecentsListView: View {
     /// session's own row is omitted entirely — its original slot collapses
     /// so there is never a double gap (item 1).
     @ViewBuilder
-    private func sectionRows(_ list: [AgentSession], section: SessionSection) -> some View {
+    private func sectionRows(_ list: [AgentSession], section: SessionSection, cascadeStart: Int = 0) -> some View {
         ForEach(rowSlots(for: list, section: section)) { slot in
             switch slot.kind {
             case .session(let session):
-                sessionRow(for: session, section: section, sectionList: list)
+                sessionRow(
+                    for: session, section: section, sectionList: list,
+                    staggerIndex: cascadeStart + (list.firstIndex(where: { $0.id == session.id }) ?? 0)
+                )
             case .gap:
                 SessionDragGapView()
             }
@@ -350,10 +366,12 @@ struct RecentsListView: View {
     /// opens where it would land (`ProjectDragReflow`). Every header and row
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
-    private func groupedActiveRows(_ active: [AgentSession]) -> some View {
+    private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
         let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        // One cascade through every header and row, in reading order.
+        let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
         let projectGapBefore = projectGapTarget(groups)
         let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
@@ -377,7 +395,8 @@ struct RecentsListView: View {
                 }
                 projectHeader(
                     group, isCollapsed: isCollapsed, dropSlot: dropSlots[item.id],
-                    monogram: monograms[group.id] ?? "?", isSelectedProject: group.id == selectedGroupId
+                    monogram: monograms[group.id] ?? "?", isSelectedProject: group.id == selectedGroupId,
+                    staggerIndex: cascade.headers[group.id] ?? cascadeStart
                 )
                 .railGroupColumn(group.id == selectedGroupId)
             case .row(let session, let group):
@@ -388,7 +407,8 @@ struct RecentsListView: View {
                     sessionRow(
                         for: session, section: .active, sectionList: active,
                         subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
-                        projectDrop: dropSlots[item.id].map(projectDropTarget)
+                        projectDrop: dropSlots[item.id].map(projectDropTarget),
+                        staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
                     .railGroupColumn(group.id == selectedGroupId)
                 }
@@ -408,12 +428,12 @@ struct RecentsListView: View {
     @ViewBuilder
     private func projectHeader(
         _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
-        monogram: String, isSelectedProject: Bool
+        monogram: String, isSelectedProject: Bool, staggerIndex: Int
     ) -> some View {
         let header = ProjectAccordionHeader(
             name: group.name, monogram: monogram, count: group.sessions.count,
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
-            redlineID: RedlineID.header(group.id)
+            redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex
         ) {
             ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
                 ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
@@ -756,7 +776,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil
+        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
@@ -782,7 +802,7 @@ struct RecentsListView: View {
             onTap: { coordinator.focusSession(id: session.id) },
             onCommitRename: { commitRename(session: session) },
             onCancelRename: { cancelRename() },
-            staggerIndex: indexInSection ?? 0,
+            staggerIndex: staggerIndex,
             dialEpoch: SidebarDialTuning.epoch()
         )
         .equatable()

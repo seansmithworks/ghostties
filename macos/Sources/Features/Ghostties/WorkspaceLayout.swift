@@ -612,7 +612,14 @@ enum WorkspaceLayout {
     /// before the card has reached the edge.
     static let closedHotZoneActivationDelay: TimeInterval = 0.18
 
-    // MARK: - Label choreography (motion spec §1, sidebar ⇄ rail)
+    /// The geometry's share of a sidebar ⇄ rail morph (width, tile, chip,
+    /// card): the panel's own duration, or 0 under Reduce Motion, where the
+    /// geometry snaps and only the fades play.
+    static func sidebarGeometryDuration(reduceMotion: Bool, timing: SidebarTransitionTiming) -> TimeInterval {
+        reduceMotion ? 0 : timing.duration
+    }
+
+    // MARK: - Label choreography (keyframe spec, sidebar ⇄ rail)
 
     /// A label's fade on the way to the rail: it leaves first, from the
     /// very start of the collapse, before the panel has moved far.
@@ -623,25 +630,108 @@ enum WorkspaceLayout {
 
     /// A label's fade-in on the way out of the rail, once its delay
     /// (`expandLabelDelay`) has passed.
-    static let sidebarRowLabelExpandFadeDuration: TimeInterval = 0.14
+    static let sidebarRowLabelExpandFadeDuration: TimeInterval = 0.12
 
-    /// The expand stagger: the first label starts 100ms into the 240ms
-    /// expand, each later row 12ms after the one above, capped at the
-    /// ninth row so a long list still lands by ~310ms.
+    /// The expand cascade: the first label starts 90ms into the 240ms
+    /// expand, each later one 16ms after the one above it in reading order
+    /// (headers included, one index across every section,
+    /// `SidebarLabelCascade`), capped at the sixth so everything has landed
+    /// by 290ms.
     static func expandLabelDelay(rowIndex: Int) -> TimeInterval {
-        0.1 + 0.012 * TimeInterval(min(max(rowIndex, 0), 8))
+        0.09 + 0.016 * TimeInterval(min(max(rowIndex, 0), 5))
     }
 
-    /// The label fade for one direction: ease-out (`.close`'s curve) in both,
-    /// fast and immediate leaving, delayed and staggered arriving. Reduce
-    /// Motion: one 120ms ease-in-out fade either way, never nothing.
-    static func sidebarLabelAnimation(appearing: Bool, rowIndex: Int, reduceMotion: Bool) -> Animation {
+    /// How far a label drifts while it fades: 4pt left on the way to the
+    /// rail, none on the way back (it fades in where it sits), none under
+    /// Reduce Motion.
+    static func sidebarLabelDriftTravel(appearing: Bool, reduceMotion: Bool) -> CGFloat {
+        appearing || reduceMotion ? 0 : sidebarRowLabelCollapseTravel
+    }
+
+    /// When one morph element fades, in seconds from the start of the
+    /// toggle, and the scale it grows through while it does. Collapse: the
+    /// header's count and chevron 0–60ms, names 0–90ms, the folded count
+    /// badge 110–270ms growing 0.9 → 1. Expand: the badge 0–50ms, names and
+    /// the count/chevron on the cascade (`expandLabelDelay`, 120ms each).
+    /// Reduce Motion: every fade 0–120ms, nothing scales.
+    static func morphFadeWindow(
+        element: SidebarMorphElement,
+        direction: SidebarMorphDirection,
+        reduceMotion: Bool,
+        staggerIndex: Int = 0
+    ) -> MorphFadeWindow {
         if reduceMotion {
-            return .easeInOut(duration: sidebarReducedMotionCrossfadeDuration)
+            return MorphFadeWindow(start: 0, end: sidebarReducedMotionCrossfadeDuration)
         }
-        let easeOut = { (duration: TimeInterval) in Animation.timingCurve(0.23, 1, 0.32, 1, duration: duration) }
-        guard appearing else { return easeOut(sidebarRowLabelCollapseFadeDuration) }
-        return easeOut(sidebarRowLabelExpandFadeDuration).delay(expandLabelDelay(rowIndex: rowIndex))
+        switch (element, direction) {
+        case (.trailingCluster, .collapse):
+            return MorphFadeWindow(start: 0, end: 0.06)
+        case (.names, .collapse):
+            return MorphFadeWindow(start: 0, end: sidebarRowLabelCollapseFadeDuration)
+        case (.badge, .collapse):
+            return MorphFadeWindow(start: 0.11, end: 0.27, scaleFrom: 0.9, scaleTo: 1)
+        case (.badge, .expand):
+            return MorphFadeWindow(start: 0, end: 0.05)
+        case (.names, .expand), (.trailingCluster, .expand):
+            let start = expandLabelDelay(rowIndex: staggerIndex)
+            return MorphFadeWindow(start: start, end: start + sidebarRowLabelExpandFadeDuration)
+        }
+    }
+
+    /// The animation that plays `window`: ease-out (`.close`'s curve),
+    /// delayed to its start. Reduce Motion: a plain ease-in-out.
+    static func morphFadeAnimation(_ window: MorphFadeWindow, reduceMotion: Bool) -> Animation {
+        let animation: Animation = reduceMotion
+            ? .easeInOut(duration: window.duration)
+            : .timingCurve(0.23, 1, 0.32, 1, duration: window.duration)
+        return window.start > 0 ? animation.delay(window.start) : animation
+    }
+}
+
+/// The parts of the sidebar ⇄ rail morph that fade on their own clocks
+/// (`WorkspaceLayout.morphFadeWindow`).
+enum SidebarMorphElement {
+    /// A project header's chevron and session count.
+    case trailingCluster
+    /// Project and session names (and a row's subtitle).
+    case names
+    /// A folded project's count badge on its rail tile.
+    case badge
+}
+
+/// Which way a sidebar ⇄ rail morph runs.
+enum SidebarMorphDirection {
+    /// Sidebar to rail.
+    case collapse
+    /// Rail to sidebar.
+    case expand
+}
+
+/// One element's fade: `start` and `end` in seconds from the toggle, and the
+/// scale it grows from and to over the same window.
+struct MorphFadeWindow: Equatable {
+    var start: TimeInterval
+    var end: TimeInterval
+    var scaleFrom: CGFloat = 1
+    var scaleTo: CGFloat = 1
+    var duration: TimeInterval { end - start }
+}
+
+/// The expand cascade's order (keyframe spec, defect 3): one index running
+/// through every section in reading order, each section's header first,
+/// then its rows, so the cascade never restarts at a new project.
+enum SidebarLabelCascade {
+    /// Each section's header index and its rows' indices, from `start`
+    /// (the labels above the first section). Uncapped:
+    /// `WorkspaceLayout.expandLabelDelay` caps the delay.
+    static func indices(rowsPerSection: [Int], start: Int = 0) -> [(header: Int, rows: [Int])] {
+        var next = start
+        return rowsPerSection.map { count in
+            let header = next
+            let rows = Array((header + 1)..<(header + 1 + max(count, 0)))
+            next = header + 1 + max(count, 0)
+            return (header, rows)
+        }
     }
 }
 

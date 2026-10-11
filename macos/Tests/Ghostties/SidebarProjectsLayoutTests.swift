@@ -273,7 +273,8 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         }
         let (header, lastRow) = anchors(.sidebar)
         let union = header.union(lastRow)
-        XCTAssertEqual(union.maxY, 240, file: file, line: line)
+        // The 40pt header (keyframe spec D1; was 32, 240) and four rows.
+        XCTAssertEqual(union.maxY, 248, file: file, line: line)
         let anchorCount = 1 + rows
         // The visual marks: the tile centred in the header, the chip in the row.
         let tileSize = RailProjectTile.size(.sidebar)
@@ -428,14 +429,13 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         XCTAssertTrue(SidebarDialTuning.retiredKeys.contains(SidebarDialTuning.retiredRailChipSizeOffsetKey))
     }
 
-    /// A project tile past the 32pt header grows the header that hosts it
+    /// A project tile past the 40pt header grows the header that hosts it
     /// (in its own context only), so the group card and the rail column,
     /// measured from the header's frame, still enclose the tile with their
-    /// inset on every side. Unset, the sidebar's header stays 32 and the
-    /// rail's grows to its 40pt tile.
+    /// inset on every side. Unset, both headers are 40 (keyframe spec D1).
     func testABigProjectTileGrowsItsHeaderAndStaysInsideTheCard() {
         withDials {
-            XCTAssertEqual(ProjectAccordionHeader.height(.sidebar), 32)
+            XCTAssertEqual(ProjectAccordionHeader.height(.sidebar), 40)
             XCTAssertEqual(ProjectAccordionHeader.height(.rail), 40)
         }
         for context in [SidebarTileContext.sidebar, .rail] {
@@ -443,7 +443,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             withDials({ $0.set(44.0, forKey: key) }) {
                 let other: SidebarTileContext = context == .sidebar ? .rail : .sidebar
                 XCTAssertEqual(ProjectAccordionHeader.height(context), 44, "\(context)")
-                XCTAssertEqual(ProjectAccordionHeader.height(other), other == .sidebar ? 32 : 40, "\(context) moved \(other)")
+                XCTAssertEqual(ProjectAccordionHeader.height(other), 40, "\(context) moved \(other)")
                 let tile = RailProjectTile.size(context)
                 XCTAssertEqual(tile, 44)
 

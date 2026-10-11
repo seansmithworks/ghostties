@@ -1441,7 +1441,7 @@ class WorkspaceViewContainer: NSView {
         let targetMorph: CGFloat = newMode == .collapsed ? 1 : 0
         let targetWidth = newMode == .collapsed ? railWidth : currentSidebarWidth
         widthModel.isMorphing = true
-        if reduceMotion {
+        if WorkspaceLayout.sidebarGeometryDuration(reduceMotion: reduceMotion, timing: timing) == 0 {
             widthModel.morph = targetMorph
             widthModel.width = targetWidth
         } else {
