@@ -157,17 +157,24 @@ enum WorkspaceLayout {
     /// Height of the session-name title bar inside the terminal card.
     static let terminalTitleBarHeight: CGFloat = 28
 
-    /// The window's own corner radius: a titled Ghostties window on macOS
-    /// 26+ (no toolbar), measured from an uncropped capture on macOS 27
-    /// (2026-10-08), the same value `TerminalWindow` uses for this titlebar
-    /// style.
-    static let windowCornerRadius: CGFloat = 16
+    /// The window's own corner radius. Sean (2026-10-11): the main window is
+    /// 20, so the inset cards and tray pills are 20 − 8 = 12 (the 16
+    /// measured on 2026-10-08 read too tight).
+    static let windowCornerRadius: CGFloat = 20
 
-    /// A surface inset `margin` from the window's edges is concentric with
-    /// the window corner: its radius is the window's less the margin (Sean,
-    /// 2026-10-08). The one rule for the canvas card and the tray pills.
+    /// Radii nest (Sean, 2026-10-11): a surface inset `inset` from its
+    /// parent surface's edges is concentric with the parent's corner — its
+    /// radius is the parent's less the inset, clamped at 0. The one rule for
+    /// every card, pill and chip.
+    static func concentricRadius(parent: CGFloat, inset: CGFloat) -> CGFloat {
+        max(0, parent - inset)
+    }
+
+    /// A surface whose parent is the window, inset `margin` from its edges:
+    /// the terminal, browser and History cards, and the tray pills (the
+    /// pinned sidebar and the rail draw no card around the tray).
     static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
-        max(0, windowCornerRadius - margin)
+        concentricRadius(parent: windowCornerRadius, inset: margin)
     }
 
     /// Corner radius on the floating terminal panel (all four corners), and
@@ -195,11 +202,6 @@ enum WorkspaceLayout {
     /// `SidebarDialTuning.windowMargin()`, which also drives the sidebar's
     /// outer edge, so every outer gutter in the window stays one value.
     static let terminalInset: CGFloat = 8
-
-    /// Width of the invisible hover trigger strip at the left edge (closed mode).
-    /// Flow 01 (sidebar-presence): 10 → 24 — the hot zone is invisible in the
-    /// app; the `#ffffff08` fill on the design canvas is a diagram device only.
-    static let overlayTriggerWidth: CGFloat = 24
 
     /// Minimum width for the browser panel when visible.
     static let browserMinWidth: CGFloat = 320
@@ -612,13 +614,6 @@ enum WorkspaceLayout {
         reduceMotion ? sidebarReducedMotionCrossfadeDuration : timing.duration
     }
 
-    /// Delay before the closed-state 24pt hot zone starts accepting hover
-    /// (Flow 05: "hot zone hidden → 24px at 180ms, step") — installed only
-    /// once the full-close animation has actually finished, not the instant
-    /// the toggle fires, so a fast mouse can't trigger the reveal overlay
-    /// before the card has reached the edge.
-    static let closedHotZoneActivationDelay: TimeInterval = 0.18
-
     /// Rail hover-reveal (`RailHoverReveal`): how long the pointer rests on
     /// the rail before the full sidebar reveals over the terminal, and how
     /// long after it leaves the revealed sidebar before it morphs back.
@@ -894,7 +889,19 @@ private struct SidebarRailWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
 }
 
+private struct TrayShadowStateKey: EnvironmentKey {
+    static let defaultValue: SidebarDialTuning.TrayShadowState = .sidebar
+}
+
 extension EnvironmentValues {
+    /// The sidebar state whose tray shadow dials the tray draws
+    /// (`SidebarDialTuning.trayGlass(for:state:)`), injected at the sidebar
+    /// root (`SidebarHostRoot`). The sidebar's outside it.
+    var trayShadowState: SidebarDialTuning.TrayShadowState {
+        get { self[TrayShadowStateKey.self] }
+        set { self[TrayShadowStateKey.self] = newValue }
+    }
+
     /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected
     /// once at the sidebar root (`SidebarHostRoot`); the rail tray sizes its
     /// square pills from it (`RailTrayGeometry`). The rail's floor width

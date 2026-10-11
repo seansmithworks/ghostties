@@ -212,6 +212,7 @@ private struct SidebarHostRoot: View {
             }
             .environment(\.sidebarTrailingGutter, trailingGutter)
             .environment(\.sidebarRailWidth, model.railWidth)
+            .environment(\.trayShadowState, SidebarDialTuning.TrayShadowState(store.sidebarMode))
     }
 
     /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
@@ -1823,9 +1824,8 @@ class WorkspaceViewContainer: NSView {
     /// Flips `pinned ↔ collapsed` (Sean, sidebar-presence review) — the
     /// toggle no longer walks all the way to fully closed; it goes from full
     /// width straight to the narrow rail. `closed` is left in the model
-    /// (persistence, the hot zone, and the overlay reveal all still work),
-    /// but the toggle can no longer reach or leave it — a persisted `closed`
-    /// state only exits via the hot zone → overlay → promote-to-pinned path.
+    /// (persistence), but this toggle can no longer reach or leave it — a
+    /// persisted `closed` state exits via Cmd+Shift+S / the View menu.
     /// Overlay isn't part of the cycle — it's a transient hover state, not
     /// one of the persisted widths — so the toggle promotes it straight to
     /// pinned, same as before Flow 01.
@@ -1851,8 +1851,8 @@ class WorkspaceViewContainer: NSView {
     /// collapsed, overlay) goes to `.closed`; `.closed` reopens to `.pinned`.
     /// This is the toggle's only remaining path back into (and out of)
     /// `.closed` now that `toggleSidebar()`/`nextSidebarMode(after:)` cycle
-    /// pinned ↔ collapsed and no longer visit it — the hot-zone reveal
-    /// overlay path is unaffected.
+    /// pinned ↔ collapsed and no longer visit it. There is no hover way out
+    /// of `.closed` (no edge hot zone).
     static func nextCloseToggleMode(after mode: SidebarMode) -> SidebarMode {
         mode == .closed ? .pinned : .closed
     }
@@ -2504,23 +2504,9 @@ class WorkspaceViewContainer: NSView {
         // 6. Traffic lights.
         setTrafficLightsHidden(newMode == .closed)
 
-        // 7. Refresh tracking areas. Every mode but a fresh close installs
-        // its tracking area immediately; closing delays the 24pt hot zone's
-        // activation until the close motion has actually finished (Flow 05:
-        // "hidden → 24px at 180ms, step") so a fast mouse can't trigger the
-        // reveal overlay while the card is still mid-close.
-        if newMode == .closed {
-            if let area = activeTrackingArea {
-                removeTrackingArea(area)
-                activeTrackingArea = nil
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + WorkspaceLayout.closedHotZoneActivationDelay) { [weak self] in
-                guard let self, self.sidebarMode == .closed else { return }
-                self.updateTrackingAreas()
-            }
-        } else {
-            updateTrackingAreas()
-        }
+        // 7. Refresh tracking areas. `.closed` installs none (no edge hot
+        // zone), so this also removes any area left from the previous mode.
+        updateTrackingAreas()
 
         // 8. Persist (overlay is transient — store persists it as .closed).
         store.updateSidebarMode(newMode)
@@ -2919,22 +2905,6 @@ class WorkspaceViewContainer: NSView {
         super.updateTrackingAreas()
 
         switch sidebarMode {
-        case .closed:
-            // Install trigger zone: thin strip at left edge.
-            let triggerRect = CGRect(
-                x: 0, y: 0,
-                width: WorkspaceLayout.overlayTriggerWidth,
-                height: bounds.height
-            )
-            let area = NSTrackingArea(
-                rect: triggerRect,
-                options: [.mouseEnteredAndExited, .activeInKeyWindow],
-                owner: self,
-                userInfo: nil
-            )
-            addTrackingArea(area)
-            activeTrackingArea = area
-
         case .overlay:
             // Install sidebar zone: covers sidebar width.
             let sidebarRect = CGRect(
@@ -2951,17 +2921,12 @@ class WorkspaceViewContainer: NSView {
             addTrackingArea(area)
             activeTrackingArea = area
 
-        case .pinned, .collapsed:
-            // No tracking areas needed — decision 2: the rail gets no
-            // hover-reveal of its own; the only way back to 244pt from a
-            // non-pinned state is the closed-mode hot zone above.
+        case .closed, .pinned, .collapsed:
+            // No tracking areas needed. `.closed` has no edge hot zone
+            // (Sean, 2026-10-11): a closed sidebar stays closed until the
+            // keyboard (Cmd+S / Cmd+Shift+S) or the View menu reopens it.
+            // The rail's hover reveal runs on its own gate, not here.
             break
-        }
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        if sidebarMode == .closed {
-            transitionTo(.overlay)
         }
     }
 

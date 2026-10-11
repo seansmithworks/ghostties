@@ -459,25 +459,27 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     /// Tray hover (Sean, 2026-10-11). A sole button is its capsule and
-    /// hovers full bleed: the chip is the cell, its corner the pill's. A
-    /// button in a grouped pill keeps a chip inset by the "Hover inset" dial
-    /// on every side, its corner concentric with the pill's (pill radius less
-    /// padding + inset) but never under `hoverMinimumCornerRadius`. Checked
-    /// for an expanded (square) cell and a rail stacked (short) cell, each
-    /// grouped and sole. Off-default dials (margin 0 → pill radius 16, inset
-    /// 3, padding 10) so the dials, not constants, drive it: the grouped
+    /// hovers full bleed: the chip is the cell, its corner the pill's
+    /// (concentric, inset 0). A button in a grouped pill keeps a chip inset
+    /// by the "Hover inset" dial on every side, its corner concentric with
+    /// the pill's (pill radius less padding + inset) but never under
+    /// `hoverMinimumCornerRadius`. Checked for an expanded (square) cell and
+    /// a rail stacked (short) cell, each grouped and sole. Off-default dials
+    /// (margin 0 → pill radius = the window corner, inset 3, padding = the
+    /// window corner − 6) so the dials, not constants, drive it: the grouped
     /// concentric value is 3, so the 6pt minimum is what renders. Pixels:
     /// grouped, the band between the cell edge and the chip stays background
     /// on all four sides; sole, the tint reaches the cell edge on all four.
     /// Corners: a point 1.4pt in along the grouped chip's corner diagonal is
     /// background (inside an r3 corner's fill, outside r6's curve) and 3pt in
-    /// is tinted; the sole chip's cell corner is background 2.4pt in (r16
-    /// curves ~4.7pt in) and tinted 7pt in.
+    /// is tinted; the sole chip's cell corner is background 0.12 r in (an
+    /// r corner curves ~0.29 r in along the diagonal) and tinted 0.4 r in.
     func testTrayHoverChipIsFullBleedWhenSoleAndInsetWithAVisibleCornerWhenGrouped() throws {
+        let expectedPadding = WorkspaceLayout.windowCornerRadius - 6
         let configure: (UserDefaults) -> Void = {
             $0.set(3.0, forKey: SidebarDialTuning.trayHoverInsetKey)
             $0.set(0.0, forKey: SidebarDialTuning.windowMarginKey)
-            $0.set(10.0, forKey: SidebarDialTuning.trayInnerPaddingKey)
+            $0.set(Double(expectedPadding), forKey: SidebarDialTuning.trayInnerPaddingKey)
         }
         let cases: [(Bool, CGSize, Bool)] = [
             (false, CGSize(width: 48, height: 48), false),
@@ -492,16 +494,18 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                 let padding = SidebarDialTuning.trayInnerPadding()
                 let pillRadius = TrayGlassStyle.pillCornerRadius()
                 XCTAssertEqual(inset, 3, tag)
-                XCTAssertEqual(padding, 10, tag)
-                XCTAssertEqual(pillRadius, 16, tag)
+                XCTAssertEqual(padding, expectedPadding, accuracy: 0.001, tag)
+                XCTAssertEqual(pillRadius, WorkspaceLayout.concentricCornerRadius(margin: 0), accuracy: 0.001, tag)
+                XCTAssertEqual(pillRadius, WorkspaceLayout.windowCornerRadius, accuracy: 0.001, tag)
                 let cellRect = CGRect(origin: .zero, size: cell)
                 let chip = TrayGlassStyle.hoverChip(cell: cellRect, soleInCapsule: sole)
                 if sole {
                     XCTAssertEqual(chip.frame, cellRect, tag)
+                    XCTAssertEqual(chip.cornerRadius, WorkspaceLayout.concentricRadius(parent: pillRadius, inset: 0), accuracy: 0.001, tag)
                     XCTAssertEqual(chip.cornerRadius, pillRadius, accuracy: 0.001, tag)
                 } else {
                     XCTAssertEqual(chip.frame, cellRect.insetBy(dx: inset, dy: inset), tag)
-                    XCTAssertEqual(pillRadius - padding - inset, 3, accuracy: 0.001, "concentric value is under the minimum (\(tag))")
+                    XCTAssertEqual(WorkspaceLayout.concentricRadius(parent: pillRadius, inset: padding + inset), 3, accuracy: 0.001, "concentric value is under the minimum (\(tag))")
                     XCTAssertEqual(chip.cornerRadius, TrayGlassStyle.hoverMinimumCornerRadius, accuracy: 0.001, tag)
                     XCTAssertEqual(chip.cornerRadius, 6, accuracy: 0.001, tag)
                 }
@@ -553,8 +557,8 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                     ] {
                         XCTAssertLessThan(try sum(x, y), 2.85, "\(side) tint reaches the cell edge (\(tag))")
                     }
-                    XCTAssertGreaterThan(try sum(2.4, 2.4), 2.95, "sole chip's corner is the pill radius (\(tag))")
-                    XCTAssertLessThan(try sum(7, 7), 2.85, "sole chip fills in past its corner curve (\(tag))")
+                    XCTAssertGreaterThan(try sum(0.12 * pillRadius, 0.12 * pillRadius), 2.95, "sole chip's corner is the pill radius (\(tag))")
+                    XCTAssertLessThan(try sum(0.4 * pillRadius, 0.4 * pillRadius), 2.85, "sole chip fills in past its corner curve (\(tag))")
                 } else {
                     XCTAssertGreaterThan(
                         try sum(chip.frame.minX + 1.4, chip.frame.minY + 1.4), 2.95,
