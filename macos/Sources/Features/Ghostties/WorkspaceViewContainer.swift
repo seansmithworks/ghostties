@@ -205,6 +205,10 @@ private struct SidebarHostRoot: View {
             // edge, so a sub-frame mismatch between the AppKit width and
             // `model.width` mid-morph moves nothing.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // The group card measures from the sidebar's leading edge, not
+            // the window's: they differ in overlay, where the column sits
+            // the window margin in.
+            .coordinateSpace(name: ProjectGroupCard.sidebarSpace)
             .overlay(alignment: .bottom) {
                 if vertical || showsTrayWhenExpanded {
                     SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch(), panelWidth: model.width)
