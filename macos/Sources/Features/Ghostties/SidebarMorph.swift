@@ -415,12 +415,20 @@ struct MorphHistoryFooterGap: ViewModifier {
 struct SidebarMorphFrame<Content: View>: View {
     @ObservedObject var model: SidebarWidthModel
     let content: Content
+    /// Read in `body` (below): an `@AppStorage` the body never reads does not
+    /// invalidate it, so the dials in the environment stayed at their first
+    /// values and no rail dial change reached a leaf.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
+    /// The live dials, keyed by the epoch so the body depends on it.
+    private static func dials(epoch _: Int) -> SidebarMorphMetrics.Dials { .current() }
+
     var body: some View {
+        // The dials are a function of the epoch, which every panel write bumps.
+        let dials = Self.dials(epoch: dialEpochTick)
         content
             .environment(\.sidebarTrailingGutter, WorkspaceLayout.sidebarTrailingGutter(for: .pinned))
-            .environment(\.sidebarMorphDials, .current())
+            .environment(\.sidebarMorphDials, dials)
             .frame(width: model.expandedWidth)
             // Every frame top-leading: a frame narrower than its child
             // centres it by default, which would slide the whole list left

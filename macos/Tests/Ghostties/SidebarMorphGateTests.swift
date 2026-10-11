@@ -1,4 +1,5 @@
 import AppKit
+import DialkitmacOSCore
 import Combine
 import Foundation
 import GhosttiesCore
@@ -34,6 +35,7 @@ struct SidebarMorphGateTests {
 
     private struct Rig {
         let container: WorkspaceViewContainer
+        let store: WorkspaceStore
         let window: NSWindow
         let groupId: String
         let selected: UUID
@@ -98,7 +100,7 @@ struct SidebarMorphGateTests {
             spin(0.05)
         }
         return Rig(
-            container: container, window: window, groupId: atlas.id.uuidString, selected: sessions[1].id,
+            container: container, store: store, window: window, groupId: atlas.id.uuidString, selected: sessions[1].id,
             restoreTab: {
                 if let previousTab { UserDefaults.standard.set(previousTab, forKey: tabKey) } else { UserDefaults.standard.removeObject(forKey: tabKey) }
             }
@@ -106,6 +108,16 @@ struct SidebarMorphGateTests {
     }
 
     // MARK: - Path
+
+    private func settledFrames(_ rig: Rig, ids: [String]) throws -> [String: CGRect] {
+        for _ in 0..<6 {
+            rig.container.layoutSubtreeIfNeeded()
+            spin(0.05)
+        }
+        return try ids.reduce(into: [:]) { out, id in
+            out[id] = try #require(rig.container.redlineRegistryForTesting.rects[id], "no frame for \(id)")
+        }
+    }
 
     private func frames(_ rig: Rig, at progress: CGFloat, ids: [String]) throws -> [String: CGRect] {
         rig.container.applyMorphStep(progress)
@@ -158,6 +170,43 @@ struct SidebarMorphGateTests {
                     #expect(abs(value - (from + to) / 2) <= 0.5, "\(id) \(name) at 0.5: \(value), ends \(from) / \(to)")
                 }
             }
+        }
+    }
+
+    // MARK: - Live dials
+
+    /// A Rail-panel edit, written the way the inspector writes it and
+    /// announced the way `SidebarDialInspector.start` announces it, resizes
+    /// the rail's drawn tile and chip while the tree stays mounted.
+    @available(macOS 14, *)
+    @Test func aRailDialEditRedrawsTheRailLive() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.redlinesKey) }) {
+            let rig = makeRig()
+            defer { rig.close() }
+            let tile = RedlineID.header(rig.groupId) + ".tile"
+            let chip = RedlineID.row(rig.selected) + ".chip"
+            rig.container.toggleSidebar()
+            spin(0.6)
+            #expect(rig.container.sidebarModeForTesting == .collapsed)
+            let before = try settledFrames(rig, ids: [tile, chip])
+
+            let defaults = SidebarDialTuning.store
+            let coordinator = FocusedDialKitCoordinator<RailDialPanel>(defaults: defaults) {
+                rig.store.objectWillChange.send()
+                NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
+            }
+            coordinator.state.values.railProjectTileSize = 31
+            coordinator.state.values.railThreadTileSize = 25
+            for _ in 0..<6 {
+                rig.container.layoutSubtreeIfNeeded()
+                spin(0.05)
+            }
+
+            let after = try settledFrames(rig, ids: [tile, chip])
+            let t0 = try #require(before[tile]), t1 = try #require(after[tile])
+            let c0 = try #require(before[chip]), c1 = try #require(after[chip])
+            #expect(abs(t1.width - 31) <= 0.5, "rail tile stayed \(t0.width) -> \(t1.width) after the dial was set to 31")
+            #expect(abs(c1.width - 25) <= 0.5, "rail chip stayed \(c0.width) -> \(c1.width) after the dial was set to 25")
         }
     }
 
