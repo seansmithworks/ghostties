@@ -4141,7 +4141,10 @@ private class PanelDragHandleView: NSView {
 /// calls; keys go through `NSWindow.sendEvent`.
 extension WorkspaceViewContainer: CaptureScript.Host {
     var isReady: Bool {
-        (window?.isKeyWindow ?? false) && !store.projects.isEmpty
+        // Fixture seeding is synchronous (`CaptureFixture.makeStore()` builds the
+        // store before any window exists), so a key window already means seeded.
+        // Don't gate on `!projects.isEmpty`: `VERIFY_FIXTURE_PROJECTS=none` has none.
+        window?.isKeyWindow ?? false
     }
 
     func composerOpen() -> Bool {
