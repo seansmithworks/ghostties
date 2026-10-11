@@ -43,19 +43,24 @@ final class RailHoverReveal {
     }
 
     /// Runs `action` after `delay`; the returned closure cancels it.
-    typealias Schedule = (_ delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> () -> Void
+    typealias Schedule = (_ delay: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> () -> Void
 
     private(set) var phase: Phase = .idle
     /// Play the rail -> sidebar morph, over the terminal.
     var onReveal: () -> Void = {}
     /// Play the sidebar -> rail morph.
     var onCollapse: () -> Void = {}
+    /// Whether a completed dwell may reveal now. False while the sidebar is
+    /// still mid-transition (e.g. the Cmd+S collapse onto the rail): the
+    /// dwell then re-arms and tries again, rather than revealing from a
+    /// half-finished width.
+    var canReveal: () -> Bool = { true }
 
     private let settings: () -> Settings
     private let schedule: Schedule
     private var cancelTimer: (() -> Void)?
 
-    init(settings: @escaping () -> Settings = { .current() }, schedule: @escaping Schedule = RailHoverReveal.mainQueue) {
+    init(settings: @escaping () -> Settings = { .current() }, schedule: @escaping Schedule = RailHoverReveal.mainQueue(after:_:)) {
         self.settings = settings
         self.schedule = schedule
     }
@@ -71,11 +76,7 @@ final class RailHoverReveal {
             let current = settings()
             guard current.isEnabled else { return }
             phase = .dwelling
-            arm(after: current.dwell) { [weak self] in
-                guard let self, self.phase == .dwelling else { return }
-                self.phase = .revealed
-                self.onReveal()
-            }
+            armDwell(current.dwell)
         case .leaving:
             // Back inside during the grace: stay out.
             cancel()
@@ -149,7 +150,19 @@ final class RailHoverReveal {
         onReveal()
     }
 
-    private func arm(after delay: TimeInterval, _ action: @escaping @MainActor () -> Void) {
+    private func armDwell(_ dwell: TimeInterval) {
+        arm(after: dwell) { [weak self] in
+            guard let self, self.phase == .dwelling else { return }
+            guard self.canReveal() else {
+                self.armDwell(dwell)
+                return
+            }
+            self.phase = .revealed
+            self.onReveal()
+        }
+    }
+
+    private func arm(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) {
         cancel()
         cancelTimer = schedule(delay, action)
     }
@@ -159,7 +172,7 @@ final class RailHoverReveal {
         cancelTimer = nil
     }
 
-    static let mainQueue: Schedule = { delay, action in
+    nonisolated static func mainQueue(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> () -> Void {
         let work = DispatchWorkItem { MainActor.assumeIsolated { action() } }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         return { work.cancel() }

@@ -564,6 +564,9 @@ class WorkspaceViewContainer: NSView {
         let reveal = RailHoverReveal()
         reveal.onReveal = { [weak self] in self?.setRailRevealed(true) }
         reveal.onCollapse = { [weak self] in self?.setRailRevealed(false) }
+        // Never from a mid-flight width: the reveal captures the rail's
+        // width as it starts (`beginRailRevealPresentation`).
+        reveal.canReveal = { [weak self] in self.map { !$0.isSidebarTransitionAnimating } ?? false }
         return reveal
     }()
 
@@ -1666,9 +1669,14 @@ class WorkspaceViewContainer: NSView {
         // NEXT collapse-pair transition would wrongly believe a cross-fade
         // is already hosted and skip remounting it.
         isCollapseCrossfadeHosted = false
-        // A view-mode switch lands on the settled rail, not a reveal.
+        // A view-mode switch lands on the settled rail, not a reveal. The
+        // bump retires a reveal's pending completion here, at the teardown,
+        // rather than relying on the group below to do it.
         railHover.reset()
-        if isRailRevealPresented { endRailRevealPresentation() }
+        if isRailRevealPresented {
+            sidebarTransitionGeneration += 1
+            endRailRevealPresentation()
+        }
         applySidebarView()
 
         // Update width constraint + intrinsic size to reflect the new mode's

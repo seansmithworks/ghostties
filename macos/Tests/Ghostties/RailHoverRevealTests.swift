@@ -15,7 +15,7 @@ struct RailHoverRevealTests {
     @MainActor private final class Clock {
         private var now: TimeInterval = 0
         private var nextId = 0
-        private var timers: [(id: Int, due: TimeInterval, action: @MainActor () -> Void)] = []
+        private var timers: [(id: Int, due: TimeInterval, action: @MainActor @Sendable () -> Void)] = []
 
         var schedule: RailHoverReveal.Schedule {
             { [unowned self] delay, action in
@@ -48,7 +48,7 @@ struct RailHoverRevealTests {
         var collapses = 0
     }
 
-    private func makeRig(enabled: Bool = true, dwell: TimeInterval = 1.2, grace: TimeInterval = 0.3) -> Rig {
+    private func makeRig(enabled: Bool = true, dwell: TimeInterval = 1.2, grace: TimeInterval = 0.3, canReveal: @escaping () -> Bool = { true }) -> Rig {
         let clock = Clock()
         let counts = Counts()
         let reveal = RailHoverReveal(
@@ -57,6 +57,7 @@ struct RailHoverRevealTests {
         )
         reveal.onReveal = { counts.reveals += 1 }
         reveal.onCollapse = { counts.collapses += 1 }
+        reveal.canReveal = canReveal
         return Rig(reveal: reveal, clock: clock, counts: counts)
     }
 
@@ -121,6 +122,20 @@ struct RailHoverRevealTests {
         #expect(!rig.reveal.isRevealed)
     }
 
+    /// A dwell that completes mid-transition doesn't reveal; it re-arms
+    /// and reveals on the next dwell once the transition has landed.
+    @Test func aDwellDuringATransitionWaitsForItToLand() {
+        var animating = true
+        let rig = makeRig(canReveal: { !animating })
+        rig.reveal.pointerEntered()
+        rig.clock.advance(1.2)
+        #expect(rig.counts.reveals == 0)
+        #expect(rig.reveal.phase == .dwelling)
+        animating = false
+        rig.clock.advance(1.2)
+        #expect(rig.counts.reveals == 1)
+    }
+
     @Test func switchedOffNothingReveals() {
         let rig = makeRig(enabled: false)
         rig.reveal.pointerEntered()
@@ -180,7 +195,7 @@ struct RailHoverRevealContainerTests {
         let container: WorkspaceViewContainer
         let window: NSWindow
 
-        func close() {
+        @MainActor func close() {
             window.contentView = nil
             window.orderOut(nil)
             window.close()
