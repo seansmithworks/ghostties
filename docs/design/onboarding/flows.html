@@ -122,12 +122,32 @@ code { font: 12px var(--f-mono); background: var(--fill); padding: 1px 5px; bord
     <p class="muted" style="max-width:720px">Every path a new or upgrading user can take, as clickable greyscale wireframes. Pick a scenario to see its branch, then click through. Blue outlines mark the clickable parts. No ghosts or visual design yet, on purpose.</p>
   </header>
 
+  <section style="display:grid; gap:10px">
+    <h2>Three concepts, same jobs</h2>
+    <div style="overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--sheet)">
+      <table style="border-collapse:collapse; width:100%; min-width:640px; font-size:13px">
+        <thead><tr style="text-align:left"><th style="padding:9px 12px; border-bottom:1px solid var(--line)" class="label"></th><th style="padding:9px 12px; border-bottom:1px solid var(--line)" class="label">Mild · sheet</th><th style="padding:9px 12px; border-bottom:1px solid var(--line)" class="label">Wild · tutorial project</th><th style="padding:9px 12px; border-bottom:1px solid var(--line)" class="label">Wilder · terminal + agent</th></tr></thead>
+        <tbody>
+          <tr><td style="padding:9px 12px; border-bottom:1px solid var(--line)"><b>Where it lives</b></td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">Modal sheet over the window</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">"Meet Ghostties" project in the sidebar; steps are its rows</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">The first terminal runs <code>ghostties hello</code></td></tr>
+          <tr><td style="padding:9px 12px; border-bottom:1px solid var(--line)"><b>Who does setup</b></td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">User clicks through</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">User, one row at a time, in any order</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">Setup agent proposes, user approves</td></tr>
+          <tr><td style="padding:9px 12px; border-bottom:1px solid var(--line)"><b>Notification ask</b></td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">Up front, step 4</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">At the first real "needs you"</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">y/N prompt at the end</td></tr>
+          <tr><td style="padding:9px 12px; border-bottom:1px solid var(--line)"><b>Interrupts work?</b></td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">Yes, until closed</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">No; ignore it and it waits</td><td style="padding:9px 12px; border-bottom:1px solid var(--line)">Only the first terminal</td></tr>
+          <tr><td style="padding:9px 12px"><b>Main risk</b></td><td style="padding:9px 12px">Feels like a form</td><td style="padding:9px 12px">Tutorial reads as clutter</td><td style="padding:9px 12px">Needs a signed-in agent; falls back to a TUI checklist</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="map" aria-label="Flow map">
     <h2>Flow map</h2>
     <div id="map"></div>
   </section>
 
   <section style="display:grid; gap:14px">
+    <div class="bar">
+      <span class="label">Concept</span>
+      <div class="seg" id="conc" role="group" aria-label="Concept"></div>
+    </div>
     <div class="bar">
       <span class="label">Scenario</span>
       <div class="seg" id="scen" role="group" aria-label="Scenario"></div>
@@ -317,6 +337,140 @@ Opening browser to sign in…
     what: ['One place to see and undo everything onboarding did.'], edge: [] },
 };
 
+// ---------- WILD: tutorial project in the sidebar ----------
+const MEET = ['Choose a layout', 'Check your agents', 'Connect status', 'Add projects', 'Start an agent', 'Answer it when it waits'];
+const meet = (done, active, real = '') => `<div class="sec">Projects</div>${R('<b>Meet Ghostties</b>', { cls: active < 0 ? 'sel' : '' })}${MEET.map((t, i) => `<div class="row sub ${i === active ? 'sel' : ''}">${ck(i < done)} ${t}</div>`).join('')}${real}`;
+const wdProjects = () => SCEN[scen].projects === 'none' ? R('my-app') : R('ghostties') + R('pico-focus') + R('annotie-web') + R('portfolio');
+const card = (h, body, btns) => `<h3 style="margin:0 0 .4em; font-size:1.3em">${h}</h3>${body}<div class="btns" style="margin-top:.8em; justify-content:flex-start">${btns}</div>`;
+Object.assign(S, {
+  wd1: { flow: 'First launch', title: 'Tutorial appears', render: () => win('Meet Ghostties', meet(0, -1), card('Meet Ghostties', `<p class="muted">Six rows in the sidebar, about a minute. Each one is a step. Do them in any order, or archive this project and set up yourself.</p><div class="box" style="margin:1.2em 0; width:100%; height:5em">wordmark assembles here</div>`, go('s0', 'Archive tutorial', 'b') + go('wd2', 'Start', 'b pri'))),
+    what: ['No modal. The tutorial is a real project, like Things\' "Meet Things".', 'The empty card plays the wordmark moment (motion TBD, ghosts on hold).'], edge: ['Help → Create Tutorial Project brings it back.', 'Ignoring it is fine: nothing is blocked.'] },
+  wd2: { flow: 'First launch', title: 'Row 1 · layout', render: () => win('Meet Ghostties', meet(0, 0), card('Choose a layout', `<div class="cards" style="max-width:32em"><div class="card pick"><div class="thumb"><span></span><span></span></div><b>Projects</b></div><div class="card"><div class="thumb"><span></span><span></span></div><b>Tasks</b></div></div>`, go('wd3', 'Use Projects', 'b pri'))),
+    what: ['Each row opens its step in the main card. Finishing ticks the row and advances.'], edge: [] },
+  wd3: { flow: 'First launch', title: 'Row 2 · agents', render: () => {
+      const a = SCEN[scen].agents;
+      const st = a === 'ok' ? '<small class="ok">found · signed in</small>' : a === 'signin' ? '<small class="bad">not signed in</small>' : '<small class="bad">not found</small>';
+      const btn = a === 'ok' ? go('wd4', 'Continue', 'b pri') : a === 'signin' ? go('wd3t', 'Sign in', 'b pri') : go('wd5', 'Skip for now', 'b') + go('wd3ok', 'Check again', 'b pri');
+      const tip = a === 'none' ? '<div class="diff" style="margin-top:.6em">npm install -g @anthropic-ai/claude-code</div>' : '';
+      return win('Meet Ghostties', meet(1, 1), card('Check your agents', `<div style="display:grid; gap:.4em; max-width:30em"><div class="opt">Claude Code ${st}</div><div class="opt">Codex ${a === 'none' ? '<small class="bad">not found</small>' : '<small class="ok">found</small>'}</div></div>${tip}`, btn)); },
+    what: ['Same detection as Mild, shown inline.'], edge: ['Skipping leaves the row unticked; it stays in the list as the reminder.'] },
+  wd3t: { flow: 'Not signed in', title: 'Sign-in session', render: () => win('Meet Ghostties · sign in', meet(1, 1, `<div class="sec">Active</div>${R('sign in · claude', { dot: 'run' })}`), `<div class="term"><span class="d">~</span> ❯ claude
+Opening browser to sign in…
+<span class="ok">✓ Signed in</span></div><div class="btns" style="justify-content:flex-start; margin-top:1em">${go('wd3ok', 'Back to Meet Ghostties', 'b pri')}</div>`),
+    what: ['Sign-in runs as a real session in the sidebar, which quietly teaches "sessions live here".'], edge: [] },
+  wd3ok: { flow: 'Recovery', title: 'Agents ok', render: () => win('Meet Ghostties', meet(2, 2), card('Agents found', `<div class="opt" style="max-width:30em">Claude Code <small class="ok">found · signed in</small></div>`, go('wd4', 'Continue', 'b pri'))), what: ['Row 2 ticks.'], edge: [] },
+  wd4: { flow: 'First launch', title: 'Row 3 · status', render: () => win('Meet Ghostties', meet(2, 2), card('Connect status', `<p class="muted">Lets the sidebar show working, done, and waiting.</p><div class="diff" style="max-width:32em">~/.claude/settings.json
++ "hooks": { "Stop", "Notification", … }</div>`, go('wd5', 'Not now', 'b') + go('wd5', 'Connect', 'b pri'))),
+    what: ['No notification ask here. That waits for the first real "needs you".'], edge: [] },
+  wd5: { flow: 'First launch', title: 'Row 4 · projects', render: () => {
+      const none = SCEN[scen].projects === 'none' && !added;
+      const list = none ? `<div class="opt" style="justify-content:center; border-style:dashed; padding:1.2em; max-width:30em">No agent history found · drop a folder</div>` : `<div style="display:grid; gap:.35em; max-width:30em">${(SCEN[scen].projects === 'none' ? ['my-app'] : ['ghostties', 'pico-focus', 'annotie-web', 'portfolio']).map(n => `<div class="opt">${ck(true)} ${n}</div>`).join('')}</div>`;
+      return win('Meet Ghostties', meet(3, 3), card('Add projects', list, none ? go('wd5f', 'Choose folder…', 'b pri') : go('wd6', 'Add to sidebar', 'b pri'))); },
+    what: ['Projects land below the tutorial project as soon as they are added.'], edge: [] },
+  wd5f: { flow: 'No projects found', title: 'Folder picker', render: () => win('Meet Ghostties', meet(3, 3), '', `<div class="scrim"><div class="sys" style="width:min(60%,420px); text-align:left"><b>Choose a project folder</b><div class="opt">~/Code/my-app</div><div class="btns">${go('wd5', 'Open', 'b pri')}</div></div></div>`), what: ['Standard folder picker.'], edge: [] },
+  wd6: { flow: 'First session', title: 'Row 5 · first agent', render: () => win('Meet Ghostties', meet(4, 4, wdProjects()), shell, `<div class="composer"><div class="field">${SCEN[scen].projects === 'none' ? 'my-app' : 'ghostties'} › main › Claude Code</div><div class="muted" style="font-size:.9em">Starter prompt: "what does this project do?"</div><div class="btns">${go('wd7', 'Return', 'b pri')}</div></div>`),
+    what: ['Row 5 opens the real ⌘T composer pre-filled, and says so: the shortcut is taught by use.'], edge: ['No agent: row 5 offers "Open a shell" instead and row 6 stays for later.'] },
+  wd7: { flow: 'First "needs you"', title: 'Row 6 · it waits', render: () => win('ghostties', meet(5, 5, wdProjects() + `<div class="sec">Needs you</div>${R('what does this do?', { dot: 'wait' })}`), `<div class="term">Do you want to run <b>swift test</b>?
+  ❯ 1. Yes
+    3. No</div>`, `<div class="banner"><b>An agent is waiting on you</b><br><span class="muted">Want a notification next time?</span><div class="btns" style="margin-top:.4em">${go('wd8', 'Not now', 'b')}${go('wd8', 'Allow', 'b pri')}</div></div>`),
+    what: ['Notification permission is asked at the exact moment it is useful.'], edge: [] },
+  wd8: { flow: 'First "needs you"', title: 'Done · archive', render: () => win('ghostties', meet(6, -1, wdProjects()), card('All six done.', `<p class="muted">Archive the tutorial? Help → Create Tutorial Project brings it back.</p>`, go('wd9', 'Archive Meet Ghostties', 'b pri'))), what: ['Ends by removing itself.'], edge: [] },
+  wd9: { flow: 'First "needs you"', title: 'Clean sidebar', render: () => win('ghostties', `<div class="sec">Projects</div>${wdProjects()}`, shell), what: ['Back to a normal sidebar.'], edge: [] },
+});
+
+// ---------- WILDER: terminal-native, agent-led ----------
+const tui = (lines, btns = '') => `<div class="term">${lines}</div>${btns ? `<div class="btns" style="justify-content:flex-start; margin-top:1em">${btns}</div>` : ''}`;
+Object.assign(S, {
+  wr1: { flow: 'First launch', title: 'ghostties hello', render: () => win('ghostties hello', emptySide, tui(`<b>Hey. Ghostties runs your agents in a row.</b>
+<span class="d">Ghostty underneath, unchanged. ↑↓ to choose, Return to pick, Esc to skip setup.</span>
+
+How do you want to organise work?
+  ❯ Projects  <span class="d">(recommended)</span>
+    Tasks`, go('s0', 'Esc', 'b') + go('wr2', 'Return', 'b pri'))),
+    what: ['Setup is a program in the first terminal. Keyboard only.', 'Esc drops to a normal shell with a "Finish setup" row.'], edge: ['Re-run any time with `ghostties hello`.'] },
+  wr2: { flow: 'First launch', title: 'Agent check', render: () => {
+      const a = SCEN[scen].agents;
+      if (a === 'ok') return win('ghostties hello', emptySide, tui(`Checking agents…
+  <span class="ok">✓</span> claude   signed in
+  <span class="ok">✓</span> codex    found
+  <span class="d">·</span> aider    not found`, go('wr3', 'Continue', 'b pri')));
+      if (a === 'signin') return win('ghostties hello', emptySide, tui(`Checking agents…
+  <span class="bad">!</span> claude   installed, not signed in
+
+Run <b>claude</b> now to sign in?  ❯ Yes   No`, go('wr2s', 'Yes', 'b pri')));
+      return win('ghostties hello', emptySide, tui(`Checking agents…
+  <span class="bad">✗</span> claude   not found
+  <span class="bad">✗</span> codex    not found
+
+Install one, then press r to re-check:
+  npm install -g @anthropic-ai/claude-code
+
+  r re-check   s skip (plain terminal)`, go('wr3m', 's', 'b') + go('wr2ok', 'r', 'b pri'))); },
+    what: ['Same detection, printed as a checklist.'], edge: ['Skip with no agent goes to a manual TUI picker; there is no setup agent to run.'] },
+  wr2s: { flow: 'Not signed in', title: 'Sign in inline', render: () => win('ghostties hello', emptySide, tui(`❯ claude
+Opening browser to sign in…
+<span class="ok">✓ Signed in</span>
+
+<span class="d">Back to setup.</span>`, go('wr2ok', 'Continue', 'b pri'))), what: ['The login runs right in the same terminal.'], edge: [] },
+  wr2ok: { flow: 'Recovery', title: 'Agents ok', render: () => win('ghostties hello', emptySide, tui(`  <span class="ok">✓</span> claude   signed in`, go('wr3', 'Continue', 'b pri'))), what: [], edge: [] },
+  wr3: { flow: 'First launch', title: 'Setup agent', render: () => {
+      const none = SCEN[scen].projects === 'none';
+      return win('ghostties hello · setup agent', emptySide, tui(`Let an agent set things up?  It reads ~/Code and ~/.claude, changes nothing without asking.  ❯ Yes   No
+
+<span class="d">✻ setup agent</span>
+● ${none ? 'No repos with agent history found.' : 'Found 5 repos you use with Claude Code'}
+● ${none ? 'Which folder should be your first project?' : 'Proposing: ghostties, pico-focus, annotie-web, portfolio'}
+● Status hooks missing from ~/.claude/settings.json
+  <span class="ok">+ "hooks": { "Stop", "Notification", … }</span>
+
+<b>Apply?</b>  ❯ Yes   No   Show full diff`, go('wr3m', 'No (pick myself)', 'b') + go(none ? 'wr3p' : 'wr4', 'Yes', 'b pri'))); },
+    what: ['An agent session using a setup preset. Every write goes through a visible approval.'], edge: ['Agent errors or times out: falls back to the manual picker.'] },
+  wr3p: { flow: 'No projects found', title: 'Agent asks for a path', render: () => win('ghostties hello · setup agent', emptySide, tui(`<b>Path to your first project:</b> ~/Code/my-app▌
+
+● Added my-app (git, branch main)`, go('wr4', 'Continue', 'b pri'))), what: ['Free text path with tab completion.'], edge: [] },
+  wr3m: { flow: 'No agent CLI', title: 'Manual picker', render: () => win('ghostties hello', emptySide, tui(`Pick projects  <span class="d">(space to toggle, Return to add)</span>
+  ❯ [x] ~/Code/ghostties
+    [x] ~/Code/pico-focus
+    [ ] ~/tmp/scratch
+    + type a path…`, go('wr4', 'Return', 'b pri'))), what: ['The no-agent fallback: same outcome, no agent.'], edge: [] },
+  wr4: { flow: 'First launch', title: 'Sidebar fills', render: () => win('ghostties', SCEN[scen].projects === 'none' ? one() : projects(), tui(`<span class="ok">✓</span> ${SCEN[scen].projects === 'none' ? '1 project' : '4 projects'} added
+<span class="ok">✓</span> status connected
+
+Notify you when an agent is waiting?  (y/N)`, go('wr5', 'N', 'b') + go('wr5', 'y', 'b pri'))),
+    what: ['Projects appear in the sidebar as they are added.'], edge: [] },
+  wr5: { flow: 'First session', title: 'Ready', render: () => win('ghostties', SCEN[scen].projects === 'none' ? one() : projects(), tui(`<span class="d">Setup done. ⌘T starts an agent in any project.</span>
+<span class="d">~/Code/ghostties</span> main ❯ `, go('c1', '⌘T', 'b pri'))),
+    what: ['The terminal just becomes a normal shell. Nothing to dismiss.'], edge: [] },
+});
+
+// ---------- concepts ----------
+const CONC = {
+  mild:   { label: 'Mild · sheet',           start: 'w1' },
+  wild:   { label: 'Wild · tutorial project', start: 'wd1' },
+  wilder: { label: 'Wilder · terminal',      start: 'wr1' },
+};
+let conc = 'mild';
+const FLOWSBY = {
+  wild: [
+    ['First launch', 'Rows tick as you go', ['wd1', 'wd2', 'wd3', 'wd4', 'wd5', 'wd6', 'wd7', 'wd8', 'wd9']],
+    ['No agent CLI', 'Row stays unticked', ['wd3', 'wd5']],
+    ['Not signed in', 'Sign-in as a session', ['wd3', 'wd3t', 'wd3ok', 'wd4']],
+    ['No projects found', 'Manual folder', ['wd5', 'wd5f', 'wd5', 'wd6']],
+    ['Skipped setup', 'Archive the tutorial', ['wd1', 's0']],
+    ['First "needs you"', 'Notification ask in context', ['wd6', 'wd7', 'wd8']],
+    ['Existing user', 'Same as Mild', ['u1', 'w4u', 's1u']],
+  ],
+  wilder: [
+    ['First launch', 'Agent-led', ['wr1', 'wr2', 'wr3', 'wr4', 'wr5', 'c1']],
+    ['No agent CLI', 'Manual TUI picker', ['wr2', 'wr3m', 'wr4']],
+    ['Not signed in', 'Login inline', ['wr2', 'wr2s', 'wr2ok', 'wr3']],
+    ['No projects found', 'Agent asks for a path', ['wr3', 'wr3p', 'wr4']],
+    ['Skipped setup', 'Esc to plain shell', ['wr1', 's0']],
+    ['First "needs you"', 'Same as Mild', ['s2', 's3', 's4']],
+    ['Existing user', 'Same as Mild', ['u1', 'w4u', 's1u']],
+  ],
+};
+
 // ---------- flow map ----------
 const FLOWS = [
   ['First launch', 'Happy path, ~1 min', ['w1', 'w2', 'w3', 'w4', 'w5', 'w5s', 'w6', 'w7', 'c1']],
@@ -331,7 +485,7 @@ const FLOWS = [
 ];
 const scenFor = { 'No agent CLI': 'noagent', 'Not signed in': 'signin', 'No projects found': 'noproj', 'Existing user': 'upgrade' };
 function drawMap() {
-  document.getElementById('map').innerHTML = FLOWS.map(([n, sub, ids]) => `<div class="flow"><div class="fname"><b>${n}</b><span>${sub}</span></div><div class="chain">${ids.map((id, i) => `${i ? '<span class="arr">→</span>' : ''}<button type="button" class="chip ${id === cur ? 'on' : ''}" data-jump="${id}" data-flow="${n}">${S[id].title}</button>`).join('')}</div></div>`).join('');
+  document.getElementById('map').innerHTML = (FLOWSBY[conc] || FLOWS).map(([n, sub, ids]) => `<div class="flow"><div class="fname"><b>${n}</b><span>${sub}</span></div><div class="chain">${ids.map((id, i) => `${i ? '<span class="arr">→</span>' : ''}<button type="button" class="chip ${id === cur ? 'on' : ''}" data-jump="${id}" data-flow="${n}">${S[id].title}</button>`).join('')}</div></div>`).join('');
 }
 document.getElementById('map').addEventListener('click', e => {
   const b = e.target.closest('[data-jump]'); if (!b) return;
@@ -347,10 +501,11 @@ function render() {
   document.getElementById('notes').innerHTML = `<div class="sid">${cur} · ${s.flow}</div><h2>${s.title}</h2>
     ${s.what.length ? `<div><div class="label">What happens</div><ul>${s.what.map(x => `<li>${x}</li>`).join('')}</ul></div>` : ''}
     ${s.edge.length ? `<div><div class="label">Edge cases</div><ul>${s.edge.map(x => `<li>${x}</li>`).join('')}</ul></div>` : ''}
-    <p class="muted" style="font-size:12px">Scenario: ${SCEN[scen].label}</p>`;
+    <p class="muted" style="font-size:12px">${CONC[conc].label} · ${SCEN[scen].label}</p>`;
   drawMap();
 }
-function nav(id) { if (id === cur) { render(); return; } hist.push(cur); if (id === 'w6' && cur === 'w6f') added = 1; cur = id; render(); }
+function nav(id) { if (id === cur) { render(); return; } hist.push(cur); if ((id === 'w6' && cur === 'w6f') || (id === 'wd5' && cur === 'wd5f')) added = 1; cur = id; render(); }
+const startFor = () => scen === 'upgrade' ? 'u1' : CONC[conc].start;
 document.getElementById('win').addEventListener('click', e => { const t = e.target.closest('[data-go]'); if (t) nav(t.dataset.go); });
 document.getElementById('win').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-go]')) { e.preventDefault(); nav(e.target.dataset.go); } });
 document.getElementById('back').onclick = () => { if (hist.length) { cur = hist.pop(); render(); } };
@@ -359,8 +514,14 @@ document.getElementById('hot').onchange = e => document.getElementById('win').cl
 function setScen(k, restart = true) {
   scen = k; added = 0; hist = [];
   [...document.querySelectorAll('#scen button')].forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
-  if (restart) { cur = SCEN[k].start; render(); }
+  if (restart) { cur = startFor(); render(); }
 }
+function setConc(k) {
+  conc = k; [...document.querySelectorAll('#conc button')].forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
+  setScen(scen, true);
+}
+document.getElementById('conc').innerHTML = Object.entries(CONC).map(([k, v]) => `<button type="button" data-k="${k}" aria-pressed="${k === conc}">${v.label}</button>`).join('');
+document.getElementById('conc').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setConc(b.dataset.k); });
 document.getElementById('scen').innerHTML = Object.entries(SCEN).map(([k, v]) => `<button type="button" data-k="${k}" aria-pressed="${k === scen}">${v.label}</button>`).join('');
 document.getElementById('scen').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setScen(b.dataset.k, true); });
 render();
