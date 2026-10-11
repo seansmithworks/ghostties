@@ -244,6 +244,10 @@ enum WorkspaceLayout {
     /// warm. See `canvasBackgroundLight`.
     static let canvasBackgroundDark = NSColor(white: 0.18, alpha: 1)
 
+    /// Border (dark mode): DESIGN.md `darkBorder` #2a2a2a, a hairline one
+    /// step above the dark chrome. The tray glass's dark rim.
+    static let borderDark = NSColor(red: 0x2A / 255.0, green: 0x2A / 255.0, blue: 0x2A / 255.0, alpha: 1)
+
     /// Terracotta/warm rust accent used as a brand/UI accent (pin notices, callout
     /// cards, task-row highlights, browser-toggle tint). #c97350
     /// NOTE: This is NOT the session-status "waiting" color — see `statusYourTurnBlue`.

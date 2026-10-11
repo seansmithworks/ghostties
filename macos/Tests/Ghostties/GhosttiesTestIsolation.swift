@@ -141,32 +141,28 @@ struct SidebarLockedDefaultsTests {
         #expect(ComposerSingleLineShadowDials.yOffset(defaults: d) == 43)
         #expect(ComposerSingleLineShadowDials.opacity(defaults: d) == 0.34)
 
+        // Sean's second DialKit export (2026-10-11), baked as the light defaults.
         let light = SidebarDialTuning.trayGlass(for: .light, defaults: d)
         #expect(light == TrayGlassStyle.Look(
-            variant: .identity, tintOpacity: 0.35, surfaceOpacity: 0.9,
-            rimWidth: 1.5, rimOpacity: 0.5,
+            variant: .identity, tintOpacity: 0.35, surfaceOpacity: 0.6,
+            rimWidth: 1, rimOpacity: 0.6,
             shadowOpacity: 0.15, shadowRadius: 8, shadowYOffset: 3,
-            chromaticIntensity: 0.4, chromaticWidth: 2.75, chromaticRotation: 220, chromaticBlur: 2.2,
-            chromaticPalette: .pastel, chromaticBlend: .normal,
-            specularStrength: 0.6, specularAngle: 270
+            chromaticIntensity: 0.15, chromaticWidth: 1.5, chromaticRotation: 80, chromaticBlur: 2.5,
+            chromaticPalette: .signal, chromaticBlend: .normal,
+            specularStrength: 0.75, specularAngle: 270,
+            backdropMaterial: .regular, backdropOpacity: 0.75, surfaceBlur: 6
         ))
 
+        // The same export's dark set; its rim now draws in `borderDark`, not white.
         let dark = SidebarDialTuning.trayGlass(for: .dark, defaults: d)
         #expect(dark == TrayGlassStyle.Look(
-            variant: .identity, tintOpacity: 0.7, surfaceOpacity: 0.9,
-            rimWidth: 1.5, rimOpacity: 0.15,
+            variant: .identity, tintOpacity: 0.35, surfaceOpacity: 0.6,
+            rimWidth: 1, rimOpacity: 0.6,
             shadowOpacity: 0.4, shadowRadius: 12, shadowYOffset: 4,
-            chromaticIntensity: 0.3, chromaticWidth: 1.5, chromaticRotation: 220, chromaticBlur: 2.2,
-            chromaticPalette: .pastel, chromaticBlend: .normal,
-            specularStrength: 0, specularAngle: 270
+            chromaticIntensity: 0.15, chromaticWidth: 1.5, chromaticRotation: 80, chromaticBlur: 2.5,
+            chromaticPalette: .signal, chromaticBlend: .normal,
+            specularStrength: 0.1, specularAngle: 270,
+            backdropMaterial: .regular, backdropOpacity: 0.75, surfaceBlur: 6
         ))
-
-        // The blur dials draw nothing until moved: no backdrop material, no
-        // surface blur, in both appearances.
-        for look in [light, dark] {
-            #expect(look.backdropMaterial == .none)
-            #expect(look.backdropOpacity == 1)
-            #expect(look.surfaceBlur == 0)
-        }
     }
 }

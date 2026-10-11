@@ -159,7 +159,8 @@ enum TrayGlassStyle {
         /// (`WorkspaceLayout.chromeBackgroundDark`) in dark, so dark glass
         /// is never lighter than the chrome it floats on.
         var surfaceOpacity: Double
-        /// White rim standing in for the shader's fresnel edge.
+        /// Rim standing in for the shader's fresnel edge: white in light,
+        /// the dark border in dark (`rimColor`).
         var rimWidth: CGFloat
         var rimOpacity: Double
         var shadowOpacity: Double
@@ -178,8 +179,8 @@ enum TrayGlassStyle {
         /// Direction the light comes from, in degrees (0 = from the right,
         /// 90 = from the top).
         var specularAngle: Double
-        // The blur dials. Each defaults to "not drawn", so `light` and
-        // `dark` (and every `Look(...)` that omits them) keep today's look.
+        // The blur dials. Each defaults to "not drawn", so a `Look(...)`
+        // that omits them draws no blur; `light` and `dark` set them.
         /// Material blurring what's behind the pill, under the surface
         /// layer. Only shows where the surface layer lets it through.
         var backdropMaterial: BackdropMaterial = .none
@@ -191,66 +192,71 @@ enum TrayGlassStyle {
         var surfaceBlur: CGFloat = 0
     }
 
-    /// Light: tuned in the Dev DialKit (re-baked 2026-10-11 from Dev's stored
-    /// dials). The base was the canvas (pen.dev `CnDfN`) values; the white
-    /// layer, rim, chromatic edge and specular are now stronger than the canvas.
+    /// Light: Sean's DialKit export (re-baked 2026-10-11, second export).
+    /// The base was the canvas (pen.dev `CnDfN`) values; the white layer is
+    /// now thinner than the canvas so the regular backdrop blur shows
+    /// through it, and the chromatic edge is the status-colour `signal`.
     static let light = Look(
         variant: .identity,
-        // The white comes mostly from `surfaceOpacity`, since a native
-        // `.tint(white)` blends far weaker than the canvas's white fill
-        // and reads grey; the tint adds the rest.
+        // The white comes from the tint and the layer together, since a
+        // native `.tint(white)` blends far weaker than the canvas's white
+        // fill and reads grey.
         tintOpacity: 0.35,
-        // Canvas base fill was `#ffffffcc` (0.8); tuned to 0.9.
-        surfaceOpacity: 0.9,
-        // Canvas `u_edgeWidth` was 3px (1.25pt); tuned to 1.5pt.
-        rimWidth: 1.5,
-        rimOpacity: 0.5,
+        // Canvas base fill was `#ffffffcc` (0.8); tuned to 0.6, so the
+        // backdrop blur under it reads.
+        surfaceOpacity: 0.6,
+        // Canvas `u_edgeWidth` was 3px (1.25pt); tuned to 1pt.
+        rimWidth: 1,
+        rimOpacity: 0.6,
         // Option D (`ab279`): 15%, blur 16, y 3. A canvas blur is twice a
         // SwiftUI shadow radius, as on the canvas card (blur 16 = radius 8).
         shadowOpacity: 0.15,
         shadowRadius: 8,
         shadowYOffset: 3,
-        // Tuned in the Dev DialKit (re-baked 2026-10-11).
-        chromaticIntensity: 0.4,
-        chromaticWidth: 2.75,
-        chromaticRotation: 220,
-        chromaticBlur: 2.2,
-        chromaticPalette: .pastel,
+        // Tuned in the Dev DialKit (re-baked 2026-10-11, second export).
+        chromaticIntensity: 0.15,
+        chromaticWidth: 1.5,
+        chromaticRotation: 80,
+        chromaticBlur: 2.5,
+        chromaticPalette: .signal,
         chromaticBlend: .normal,
-        specularStrength: 0.6,
-        specularAngle: 270
+        specularStrength: 0.75,
+        specularAngle: 270,
+        backdropMaterial: .regular,
+        backdropOpacity: 0.75,
+        surfaceBlur: 6
     )
 
-    /// Dark: Sean's tuned dark structure (2026-10-11 export: 1.5pt rim,
-    /// pastel chromatic edge at 220°, light from below), drawn as dark
-    /// glass: a near-opaque chrome layer (`chromeBackgroundDark`, never the
-    /// lighter canvas grey), so the pill sits at the chrome's lightness, or
-    /// darkens what scrolls under it. No white specular (0 = not drawn): any
-    /// white gradient lifts the fill above the chrome, and Sean's 0.6 from
-    /// below turned the pill's lower half pale grey and dropped the icons
-    /// to 1.1:1. The rim at 0.15 is a taste choice, not a measured limit: the
-    /// rim draws only at the edge and never lifts the fill, so its dial is
-    /// free to go higher. Icons (`textSecondaryDark`) measure 5.45:1 on the
-    /// rendered fill. A deeper shadow than light's, since an 8% black
-    /// shadow vanishes on dark chrome.
+    /// Dark: Sean's DialKit export (2026-10-11, second export), drawn as dark
+    /// glass: the layer is the chrome (`chromeBackgroundDark`, never the
+    /// lighter canvas grey) over the regular backdrop blur, and the rim is
+    /// a dark stroke (`WorkspaceLayout.borderDark`, `rimColor`), not white:
+    /// a white rim drew a bright outline on the dark toolbar. The specular
+    /// stays faint (0.10): any white gradient lifts the fill above the
+    /// chrome, and a 0.6 one from below turned the pill's lower half pale
+    /// grey and dropped the icons to 1.1:1. A deeper shadow than light's,
+    /// since an 8% black shadow vanishes on dark chrome.
     static let dark = Look(
         variant: .identity,
-        tintOpacity: 0.7,
-        surfaceOpacity: 0.9,
-        rimWidth: 1.5,
-        rimOpacity: 0.15,
+        tintOpacity: 0.35,
+        surfaceOpacity: 0.6,
+        rimWidth: 1,
+        rimOpacity: 0.6,
         // Light's lift, at the opacity dark chrome needs to show it.
         shadowOpacity: 0.4,
         shadowRadius: 12,
         shadowYOffset: 4,
-        chromaticIntensity: 0.3,
+        chromaticIntensity: 0.15,
         chromaticWidth: 1.5,
-        chromaticRotation: 220,
-        chromaticBlur: 2.2,
-        chromaticPalette: .pastel,
+        chromaticRotation: 80,
+        chromaticBlur: 2.5,
+        chromaticPalette: .signal,
         chromaticBlend: .normal,
-        specularStrength: 0,
-        specularAngle: 270
+        specularStrength: 0.1,
+        specularAngle: 270,
+        backdropMaterial: .regular,
+        backdropOpacity: 0.75,
+        surfaceBlur: 6
     )
 
     static func defaultLook(for colorScheme: ColorScheme) -> Look {
@@ -330,18 +336,28 @@ enum TrayGlassStyle {
             : Color.white.opacity(look.surfaceOpacity)
     }
 
-    static func rimColor(_ look: Look) -> Color {
-        Color.white.opacity(look.rimOpacity)
+    /// The glass rim: white in light, the dark border token
+    /// (`WorkspaceLayout.borderDark`) in dark, so the dark pill's edge is a
+    /// dark-mode stroke, not a bright outline. The rim opacity and width
+    /// dials scale it in both.
+    static func rimColor(_ look: Look, for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(WorkspaceLayout.borderDark).opacity(look.rimOpacity)
+            : Color.white.opacity(look.rimOpacity)
     }
 
     /// The opaque fallback's dark edge (Reduce Transparency / pre-26). That
     /// path draws no glass rim or chromatic stroke, and its chrome-coloured
     /// fill sits on the chrome, so without this hairline only a shadow,
-    /// invisible on dark chrome, separated the pill. White at 0.35 lands the
-    /// edge at about #717171 on the #242424 chrome: 3:1, the WCAG non-text
-    /// minimum, on the setting that asks for more contrast. An edge, not a
-    /// fill: the pill itself stays at the chrome's lightness.
-    static let opaqueDarkEdgeColor = Color.white.opacity(0.35)
+    /// invisible on dark chrome, separated the pill. A dark-mode stroke like
+    /// the glass rim, at the canvas grey (`canvasBackgroundDark` #2D2D2D):
+    /// the strongest dark token step off the #242424 chrome (1.13:1, the
+    /// same step that sets the terminal card off the chrome; `borderDark`
+    /// is 1.08:1). 3:1 needs about #717171, a light grey, which is the
+    /// bright outline this replaces. The icons, which identify the buttons,
+    /// keep 5.45:1. An edge, not a fill: the pill stays at the chrome's
+    /// lightness.
+    static let opaqueDarkEdgeColor = Color(WorkspaceLayout.canvasBackgroundDark)
     static let opaqueDarkEdgeWidth: CGFloat = 1
 
 
@@ -586,7 +602,7 @@ struct TrayGlassSurface: ViewModifier {
                             specular(look)
                         }
                     }
-                    .overlay(shape.strokeBorder(TrayGlassStyle.rimColor(look), lineWidth: look.rimWidth))
+                    .overlay(shape.strokeBorder(TrayGlassStyle.rimColor(look, for: colorScheme), lineWidth: look.rimWidth))
                     .overlay { chromaticRim(look) }
             }
             .glassEffect(glass(look), in: shape)

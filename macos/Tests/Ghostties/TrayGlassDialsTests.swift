@@ -33,7 +33,11 @@ struct TrayGlassDialsTests {
              set: { $0.glassDark.backdropOpacity = 0.3 }, read: { $0.backdropOpacity }, expected: 0.3),
         Case(name: "Surface blur", scheme: .dark, key: "ghostties.sidebarDial.trayGlass.dark.surfaceBlur",
              set: { $0.glassDark.surfaceBlur = 3 }, read: { $0.surfaceBlur }, expected: CGFloat(3)),
-    ] + TrayGlassStyle.ChromaticPalette.allCases.filter { $0 != .pastel }.flatMap { palette in [
+    // Every palette but the default (both appearances default to `signal`
+    // since the 2026-10-11 bake), so each case is a real change.
+    ] + TrayGlassStyle.ChromaticPalette.allCases.filter {
+        $0 != TrayGlassStyle.light.chromaticPalette && $0 != TrayGlassStyle.dark.chromaticPalette
+    }.flatMap { palette in [
         Case(name: "Palette \(palette.rawValue)", scheme: .light, key: "ghostties.sidebarDial.trayGlass.chromaticPalette",
              set: { $0.glassLight.chromaticPalette = palette.rawValue }, read: { $0.chromaticPalette }, expected: palette),
         Case(name: "Palette \(palette.rawValue)", scheme: .dark, key: "ghostties.sidebarDial.trayGlass.dark.chromaticPalette",
