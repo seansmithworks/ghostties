@@ -9,7 +9,7 @@
 #  (d) SEAN rows are reported pending or signed. With --require-signed, pending ones fail too.
 # Test seam: CONTRACT_CHECK_XCRESULTTOOL overrides `xcrun xcresulttool` (a command that takes the same args).
 set -euo pipefail
-DIR="/Users/seansmith/.claude/projects/-Users-seansmith-Code-ghostties/memory/beta26-test-harness"
+DIR="${CONTRACT_HARNESS_DIR:-$HOME/.claude/projects/-Users-seansmith-Code-ghostties/memory/beta26-test-harness}"
 REQ=0
 for a in "$@"; do
   case "$a" in --require-signed) REQ=1 ;; *) DIR="$a" ;; esac
