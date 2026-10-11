@@ -34,7 +34,10 @@ enum QuietTestHost {
                 (note.object as? NSWindow)?.quietParkIfOnScreen()
             }
         }
-        NSApplication.shared.setActivationPolicy(.accessory)
+        // First touch of the shared application decides its class. Use the
+        // principal class so NSApplicationMain doesn't inherit a plain
+        // NSApplication (which lacks CefAppProtocol).
+        GhosttiesApplication.shared.setActivationPolicy(.accessory)
 
         swap(NSWindow.self, #selector(NSWindow.orderFront(_:)), #selector(NSWindow.quiet_orderFront(_:)))
         swap(NSWindow.self, #selector(NSWindow.orderFrontRegardless), #selector(NSWindow.quiet_orderFrontRegardless))
