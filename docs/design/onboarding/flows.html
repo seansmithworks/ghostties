@@ -1,0 +1,367 @@
+<title>Ghostties Onboarding Flows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: wireframe board. Flow map on top, then a two-column stage: clickable greyscale window + screen notes. Blue = clickable. */
+:root {
+  --paper: #f4f3f0; --sheet: #ffffff; --ink: #1d1d1b; --ink2: #6f6d68; --line: #c9c6bf; --fill: #e6e4df;
+  --hot: #2f6fdf; --hotbg: #e3ecfc; --warn: #b4542e; --ok: #2f7a45;
+  --f-sans: "IBM Plex Sans", -apple-system, system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #191917; --sheet: #22221f; --ink: #ecebe7; --ink2: #9c9a94; --line: #45433f; --fill: #2e2d2a;
+  --hot: #77a4f4; --hotbg: #1e2b44; --warn: #e08a63; --ok: #6cc187; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #191917; --sheet: #22221f; --ink: #ecebe7; --ink2: #9c9a94; --line: #45433f; --fill: #2e2d2a;
+  --hot: #77a4f4; --hotbg: #1e2b44; --warn: #e08a63; --ok: #6cc187; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--f-sans); padding-inline: 20px; padding-block: 40px 80px }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px }
+h1 { font: 600 30px/1.15 var(--f-sans); margin: 0; letter-spacing: -0.01em }
+h2 { font: 600 17px/1.3 var(--f-sans); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--ink2) }
+.label { font: 500 11px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink2) }
+code { font: 12px var(--f-mono); background: var(--fill); padding: 1px 5px; border-radius: 3px }
+:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px }
+
+/* Flow map */
+.map { display: grid; gap: 8px }
+.flow { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: start; padding: 10px 0; border-top: 1px dashed var(--line) }
+.flow .fname { display: grid; gap: 2px }
+.flow .fname b { font-weight: 600 }
+.flow .fname span { font-size: 12px; color: var(--ink2) }
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 2px; min-width: 0 }
+.chip { font: 12px/1 var(--f-mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--sheet); color: var(--ink); cursor: pointer }
+.chip:hover { border-color: var(--hot) }
+.chip.on { background: var(--hot); border-color: var(--hot); color: var(--sheet) }
+.arr { color: var(--ink2); font-size: 12px; padding: 0 2px }
+@media (max-width: 720px) { .flow { grid-template-columns: 1fr } }
+
+/* Controls */
+.bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex-wrap: wrap }
+.seg button { font: 13px var(--f-sans); background: var(--sheet); color: var(--ink); border: 0; border-right: 1px solid var(--line); padding: 7px 11px; cursor: pointer }
+.seg button:last-child { border-right: 0 }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper) }
+.navbtn { font: 13px var(--f-sans); background: var(--sheet); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 11px; cursor: pointer }
+
+/* Stage */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start }
+@media (max-width: 900px) { .stage { grid-template-columns: 1fr } }
+.notes { background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0 }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.notes .sid { font: 500 12px var(--f-mono); color: var(--hot) }
+
+/* Wireframe window */
+.win { position: relative; aspect-ratio: 16 / 10; max-width: 100%; background: var(--sheet); border: 1.5px solid var(--ink); border-radius: 10px; overflow: hidden; container-type: inline-size; font-size: clamp(9px, 1.35cqw, 13px) }
+.tbar { height: 2.4em; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: .5em; padding: 0 .9em }
+.tbar i { width: .8em; height: .8em; border-radius: 50%; border: 1px solid var(--ink2) }
+.tbar .t { margin: 0 auto; color: var(--ink2); font-size: .9em }
+.body { position: absolute; inset: 2.4em 0 0; display: grid; grid-template-columns: 22% 1fr }
+.side { border-right: 1px solid var(--line); padding: .8em .6em; display: flex; flex-direction: column; gap: .25em; background: var(--fill); min-width: 0 }
+.main { position: relative; padding: 1.2em 1.4em; min-width: 0; overflow: hidden }
+.sec { font: 500 .78em var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); padding: .6em .3em .2em }
+.row { display: flex; align-items: center; gap: .5em; padding: .35em .4em; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.row .g { width: .9em; height: .9em; background: var(--ink2); border-radius: .2em .2em 0 0; flex: none }
+.row.sub { padding-left: 1.6em; color: var(--ink2) }
+.row.sel { background: var(--sheet); outline: 1px solid var(--line) }
+.dot { margin-left: auto; width: .55em; height: .55em; border-radius: 50%; border: 1.5px solid var(--ink2); flex: none }
+.dot.run { background: var(--ink2) }
+.dot.wait { background: var(--warn); border-color: var(--warn) }
+.term { font: .95em/1.55 var(--f-mono); white-space: pre-wrap; color: var(--ink) }
+.term .d { color: var(--ink2) }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--ink2) }
+.box { border: 1px dashed var(--ink2); width: 4em; height: 4em; margin: 0 auto .6em; border-radius: .4em }
+
+/* Sheet */
+.scrim { position: absolute; inset: 2.4em 0 0; background: color-mix(in srgb, var(--ink) 10%, transparent); display: grid; place-items: center; z-index: 5 }
+.sheet { width: min(62%, 460px); background: var(--sheet); border: 1.5px solid var(--ink); border-radius: 10px; padding: 1.6em; display: grid; gap: .9em }
+.sheet h3 { margin: 0; font-size: 1.35em; font-weight: 600 }
+.steps { display: flex; gap: .35em } .steps b { flex: 1; height: .25em; background: var(--line); border-radius: 2px } .steps b.on { background: var(--ink) }
+.opt { display: flex; align-items: center; gap: .6em; padding: .55em .7em; border: 1px solid var(--line); border-radius: 6px }
+.opt small { margin-left: auto; font: .85em var(--f-mono); color: var(--ink2); text-align: right }
+.opt.pick { border: 1.5px solid var(--ink) }
+.ck { width: 1em; height: 1em; border: 1.5px solid var(--ink2); border-radius: .2em; flex: none; display: grid; place-items: center; font-size: .8em }
+.ck.on { background: var(--ink); border-color: var(--ink); color: var(--sheet) }
+.ok { color: var(--ok) } .bad { color: var(--warn) }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: .7em }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: .8em; display: grid; gap: .4em }
+.card.pick { border: 2px solid var(--ink) }
+.thumb { height: 4.2em; background: var(--fill); border-radius: 4px; display: grid; grid-template-columns: 30% 1fr; gap: 3px; padding: 3px }
+.thumb span { background: var(--line); border-radius: 2px }
+.diff { font: .88em/1.5 var(--f-mono); background: var(--fill); border-radius: 6px; padding: .6em .8em; white-space: pre-wrap }
+.btns { display: flex; justify-content: flex-end; gap: .5em; flex-wrap: wrap }
+.b { border: 1px solid var(--ink2); border-radius: 6px; padding: .4em .9em; color: var(--ink); background: var(--sheet) }
+.b.pri { background: var(--ink); color: var(--sheet); border-color: var(--ink) }
+.callout { margin: .5em .1em; padding: .6em .7em; border: 1.5px solid var(--ink); border-radius: 6px; background: var(--sheet); white-space: normal; font-size: .92em }
+.callout b { display: block }
+.kbd { font: 500 .85em var(--f-mono); padding: .05em .35em; border: 1px solid var(--ink2); border-radius: 3px }
+.banner { position: absolute; top: .8em; right: .8em; width: 36%; border: 1.5px solid var(--ink); border-radius: 8px; background: var(--sheet); padding: .6em .7em; z-index: 6; font-size: .92em }
+.menu { position: absolute; top: 0; left: 30%; width: 34%; border: 1.5px solid var(--ink); border-radius: 6px; background: var(--sheet); padding: .3em; z-index: 7 }
+.menu div { padding: .35em .6em; border-radius: 4px } .menu hr { border: 0; border-top: 1px solid var(--line); margin: .2em 0 }
+.composer { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); width: 62%; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--sheet); padding: .9em; z-index: 6; display: grid; gap: .5em }
+.field { border: 1px solid var(--ink2); border-radius: 6px; padding: .55em .7em; font-family: var(--f-mono) }
+.sys { width: min(44%, 320px); background: var(--sheet); border: 1.5px solid var(--ink); border-radius: 12px; padding: 1.2em; display: grid; gap: .6em; text-align: center }
+
+.scroller { overflow-x: auto; min-width: 0 }
+@media (max-width: 680px) { .scroller .win { width: 640px; max-width: none } }
+/* Hotspots */
+[data-go] { cursor: pointer; position: relative }
+[data-go]:hover { outline: 2px solid var(--hot); outline-offset: 1px }
+.showhot [data-go] { box-shadow: 0 0 0 2px var(--hot); background-image: linear-gradient(var(--hotbg), var(--hotbg)) }
+.showhot .b.pri[data-go] { background-image: none }
+</style>
+
+<div class="wrap">
+  <header style="display:grid; gap:8px">
+    <div class="label">Ghostties · onboarding · lo-fi flows · 2026-10-11</div>
+    <h1>Onboarding flows</h1>
+    <p class="muted" style="max-width:720px">Every path a new or upgrading user can take, as clickable greyscale wireframes. Pick a scenario to see its branch, then click through. Blue outlines mark the clickable parts. No ghosts or visual design yet, on purpose.</p>
+  </header>
+
+  <section class="map" aria-label="Flow map">
+    <h2>Flow map</h2>
+    <div id="map"></div>
+  </section>
+
+  <section style="display:grid; gap:14px">
+    <div class="bar">
+      <span class="label">Scenario</span>
+      <div class="seg" id="scen" role="group" aria-label="Scenario"></div>
+      <button class="navbtn" id="back" type="button">← Back</button>
+      <button class="navbtn" id="restart" type="button">Restart scenario</button>
+      <label style="display:flex; gap:6px; align-items:center; font-size:13px"><input type="checkbox" id="hot"> Show clickable areas</label>
+    </div>
+    <div class="stage">
+      <div class="scroller"><div class="win" id="win"></div></div>
+      <aside class="notes" id="notes" aria-live="polite"></aside>
+    </div>
+  </section>
+</div>
+
+<script>
+// ---------- scenarios ----------
+const SCEN = {
+  happy:   { label: 'Happy path',        start: 'w1', agents: 'ok',      projects: 'found' },
+  noagent: { label: 'No agent CLI',      start: 'w1', agents: 'none',    projects: 'found' },
+  signin:  { label: 'Not signed in',     start: 'w1', agents: 'signin',  projects: 'found' },
+  noproj:  { label: 'No projects found', start: 'w1', agents: 'ok',      projects: 'none' },
+  upgrade: { label: 'Existing user',     start: 'u1', agents: 'ok',      projects: 'found' },
+};
+let scen = 'happy', cur = 'w1', hist = [], added = 0;
+
+// ---------- building blocks ----------
+const go = (id, html, cls = '') => `<span class="${cls}" data-go="${id}" tabindex="0" role="button">${html}</span>`;
+const steps = n => `<div class="steps">${[1,2,3,4,5].map(i => `<b class="${i <= n ? 'on' : ''}"></b>`).join('')}</div>`;
+const ck = on => `<span class="ck ${on ? 'on' : ''}">${on ? '✓' : ''}</span>`;
+const R = (t, o = {}) => `<div class="row ${o.cls || ''}">${o.nog ? '' : '<span class="g"></span>'}${t}${o.dot ? `<span class="dot ${o.dot}"></span>` : ''}</div>`;
+const projects = (extra = '') => `<div class="sec">Projects</div>${R('ghostties')}${R('pico-focus')}${R('annotie-web')}${R('portfolio')}${extra}`;
+const one = (extra = '') => `<div class="sec">Projects</div>${R('my-app')}${extra}`;
+const emptySide = `<div class="sec">Projects</div><div class="row muted" style="white-space:normal">No projects yet</div>`;
+function win(title, side, main, over = '') {
+  return `<div class="tbar"><i></i><i></i><i></i><span class="t">${title}</span></div>
+  <div class="body"><div class="side">${side}</div><div class="main">${main}</div></div>${over}`;
+}
+const sheet = inner => `<div class="scrim"><div class="sheet">${inner}</div></div>`;
+const shell = `<div class="term"><span class="d">~</span> ❯ </div>`;
+
+// ---------- screens ----------
+const S = {
+  w1: { flow: 'First launch', title: 'Welcome', render: () => win('Ghostties', emptySide, '', sheet(`
+      ${steps(1)}<h3>Your agents, in a row.</h3>
+      <p class="muted">Ghostties is Ghostty with a sidebar that shows what each agent is doing and which one needs you.</p>
+      <p class="muted" style="font-size:.9em">Takes about a minute. Everything here can be changed later in Settings.</p>
+      <div class="btns">${go('s0', 'Skip setup', 'b')}${go('w2', 'Get started', 'b pri')}</div>`)),
+    what: ['One sentence of promise, one of reassurance.', 'Skip is real: it lands on the empty window with a "Finish setup" row.'],
+    edge: ['Never shown again once completed or skipped.', 'Help → Show Welcome re-opens it.', 'Demo-capture launch flag suppresses it.'] },
+
+  w2: { flow: 'First launch', title: 'Choose a layout', render: () => win('Ghostties', emptySide, '', sheet(`
+      ${steps(2)}<h3>How do you want to organise work?</h3>
+      <div class="cards">
+        <div class="card pick"><div class="thumb"><span></span><span></span></div><b>Projects</b><span class="muted" style="font-size:.9em">Sessions grouped under each repo. Recommended.</span></div>
+        <div class="card"><div class="thumb"><span></span><span></span></div><b>Tasks</b><span class="muted" style="font-size:.9em">Lanes: Inbox, Running, Needs you, Review.</span></div>
+      </div>
+      <p class="muted" style="font-size:.9em">Switch any time from View → Sidebar.</p>
+      <div class="btns">${go('w1', 'Back', 'b')}${go('w3', 'Continue', 'b pri')}</div>`)),
+    what: ['The one up-front choice (Raycast pattern). Projects is pre-selected.'],
+    edge: ['Choosing Tasks changes later copy ("tasks" instead of "projects") but not the steps.'] },
+
+  w3: { flow: 'First launch', title: 'Check agents', render: () => {
+      const a = SCEN[scen].agents;
+      const claude = a === 'ok' ? `<small class="ok">found · signed in</small>` : a === 'signin' ? `<small class="bad">found · not signed in</small>` : `<small class="bad">not found</small>`;
+      const codex = a === 'none' ? `<small class="bad">not found</small>` : `<small class="ok">found</small>`;
+      let extra = '', next = go('w4', 'Continue', 'b pri');
+      if (a === 'none') { extra = `<div class="diff">Install one to get started:
+claude:  npm install -g @anthropic-ai/claude-code
+codex:   npm install -g @openai/codex</div>`; next = go('w3x', 'Continue without agents', 'b') + go('w3ok', 'Check again', 'b pri'); }
+      if (a === 'signin') { extra = `<p class="muted" style="font-size:.9em">Claude Code is installed but not signed in. Sign in once in a terminal and come back.</p>`; next = go('w3t', 'Open terminal to sign in', 'b pri'); }
+      return win('Ghostties', emptySide, '', sheet(`${steps(3)}<h3>Your agents</h3>
+        <p class="muted">Ghostties runs the agent CLIs you already have.</p>
+        <div class="opt">Claude Code ${claude}</div><div class="opt">Codex ${codex}</div><div class="opt">Aider <small>not found · optional</small></div>
+        ${extra}<div class="btns">${go('w2', 'Back', 'b')}${next}</div>`)); },
+    what: ['Looks for claude / codex / aider on PATH and checks sign-in.', 'Branches by scenario: switch the scenario above to see each.'],
+    edge: ['Install commands shown are illustrative; confirm current ones before shipping.', 'PATH from a GUI app differs from the login shell. Detect through a login shell.'] },
+
+  w3t: { flow: 'Not signed in', title: 'Sign in (terminal)', render: () => win('Ghostties · sign in', emptySide, `<div class="term"><span class="d">~</span> ❯ claude
+Opening browser to sign in…
+<span class="ok">✓ Signed in</span>
+
+<span class="d">Back in Ghostties, press Check again.</span></div>`, `<div class="banner"><b>Finish signing in</b><br><span class="muted">Then return to setup.</span><div class="btns" style="margin-top:.4em">${go('w3ok', 'Check again', 'b pri')}</div></div>`),
+    what: ['Opens a real terminal tab running the agent\'s own login, so we never touch credentials.', 'A floating banner keeps the way back to setup visible.'],
+    edge: ['If the user closes the banner, setup resumes from the sidebar\'s "Finish setup" row.'] },
+
+  w3ok: { flow: 'Recovery', title: 'Agents found', render: () => win('Ghostties', emptySide, '', sheet(`${steps(3)}<h3>Your agents</h3>
+      <div class="opt">Claude Code <small class="ok">found · signed in</small></div><div class="opt">Codex <small class="ok">found</small></div><div class="opt">Aider <small>not found · optional</small></div>
+      <div class="btns">${go('w4', 'Continue', 'b pri')}</div>`)),
+    what: ['Same step, re-checked. Continues into hooks.'], edge: [] },
+
+  w3x: { flow: 'No agent CLI', title: 'Continue without agents', render: () => win('Ghostties', emptySide, '', sheet(`${steps(4)}<h3>Plain terminal for now</h3>
+      <p class="muted">Projects and sessions work without an agent. Status like "needs you" turns on once Claude Code or Codex is installed.</p>
+      <div class="btns">${go('w6', 'Continue', 'b pri')}</div>`)),
+    what: ['Skips hooks and notifications (nothing to report yet).', 'Settings → Agents shows "Not set up" with Check again.'], edge: ['On a later launch, if an agent appears, a one-time sidebar callout offers to connect it.'] },
+
+  w4: { flow: 'First launch', title: 'Connect status', render: () => win('Ghostties', emptySide, '', sheet(`${steps(4)}<h3>See when an agent needs you</h3>
+      <p class="muted">Ghostties adds a small hook to each agent so it can report working, done, or waiting.</p>
+      <div class="opt">${ck(true)} Claude Code <small>edits ~/.claude/settings.json</small></div>
+      <div class="diff">+ "hooks": { "Stop", "Notification",
++   "PermissionRequest", … 4 more }</div>
+      <div class="opt">${ck(true)} Codex <small>approve once inside Codex</small></div>
+      <div class="btns">${go('w5', 'Not now', 'b')}${go('w5', 'Connect', 'b pri')}</div>`)),
+    what: ['Shows the exact change before making it.', 'Merges into existing settings; never overwrites other hooks.', 'Undo lives in Settings → Agents.'],
+    edge: ['Malformed settings.json: show "Couldn\'t read your Claude settings" with Open file / Skip.', 'Not now: sidebar works, status glyphs show idle only.'] },
+
+  w5: { flow: 'First launch', title: 'Notifications', render: () => win('Ghostties', emptySide, '', sheet(`${steps(4)}<h3>Get a nudge when an agent is waiting?</h3>
+      <p class="muted">Only for "needs you". Never for finished or running.</p>
+      <div class="btns">${go('w6', 'Not now', 'b')}${go('w5s', 'Allow notifications', 'b pri')}</div>`)),
+    what: ['Primes the macOS prompt by explaining it first.'], edge: ['If denied, Settings shows how to enable it in System Settings.'] },
+
+  w5s: { flow: 'First launch', title: 'macOS prompt', render: () => win('Ghostties', emptySide, '', `<div class="scrim"><div class="sys"><b>"Ghostties" would like to send you notifications.</b><span class="muted" style="font-size:.9em">Notifications may include alerts and sounds.</span><div class="btns" style="justify-content:center">${go('w6', 'Don\'t Allow', 'b')}${go('w6', 'Allow', 'b pri')}</div></div></div>`),
+    what: ['System dialog, not ours.'], edge: [] },
+
+  w6: { flow: 'First launch', title: 'Add projects', render: () => {
+      if (SCEN[scen].projects === 'none' && !added) return win('Ghostties', emptySide, '', sheet(`${steps(5)}<h3>Add a project</h3>
+        <p class="muted">We didn't find folders you've used with an agent yet.</p>
+        <div class="opt" style="justify-content:center; border-style:dashed; padding:1.4em">Drop a folder here</div>
+        <div class="btns">${go('w7', 'Skip', 'b')}${go('w6f', 'Choose folder…', 'b pri')}</div>`));
+      if (SCEN[scen].projects === 'none') return win('Ghostties', emptySide, '', sheet(`${steps(5)}<h3>Add a project</h3>
+        <div class="opt">${ck(true)} my-app <small>~/Code</small></div><p class="muted" style="font-size:.9em">Add another folder…</p>
+        <div class="btns">${go('w7', 'Add 1 project', 'b pri')}</div>`));
+      return win('Ghostties', emptySide, '', sheet(`${steps(5)}<h3>Add your projects</h3>
+        <p class="muted">Found 5 folders you've used with Claude Code or Codex.</p>
+        <div class="opt">${ck(true)} ghostties <small>~/Code</small></div><div class="opt">${ck(true)} pico-focus <small>~/Code</small></div>
+        <div class="opt">${ck(true)} annotie-web <small>~/Code</small></div><div class="opt">${ck(true)} portfolio <small>~/Sites</small></div>
+        <div class="opt">${ck(false)} scratch <small>~/tmp · used once</small></div>
+        <div class="btns">${go('w6f', 'Choose folder…', 'b')}${go('w7', 'Add 4 projects', 'b pri')}</div>`)); },
+    what: ['Detected from agent history (~/.claude/projects) plus recent git repos, pre-checked by recency.', 'One-off folders start unchecked.'],
+    edge: ['No matches: falls back to drop zone + Choose folder.', 'Folder moved or deleted since: hidden from the list.'] },
+
+  w6f: { flow: 'No projects found', title: 'Folder picker', render: () => win('Ghostties', emptySide, '', `<div class="scrim"><div class="sys" style="width:min(60%,420px); text-align:left"><b>Choose a project folder</b>
+      <div class="opt">~/Code/my-app</div><div class="opt muted">~/Code/old-thing</div><div class="btns">${go('w6', 'Cancel', 'b')}${go('w6', 'Open', 'b pri', 'pick')}</div></div></div>`),
+    what: ['Standard NSOpenPanel.'], edge: ['Non-git folders are fine; branch segment is just omitted later.'] },
+
+  w7: { flow: 'First launch', title: 'Ready', render: () => win('Ghostties', SCEN[scen].projects === 'none' ? one() : projects(), '', sheet(`<h3>Ready.</h3>
+      <div class="opt"><span class="kbd">⌘T</span> new session <small>project › branch › agent</small></div>
+      <div class="opt"><span class="kbd">⌘⇧[</span> <span class="kbd">⌘⇧]</span> switch sessions</div>
+      <div class="opt"><span class="kbd">⌘S</span> show or hide the sidebar</div>
+      <div class="btns">${go('s1', 'Close', 'b')}${go('c1', 'Start first agent', 'b pri')}</div>`)),
+    what: ['Three shortcuts, no more.', 'Sidebar is already populated behind the sheet.'], edge: [] },
+
+  s0: { flow: 'Skipped setup', title: 'Empty window', render: () => win('Ghostties', emptySide + `<div style="margin-top:auto">${go('w2', '<div class="row"><b>Finish setup</b><span class="dot"></span></div>')}</div>`,
+      `<div class="empty"><div><div class="box"></div>Add a project to get started<br><br>${go('w6', 'Add project', 'b pri')}</div></div>`),
+    what: ['Plain shell works immediately.', '"Finish setup" row stays until setup is done or dismissed.'], edge: ['Right-click → Dismiss removes the row for good.'] },
+
+  s1: { flow: 'First session', title: 'Sidebar ready', render: () => win('ghostties', (SCEN[scen].projects === 'none' ? one() : projects()) + `<div class="callout"><b>Start an agent</b>${go('c1', '<span class="kbd">⌘T</span>')} opens a new session in any project.</div>`, shell),
+    what: ['One dismissible callout, not a tour.'], edge: [] },
+
+  c1: { flow: 'First session', title: 'Composer', render: () => win('ghostties', projects(), shell, `<div class="composer"><div class="field">ghostties › main › Claude Code</div><div class="muted" style="font-size:.9em">Return to start · type to change project, branch or agent</div><div class="btns">${go('s2', 'Return', 'b pri')}</div></div>`),
+    what: ['Pre-filled with the most recent project and the detected agent.', 'Return starts it in a new session under that project.'], edge: ['Agent CLI missing: composer offers "Plain shell" as the template.'] },
+
+  s2: { flow: 'First session', title: 'Agent running', render: () => win('ghostties · new session', projects(`<div class="sec">Active</div>${R('new session', { dot: 'run' })}`), `<div class="term"><span class="d">✻ Claude Code</span>
+
+&gt; <span class="d">what would you like to do?</span></div>`),
+    what: ['Session row appears under Active with a running dot.', 'Prototype: click the session row to simulate the agent asking for permission.'], edge: [],
+    hook: w => { const r = w.querySelectorAll('.row'); const last = r[r.length - 1]; last.setAttribute('data-go', 's3'); last.tabIndex = 0; } },
+
+  s3: { flow: 'First "needs you"', title: 'Agent waiting', render: () => win('ghostties · new session', projects(`<div class="sec">Needs you</div>${R('new session', { dot: 'wait' })}<div class="callout"><b>That's "needs you"</b>Waiting agents show here, in the menu bar and as a notification.</div>`), `<div class="term">Do you want to run <b>swift test</b>?
+  ❯ 1. Yes
+    2. Yes, and don't ask again
+    3. No</div>`, `<div class="banner"><b>Ghostties</b><br>new session needs you · ghostties<div class="btns" style="margin-top:.4em">${go('s4', 'Show', 'b pri')}</div></div>`),
+    what: ['The aha moment: status, menu bar, notification at once.', 'Callout appears once ever.'], edge: ['Hooks not connected: no state change. Settings shows why.'] },
+
+  s4: { flow: 'First "needs you"', title: 'Answered', render: () => win('ghostties · new session', projects(`<div class="sec">Active</div>${R('new session', { dot: 'run' })}`), `<div class="term">  ❯ 1. Yes
+<span class="ok">● Running swift test…</span></div>`),
+    what: ['Answering returns the row to running. Loop learned.'], edge: [] },
+
+  u1: { flow: 'Existing user', title: 'Upgrade, hooks missing', render: () => win('ghostties', projects(`<div class="callout"><b>See when agents need you</b>Connect Claude Code so this sidebar can show waiting sessions.<div class="btns" style="margin-top:.4em">${go('s1u', 'Later', 'b')}${go('w4u', 'Connect', 'b pri')}</div></div>`), shell),
+    what: ['Existing users never see the welcome sheet.', 'Only what\'s missing for them is offered, once.'], edge: ['Hooks already connected: nothing shown at all.'] },
+
+  w4u: { flow: 'Existing user', title: 'Connect (single step)', render: () => win('ghostties', projects(), shell, sheet(`<h3>See when an agent needs you</h3>
+      <div class="opt">${ck(true)} Claude Code <small>edits ~/.claude/settings.json</small></div>
+      <div class="diff">+ "hooks": { "Stop", "Notification", … }</div>
+      <div class="btns">${go('s1u', 'Cancel', 'b')}${go('s1u', 'Connect', 'b pri')}</div>`)),
+    what: ['The same hooks step, alone.'], edge: [] },
+
+  s1u: { flow: 'Existing user', title: 'Back to work', render: () => win('ghostties', projects(), shell), what: ['Done. Nothing else interrupts.'], edge: [] },
+
+  r1: { flow: 'Re-entry', title: 'Help menu', render: () => win('Ghostties', projects(), shell, `<div class="menu"><div class="muted">Help</div><hr><div>Ghostties Help</div>${go('w1', '<div>Show Welcome</div>')}${go('r2', '<div>Agent Setup…</div>')}<hr><div>Send Feedback</div></div>`),
+    what: ['Welcome is re-enterable from Help.'], edge: [] },
+
+  r2: { flow: 'Re-entry', title: 'Settings › Agents', render: () => win('Settings', `<div class="sec">Settings</div>${R('General', { nog: 1 })}${R('Agents', { nog: 1, cls: 'sel' })}${R('Sidebar', { nog: 1 })}`, `<h3 style="margin:0 0 .6em">Agents</h3>
+      <div class="opt">Claude Code <small class="ok">signed in · status connected</small></div>
+      <div class="opt">Codex <small class="ok">found · status connected</small></div>
+      <div class="opt">Aider <small>not found</small></div>
+      <div class="btns" style="margin-top:.8em">${go('r2', 'Disconnect status hooks', 'b')}${go('r2', 'Check again', 'b pri')}</div>`),
+    what: ['One place to see and undo everything onboarding did.'], edge: [] },
+};
+
+// ---------- flow map ----------
+const FLOWS = [
+  ['First launch', 'Happy path, ~1 min', ['w1', 'w2', 'w3', 'w4', 'w5', 'w5s', 'w6', 'w7', 'c1']],
+  ['No agent CLI', 'Install hint, continue plain', ['w3', 'w3x', 'w6']],
+  ['Not signed in', 'Agent\'s own login', ['w3', 'w3t', 'w3ok', 'w4']],
+  ['No projects found', 'Manual folder', ['w6', 'w6f', 'w7']],
+  ['Skipped setup', 'Resume any time', ['w1', 's0', 'w2']],
+  ['First session', '⌘T to running', ['w7', 'c1', 's2']],
+  ['First "needs you"', 'The aha moment', ['s2', 's3', 's4']],
+  ['Existing user', 'Upgrade, no welcome', ['u1', 'w4u', 's1u']],
+  ['Re-entry', 'Undo and revisit', ['r1', 'w1', 'r2']],
+];
+const scenFor = { 'No agent CLI': 'noagent', 'Not signed in': 'signin', 'No projects found': 'noproj', 'Existing user': 'upgrade' };
+function drawMap() {
+  document.getElementById('map').innerHTML = FLOWS.map(([n, sub, ids]) => `<div class="flow"><div class="fname"><b>${n}</b><span>${sub}</span></div><div class="chain">${ids.map((id, i) => `${i ? '<span class="arr">→</span>' : ''}<button type="button" class="chip ${id === cur ? 'on' : ''}" data-jump="${id}" data-flow="${n}">${S[id].title}</button>`).join('')}</div></div>`).join('');
+}
+document.getElementById('map').addEventListener('click', e => {
+  const b = e.target.closest('[data-jump]'); if (!b) return;
+  const s = scenFor[b.dataset.flow]; if (s && s !== scen) setScen(s, false);
+  nav(b.dataset.jump);
+  document.getElementById('win').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+// ---------- render ----------
+function render() {
+  const s = S[cur], w = document.getElementById('win');
+  w.innerHTML = s.render(); if (s.hook) s.hook(w);
+  document.getElementById('notes').innerHTML = `<div class="sid">${cur} · ${s.flow}</div><h2>${s.title}</h2>
+    ${s.what.length ? `<div><div class="label">What happens</div><ul>${s.what.map(x => `<li>${x}</li>`).join('')}</ul></div>` : ''}
+    ${s.edge.length ? `<div><div class="label">Edge cases</div><ul>${s.edge.map(x => `<li>${x}</li>`).join('')}</ul></div>` : ''}
+    <p class="muted" style="font-size:12px">Scenario: ${SCEN[scen].label}</p>`;
+  drawMap();
+}
+function nav(id) { if (id === cur) { render(); return; } hist.push(cur); if (id === 'w6' && cur === 'w6f') added = 1; cur = id; render(); }
+document.getElementById('win').addEventListener('click', e => { const t = e.target.closest('[data-go]'); if (t) nav(t.dataset.go); });
+document.getElementById('win').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-go]')) { e.preventDefault(); nav(e.target.dataset.go); } });
+document.getElementById('back').onclick = () => { if (hist.length) { cur = hist.pop(); render(); } };
+document.getElementById('restart').onclick = () => setScen(scen, true);
+document.getElementById('hot').onchange = e => document.getElementById('win').classList.toggle('showhot', e.target.checked);
+function setScen(k, restart = true) {
+  scen = k; added = 0; hist = [];
+  [...document.querySelectorAll('#scen button')].forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
+  if (restart) { cur = SCEN[k].start; render(); }
+}
+document.getElementById('scen').innerHTML = Object.entries(SCEN).map(([k, v]) => `<button type="button" data-k="${k}" aria-pressed="${k === scen}">${v.label}</button>`).join('');
+document.getElementById('scen').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setScen(b.dataset.k, true); });
+render();
+</script>
