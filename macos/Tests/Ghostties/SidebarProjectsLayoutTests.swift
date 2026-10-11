@@ -378,10 +378,10 @@ final class SidebarProjectsLayoutTests: XCTestCase {
 
     // MARK: - Tile dials (project / thread, per context)
 
-    /// Unset, the sidebar draws 30pt project tiles with a 13pt monogram (11
-    /// for two letters), 30pt chips, and the chip's glyph at "Row ghost
-    /// size"; the rail draws them a third larger (Sean, 2026-10-10): 40pt
-    /// tiles with an 18pt monogram (16 for two), 40pt chips, a 26pt glyph.
+    /// Unset, the sidebar draws 32pt project tiles with a 13pt monogram (11
+    /// for two letters), 32pt chips, and a 16pt chip glyph; the rail draws
+    /// the tiles and chips a quarter larger (Sean, 2026-10-10): 40pt, with
+    /// the same 13pt monogram (11 for two) and 16pt glyph.
     /// Each dial, written alone, moves exactly its own value and nothing in
     /// the other context or the other tile.
     func testTileDialsDefaultToTodayAndMoveIndependently() {
@@ -397,12 +397,12 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         ]
         let defaults: [CGFloat] = withDials {
             XCTAssertEqual(RailProjectTile.textSize(.sidebar, letters: 2), 11)
-            XCTAssertEqual(RailProjectTile.textSize(.rail, letters: 2), 16)
+            XCTAssertEqual(RailProjectTile.textSize(.rail, letters: 2), 11)
             XCTAssertEqual(SidebarListRowChrome<Text, Text>.glyphSlotWidth, 32)
             XCTAssertEqual(RailProjectColumn.columnWidth(anchorCount: 5, inset: RailProjectColumn.columnInset), 48)
             return probes.map { $0.read() }
         }
-        XCTAssertEqual(defaults, [32, 13, 32, 16, 40, 18, 40, 24])
+        XCTAssertEqual(defaults, [32, 13, 32, 16, 40, 13, 40, 16])
 
         for (index, probe) in probes.enumerated() {
             let written: CGFloat = 23
@@ -428,7 +428,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         XCTAssertTrue(SidebarDialTuning.retiredKeys.contains(SidebarDialTuning.retiredRailChipSizeOffsetKey))
     }
 
-    /// A project tile past the 30pt header grows the header that hosts it
+    /// A project tile past the 32pt header grows the header that hosts it
     /// (in its own context only), so the group card and the rail column,
     /// measured from the header's frame, still enclose the tile with their
     /// inset on every side. Unset, the sidebar's header stays 32 and the

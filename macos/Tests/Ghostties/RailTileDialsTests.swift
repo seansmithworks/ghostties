@@ -23,7 +23,7 @@ struct RailTileDialsTests {
         Case(name: "Project tile size", key: SidebarDialTuning.railProjectTileSizeKey,
              set: { $0.railProjectTileSize = 31 }, read: \.railTileSize, expected: 31),
         Case(name: "Project tile text", key: SidebarDialTuning.railProjectTileTextKey,
-             set: { $0.railProjectTileText = 13 }, read: \.railTileText, expected: 13),
+             set: { $0.railProjectTileText = 15 }, read: \.railTileText, expected: 15),
         Case(name: "Thread tile size", key: SidebarDialTuning.railThreadTileSizeKey,
              set: { $0.railThreadTileSize = 29 }, read: \.railChipSize, expected: 29),
         Case(name: "Thread tile icon", key: SidebarDialTuning.railThreadTileIconKey,

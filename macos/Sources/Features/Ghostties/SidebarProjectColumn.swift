@@ -24,8 +24,8 @@ enum RailProjectColumn {
     /// the 8pt grid). Not "Row ghost size", which the Sessions rows keep.
     static let defaultSidebarThreadTileIcon: CGFloat = 16
     /// The rail's status glyph inside its chip, unset: the sidebar's 16pt
-    /// glyph scaled with the tile, 32 to 40 (Sean, 2026-10-10: 24).
-    static let defaultRailThreadTileIcon: CGFloat = 24
+    /// glyph in the rail's larger chip (Sean, 2026-10-10).
+    static let defaultRailThreadTileIcon: CGFloat = 16
     static let defaultChipCornerRadius: CGFloat = RailProjectTile.cornerRadius
     /// The rail column: the tile plus this margin on every side (option D:
     /// 4, a 38pt column round the 30pt tile).

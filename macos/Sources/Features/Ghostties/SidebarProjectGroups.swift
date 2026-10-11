@@ -513,12 +513,12 @@ enum RailProjectTile {
     /// A one-letter monogram's font size: what the sidebar's "Project tile
     /// text" dial reads unset.
     static let defaultTextSize: CGFloat = 13
-    /// The rail's monogram, unset: scaled with the rail's tile (16 for two
-    /// letters).
-    static let defaultRailTextSize: CGFloat = 18
+    /// The rail's monogram, unset: the sidebar's size, so the rail's larger
+    /// tile holds the same text (Sean, 2026-10-10).
+    static let defaultRailTextSize: CGFloat = 13
     /// The monogram's font size in `context` ("Project tile text"); a
-    /// two-letter monogram draws 2pt smaller (13 / 11 in the sidebar, 18 / 16
-    /// on the rail, at the defaults).
+    /// two-letter monogram draws 2pt smaller (13 / 11 in the sidebar and on
+    /// the rail, at the defaults).
     static func textSize(_ context: SidebarTileContext, letters: Int) -> CGFloat {
         let text = switch context {
         case .sidebar: SidebarDialTuning.sidebarProjectTileText()

@@ -34,13 +34,14 @@ struct SidebarMorphMetricsTests {
     }
 
     /// Option D's rail, with the rail's tiles a third larger (Sean,
-    /// 2026-10-10): 40pt tile and chip, 24pt glyph.
+    /// 2026-10-10): 40pt tile and chip, 16pt glyph
+    /// (the content stays at the sidebar's size).
     @Test func railEndMatchesOptionD() {
         let m = metrics(1)
         #expect(m.tileCenterX == 49, "centred on the 98pt rail")
         #expect(m.tileSize == 40)
         #expect(m.chipSize == 40)
-        #expect(m.glyphSize == 24)
+        #expect(m.glyphSize == 16)
         #expect(m.labelOpacity == 0)
         let column = m.card(hasRows: true)
         #expect(column.width == 48, "tile ±4")
