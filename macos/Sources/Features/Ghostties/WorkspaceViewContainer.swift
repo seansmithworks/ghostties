@@ -644,6 +644,8 @@ class WorkspaceViewContainer: NSView {
     #if DEBUG
     var isRailRevealedForTesting: Bool { railRevealTarget }
     var railHoverForTesting: RailHoverReveal { railHover }
+    /// The sidebar's spring, for tests that step it frame by frame.
+    var motionForTesting: SidebarMotionDriver { motion }
     #endif
 
     /// True while `applyCollapseCrossfadeSidebarView` has both
@@ -1664,6 +1666,18 @@ class WorkspaceViewContainer: NSView {
         setCardLeadingClamp(nil)
     }
 
+    /// Where the card's leading edge is, from the constraints rather than the
+    /// frame (a layout pass behind a spring that is still moving). While the
+    /// clamp holds, the sidebar's edge plus gap can overshoot past the card
+    /// (the 999 equality is broken), so the card is that sum held inside the
+    /// clamp. A retarget's clamp must start here, or lifting the ceiling
+    /// snaps the card forward by the overshoot.
+    private var cardLeadingFromConstraints: CGFloat {
+        let attached = sidebarWidthConstraint.constant + shadowHostLeadingToSidebar.constant
+        guard cardLeadingFloor.isActive else { return attached }
+        return min(max(attached, cardLeadingFloor.constant), cardLeadingCeiling.constant)
+    }
+
     /// Bounds the card's leading edge to `range` while the spring runs, or
     /// lifts the bounds (nil).
     private func setCardLeadingClamp(_ range: ClosedRange<CGFloat>?) {
@@ -2417,9 +2431,7 @@ class WorkspaceViewContainer: NSView {
             applyTransitionAlphas(for: newMode)
             let targetWidth = targets.first { $0.0 === sidebarWidthConstraint }?.1 ?? sidebarWidthConstraint.constant
             let targetGap = targets.first { $0.0 === shadowHostLeadingToSidebar }?.1 ?? shadowHostLeadingToSidebar.constant
-            // From the constants, not the frame: the frame is a layout pass
-            // behind a spring that is still moving.
-            let cardFrom = sidebarWidthConstraint.constant + shadowHostLeadingToSidebar.constant
+            let cardFrom = cardLeadingFromConstraints
             let cardTo = targetWidth + targetGap
             setCardLeadingClamp(min(cardFrom, cardTo)...max(cardFrom, cardTo))
             let shadowFrom = Double(railRevealBacking.layer?.shadowOpacity ?? 0)
@@ -2734,7 +2746,7 @@ class WorkspaceViewContainer: NSView {
             ]
             if pushes {
                 targets.append((shadowHostLeadingToSidebar, cardGap))
-                let cardFrom = sidebarWidthConstraint.constant + shadowHostLeadingToSidebar.constant
+                let cardFrom = cardLeadingFromConstraints
                 let cardTo = targetWidth + cardGap
                 setCardLeadingClamp(min(cardFrom, cardTo)...max(cardFrom, cardTo))
             }

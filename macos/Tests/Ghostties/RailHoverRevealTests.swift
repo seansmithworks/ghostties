@@ -352,4 +352,67 @@ struct RailHoverRevealContainerTests {
         #expect(container.sidebarModeForTesting == .pinned)
         #expect(!container.isRailRevealedForTesting)
     }
+
+    /// Steps the spring one 120Hz frame at a time, laying out after each,
+    /// until the opening motion reaches its peak overshoot.
+    private func stepToPeakOvershoot(_ container: WorkspaceViewContainer) -> Bool {
+        let motion = container.motionForTesting
+        for _ in 0..<240 {
+            motion.step(1.0 / 120)
+            container.layoutSubtreeIfNeeded()
+            if motion.progress > 1 && motion.velocity <= 0 { return true }
+        }
+        return false
+    }
+
+    /// After a collapse retargets an opening at its peak overshoot: the
+    /// card starts from where the clamp held it, never past it, and only
+    /// moves back toward the rail — no forward snap on the first frame.
+    private func expectCardNeverSnapsForward(_ container: WorkspaceViewContainer, from held: CGFloat) {
+        let motion = container.motionForTesting
+        container.layoutSubtreeIfNeeded()
+        #expect(abs(container.cardFrameForTesting.minX - held) <= 1)
+        var last = container.cardFrameForTesting.minX
+        var frames = 0
+        while motion.isRunning && frames < 240 {
+            motion.step(1.0 / 120)
+            container.layoutSubtreeIfNeeded()
+            let x = container.cardFrameForTesting.minX
+            #expect(x <= held + 0.5)
+            #expect(x <= last + 1)
+            last = x
+            frames += 1
+        }
+        #expect(frames > 0)
+    }
+
+    /// Push reveal, hover-out at peak overshoot: the sidebar has overshot
+    /// past the card's open x, and the card is held there by the clamp.
+    @Test func pushRevealCollapsedAtPeakOvershootNeverSnapsTheCard() {
+        let rig = makeRig()
+        defer { rig.close() }
+        let container = rig.container
+        reveal(container, .push)
+        #expect(stepToPeakOvershoot(container))
+        let held = container.cardFrameForTesting.minX
+        container.railHoverForTesting.dismiss(pointerInside: false)
+        expectCardNeverSnapsForward(container, from: held)
+    }
+
+    /// Cmd+S reversing an opening at its peak overshoot: the same hold.
+    @Test func toggleReversedAtPeakOvershootNeverSnapsTheCard() {
+        let rig = makeRig()
+        defer { rig.close() }
+        let container = rig.container
+        container.toggleSidebar()
+        #expect(container.sidebarModeForTesting == .pinned)
+        #expect(stepToPeakOvershoot(container))
+        let held = container.cardFrameForTesting.minX
+        // Past the toggle's 0.25s debounce, without ticking the spring: the
+        // overshoot lasts to ~0.5s, so a real second Cmd+S lands in it.
+        Thread.sleep(forTimeInterval: 0.3)
+        container.toggleSidebar()
+        #expect(container.sidebarModeForTesting == .collapsed)
+        expectCardNeverSnapsForward(container, from: held)
+    }
 }
