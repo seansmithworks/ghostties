@@ -3305,3 +3305,22 @@ Done: all four fix branches merged (appearance → main as #204; others into vne
 - [ ] **Parallel test processes share the sidebar dial UserDefaults suite** (2026-10-07) — a process starting up clears it, so a dial can vanish mid-render in another process's test. Fixed only in the History placement tests; existing dial tests are open to the same race. Fix: per-process suite name. *parked*
 - [ ] **Rail has no scroll view** (2026-10-07) — a very long rail list overflows (pre-existing). *parked*
 - [ ] **Lock it → PR for beta.26** (carried 2026-10-07) — `feat/vnext-lock-it` @ 4fa72730b (pushed, unmerged): first-pass baked defaults + selected row = hover footprint + History placement dial (default bottom), all reviewer-APPROVED. On Sean's "done tuning": re-snapshot `defaults read com.seansmithdesign.ghostties.dev | grep sidebarDial` and re-bake (his tuning moved after the first snapshot), merge into feat/sidebar-vnext, full unfiltered suite on the combined tree, PR to main with before/after captures + Merge Danger, then message the "Ghostties Clean Up" thread (beta.26 tag owner) that it merged.
+
+## 2026-10-11 — wrap-continue (sidebar morph thread, session d50f2d3b)
+
+State: `feat/sidebar-morph` @ 41d5c842d pushed. Stacked on integrate/vnext-dials-sessions → feat/sidebar-vnext (#205 head b5577ba9b). Full suite on 67699f7b9 (Light): 1710 pass / 1 fail (env-only stateDir test, fixed on `fix/statedir-test-capture-bundle` a94f5428a, pushed, no PR) / 1 skip. 41d5c842d: targeted tray suites only (9/9).
+
+- [ ] Sean's Dev pass on 41d5c842d (Dev running from .build-morph, DialKit open); checklist in session scratchpad pr205/dev-pass.md. | carried
+- [ ] Fold into #205 on Sean's OK: ff feat/sidebar-vnext → feat/sidebar-morph + cherry-pick a94f5428a; full suite on the folded head; post the drafted PR body (scratchpad pr205/body.md; image placeholders → pr-assets branch). | carried
+- [ ] DECIDE OR KILL: Reduce-Transparency dark tray edge is now dark (canvasBackgroundDark, ~1.14:1 vs chrome; was white@0.35, 3.13:1) per Sean's "rim must be dark". Strawman: keep dark; icons still 5.45:1. | carried
+- [ ] DECIDE OR KILL: `ember` stroke palette uses waitingTerracotta, against DESIGN.md "terracotta reserved for waiting". Strawman: cut ember. | carried
+- [ ] One-clock: panel steps with AppKit's constraint ticks (6–10 steps/transition in Debug); confirm smoothness in Release. View-mode toggle mid-morph leaves morphClock un-landed (bounded; one-line `morphClock?.land()` where generation bumps). | parked
+- [ ] Stale comments: SessionRowGlyphSlotTests.swift:245-249; SidebarSessionsTabSelectionTests.swift:68 harmless Spacer; canvasBackgroundDark comment says #2D2D2D (is #2E2E2E). | parked
+- [ ] Dev defaults hold 8 dead dial keys (trayMargin, selectedPillHeight, header*, selectedCard*) — no readers. | parked
+
+## Teased
+
+- [ ] (2026-10-10, sidebar morph) "there is likely a future where I'm going to change that into ghost characters or customizable things" — project tile monograms → ghost characters / customizable marks.
+- [ ] (2026-10-10, sidebar morph) "the status icons are still a friction point of how you recognize what something is at a glance ... figure out that a little bit more functional in the future" — rail status glyph recognizability.
+- [ ] (2026-10-10) `ComposerSingleLineStyleTests/singleLineFieldTextIsInsetFromTheCardsLeftEdge()` fails only on Dark-appearance full runs — make it appearance-independent. Not caused by sidebar-morph.
+- [ ] Rail hover-reveal (Sean, 2026-10-11): "instead of the popover... when hovering over the rail the sidebar gets revealed temporarily. same animation. if you hover for ~1-2 seconds it animates." Decided: NEW PR after #205. Strawman: 0.6s dwell (Sean said 1–2s — confirm), overlay the terminal (no reflow) using the morph, ~0.3s exit grace, click-through collapses, Cmd+S still pins, retires the Flow 09 popover, DialKit dwell + off switch.
