@@ -453,19 +453,27 @@ struct MorphRailOnlyFade: ViewModifier {
     }
 }
 
-/// The space the tray takes under the list: the horizontal bar's on the
-/// sidebar, the rail's taller stack on the rail, following the morph's
-/// progress frame by frame (`height(progress:railWidth:)`), so it never
-/// jumps when a toggle writes its target at t=0 (keyframe spec, defect 2).
-struct MorphTrayReserve: View {
+/// The tray's height as a bottom inset on whatever sits under it: the
+/// horizontal bar's on the sidebar, the rail's taller stack on the rail,
+/// following the morph's progress frame by frame (`height(progress:railWidth:)`),
+/// so it never jumps when a toggle writes its target at t=0 (keyframe spec,
+/// defect 2). Never a layout slot under the list: the tray floats over it
+/// (Flow 07). On a scroll view (`scrolls`) it is a bottom safe-area inset,
+/// so the viewport runs to the panel's bottom, rows scroll under the glass,
+/// and the last row's resting place (and any `scrollTo`) clears the tray.
+/// On anything else it is plain bottom padding.
+struct MorphTrayReserve: ViewModifier {
+    var scrolls = false
+    /// False, the inset is zero (same view, so toggling it keeps identity).
+    var isActive = true
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var override
     /// The rail's width as the tray reads it (`EnvironmentValues.sidebarRailWidth`),
-    /// so the reservation and the rail tray's pills agree.
+    /// so the inset and the rail tray's pills agree.
     @Environment(\.sidebarRailWidth) private var railWidth
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
-    /// The reservation at `progress`: the horizontal tray's at 0, the rail
+    /// The inset at `progress`: the horizontal tray's at 0, the rail
     /// stack's at 1, on a straight line between.
     static func height(progress: CGFloat, railWidth: CGFloat) -> CGFloat {
         SidebarMorphMetrics.lerp(
@@ -475,25 +483,33 @@ struct MorphTrayReserve: View {
         )
     }
 
-    var body: some View {
-        Color.clear
-            .modifier(Frame(progress: override ?? widthModel.morph, railWidth: railWidth))
-            .accessibilityHidden(true)
+    func body(content: Content) -> some View {
+        content.modifier(Inset(progress: override ?? widthModel.morph, railWidth: railWidth, scrolls: scrolls, isActive: isActive))
     }
 
-    /// Interpolates `progress` on the toggle's transaction, so the height
+    /// Interpolates `progress` on the toggle's transaction, so the inset
     /// is read per frame, not at the target.
-    private struct Frame: ViewModifier, Animatable {
+    private struct Inset: ViewModifier, Animatable {
         var progress: CGFloat
         let railWidth: CGFloat
+        let scrolls: Bool
+        let isActive: Bool
 
         var animatableData: CGFloat {
             get { progress }
             set { progress = newValue }
         }
 
+        @ViewBuilder
         func body(content: Content) -> some View {
-            content.frame(height: MorphTrayReserve.height(progress: progress, railWidth: railWidth))
+            let height = isActive ? MorphTrayReserve.height(progress: progress, railWidth: railWidth) : 0
+            if scrolls {
+                content.safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: height).accessibilityHidden(true)
+                }
+            } else {
+                content.padding(.bottom, height)
+            }
         }
     }
 }

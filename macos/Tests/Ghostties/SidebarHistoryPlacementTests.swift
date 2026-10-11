@@ -47,9 +47,10 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     }
 
     /// The sidebar column as the app composes it: the expanded Sessions list
-    /// (mirroring `WorkspaceSidebarView`: titlebar band, list, spacer, the
-    /// tray's reserved space) or the rail, with the opaque tray overlaid at
-    /// the bottom the way the sidebar root hosts it.
+    /// (mirroring `WorkspaceSidebarView`: titlebar band, then the list,
+    /// which runs to the bottom and insets itself for the tray) or the rail,
+    /// with the opaque tray overlaid at the bottom the way the sidebar root
+    /// hosts it.
     ///
     /// The dials are set in a private suite bound around the render
     /// (`withDials`), so no other test reads or clears them.
@@ -97,8 +98,6 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             column = AnyView(VStack(spacing: 0) {
                 Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
                 RecentsListView()
-                Spacer(minLength: 0)
-                Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: false))
             })
         }
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))

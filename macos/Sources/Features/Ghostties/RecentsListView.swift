@@ -142,17 +142,21 @@ struct RecentsListView: View {
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
                 emptyState
+                    .modifier(MorphTrayReserve())
             } else {
+                // With History pinned below it, the list stops at History;
+                // without, it runs under the floating tray.
+                let underTray = layout.footer.isEmpty
                 #if DEBUG
                 if skipScrollViewForTesting {
                     // See the doc comment on the `previewDragState` init.
                     sectionsContent(displaySections, slots: layout.list)
                         .modifier(SidebarColumnPadding())
                 } else {
-                    sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
+                    sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds, underTray: underTray)
                 }
                 #else
-                sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
+                sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds, underTray: underTray)
                 #endif
             }
 
@@ -160,7 +164,7 @@ struct RecentsListView: View {
 
             // History, outside the scrolling area, so a long list never
             // scrolls it away, one History-to-tray gap above the tray
-            // (`MorphHistoryFooterGap`).
+            // (`MorphHistoryFooterGap`), clear of the floating tray.
             if !store.sessions.isEmpty && !layout.footer.isEmpty {
                 VStack(spacing: SidebarDialTuning.rowGap()) {
                     ForEach(layout.footer, id: \.self) { slot in
@@ -169,6 +173,7 @@ struct RecentsListView: View {
                 }
                 .modifier(SidebarColumnPadding(horizontalOnly: true))
                 .modifier(MorphHistoryFooterGap())
+                .modifier(MorphTrayReserve())
             }
         }
         .background(.clear)
@@ -292,7 +297,7 @@ struct RecentsListView: View {
     /// animation, accessibility label, and the auto-scroll edge zones (item
     /// 4), which need `scrollProxy` and so make no sense outside a
     /// `ScrollViewReader`.
-    private func sessionsScrollView(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot], orderedRowIds: [String]) -> some View {
+    private func sessionsScrollView(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot], orderedRowIds: [String], underTray: Bool) -> some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 sectionsContent(sections, slots: slots)
@@ -309,6 +314,9 @@ struct RecentsListView: View {
             }
             .padding(.top, -scrollBleed)
             .padding(.trailing, -trailingBleed)
+            // Rows scroll under the floating tray; the inset is where the
+            // last one rests, clear of it.
+            .modifier(MorphTrayReserve(scrolls: true, isActive: underTray))
             .accessibilityLabel("Sessions")
             .redlineFrame(RedlineID.listViewport)
             .modifier(RailScrollToKeyboardSelection(
@@ -317,7 +325,11 @@ struct RecentsListView: View {
                 scrollProxy: scrollProxy
             ))
             .overlay(alignment: .top) { autoScrollEdgeZone(direction: -1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
-            .overlay(alignment: .bottom) { autoScrollEdgeZone(direction: 1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
+            // Lifted above the tray, which would otherwise cover it.
+            .overlay(alignment: .bottom) {
+                autoScrollEdgeZone(direction: 1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy)
+                    .modifier(MorphTrayReserve(isActive: underTray))
+            }
         }
     }
 

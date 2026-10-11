@@ -67,6 +67,7 @@ struct WorkspaceSidebarView: View {
                 // Scrollable disclosure list or empty state
                 if store.sectionedProjects.isEmpty {
                     emptyState
+                        .modifier(MorphTrayReserve())
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 2) {
@@ -93,17 +94,18 @@ struct WorkspaceSidebarView: View {
                             value: store.sectionSignature
                         )
                     }
+                    // Runs under the floating tray; the inset clears it.
+                    .modifier(MorphTrayReserve(scrolls: true))
                     .accessibilityLabel("Projects")
                     .redlineFrame(RedlineID.listViewport)
                 }
             }
 
-            Spacer(minLength: 0)
-
-            // The tray itself is hosted once at the sidebar root
-            // (`SidebarTray`), over the list on the sidebar and the rail
-            // alike, so it can morph between them; this reserves its space.
-            MorphTrayReserve()
+            // The tray is hosted once at the sidebar root (`SidebarTray`),
+            // over the list on the sidebar and the rail alike, so it can
+            // morph between them. It floats over the list, which runs to
+            // the panel's bottom and insets its own content for it
+            // (`MorphTrayReserve`).
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
@@ -309,7 +311,7 @@ struct WorkspaceSidebarView: View {
 /// The rail for the layouts that don't morph (task-first, and the Projects
 /// tab's tabs layout): the session list the morphing layouts collapse to,
 /// held at the rail's end (`sidebarMorphOverride` 1), under the same
-/// titlebar band and above the same tray reservation as the sidebar. It
+/// titlebar band and under the same floating tray as the sidebar. It
 /// lists Pinned and Active as the Sessions list does (grouped by project in
 /// One view's Projects tab), whichever view the sidebar shows expanded.
 struct SidebarRailColumn: View {
@@ -320,8 +322,6 @@ struct SidebarRailColumn: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
             RecentsListView()
-            Spacer(minLength: 0)
-            MorphTrayReserve()
         }
         .environment(\.sidebarMorphOverride, 1)
         .onAppear {
