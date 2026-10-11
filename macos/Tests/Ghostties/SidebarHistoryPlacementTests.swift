@@ -176,7 +176,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let trayHeight = SidebarTray.reservedHeight(isVertical: rail) - (rail ? 0 : SidebarDialTuning.listToTrayGap())
         let chip = RailProjectColumn.chipSize(rail ? .rail : .sidebar)
         // The rail's reserved space holds no list-to-tray gap, so its footer
-        // adds all of the History-to-tray gap (`SidebarRailView`); the
+        // adds all of the History-to-tray gap (`MorphHistoryFooterGap`); the
         // expanded list's reserved space already holds the list-to-tray gap.
         let historyBottom = r.height - SidebarTray.reservedHeight(isVertical: rail)
             - (SidebarSessionSections.historyToTrayGap() - (rail ? 0 : SidebarDialTuning.listToTrayGap()))

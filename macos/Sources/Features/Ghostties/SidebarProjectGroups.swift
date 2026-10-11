@@ -275,7 +275,7 @@ private struct ToggleKeyActivation: ViewModifier {
 /// instead.
 struct ProjectAccordionHeader: View {
     /// Option D's header height, which a tile at or under 30pt sits in.
-    static let baseHeight: CGFloat = 30
+    static let baseHeight: CGFloat = SidebarMorphMetrics.headerBaseHeight
     /// The header's height in `context` (the expanded header, or the rail's
     /// tile row): grows with that context's project tile, so the tile never
     /// overflows it and the group card, measured from the header's frame,
@@ -299,15 +299,16 @@ struct ProjectAccordionHeader: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
+    @Environment(\.sidebarMorphDials) private var morphDials
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @FocusState private var isFocused: Bool
 
     var body: some View {
         let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
         let progress = morphOverride ?? widthModel.morph
-        let dials = SidebarMorphMetrics.Dials.current()
-        let travel = SidebarMorphMetrics(dials: dials, expandedWidth: widthModel.expandedWidth, railWidth: widthModel.railWidth, progress: 0).tileTravel
-        let slot = SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth
+        let metrics = widthModel.metrics(progress, dials: morphDials)
+        let dials = metrics.dials
+        let slot = dials.sidebarTileSize
         // A tap gesture, not a `Button`: the header is also the project's
         // drag handle (`RecentsListView.groupedActiveRows`), and a macOS
         // `Button` takes the mouse-down that `.onDrag` needs — the session
@@ -324,8 +325,8 @@ struct ProjectAccordionHeader: View {
                         progress: progress,
                         sizes: (dials.sidebarTileSize, dials.railTileSize),
                         textSizes: (
-                            RailProjectTile.textSize(.sidebar, letters: monogram.count),
-                            RailProjectTile.textSize(.rail, letters: monogram.count)
+                            dials.tileTextSize(rail: false, letters: monogram.count),
+                            dials.tileTextSize(rail: true, letters: monogram.count)
                         ),
                         monogram: monogram,
                         isEmpty: isEmpty,
@@ -334,7 +335,7 @@ struct ProjectAccordionHeader: View {
                         badgeCount: isCollapsed ? count : nil
                     )
                 }
-                .modifier(MorphTravel(distance: travel, progress: progress))
+                .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
                 .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
             HStack(spacing: 0) {
                 Text(name.uppercased())
@@ -361,7 +362,7 @@ struct ProjectAccordionHeader: View {
         .foregroundStyle(ink)
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-        .modifier(MorphHeight(from: Self.height(.sidebar), to: Self.height(.rail), progress: progress))
+        .modifier(MorphHeight(from: dials.sidebarHeaderHeight, to: dials.railHeaderHeight, progress: progress))
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
         // Mid-morph the header is in flight: no clicks, drags or drops land.

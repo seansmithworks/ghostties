@@ -158,10 +158,9 @@ struct RecentsListView: View {
 
             Spacer(minLength: 0)
 
-            // History and its hairline, outside the scrolling
-            // area, so a long list never scrolls it away. The tray's
-            // reserved space (`WorkspaceSidebarView`) already holds the
-            // list-to-tray gap; this adds the row gap above it.
+            // History, outside the scrolling area, so a long list never
+            // scrolls it away, one History-to-tray gap above the tray
+            // (`MorphHistoryFooterGap`).
             if !store.sessions.isEmpty && !layout.footer.isEmpty {
                 VStack(spacing: SidebarDialTuning.rowGap()) {
                     ForEach(layout.footer, id: \.self) { slot in
@@ -169,7 +168,7 @@ struct RecentsListView: View {
                     }
                 }
                 .modifier(SidebarColumnPadding(horizontalOnly: true))
-                .padding(.bottom, SidebarSessionSections.historyToTrayGap() - SidebarDialTuning.listToTrayGap())
+                .modifier(MorphHistoryFooterGap())
             }
         }
         .background(.clear)

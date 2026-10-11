@@ -764,4 +764,19 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         XCTAssertEqual(TrayGlassStyle.trayWidth, .split)
     }
 
+
+    // MARK: - Rail VoiceOver label
+
+    /// The rail shows only the glyph, so the row it is (the unified
+    /// `RecentsRowView`) names the session and its status for VoiceOver.
+    func testRailRowLabelNamesTheSessionAndItsStatus() {
+        XCTAssertEqual(
+            RecentsRowView.accessibilityLabel(name: "Claude Code 6", projectName: "atlas-api", kind: SessionIndicatorState.needsAttention.statusGlyphKind, isActive: false),
+            "Claude Code 6, in atlas-api, needs your input"
+        )
+        XCTAssertEqual(
+            RecentsRowView.accessibilityLabel(name: "A", projectName: "p", kind: .done, isActive: true),
+            "A, in p, idle, active"
+        )
+    }
 }

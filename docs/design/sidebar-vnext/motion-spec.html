@@ -388,7 +388,7 @@ summary{cursor:pointer;font-weight:600}
   <ul class="tight">
     <li><b>Projects ↔ Sessions tab switch</b> stays instant, today and proposed. It's only reachable by keyboard and menu (⌘⇧1 / ⌘⇧2), and keyboard actions don't animate.</li>
     <li><b>Row hover tint</b> stays instant both ways. You see it tens of times a minute.</li>
-    <li><b>Rail auto-scroll on keyboard selection</b> becomes instant instead of easeInOut 200 (<code>SidebarRailView.swift:248</code>). The keyboard rule wins.</li>
+    <li><b>Rail auto-scroll on keyboard selection</b> becomes instant instead of easeInOut 200 (built: <code>RailScrollToKeyboardSelection</code>, <code>SidebarProjectColumn.swift</code>). The keyboard rule wins.</li>
     <li><b>The popover moving between rows</b> stays an instant jump. A 52pt glide on every row would trail the pointer.</li>
     <li><b>The spinner</b> keeps a fixed 80ms frame step with no easing. Under Reduce Motion it's a static <code>…</code>.</li>
     <li><b>Colour and theme changes</b> never blur or travel.</li>
@@ -402,11 +402,11 @@ summary{cursor:pointer;font-weight:600}
   <table>
     <tr><th>Moment</th><th>Where</th><th>Change</th></tr>
     <tr><td>Tokens</td><td><code>WorkspaceLayout.swift</code> "Animation Tokens (D18)": add <code>Animation.sidebarSnap</code>, <code>.sidebarPop</code>, <code>.sidebarFade(_:)</code></td><td>Token swap</td></tr>
-    <tr><td>Morph: shared element</td><td><code>WorkspaceViewContainer.SidebarCollapseCrossfade</code>, <code>applyCollapseCrossfadeSidebarView</code>, <code>ExpandedGroupCard</code>, <code>RailProjectColumn</code></td><td><b>Structural.</b> Hoist the group card into <code>SidebarHostRoot</code>, the same way the tray already survives the swap, and drive its frame from <code>isCollapsedPresentation</code>. Give glyphs and tiles a +22 offset on that progress instead of crossfading two trees.</td></tr>
+    <tr><td>Morph: shared element</td><td><code>WorkspaceViewContainer.SidebarCollapseCrossfade</code>, <code>applyCollapseCrossfadeSidebarView</code>, <code>ProjectGroupCard</code> (was <code>ExpandedGroupCard</code> + <code>RailGroupColumn</code>), <code>RailProjectColumn</code></td><td><b>Structural.</b> Hoist the group card into <code>SidebarHostRoot</code>, the same way the tray already survives the swap, and drive its frame from <code>isCollapsedPresentation</code>. Give glyphs and tiles a +22 offset on that progress instead of crossfading two trees.</td></tr>
     <tr><td>Morph: label timing</td><td><code>RecentsRowView.labelAnimation</code>, <code>WorkspaceLayout.expandLabelDelay</code></td><td>Token swap (delay 100 + 12·i, cap 8. Out 90)</td></tr>
     <tr><td>Dropped presses</td><td><code>WorkspaceViewContainer.transitionTo</code> :1896 (<code>> 0.25</code>)</td><td>Token swap → 0.06. The animator already retargets.</td></tr>
     <tr><td>Close drift</td><td><code>applyTransitionAlphas</code> plus a 16pt translate on the sidebar hosting layer</td><td>Small structural (a layer transform, not a constraint)</td></tr>
-    <tr><td>Selection trailing fade</td><td><code>SidebarRowChipBackground</code>, <code>SidebarRowCardBackground</code>, <code>ExpandedGroupCard</code>, rail chip</td><td>Small structural: asymmetric <code>.transition</code> (insertion <code>.identity</code>, removal fade 100)</td></tr>
+    <tr><td>Selection trailing fade</td><td><code>SidebarRowChipBackground</code>, <code>ProjectGroupCard</code> (the wide card and the rail chip are gone: one chip in both modes)</td><td>Small structural: asymmetric <code>.transition</code> (insertion <code>.identity</code>, removal fade 100)</td></tr>
     <tr><td>Accordion + chevron</td><td><code>ProjectAccordionState.toggleAnimation</code>; row transitions in <code>RecentsListView</code> grouped <code>ForEach</code></td><td>Token swap + a row <code>.transition</code></td></tr>
     <tr><td>Tray</td><td><code>TrayIconButton</code>; <code>sidebarTrayItems</code> <code>tapEffect</code>; the <code>SidebarTray</code> Reduce Motion transaction</td><td>Token swap + a press <code>ButtonStyle</code>. Drop <code>.bounce</code></td></tr>
     <tr><td>Glyph swap</td><td><code>SessionStatusGlyph</code> body</td><td>Small structural: <code>.id(kind)</code> + transition (blur, scale, opacity). Pop on <code>.needsInput</code></td></tr>
@@ -434,10 +434,10 @@ summary{cursor:pointer;font-weight:600}
       <tr><td>Toggle debounce</td><td>drops any transition within 250ms of the last</td><td>WorkspaceViewContainer.swift:1896</td><td>n/a</td></tr>
       <tr><td>List ↔ rail content</td><td>both trees mounted, opacity crossfade on the panel curve</td><td>WorkspaceViewContainer.swift:91, :1387</td><td>Yes: easeInOut 120</td></tr>
       <tr><td>Row labels / radius</td><td>out easeOut 100. In easeOut 120 after 240+60+40·i. Radius 6→12 drawer 200 after 60</td><td>RecentsRowView.swift:316–339, WorkspaceLayout.swift:613–681</td><td>Yes: skipped</td></tr>
-      <tr><td>Group card → rail column</td><td>no own animation. Card (list tree) and column (rail tree) crossfade</td><td>SidebarRailView.swift:400</td><td>via the crossfade</td></tr>
+      <tr><td>Group card → rail column</td><td>no own animation. Card (list tree) and column (rail tree) crossfade</td><td>SidebarRailView.swift:400 (deleted; now <code>ProjectGroupCard</code>, one shape)</td><td>via the crossfade</td></tr>
       <tr><td>Tray horizontal ↔ stacked</td><td>AnyLayout axis flip rides the panel transaction</td><td>SidebarTrayItems.swift:741</td><td>Partly: snaps (:804)</td></tr>
       <tr><td>View-mode width change</td><td>easeInEaseOut 200</td><td>WorkspaceViewContainer.swift:1440</td><td>No: duration 0</td></tr>
-      <tr><td>Selection (chip, wide card, rail chip, group card, ink tile)</td><td>no animation</td><td>SidebarRailView.swift:439, SidebarTrayItems.swift:588</td><td>n/a</td></tr>
+      <tr><td>Selection (chip, wide card, rail chip, group card, ink tile)</td><td>no animation</td><td>SidebarRailView.swift:439 (deleted; now <code>SidebarRowChipBackground</code>), SidebarTrayItems.swift:588</td><td>n/a</td></tr>
       <tr><td>Accordion + chevron</td><td>withAnimation easeInOut 200. Chevron rotation in the same transaction. Default opacity row transition</td><td>SidebarProjectGroups.swift:147, :160, :318</td><td>Partly: instant</td></tr>
       <tr><td>Legacy Projects-tabs disclosure</td><td>easeInOut 200 (rows + pixel chevron)</td><td>ProjectDisclosureRow.swift:340, :589; PixelChevronView.swift:38</td><td>Yes</td></tr>
       <tr><td>Tray hover</td><td>easeInOut 150 both ways. Icon scale 1.06</td><td>SidebarTrayItems.swift:883, :918</td><td>Yes</td></tr>
@@ -445,7 +445,7 @@ summary{cursor:pointer;font-weight:600}
       <tr><td>Status glyph</td><td>spinner 80ms frames. Kind change is a hard cut</td><td>SessionStatusGlyph.swift:115–140</td><td>Yes: static …</td></tr>
       <tr><td>Rows insert / remove</td><td>none</td><td>RecentsListView.swift:200</td><td>n/a</td></tr>
       <tr><td>Drag reflow gap</td><td>spring(0.2, 1.0). Gap transition scale 0.01</td><td>RecentsListView.swift:101, :274; SessionDragReflow.swift:105</td><td>Yes</td></tr>
-      <tr><td>Drag auto-scroll / rail key scroll</td><td>linear 120 / easeInOut 200</td><td>RecentsListView.swift:678; SidebarRailView.swift:248</td><td>Yes</td></tr>
+      <tr><td>Drag auto-scroll / rail key scroll</td><td>linear 120 / easeInOut 200</td><td>RecentsListView.swift:678; SidebarRailView.swift:248 (now instant, <code>SidebarProjectColumn.swift</code>)</td><td>Yes</td></tr>
       <tr><td>Tab switch</td><td>instant (UserDefaults write from menu)</td><td>TerminalController.swift:1445, :1452</td><td>n/a</td></tr>
       <tr><td>Popover</td><td>delay 350, grace 250. Open CA easeOut 140 + 4pt slide. Close 140, no curve</td><td>SessionPopoverController.swift:182, :273; SessionPopoverCard.swift:19–26</td><td>Yes: fade 120</td></tr>
       <tr><td>Legacy list section reorder</td><td>.default on sectionSignature</td><td>WorkspaceSidebarView.swift:89</td><td>Yes</td></tr>
@@ -550,7 +550,7 @@ function mkHeader(p,g){ const r=el(p,'item hdr'); r.tile=el(r,'tile',null,g.mono
 function mkRow(p,row){ const r=el(p,'item row'); r.wcard=el(r,'wcard'); r.hov=el(r,'hov'); r.chip=el(r,'chip'); r.gl=el(r,'gl k-'+row.k); r.kind=row.k;
   r.lab=el(r,'rlab'); r.title=el(r.lab,'rtitle',null,row.t); const s=el(r.lab,'rsub'); r.subA=el(s,null); r.subA.style.position='absolute'; r.subA.textContent=SUB[row.k]; r.subEl=s; return r; }
 function windowFrame(stage,w,h){ const win=el(stage,'win',{width:px(w),height:px(h)}); const tl=el(win,'tl'); tl.innerHTML='<i></i><i></i><i></i>'; return {win,tl}; }
-function termCard(p){ const c=el(p,'tcard'); c.innerHTML='<b>~/Code/ghostties</b> on feat/sidebar-d<br>$ zig build run<br>Build complete (12.4s)<br>$ claude<br>&gt; tighten the rail morph<br>⠋ Reading SidebarRailView.swift<br>$ _'; return c; }
+function termCard(p){ const c=el(p,'tcard'); c.innerHTML='<b>~/Code/ghostties</b> on feat/sidebar-d<br>$ zig build run<br>Build complete (12.4s)<br>$ claude<br>&gt; tighten the rail morph<br>⠋ Reading SidebarMorph.swift<br>$ _'; return c; }
 function buildTray(p){ const t={cp:el(p,'pill'),tp:el(p,'pill'),b:[]}; ['plus','folder','sidebar'].forEach(k=>{ const b=el(p,'tbtn'); b.hc=el(b,'hc'); b.ic=el(b,'ic'); b.ic.innerHTML=ICON[k]; t.b.push(b); }); return t; }
 function trayGeo(H,ox=0,rx=0){ const y=H-56; return {
   exp:{cp:[ox+8,y,100,48],tp:[ox+208,y,48,48],b:[[ox+10,y],[ox+58,y],[ox+208,y]]},
@@ -798,7 +798,7 @@ class Popover extends Mock{
   constructor(sec){ super(sec,540,280); const win=el(this.stage,'win',{width:'540px',height:'280px'}); const tc=termCard(win); tc.style.left='264px';
     const rows=[{t:'sidebar motion spec',k:'working'},{t:'fix tray glass',k:'needs'},{t:'release beta.26',k:'done'},{t:'deploy preview',k:'working'}];
     const g={name:'Ghostties',mono:'G',rows}; const h=mkHeader(win,g); h.style.transform='translateY(16px)';
-    this.content={working:['Last prompt · now reading','tighten the rail morph\n⠋ SidebarRailView.swift'],needs:['Wants to run','swift test --parallel']};
+    this.content={working:['Last prompt · now reading','tighten the rail morph\n⠋ SidebarMorph.swift'],needs:['Wants to run','swift test --parallel']};
     this.rowEls=rows.map((r,i)=>{ const e=mkRow(win,r); const y=16+34+52*i; e.style.transform=`translateY(${y}px)`; e.gl.textContent=glyphText(r.k,0); e.y=y; e.k=r.k;
       e.onpointerenter=()=>{ e.hov.style.opacity=1; this.rowEnter(i); }; e.onpointerleave=()=>{ e.hov.style.opacity=0; this.rowLeave(i); }; return e; });
     this.pop=el(win,'pop'); this.pk=el(this.pop,'k'); this.pc=el(this.pop,'cmd');

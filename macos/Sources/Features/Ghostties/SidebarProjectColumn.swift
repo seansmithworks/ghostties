@@ -143,6 +143,7 @@ struct ProjectGroupCard: View {
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
+    @Environment(\.sidebarMorphDials) private var morphDials
     let anchors: [Anchor<CGRect>]
 
     /// How far the expanded card reaches past the row frames on each side:
@@ -165,14 +166,17 @@ struct ProjectGroupCard: View {
     }
 
     var body: some View {
-        let progress = morphOverride ?? widthModel.morph
-        let railWidth = widthModel.railWidth
+        let metrics = widthModel.metrics(morphOverride ?? widthModel.morph, dials: morphDials)
         GeometryReader { proxy in
             if let first = anchors.first {
                 let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
                 ProjectGroupCardShape(
-                    progress: progress,
-                    ends: .init(union: union, anchorCount: anchors.count, originX: proxy.frame(in: .global).minX, railWidth: railWidth)
+                    metrics: metrics,
+                    progress: metrics.progress,
+                    hasRows: anchors.count > 1,
+                    unionMinY: union.minY,
+                    unionMaxY: union.maxY,
+                    originX: proxy.frame(in: .global).minX
                 )
             }
         }
@@ -181,54 +185,20 @@ struct ProjectGroupCard: View {
     }
 }
 
-/// The card at one step of the morph.
+/// The card at one step of the morph: `SidebarMorphMetrics.card` at this
+/// frame's progress for its span, inset and trims, set round the group's
+/// laid-out tile and last row.
 private struct ProjectGroupCardShape: View, Animatable {
-    /// Both ends of the card for one laid-out group, in the card's local
-    /// space (its `GeometryReader`), and the trims that place its top and
-    /// bottom edges round the tile and the last chip.
-    struct Ends {
-        var sidebarMinX: CGFloat, sidebarWidth: CGFloat
-        var railMinX: CGFloat, railWidth: CGFloat
-        var unionMinY: CGFloat, unionMaxY: CGFloat
-        var tileTrim: (from: CGFloat, to: CGFloat)
-        var chipTrim: (from: CGFloat, to: CGFloat)
-        var inset: (from: CGFloat, to: CGFloat)
-        var hasRows: Bool
-
-        /// `originX`: the local space's x from the sidebar's leading edge,
-        /// where the rail's centre (`railWidth / 2`) is measured from.
-        @MainActor
-        init(union: CGRect, anchorCount: Int, originX: CGFloat, railWidth: CGFloat) {
-            hasRows = anchorCount > 1
-            let cardInset = SidebarDialTuning.groupCardInset()
-            let columnInset = RailProjectColumn.columnInset
-            let outset = ProjectGroupCard.horizontalOutset(
-                cardInset: cardInset,
-                rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
-                chipOverhang: RailProjectColumn.sideOverhang(anchorCount: anchorCount, context: .sidebar)
-            )
-            sidebarMinX = union.minX - outset
-            sidebarWidth = max(0, union.width + outset * 2)
-            let column = RailProjectColumn.columnWidth(anchorCount: anchorCount, inset: columnInset)
-            railMinX = railWidth / 2 - originX - column / 2
-            self.railWidth = column
-            unionMinY = union.minY
-            unionMaxY = union.maxY
-            func trims(_ context: SidebarTileContext) -> (tile: CGFloat, chip: CGFloat) {
-                (
-                    (ProjectAccordionHeader.height(context) - RailProjectTile.size(context)) / 2,
-                    max(0, (SidebarDialTuning.rowHeight() - RailProjectColumn.chipSize(context)) / 2)
-                )
-            }
-            let sidebar = trims(.sidebar), rail = trims(.rail)
-            tileTrim = (sidebar.tile, rail.tile)
-            chipTrim = (sidebar.chip, rail.chip)
-            inset = (cardInset, columnInset)
-        }
-    }
-
+    /// The ends (dials and widths); its own progress is not used.
+    let metrics: SidebarMorphMetrics
     var progress: CGFloat
-    let ends: Ends
+    let hasRows: Bool
+    /// The group's laid-out top and bottom, in the card's local space.
+    let unionMinY: CGFloat
+    let unionMaxY: CGFloat
+    /// The local space's x from the sidebar's leading edge, where the
+    /// metrics measure from.
+    let originX: CGFloat
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -238,19 +208,17 @@ private struct ProjectGroupCardShape: View, Animatable {
     }
 
     var body: some View {
-        let lerp = { (a: CGFloat, b: CGFloat) in SidebarMorphMetrics.lerp(a, b, progress) }
-        let minX = lerp(ends.sidebarMinX, ends.railMinX)
-        let width = lerp(ends.sidebarWidth, ends.railWidth)
-        let inset = lerp(ends.inset.from, ends.inset.to)
-        let tileTrim = lerp(ends.tileTrim.from, ends.tileTrim.to)
-        let top = ends.unionMinY + tileTrim - inset
-        let bottom = max(top, ends.unionMaxY - (ends.hasRows ? lerp(ends.chipTrim.from, ends.chipTrim.to) : tileTrim) + inset)
-        RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
+        let card = SidebarMorphMetrics(
+            dials: metrics.dials, expandedWidth: metrics.expandedWidth, railWidth: metrics.railWidth, progress: progress
+        ).card(hasRows: hasRows)
+        let top = unionMinY + card.tileTrim - card.verticalInset
+        let bottom = max(top, unionMaxY - (hasRows ? card.chipTrim : card.tileTrim) + card.verticalInset)
+        RoundedRectangle(cornerRadius: card.cornerRadius, style: .continuous)
             .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
-            .frame(width: width, height: bottom - top)
+            .frame(width: card.width, height: bottom - top)
             .redlineFrame(RedlineID.groupCard)
             .morphIdentityProbe(RedlineID.groupCard)
-            .position(x: minX + width / 2, y: (top + bottom) / 2)
+            .position(x: card.minX - originX + card.width / 2, y: (top + bottom) / 2)
     }
 }
 

@@ -409,9 +409,14 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     func testRailHistoryClockIsCentredOnTheRail() throws {
         let rail = try XCTUnwrap(render(HistoryRowView(subtitle: "3 sessions", isActive: false, onTap: {}), asRail: true))
         let clock = try XCTUnwrap(ink(rail, fromX: 0, toX: width), "rail clock")
-        // The clock symbol's ink is a little heavier on its leading side,
-        // which shows at the rail's 26pt glyph.
-        XCTAssertEqual((clock.minX + clock.maxX) / 2, width / 2, accuracy: 2.0)
+        // The clock's frame is centred on the rail; its ink is not centred
+        // in its frame (the symbol's arrow side is heavier), so the
+        // expectation is the same glyph alone, at the rail's size, centred
+        // in the same row.
+        let size = RailProjectColumn.chipGlyphSize(.rail)
+        let alone = try XCTUnwrap(render(HistoryGlyph(size: size).frame(maxWidth: .infinity)))
+        let reference = try XCTUnwrap(ink(alone, fromX: 0, toX: width), "lone clock")
+        XCTAssertEqual((clock.minX + clock.maxX) / 2, (reference.minX + reference.maxX) / 2, accuracy: 0.5, "clock centred on the rail")
         XCTAssertEqual((clock.minY + clock.maxY) / 2, rowHeight / 2, accuracy: 1.0)
     }
 

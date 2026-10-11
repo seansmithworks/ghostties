@@ -35,6 +35,20 @@ struct SidebarMorphMetrics: Equatable {
         var railChipSize: CGFloat
         var sidebarGlyphSize: CGFloat
         var railGlyphSize: CGFloat
+        /// "Project tile text": a one-letter monogram's size in each context.
+        var sidebarTileText: CGFloat
+        var railTileText: CGFloat
+
+        /// The monogram's font size; two letters draw 2pt smaller
+        /// (`RailProjectTile.textSize`).
+        func tileTextSize(rail: Bool, letters: Int) -> CGFloat {
+            max((rail ? railTileText : sidebarTileText) - (letters > 1 ? 2 : 0), 1)
+        }
+
+        /// The project header's height in each context: grows with its tile
+        /// (`ProjectAccordionHeader.height`).
+        var sidebarHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, sidebarTileSize) }
+        var railHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, railTileSize) }
 
         /// The live dials, clamped as the views clamp them
         /// (`RailProjectTile.size`, `RailProjectColumn.chipSize`, …).
@@ -60,19 +74,31 @@ struct SidebarMorphMetrics: Equatable {
                 sidebarChipSize: chip(SidebarDialTuning.sidebarThreadTileSize(defaults: defaults)),
                 railChipSize: chip(SidebarDialTuning.railThreadTileSize(defaults: defaults)),
                 sidebarGlyphSize: max(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults), 0),
-                railGlyphSize: max(SidebarDialTuning.railThreadTileIcon(defaults: defaults), 0)
+                railGlyphSize: max(SidebarDialTuning.railThreadTileIcon(defaults: defaults), 0),
+                sidebarTileText: SidebarDialTuning.sidebarProjectTileText(defaults: defaults),
+                railTileText: SidebarDialTuning.railProjectTileText(defaults: defaults)
             )
         }
     }
 
+    /// Option D's project header height, which a tile at or under 30pt
+    /// sits in (`ProjectAccordionHeader.baseHeight`).
+    static let headerBaseHeight: CGFloat = 30
+
     /// The selected group's card in the expanded list and its column on the
     /// rail, as one shape: horizontal span, the inset above the tile and
-    /// below the last chip, and corner radius.
+    /// below the last chip, corner radius, and how far the tile and the
+    /// last chip sit inside their header and row (the card's top and
+    /// bottom are measured from those, not from the frames).
     struct Card: Equatable {
         var minX: CGFloat
         var width: CGFloat
         var verticalInset: CGFloat
         var cornerRadius: CGFloat
+        /// The tile's inset from its header's top and bottom.
+        var tileTrim: CGFloat
+        /// The chip's inset from its row's top and bottom.
+        var chipTrim: CGFloat
         var maxX: CGFloat { minX + width }
         var midX: CGFloat { minX + width / 2 }
     }
@@ -153,7 +179,9 @@ struct SidebarMorphMetrics: Equatable {
             minX: listMinX - outset,
             width: max(0, listMaxX - listMinX + outset * 2),
             verticalInset: dials.groupCardInset,
-            cornerRadius: dials.chipCornerRadius + dials.columnInset
+            cornerRadius: dials.chipCornerRadius + dials.columnInset,
+            tileTrim: (dials.sidebarHeaderHeight - dials.sidebarTileSize) / 2,
+            chipTrim: max(0, (dials.rowHeight - dials.sidebarChipSize) / 2)
         )
     }
 
@@ -166,7 +194,9 @@ struct SidebarMorphMetrics: Equatable {
             minX: railTileCenterX - width / 2,
             width: width,
             verticalInset: dials.columnInset,
-            cornerRadius: dials.chipCornerRadius + dials.columnInset
+            cornerRadius: dials.chipCornerRadius + dials.columnInset,
+            tileTrim: (dials.railHeaderHeight - dials.railTileSize) / 2,
+            chipTrim: max(0, (dials.rowHeight - dials.railChipSize) / 2)
         )
     }
 
@@ -179,7 +209,9 @@ struct SidebarMorphMetrics: Equatable {
             minX: lerp(from.minX, to.minX),
             width: lerp(from.width, to.width),
             verticalInset: lerp(from.verticalInset, to.verticalInset),
-            cornerRadius: lerp(from.cornerRadius, to.cornerRadius)
+            cornerRadius: lerp(from.cornerRadius, to.cornerRadius),
+            tileTrim: lerp(from.tileTrim, to.tileTrim),
+            chipTrim: lerp(from.chipTrim, to.chipTrim)
         )
     }
 }
@@ -204,10 +236,25 @@ extension EnvironmentValues {
     }
 }
 
+/// The dials, read once per sidebar tree (`SidebarMorphFrame`, re-read on
+/// every dial write) and handed to every morph leaf, so a row or header
+/// body never reads them from `UserDefaults` itself.
+private struct SidebarMorphDialsKey: EnvironmentKey {
+    static let defaultValue: SidebarMorphMetrics.Dials? = nil
+}
+
+extension EnvironmentValues {
+    var sidebarMorphDials: SidebarMorphMetrics.Dials? {
+        get { self[SidebarMorphDialsKey.self] }
+        set { self[SidebarMorphDialsKey.self] = newValue }
+    }
+}
+
 extension SidebarWidthModel {
-    /// This model's metrics at `progress` (the live dials).
-    func metrics(_ progress: CGFloat) -> SidebarMorphMetrics {
-        SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: progress)
+    /// This model's metrics at `progress`, from `dials` (the tree's, or
+    /// the live dials for a view hosted outside `SidebarMorphFrame`).
+    func metrics(_ progress: CGFloat, dials: SidebarMorphMetrics.Dials?) -> SidebarMorphMetrics {
+        SidebarMorphMetrics(dials: dials ?? .current(), expandedWidth: expandedWidth, railWidth: railWidth, progress: progress)
     }
 }
 
@@ -302,7 +349,9 @@ struct MorphLabelFade: ViewModifier {
                 WorkspaceLayout.sidebarLabelAnimation(appearing: opacity > 0, rowIndex: staggerIndex, reduceMotion: reduceMotion),
                 value: opacity
             )
-            .allowsHitTesting(progress == 0)
+            // `morph` is the target as soon as a toggle starts, so labels
+            // fading back in stay unclickable until the morph has landed.
+            .allowsHitTesting(progress == 0 && !widthModel.isMorphing)
     }
 }
 
@@ -344,6 +393,20 @@ struct MorphTrayReserve: View {
     }
 }
 
+/// The gap under the pinned History row: one History-to-tray gap above the
+/// tray. The horizontal tray's reservation already holds the list-to-tray
+/// gap; the rail's doesn't, so on the rail the footer adds all of it.
+struct MorphHistoryFooterGap: ViewModifier {
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @Environment(\.sidebarMorphOverride) private var override
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
+    func body(content: Content) -> some View {
+        let vertical = (override ?? widthModel.morph) >= 0.5
+        content.padding(.bottom, SidebarSessionSections.historyToTrayGap() - (vertical ? 0 : SidebarDialTuning.listToTrayGap()))
+    }
+}
+
 /// Hosts the one sidebar tree for every morph step: laid out at the
 /// expanded width always, leading-anchored, and clipped to the current
 /// width, so nothing re-lays out as the panel narrows; only the leaves'
@@ -357,6 +420,7 @@ struct SidebarMorphFrame<Content: View>: View {
     var body: some View {
         content
             .environment(\.sidebarTrailingGutter, WorkspaceLayout.sidebarTrailingGutter(for: .pinned))
+            .environment(\.sidebarMorphDials, .current())
             .frame(width: model.expandedWidth)
             // Every frame top-leading: a frame narrower than its child
             // centres it by default, which would slide the whole list left

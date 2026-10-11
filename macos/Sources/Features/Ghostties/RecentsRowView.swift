@@ -131,19 +131,32 @@ struct RecentsRowView: View, Equatable {
     // MARK: - Accessibility
 
     private var accessibilityLabel: String {
+        Self.accessibilityLabel(
+            name: session.name, projectName: projectName, kind: indicatorState.statusGlyphKind,
+            hookUnconfirmed: hookUnconfirmed, lastOutput: session.displayTimestamp, isActive: isActive
+        )
+    }
+
+    /// The row's VoiceOver label, on the sidebar and the rail alike (the
+    /// rail shows only the glyph, so the label carries the name): name,
+    /// project, spoken status, the hook hint, last output, active.
+    static func accessibilityLabel(
+        name: String, projectName: String, kind: SessionStatusGlyphKind,
+        hookUnconfirmed: Bool = false, lastOutput: Date? = nil, isActive: Bool
+    ) -> String {
         // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
         // renders from — this row previously stated no status at all.
-        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
+        var parts = [name, "in \(projectName)", kind.spokenStatus]
         if hookUnconfirmed {
             parts.append("Approve the Ghostties hook in Codex")
         }
-        if let ts = session.displayTimestamp {
+        if let ts = lastOutput {
             // "last output" — not a bare relative token — so a screen reader
             // has a noun for what this measures. Browsing (focus/selection)
             // no longer advances this value; without the noun, "2m" reads as
             // an event the user didn't cause. A11y string only — the visual
             // row keeps the bare relative label. See RecentsRowView.body.
-            parts.append("last output \(Self.relativeLabel(ts))")
+            parts.append("last output \(relativeLabel(ts))")
         }
         if isActive { parts.append("active") }
         return parts.joined(separator: ", ")
@@ -231,6 +244,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
+    @Environment(\.sidebarMorphDials) private var morphDials
     @State private var isHovered = false
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
@@ -240,15 +254,15 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
 
     var body: some View {
         let progress = morphOverride ?? widthModel.morph
-        let dials = SidebarMorphMetrics.Dials.current()
-        let travel = SidebarMorphMetrics(dials: dials, expandedWidth: widthModel.expandedWidth, railWidth: widthModel.railWidth, progress: 0).tileTravel
+        let metrics = widthModel.metrics(progress, dials: morphDials)
+        let dials = metrics.dials
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
             // Selection and hover are a tile-sized chip behind the glyph in
             // every list (option D): one rule; the group card is drawn only
             // around a project group.
             MorphGlyphSlot(
                 progress: progress,
-                slotWidth: Self.glyphSlotWidth,
+                slotWidth: dials.sidebarTileSize,
                 glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
                 chipSizes: (dials.sidebarChipSize, dials.railChipSize),
                 isActive: isActive,
@@ -257,7 +271,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 glyph: glyph
             )
             .redlineFrame(redlineID + ".glyph")
-            .modifier(MorphTravel(distance: travel, progress: progress))
+            .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
 
             // Title + subtitle stacked
             VStack(alignment: .leading, spacing: 1) {
