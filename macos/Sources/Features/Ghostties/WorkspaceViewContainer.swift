@@ -212,6 +212,7 @@ private struct SidebarHostRoot: View {
             }
             .environment(\.sidebarTrailingGutter, trailingGutter)
             .environment(\.sidebarRailWidth, model.railWidth)
+            .environment(\.trayShadowState, SidebarDialTuning.TrayShadowState(store.sidebarMode))
     }
 
     /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),

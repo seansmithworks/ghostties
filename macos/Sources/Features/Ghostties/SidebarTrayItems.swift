@@ -588,13 +588,17 @@ struct TrayGlassSurface: ViewModifier {
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// Which state's light shadow to draw (`SidebarHostRoot` injects the
+    /// sidebar's mode; the target mode as soon as a transition starts, so a
+    /// morph switches once rather than flickering).
+    @Environment(\.trayShadowState) private var shadowState
     var forceOpaque = false
     var interactive = false
 
     private var shape: RoundedRectangle { TrayGlassStyle.pillShape() }
 
     func body(content: Content) -> some View {
-        let look = SidebarDialTuning.trayGlass(for: colorScheme)
+        let look = SidebarDialTuning.trayGlass(for: colorScheme, state: shadowState)
         if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
             GlassEffectContainer {
                 content

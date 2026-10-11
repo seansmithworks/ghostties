@@ -889,7 +889,19 @@ private struct SidebarRailWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
 }
 
+private struct TrayShadowStateKey: EnvironmentKey {
+    static let defaultValue: SidebarDialTuning.TrayShadowState = .sidebar
+}
+
 extension EnvironmentValues {
+    /// The sidebar state whose tray shadow dials the tray draws
+    /// (`SidebarDialTuning.trayGlass(for:state:)`), injected at the sidebar
+    /// root (`SidebarHostRoot`). The sidebar's outside it.
+    var trayShadowState: SidebarDialTuning.TrayShadowState {
+        get { self[TrayShadowStateKey.self] }
+        set { self[TrayShadowStateKey.self] = newValue }
+    }
+
     /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected
     /// once at the sidebar root (`SidebarHostRoot`); the rail tray sizes its
     /// square pills from it (`RailTrayGeometry`). The rail's floor width
