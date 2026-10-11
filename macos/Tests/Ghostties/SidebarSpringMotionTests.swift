@@ -94,7 +94,9 @@ struct SidebarSpringMotionTests {
     /// A window closed mid-spring: once the driver is gone, the display
     /// link and the backstop timer stop, rather than ticking forever.
     @Test func tickerStopsWhenTheDriverGoesMidSpring() {
-        var driver: SidebarMotionDriver? = SidebarMotionDriver(view: NSView())
+        // The driver holds its view weakly; the window would own it.
+        let view = NSView()
+        var driver: SidebarMotionDriver? = SidebarMotionDriver(view: view)
         driver?.animate([(constraint(60), 256)], spring: WorkspaceLayout.sidebarMorphOpenSpring) {}
         weak var ticker = driver?.tickerForTesting
         weak var timer = ticker?.timerForTesting
@@ -103,6 +105,7 @@ struct SidebarSpringMotionTests {
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         #expect(timer == nil, "the timer is still scheduled")
         #expect(ticker == nil, "the ticker is still retained (display link or timer)")
+        withExtendedLifetime(view) {}
     }
 
     /// Constraints keep moving together on a retarget that names only some
