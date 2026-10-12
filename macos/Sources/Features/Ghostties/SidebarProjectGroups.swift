@@ -535,7 +535,7 @@ struct ProjectMonogramTileFace: View {
 
     // Option D (`hRCBC`: `#28221E1A`), per appearance.
     private var tint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.tintOpacity)
+        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(isEmpty ? RailProjectTile.emptyTintOpacity : RailProjectTile.tintOpacity)
     }
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
@@ -684,6 +684,9 @@ enum RailProjectTile {
     static let cornerRadius: CGFloat = 8
     /// The tile's tint in light (option D `#28221E1A`; was 7.5%).
     static let tintOpacity: Double = 0.10
+    /// An empty project's tile tint in light (beta.26): lighter than a live
+    /// tile's, so its `textSecondary` letter clears 4.5:1 (4.61 on chrome).
+    static let emptyTintOpacity: Double = 0.085
 
     static func ink(_ colorScheme: ColorScheme) -> Color {
         colorScheme == .dark

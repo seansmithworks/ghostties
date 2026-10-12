@@ -204,6 +204,13 @@ enum WorkspaceLayout {
     /// Shadow opacity applied to canvas shadow hosts when the card is visible.
     static let canvasShadowOpacity: Float = 0.15
 
+    /// The closed-sidebar hover bar's shadow (beta.26, Sean): the canvas
+    /// card's own shadow, so the bar floating over the terminal reads as
+    /// one more card in the same stack. Cast rightward onto the canvas.
+    static let hoverBarShadowColor: CGColor = canvasShadowColor
+    static let hoverBarShadowRadius: CGFloat = canvasShadowRadius
+    static let hoverBarShadowOpacity: Float = canvasShadowOpacity
+
     /// Inset around the terminal panel when sidebar is visible (floating card effect).
     /// The design uses 8pt on all four sides (top, bottom, left, right).
     /// The compiled default of the "Window margin" dial — read it through
@@ -275,6 +282,13 @@ enum WorkspaceLayout {
     /// Canvas background (dark mode). Slightly lighter than chrome dark, still
     /// warm. See `canvasBackgroundLight`.
     static let canvasBackgroundDark = NSColor(white: 0.18, alpha: 1)
+
+    /// The closed-sidebar hover bar's fill (beta.26, Sean): the pinned
+    /// sidebar's chrome, so the sidebar looks the same revealed as pinned.
+    /// Follows the OS appearance, not the terminal theme.
+    static func hoverBarFill(isDark: Bool) -> NSColor {
+        isDark ? chromeBackgroundDark : chromeBackgroundLight
+    }
 
     /// Border (dark mode): DESIGN.md `darkBorder` #2a2a2a, a hairline one
     /// step above the dark chrome. The tray glass's dark rim.
@@ -367,10 +381,15 @@ enum WorkspaceLayout {
     }
 
     /// An empty project's header and rail monogram in the one-view sidebar
-    /// (Sean, 2026-10-08: shown dimmed, count 0). One tier below
-    /// `sectionHeaderForeground` on purpose, so it sits under the 4.5:1 that
-    /// token clears: the dimming is the signal that nothing is running there.
-    static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
+    /// (Sean, 2026-10-08: shown dimmed, count 0). The `textSecondary` token
+    /// (beta.26: was `tertiaryLabelColor`, which failed 4.5:1), resolved per
+    /// appearance. The quiet comes from the tile: a live project's monogram
+    /// is primary ink, an empty one's is this secondary grey.
+    static let emptyProjectForeground = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(textSecondaryDark)
+            : NSColor(textSecondaryLight)
+    })
 
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
