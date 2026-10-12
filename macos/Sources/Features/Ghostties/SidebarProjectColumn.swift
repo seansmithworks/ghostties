@@ -30,9 +30,15 @@ enum RailProjectColumn {
     /// The rail column: the tile plus this margin on every side (option D:
     /// 4, a 38pt column round the 30pt tile).
     static let defaultColumnInset: CGFloat = 4
-    /// The column's and the expanded group card's faint fill (option D
-    /// `#0000000F`).
-    static let defaultColumnTintOpacity: Double = 0.06
+    /// The column's and the expanded group card's fill in dark: white at
+    /// this opacity over the chrome (`#2D2D2D` on `#242424`; beta.26
+    /// sidebar contrast, was 6%). The "Column tint" dial.
+    static let defaultColumnTintOpacity: Double = 0.04
+    /// The column's and the expanded group card's fill in light: a lift,
+    /// white at this opacity over the chrome (`#F7F3F1` on `#F0E9E6`;
+    /// beta.26 sidebar contrast, was a 6% black shade), so secondary text
+    /// reads on it at the same contrast as on the chrome.
+    static let lightColumnLiftOpacity: Double = 0.45
     /// The selected project's tile: 1 is full ink, 0 the plain tile tint.
     static let defaultSelectedTileFill: Double = 1
     /// The selected chip's fill (option D `#0000001A`). Flat: no chromatic
@@ -65,7 +71,17 @@ enum RailProjectColumn {
     /// 8 + 4 = 12). The expanded group card takes the same corner.
     static var columnCornerRadius: CGFloat { chipCornerRadius + columnInset }
 
-    /// The ink the column, card and chip tints are laid in: solid black in
+    /// The column's and the expanded group card's fill: white in both
+    /// appearances, a lift over the chrome, at `columnFillOpacity`.
+    static func columnFill(_ colorScheme: ColorScheme) -> Color {
+        Color.white.opacity(columnFillOpacity(colorScheme))
+    }
+    /// `columnFill`'s opacity: the light lift, or the dark "Column tint" dial.
+    static func columnFillOpacity(_ colorScheme: ColorScheme) -> Double {
+        colorScheme == .dark ? columnTintOpacity : lightColumnLiftOpacity
+    }
+
+    /// The ink the chip tints are laid in: solid black in
     /// light, white in dark, so an opacity here is the canvas's alpha.
     /// (`Color.primary` is 85% black in light, which drew option D's 10%
     /// chip at 8.5%.)
@@ -223,7 +239,7 @@ private struct ProjectGroupCardShape: View, Animatable {
         let top = unionMinY + card.tileTrim - card.verticalInset
         let bottom = max(top, unionMaxY - (hasRows ? card.chipTrim : card.tileTrim) + card.verticalInset)
         RoundedRectangle(cornerRadius: card.cornerRadius, style: .continuous)
-            .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
+            .fill(RailProjectColumn.columnFill(colorScheme))
             .frame(width: card.width, height: bottom - top)
             .redlineFrame(RedlineID.groupCard)
             .morphIdentityProbe(RedlineID.groupCard)

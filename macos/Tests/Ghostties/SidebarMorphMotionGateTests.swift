@@ -68,13 +68,13 @@ struct SidebarMorphMotionGateTests {
 
     /// RED (compile): needs the `RailCountBadge.style` seam. Fill is an
     /// opaque faint tint (light ~ ink 14% over #D3CDCA, dark ~ ink 12% over
-    /// #3D3C3C), text is textSecondary (#636363 / #9A9A9A), and the fill is
+    /// #3D3C3C), text is textSecondary (#5E5E5E / #A6A6A6), and the fill is
     /// separable from the selected tile's ink fill.
     @Test func countBadgeIsTheQuietTint() {
         for selected in [false, true] {
             for (scheme, fillHex, textHex) in [
-                (ColorScheme.light, UInt32(0xBAB4B1), UInt32(0x636363)),
-                (ColorScheme.dark, UInt32(0x525252), UInt32(0x9A9A9A)),
+                (ColorScheme.light, UInt32(0xBAB4B1), UInt32(0x5E5E5E)),
+                (ColorScheme.dark, UInt32(0x525252), UInt32(0xA6A6A6)),
             ] {
                 let style = RailCountBadge.style(selected: selected, colorScheme: scheme)
                 let tag = "selected=\(selected) \(scheme)"

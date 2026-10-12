@@ -596,7 +596,7 @@ enum SidebarDialTuning {
         cgFloat(trayHoverInsetKey, default: TrayGlassStyle.hoverInset, defaults: defaults)
     }
 
-    /// The project column's faint fill (`RailProjectColumn.columnTintOpacity`).
+    /// The project column's fill in dark (`RailProjectColumn.columnTintOpacity`).
     static func railColumnTintOpacity(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
         double(railColumnTintOpacityKey, default: RailProjectColumn.defaultColumnTintOpacity, defaults: defaults)
     }
@@ -1307,7 +1307,7 @@ enum RailDialPanel: FocusedDialPanel {
             .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
             // One view's selected project column (`RailProjectColumn`).
             .group("railColumn", label: "Rail column", children: [
-                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint", range: 0...0.3, step: 0.005),
+                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint (dark)", range: 0...0.3, step: 0.005),
                 .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
                 .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
                 .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
