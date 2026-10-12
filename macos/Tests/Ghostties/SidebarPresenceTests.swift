@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import Foundation
 import GhosttiesCore
 import Testing
@@ -25,7 +24,8 @@ struct SidebarPresenceTests {
         #expect(WorkspaceViewContainer.nextSidebarMode(after: .collapsed) == .pinned)
     }
 
-    /// `.closed` is left in the model (persistence) but is no longer reachable from
+    /// `.closed` is left in the model (persistence, the hot zone, and the
+    /// overlay reveal all still function) but is no longer reachable from
     /// the toggle — a persisted `closed` state (raw value 1) must still
     /// load and, if the toggle somehow fires from it, land on `.pinned`
     /// rather than dead-ending or cycling back into `.closed`.
@@ -268,6 +268,15 @@ struct SidebarPresenceTests {
             == collapseTiming.duration)
     }
 
+    /// The closed-state hot zone activates only after the full-close motion
+    /// (180ms) has actually finished — the delay must be at least as long as
+    /// the close animation itself, or the reveal overlay could fire before
+    /// the card has reached the edge.
+    @Test func closedHotZoneActivatesNoSoonerThanCloseFinishes() {
+        let closeTiming = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .closed)
+        #expect(WorkspaceLayout.closedHotZoneActivationDelay >= closeTiming.duration)
+    }
+
     // MARK: - Closed-State Card Inset
 
     /// Sean's closed-state layout call (overrides Flow 05's own "card
@@ -413,76 +422,5 @@ struct SidebarPresenceTests {
 private extension TimeInterval {
     func isApproximatelyEqual(to other: TimeInterval, tolerance: TimeInterval = 0.0001) -> Bool {
         abs(self - other) < tolerance
-    }
-}
-
-/// A fully closed sidebar stays closed (Sean, 2026-10-11): the container
-/// installs no tracking area in `.closed`, so hovering the window's left
-/// edge cannot reopen it. Reopening is keyboard / menu only.
-@MainActor
-@Suite(.serialized)
-struct ClosedSidebarHasNoHotZoneTests {
-    @MainActor private final class StubViewModel: TerminalViewModel {
-        @Published var surfaceTree: SplitTree<Ghostty.SurfaceView> = .init()
-        @Published var commandPaletteIsShowing = false
-        var updateOverlayIsVisible: Bool { false }
-    }
-
-    private func spin(_ seconds: TimeInterval) {
-        let end = Date().addingTimeInterval(seconds)
-        while Date() < end {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
-        }
-    }
-
-    private func makeWindow(mode: SidebarMode) -> (WorkspaceViewContainer, NSWindow) {
-        let store = WorkspaceStore(
-            testingProjects: [], testingSessions: [],
-            hasShownPinMigrationNotice: true, hasDismissedPinMigrationNotice: true
-        )
-        store.updateSidebarMode(mode)
-        let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
-        let window = NSWindow(
-            contentRect: .init(x: 0, y: 0, width: 900, height: 620),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered, defer: false
-        )
-        window.isReleasedWhenClosed = false
-        window.contentView = container
-        window.orderFrontRegardless()
-        for _ in 0..<4 {
-            container.needsLayout = true
-            container.layoutSubtreeIfNeeded()
-            spin(0.05)
-        }
-        return (container, window)
-    }
-
-    private func close(_ window: NSWindow) {
-        window.contentView = nil
-        window.orderOut(nil)
-        window.close()
-    }
-
-    /// Closing from a visible mode leaves no tracking area, including after
-    /// the old 180ms hot-zone activation delay has passed.
-    @Test func closingInstallsNoTrackingArea() {
-        let (container, window) = makeWindow(mode: .pinned)
-        defer { close(window) }
-        container.toggleSidebarFullyClosed()
-        spin(0.5)
-        #expect(container.sidebarModeForTesting == .closed)
-        container.updateTrackingAreas()
-        #expect(container.trackingAreas.isEmpty)
-    }
-
-    /// A persisted `.closed` sidebar launches with no tracking area either.
-    @Test func persistedClosedHasNoTrackingArea() {
-        let (container, window) = makeWindow(mode: .closed)
-        defer { close(window) }
-        spin(0.5)
-        #expect(container.sidebarModeForTesting == .closed)
-        container.updateTrackingAreas()
-        #expect(container.trackingAreas.isEmpty)
     }
 }
