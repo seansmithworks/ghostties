@@ -224,13 +224,6 @@ class AppDelegate: NSObject,
             return
         }
 
-        // Ensures Ghostty finds vendored themes even when terminfo sentinel is missing from the bundle.
-        if getenv("GHOSTTY_RESOURCES_DIR") == nil,
-           let resourcePath = Bundle.main.resourcePath {
-            let ghosttyResources = resourcePath + "/ghostty"
-            setenv("GHOSTTY_RESOURCES_DIR", ghosttyResources, 1)
-        }
-
         #if DEBUG
         if
             let suite = UserDefaults.ghosttySuite,

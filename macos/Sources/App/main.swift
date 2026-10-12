@@ -20,9 +20,16 @@ let isRunningUnderXCTest = ProcessInfo.processInfo.environment["XCTestConfigurat
 // activation. Must run before any window or state load.
 QuietTestHost.install()
 
+// Ensures Ghostty finds vendored themes even when terminfo sentinel is missing from the bundle.
+if getenv("GHOSTTY_RESOURCES_DIR") == nil,
+   let resourcePath = Bundle.main.resourcePath {
+    setenv("GHOSTTY_RESOURCES_DIR", resourcePath + "/ghostty", 1)
+}
+
 // Initialize Ghostty global state. We do this once right away because the
 // CLI APIs require it and it lets us ensure it is done immediately for the
 // rest of the app.
+// Process env must be mutated before ghostty_init, because libghostty snapshots environ.
 if ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) != GHOSTTY_SUCCESS {
     Ghostty.logger.critical("ghostty_init failed")
 
