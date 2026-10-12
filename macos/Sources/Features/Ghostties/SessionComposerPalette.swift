@@ -1085,6 +1085,12 @@ struct SessionComposerPalette: View {
     /// Skipped when the word also prefixes the current project's name:
     /// template rows already ghost "<current project> > …" then, so the
     /// name completes without moving the highlight off the templates.
+    ///
+    /// Also skipped when the word IS a listed template's name ("codex",
+    /// any casing): Return on a project row opens a shell there, so a
+    /// project like "codex-fork" must not take "codex" + Return away from
+    /// the Codex template. A mere prefix ("Code" vs "Codex") still goes to
+    /// the project.
     static func projectWordIndex(
         in options: [ComposerOption],
         projectIds: Set<UUID>,
@@ -1094,6 +1100,9 @@ struct SessionComposerPalette: View {
         guard !rawQuery.isEmpty, rawQuery.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
         if let currentProjectName,
            currentProjectName.range(of: rawQuery, options: [.caseInsensitive, .anchored]) != nil {
+            return nil
+        }
+        if options.contains(where: { $0.template != nil && $0.title.caseInsensitiveCompare(rawQuery) == .orderedSame }) {
             return nil
         }
         return options.firstIndex { option in
@@ -1851,17 +1860,20 @@ struct SessionComposerPalette: View {
     /// typed branch, and neither belongs to the highlighted project: a
     /// query like "ghostties web" parses "ghostties" as the command
     /// project while the row being committed is "ghostties web".
-    /// The branch pick is cleared too, even for the current project: the
-    /// row says the project, so the shell starts at its root.
+    /// `precommit(atRootOf:)` targets the project and ignores the branch
+    /// pick, even for the current project — the row says the project, so
+    /// the shell starts at its root — without writing the composer's
+    /// selected project or branch, so a failed commit leaves them as they
+    /// were.
     ///
     /// Double-fire: `selectedIndex = nil` first (N1/F1, same as every
     /// other row action), and `precommit`'s own `guard isOpen` rejects a
     /// second same-keystroke call after the first one closes the store.
     private func commitShell(in project: Project) {
         selectedIndex = nil
-        composerStore.selectedProjectId = project.id
-        composerStore.selectedWorktreePath = nil
-        let success = composerStore.precommit(template: .shell, coordinator: coordinator, workspaceStore: store)
+        let success = composerStore.precommit(
+            template: .shell, coordinator: coordinator, workspaceStore: store, atRootOf: project
+        )
         if success {
             witnessBeat = witnessBeat.next(.launch)
             isPresented = false

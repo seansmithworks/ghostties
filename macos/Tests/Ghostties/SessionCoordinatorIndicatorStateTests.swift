@@ -123,4 +123,27 @@ final class SessionCoordinatorIndicatorStateTests: XCTestCase {
             "plain shell sessions must keep the original .waiting fallback — only agent-kind sessions change"
         )
     }
+
+    // MARK: - Retired Orchestrator template (0.1.0-beta.26)
+
+    /// A saved session on the retired Orchestrator template, loaded the way
+    /// the app loads it (`WorkspacePersistence.validate`), is an agent-kind
+    /// session: loading moves it onto Claude Code, so a silent one reads
+    /// `.idle` like any Claude Code session, not the shell's `.waiting`.
+    func testOrchestratorSessionLoadedFromDiskIsAgentKind() throws {
+        let orchestratorId = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
+        let project = makeProject()
+        let loaded = WorkspacePersistence.validate(WorkspacePersistence.State(
+            projects: [project],
+            sessions: [AgentSession(name: "orchestrator thread", templateId: orchestratorId, projectId: project.id)]
+        ))
+        let templateId = try XCTUnwrap(loaded.sessions.first?.templateId, "the session still loads")
+        XCTAssertEqual(templateId, AgentTemplate.claudeCode.id)
+
+        let (coordinator, sessionId, claudeStateDir) = makeCoordinator(templateId: templateId)
+        addTeardownBlock { try? FileManager.default.removeItem(at: claudeStateDir) }
+        coordinator.seedIndicatorStateForTesting(id: sessionId, status: .running, isAtPrompt: false)
+
+        XCTAssertEqual(coordinator.indicatorState(for: sessionId), .idle)
+    }
 }

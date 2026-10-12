@@ -51,6 +51,19 @@ struct AgentTemplateTests {
         #expect(AgentTemplate.defaults.map(\.name) == ["Shell", "Claude Code", "Codex", "Browser"])
     }
 
+    /// Orchestrator was retired in 0.1.0-beta.26: its id (a saved session)
+    /// and its name (a task's `template: Orchestrator`, any casing) both
+    /// resolve to Claude Code. Anything else resolves to nothing.
+    @Test func theRetiredOrchestratorResolvesToClaudeCode() {
+        let orchestratorId = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+        #expect(AgentTemplate.replacement(forRetiredId: orchestratorId)?.id == AgentTemplate.claudeCode.id)
+        #expect(AgentTemplate.replacement(forRetiredName: "orchestrator")?.id == AgentTemplate.claudeCode.id)
+        #expect(AgentTemplate.replacement(forRetiredName: "Orchestrator")?.id == AgentTemplate.claudeCode.id)
+        #expect(AgentTemplate.replacement(forRetiredId: AgentTemplate.codex.id) == nil)
+        #expect(AgentTemplate.replacement(forRetiredName: "deploy") == nil)
+        #expect(!AgentTemplate.defaults.contains { $0.id == orchestratorId })
+    }
+
     @Test func deterministicUUIDs() {
         // UUIDs must be stable across launches for persistence
         #expect(AgentTemplate.shell.id.uuidString == "00000000-0000-0000-0000-000000000001")

@@ -279,16 +279,24 @@ struct WorkspacePersistence {
     static func validate(_ state: State) -> State {
         var validated = state
 
+        // A session on a retired built-in (Orchestrator) is moved onto its
+        // replacement (Claude Code) here, once, at load — so relaunch, the
+        // status indicator and every other template lookup agree, and the
+        // orphan filter below keeps it.
+        for i in validated.sessions.indices {
+            if let replacement = AgentTemplate.replacement(forRetiredId: validated.sessions[i].templateId) {
+                validated.sessions[i].templateId = replacement.id
+            }
+        }
+
         // Remove sessions whose template no longer exists.
         // Include built-in defaults AND file-based preset IDs so sessions
-        // referencing presets survive across app launches, and retired
-        // built-ins so removing one doesn't delete the sessions that used it.
+        // referencing presets survive across app launches.
         let presetIds = PresetLoader.loadPresets().map(\.id)
         let knownTemplateIds = Set(state.templates.map(\.id))
             .union(AgentTemplate.defaults.map(\.id))
-            .union(AgentTemplate.retiredBuiltInIds)
             .union(presetIds)
-        validated.sessions = state.sessions.filter { session in
+        validated.sessions = validated.sessions.filter { session in
             knownTemplateIds.contains(session.templateId)
         }
 

@@ -479,7 +479,7 @@ final class SessionCoordinator: ObservableObject {
     func relaunch(session: AgentSession, mode: RelaunchMode) async -> Bool {
         let store = WorkspaceStore.shared
         guard let project = store.projects.first(where: { $0.id == session.projectId }),
-              let template = Self.relaunchTemplate(for: session, templates: store.templates) else {
+              let template = store.templates.first(where: { $0.id == session.templateId }) else {
             Self.logger.warning("Cannot relaunch '\(session.name, privacy: .public)': template or project not found")
             return false
         }
@@ -493,18 +493,6 @@ final class SessionCoordinator: ObservableObject {
             project: project,
             commandOverride: override
         )
-    }
-
-    /// The template a relaunch starts: the session's own, or, when its
-    /// built-in was retired, that built-in's replacement
-    /// (`AgentTemplate.retiredBuiltInReplacements` — an Orchestrator
-    /// session relaunches as Claude Code). The cwd is unaffected: neither
-    /// template sets `workingDirectory`, so both start at the project root.
-    /// A template id that is neither known nor retired stays `nil`, and
-    /// relaunch keeps its not-found path.
-    static func relaunchTemplate(for session: AgentSession, templates: [AgentTemplate]) -> AgentTemplate? {
-        templates.first(where: { $0.id == session.templateId })
-            ?? AgentTemplate.retiredBuiltInReplacements[session.templateId]
     }
 
     /// `ResumePlan.command`, gated at click time (not menu render — see
@@ -770,6 +758,11 @@ final class SessionCoordinator: ObservableObject {
                 $0.name.lowercased() == needle
             }) {
                 return match
+            }
+            // A retired built-in's name (a task saved with
+            // `template: Orchestrator`) starts its replacement.
+            if let replacement = AgentTemplate.replacement(forRetiredName: requested) {
+                return store.templates.first(where: { $0.id == replacement.id }) ?? replacement
             }
             FileHandle.standardError.write(Data(
                 "⚠️ Ghostties: template '\(requested)' not found; falling back to default\n".utf8

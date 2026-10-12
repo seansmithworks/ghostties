@@ -178,20 +178,34 @@ public struct AgentTemplate: Identifiable, Codable, Hashable {
     /// All built-in templates, in display order.
     public static let defaults: [AgentTemplate] = [shell, claudeCode, codex, browser]
 
-    /// Built-in templates that have been removed, each mapped to the
-    /// built-in that replaces it. A saved session can still name a retired
-    /// id: loading keeps the session instead of dropping it as an orphan,
-    /// and relaunching it starts the replacement
-    /// (`SessionCoordinator.relaunchTemplate`). Never reuse an id listed here.
-    /// - `…0003`: Orchestrator (Claude Code plus a system prompt), removed
-    ///   in 0.1.0-beta.26 → Claude Code.
-    public static let retiredBuiltInReplacements: [UUID: AgentTemplate] = [
-        UUID(uuidString: "00000000-0000-0000-0000-000000000003")!: claudeCode,
+    /// A built-in template that has been removed, and the built-in that
+    /// replaces it. Saved state can still name a retired template, by id (a
+    /// session) or by name (a task's `template:`); both resolve to the
+    /// replacement, so every lookup agrees. Never reuse an id listed here.
+    public struct RetiredBuiltIn {
+        public let id: UUID
+        public let name: String
+        public let replacement: AgentTemplate
+    }
+
+    /// - Orchestrator (Claude Code plus a system prompt), removed in
+    ///   0.1.0-beta.26 → Claude Code.
+    public static let retiredBuiltIns: [RetiredBuiltIn] = [
+        RetiredBuiltIn(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+            name: "Orchestrator",
+            replacement: claudeCode
+        ),
     ]
 
-    /// The ids in `retiredBuiltInReplacements`.
-    public static var retiredBuiltInIds: Set<UUID> {
-        Set(retiredBuiltInReplacements.keys)
+    /// The replacement for a retired built-in's id, or nil.
+    public static func replacement(forRetiredId id: UUID) -> AgentTemplate? {
+        retiredBuiltIns.first { $0.id == id }?.replacement
+    }
+
+    /// The replacement for a retired built-in's name (case-insensitive), or nil.
+    public static func replacement(forRetiredName name: String) -> AgentTemplate? {
+        retiredBuiltIns.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.replacement
     }
 
     // MARK: - CLI Construction
