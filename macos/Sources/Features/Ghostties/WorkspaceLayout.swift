@@ -205,11 +205,12 @@ enum WorkspaceLayout {
     static let canvasShadowOpacity: Float = 0.15
 
     /// The closed-sidebar hover bar's shadow (beta.26, Sean): the canvas
-    /// card's own shadow, so the bar floating over the terminal reads as
-    /// one more card in the same stack. Cast rightward onto the canvas.
+    /// card's colour, lighter and wider than its blur and opacity (round 2),
+    /// so the bar floating over the terminal reads as one more card in the
+    /// same stack. Cast rightward onto the canvas.
     static let hoverBarShadowColor: CGColor = canvasShadowColor
-    static let hoverBarShadowRadius: CGFloat = canvasShadowRadius
-    static let hoverBarShadowOpacity: Float = canvasShadowOpacity
+    static let hoverBarShadowRadius: CGFloat = 16
+    static let hoverBarShadowOpacity: Float = 0.1275
 
     /// Inset around the terminal panel when sidebar is visible (floating card effect).
     /// The design uses 8pt on all four sides (top, bottom, left, right).
