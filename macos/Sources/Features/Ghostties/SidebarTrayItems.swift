@@ -5,6 +5,10 @@ import SwiftUI
 /// its own. Leading to trailing in the expanded bar, top to bottom on the rail.
 enum SidebarTrayGroup: String, CaseIterable {
     case create, toggle
+
+    /// The capsule's end of the expanded bar, which picks the corner that
+    /// nests in the hover bar (`TrayGlassStyle.hoverBarPillCorners`).
+    var side: HorizontalEdge { self == .create ? .leading : .trailing }
 }
 
 /// One entry in the sidebar's bottom tray — icon, label, capsule, and action.
@@ -315,16 +319,43 @@ enum TrayGlassStyle {
     // MARK: Derived
 
     /// The pill shape the tray and the selected row share, from the corner
-    /// style dial.
-    static func pillShape() -> RoundedRectangle {
-        RoundedRectangle(cornerRadius: pillCornerRadius(), style: .continuous)
+    /// style dial. In the hover bar (overlay, "radius" style) a pill at
+    /// `side` nests only its outer corner (`hoverBarPillCorners`); every
+    /// other mode, or with no side, all four corners are one radius.
+    static func pillShape(for mode: SidebarMode = .pinned, side: HorizontalEdge? = nil) -> TrayPillShape {
+        if mode == .overlay, let side, SidebarDialTuning.trayGlassCornerStyle() == .radius {
+            let c = hoverBarPillCorners(side: side)
+            return TrayPillShape(
+                topLeading: c.topLeading, topTrailing: c.topTrailing,
+                bottomLeading: c.bottomLeading, bottomTrailing: c.bottomTrailing
+            )
+        }
+        return TrayPillShape(cornerRadius: pillCornerRadius(for: mode))
     }
 
-    /// The pill's corner radius, from the corner style dial.
-    static func pillCornerRadius() -> CGFloat {
+    /// The hover bar's pill corners (beta.26 round 2, Sean): the pinned and
+    /// rail pills' radius on three corners; only the corner sitting in the
+    /// overlay card's own bottom corner nests, concentric with the card
+    /// (`trayCornerRadius(for: .overlay)`: 12 − 8 = 4 at the default margin).
+    /// `.leading` is the Create pill (bottom-leading nests), `.trailing` the
+    /// Toggle pill (bottom-trailing).
+    static func hoverBarPillCorners(
+        side: HorizontalEdge,
+        defaults: UserDefaults = SidebarDialTuning.store
+    ) -> (topLeading: CGFloat, topTrailing: CGFloat, bottomLeading: CGFloat, bottomTrailing: CGFloat) {
+        let open = SidebarDialTuning.trayCornerRadius(for: .pinned, defaults: defaults)
+        let nested = SidebarDialTuning.trayCornerRadius(for: .overlay, defaults: defaults)
+        switch side {
+        case .leading: return (open, open, nested, open)
+        case .trailing: return (open, open, open, nested)
+        }
+    }
+
+    /// The pill's corner radius in `mode`, from the corner style dial.
+    static func pillCornerRadius(for mode: SidebarMode = .pinned) -> CGFloat {
         SidebarDialTuning.trayGlassCornerStyle() == .capsule
             ? capsuleCornerRadius
-            : SidebarDialTuning.trayCornerRadius()
+            : SidebarDialTuning.trayCornerRadius(for: mode)
     }
 
     static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
@@ -367,7 +398,7 @@ enum TrayGlassStyle {
     static let opaqueDarkEdgeWidth: CGFloat = 1
 
 
-    /// Canvas icon fill `#636363` = `textSecondaryLight`.
+    /// Canvas icon fill: `textSecondaryLight`.
     static func iconColor(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
     }
@@ -464,11 +495,13 @@ enum TrayGlassStyle {
     /// radius `cornerRadius − innerPadding` (capsule style: a capsule).
     static func buttonHitShape(
         soleInCapsule: Bool,
+        mode: SidebarMode = .pinned,
+        side: HorizontalEdge? = nil,
         cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
-        cornerRadius: CGFloat = SidebarDialTuning.trayCornerRadius(),
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
     ) -> AnyShape {
-        if soleInCapsule { return AnyShape(pillShape()) }
+        let cornerRadius = SidebarDialTuning.trayCornerRadius(for: mode)
+        if soleInCapsule { return AnyShape(pillShape(for: mode, side: side)) }
         switch cornerStyle {
         case .capsule:
             return AnyShape(Capsule(style: .continuous))
@@ -560,11 +593,67 @@ struct RailTrayGeometry: Equatable {
     }
 }
 
+/// The tray pill's outline: a continuous rounded rectangle, one radius on
+/// all four corners or, in the hover bar, one nested corner
+/// (`TrayGlassStyle.pillShape`). Four equal corners draw exactly the
+/// `RoundedRectangle` the pill always was; the radii animate either way.
+struct TrayPillShape: InsettableShape {
+    var topLeading: CGFloat
+    var topTrailing: CGFloat
+    var bottomLeading: CGFloat
+    var bottomTrailing: CGFloat
+    private var insetAmount: CGFloat = 0
+
+    init(topLeading: CGFloat, topTrailing: CGFloat, bottomLeading: CGFloat, bottomTrailing: CGFloat) {
+        self.topLeading = topLeading
+        self.topTrailing = topTrailing
+        self.bottomLeading = bottomLeading
+        self.bottomTrailing = bottomTrailing
+    }
+
+    init(cornerRadius: CGFloat) {
+        self.init(topLeading: cornerRadius, topTrailing: cornerRadius, bottomLeading: cornerRadius, bottomTrailing: cornerRadius)
+    }
+
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(topLeading, topTrailing), AnimatablePair(bottomLeading, bottomTrailing)) }
+        set {
+            topLeading = newValue.first.first
+            topTrailing = newValue.first.second
+            bottomLeading = newValue.second.first
+            bottomTrailing = newValue.second.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        if topLeading == topTrailing, topLeading == bottomLeading, topLeading == bottomTrailing {
+            return RoundedRectangle(cornerRadius: topLeading, style: .continuous)
+                .inset(by: insetAmount)
+                .path(in: rect)
+        }
+        return UnevenRoundedRectangle(
+            topLeadingRadius: topLeading,
+            bottomLeadingRadius: bottomLeading,
+            bottomTrailingRadius: bottomTrailing,
+            topTrailingRadius: topTrailing,
+            style: .continuous
+        )
+        .inset(by: insetAmount)
+        .path(in: rect)
+    }
+
+    func inset(by amount: CGFloat) -> TrayPillShape {
+        var shape = self
+        shape.insetAmount += amount
+        return shape
+    }
+}
+
 /// The iridescent edge of the tray glass, in either appearance. Not in the tree at all at
 /// intensity 0, so the default look is untouched.
 struct TrayChromaticRim: View {
     let look: TrayGlassStyle.Look
-    let shape: RoundedRectangle
+    let shape: TrayPillShape
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -602,14 +691,17 @@ struct TrayGlassSurface: ViewModifier {
     /// Which state's light shadow to draw (`SidebarHostRoot` injects the
     /// sidebar's mode; the target mode as soon as a transition starts, so a
     /// morph switches once rather than flickering).
-    @Environment(\.trayShadowState) private var shadowState
+    @Environment(\.sidebarMode) private var sidebarMode
     var forceOpaque = false
     var interactive = false
+    /// The capsule's end of the bar (`SidebarTrayGroup.side`), for the hover
+    /// bar's nested corner. Nil: four equal corners.
+    var side: HorizontalEdge? = nil
 
-    private var shape: RoundedRectangle { TrayGlassStyle.pillShape() }
+    private var shape: TrayPillShape { TrayGlassStyle.pillShape(for: sidebarMode, side: side) }
 
     func body(content: Content) -> some View {
-        let look = SidebarDialTuning.trayGlass(for: colorScheme, state: shadowState)
+        let look = SidebarDialTuning.trayGlass(for: colorScheme, state: .init(sidebarMode))
         if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
             GlassEffectContainer {
                 content
@@ -716,7 +808,7 @@ struct TrayGlassSurface: ViewModifier {
 /// shadow outside the pill is drawn and the glass samples the chrome as
 /// before.
 private struct TrayPillShadow: View {
-    let shape: RoundedRectangle
+    let shape: TrayPillShape
     let look: TrayGlassStyle.Look
 
     var body: some View {
@@ -764,6 +856,8 @@ struct SidebarTrayPill<Content: View>: View {
     /// above: the rail's stacked Create pill, whose outer buttons carry it
     /// themselves (`RailTrayGeometry.stackedPadding`), so it is 0 here.
     var verticalPadding: CGFloat? = nil
+    /// See `TrayGlassSurface.side`.
+    var side: HorizontalEdge? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -778,7 +872,7 @@ struct SidebarTrayPill<Content: View>: View {
             .padding(.horizontal, axis == .horizontal ? along : 0)
             .padding(.vertical, verticalPadding ?? (axis == .vertical ? along : 0))
             .redlineFrame(redlineID)
-        framed.modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
+        framed.modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive(), side: side))
     }
 }
 
@@ -881,7 +975,8 @@ struct SidebarTray: View {
                     redlineID: RedlineID.trayPill(group.rawValue),
                     itemSpacing: isVertical ? rail.itemGap : TrayGlassStyle.horizontalItemGap,
                     soleButton: sole,
-                    verticalPadding: stacked ? 0 : nil
+                    verticalPadding: stacked ? 0 : nil,
+                    side: group.side
                 ) {
                     ForEach(groupItems) { item in
                         let isFirst = item.id == groupItems.first?.id
@@ -899,6 +994,7 @@ struct SidebarTray: View {
                                 : EdgeInsets(),
                             fillsWidth: fillsCreate && group == .create,
                             fillsCapsule: sole,
+                            side: group.side,
                             tapEffect: item.tapEffect,
                             action: item.action
                         )
@@ -981,6 +1077,10 @@ struct TrayIconButton: View {
     /// the capsule (option D: no padding), so its hit area is the capsule's
     /// own shape (`TrayGlassStyle.buttonHitShape`).
     var fillsCapsule = false
+    /// The capsule's end of the bar (`SidebarTrayGroup.side`): a sole
+    /// button's hit area and full-bleed hover chip are the capsule's own
+    /// shape, nested corner included.
+    var side: HorizontalEdge? = nil
     /// Symbol animation to play on click — see `TrayIconTapEffect`.
     var tapEffect: TrayIconTapEffect? = nil
     /// Draws the hover chip without a pointer. Test seam: a render test
@@ -992,6 +1092,7 @@ struct TrayIconButton: View {
     @State private var tapEffectTrigger = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.sidebarMode) private var sidebarMode
 
     var body: some View {
         let size = cellSize
@@ -1026,12 +1127,13 @@ struct TrayIconButton: View {
                     GeometryReader { proxy in
                         let chip = TrayGlassStyle.hoverChip(
                             cell: CGRect(origin: .zero, size: proxy.size),
-                            soleInCapsule: fillsCapsule
+                            soleInCapsule: fillsCapsule,
+                            pillCornerRadius: TrayGlassStyle.pillCornerRadius(for: sidebarMode)
                         )
                         // Placed by `.position` (layout), not `.offset` (a
                         // draw-time shift), so the published redline frame
                         // is where the chip is drawn.
-                        RoundedRectangle(cornerRadius: chip.cornerRadius, style: .continuous)
+                        chipShape(chip)
                             .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
                             // A tint: fades on the hover spring, never
                             // overshooting.
@@ -1052,7 +1154,15 @@ struct TrayIconButton: View {
     }
 
     private var hitShape: AnyShape {
-        TrayGlassStyle.buttonHitShape(soleInCapsule: fillsCapsule)
+        TrayGlassStyle.buttonHitShape(soleInCapsule: fillsCapsule, mode: sidebarMode, side: side)
+    }
+
+    /// A full-bleed chip is the capsule (`TrayGlassStyle.hoverChip`), so it
+    /// takes the capsule's shape, the hover bar's nested corner included.
+    private func chipShape(_ chip: TrayGlassStyle.HoverChip) -> AnyShape {
+        fillsCapsule
+            ? AnyShape(TrayGlassStyle.pillShape(for: sidebarMode, side: side))
+            : AnyShape(RoundedRectangle(cornerRadius: chip.cornerRadius, style: .continuous))
     }
 
     private var showsHover: Bool {

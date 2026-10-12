@@ -26,7 +26,10 @@ struct ComposerDownProjectsHostedTests {
         let repo: Project
     }
 
-    private func mount(relaunch: @escaping (AgentSession, SessionCoordinator.RelaunchMode) -> Void = { _, _ in }) throws -> Mounted {
+    private func mount(
+        extraProjects: [Project] = [],
+        relaunch: @escaping (AgentSession, SessionCoordinator.RelaunchMode) -> Void = { _, _ in }
+    ) throws -> Mounted {
         let current = Project(name: "atlas-api", rootPath: "/tmp/composer-down-projects-atlas-\(UUID().uuidString)")
         let code = Project(name: "Code", rootPath: "/tmp/composer-down-projects-code-\(UUID().uuidString)")
         let repo = Project(name: "repo", rootPath: "/tmp/composer-down-projects-repo-\(UUID().uuidString)")
@@ -35,7 +38,7 @@ struct ComposerDownProjectsHostedTests {
             lastActiveAt: now.addingTimeInterval(-7_200), lastOutputAt: now.addingTimeInterval(-7_200),
             isNamePinned: true
         )
-        let store = WorkspaceStore(testingProjects: [current, code, repo], testingSessions: [past])
+        let store = WorkspaceStore(testingProjects: [current, code, repo] + extraProjects, testingSessions: [past])
         let composerStore = SessionComposerStore(isolatedForTesting: ())
         let tuning = try #require(UserDefaults(suiteName: "ghostties.composerDownProjects.\(UUID().uuidString)"))
         tuning.set(ComposerResumeLayout.list.rawValue, forKey: ComposerResumeLayout.storageKey)
@@ -91,13 +94,13 @@ struct ComposerDownProjectsHostedTests {
     private static let tab = #selector(NSResponder.insertTab(_:))
 
     /// The bug, end to end: "Code" ghosts the project, and ↓ walks to a
-    /// PROJECTS row whose Return selects the project the way a project row
-    /// always has (`selectProject`: project set, field cleared).
+    /// PROJECTS row whose Return opens a Shell in that project (Sean,
+    /// 2026-10-12 — it used to only scope the composer to the project).
     @Test func typingAProjectNameGhostsItAndTheDownListReachesIt() throws {
-        var started = 0
+        var started: [(Project, AgentTemplate)] = []
         let m = try mount()
         defer { m.window.orderOut(nil) }
-        m.composerStore.dispatchOverrideForTesting = { _, _ in started += 1 }
+        m.composerStore.dispatchOverrideForTesting = { project, template in started.append((project, template)) }
 
         type("Code", in: m)
         #expect(ghost(m).hasPrefix(" > "), "the ghost continues the project's path: \"\(ghost(m))\"")
@@ -107,9 +110,48 @@ struct ComposerDownProjectsHostedTests {
         press(Self.down, times: 8, in: m)
         press(Self.enter, in: m)
 
-        #expect(m.composerStore.selectedProjectId == m.code.id, "Return on the PROJECTS row selects Code")
-        #expect(m.composerStore.searchText.isEmpty, "selecting a project clears the field, as it always has")
-        #expect(started == 0, "selecting a project starts nothing")
+        #expect(started.map(\.0.id) == [m.code.id], "Return on the PROJECTS row starts one session in Code")
+        #expect(started.first?.1.id == AgentTemplate.shell.id, "the session is a Shell")
+    }
+
+    /// Return on a highlighted project row with the list closed opens
+    /// exactly one Shell in that project, at its root — and a second
+    /// Return fired in the same turn (`.onSubmit` + `onKeyPress` both
+    /// firing on macOS 14+) can't start a second one.
+    @Test func returnOnAProjectRowOpensOneShellAtItsRoot() throws {
+        var started: [(Project, AgentTemplate)] = []
+        let m = try mount()
+        defer { m.window.orderOut(nil) }
+        m.composerStore.dispatchOverrideForTesting = { project, template in started.append((project, template)) }
+
+        // One word prefixing a project highlights its row (`projectWordIndex`).
+        type("rep", in: m)
+        #expect(ghost(m) == "o > Default > Shell", "the ghost names what Return opens: \"\(ghost(m))\"")
+        m.field.doCommand(by: Self.enter)
+        m.field.doCommand(by: Self.enter)
+        settle(m.window.contentView!)
+
+        #expect(started.count == 1, "one Return-pair, one session: got \(started.count)")
+        #expect(started.first?.0.id == m.repo.id, "the shell starts in the highlighted project, not the prefilled one")
+        #expect(started.first?.1.id == AgentTemplate.shell.id, "the template is Shell")
+        #expect(started.first?.1.workingDirectory == nil, "no branch carried over: the shell starts at the project root")
+    }
+
+    /// A word that IS a template's name stays with the template: with a
+    /// project named "codex-fork", "codex" + Return starts Codex in the
+    /// current project, not a Shell in codex-fork.
+    @Test func aWordThatIsATemplateNameStartsTheTemplateNotAProjectShell() throws {
+        var started: [(Project, AgentTemplate)] = []
+        let fork = Project(name: "codex-fork", rootPath: "/tmp/composer-down-projects-codex-fork-\(UUID().uuidString)")
+        let m = try mount(extraProjects: [fork])
+        defer { m.window.orderOut(nil) }
+        m.composerStore.dispatchOverrideForTesting = { project, template in started.append((project, template)) }
+
+        type("codex", in: m)
+        press(Self.enter, in: m)
+
+        #expect(started.map(\.0.id) == [m.current.id], "starts in the current project, not codex-fork")
+        #expect(started.first?.1.id == AgentTemplate.codex.id, "starts Codex, not a Shell")
     }
 
     /// Control for the root cause: a project's full name with no template
@@ -221,6 +263,17 @@ struct ComposerDownProjectsModelTests {
         ComposerOption(id: id, title: title, subtitle: nil, leadingIcon: nil, action: {})
     }
 
+    @Test func aWordThatIsATemplateNameDoesNotHighlightAProject() {
+        let codex = ComposerOption(id: UUID(), title: "Codex", subtitle: nil, leadingIcon: nil, action: {}, template: .codex)
+        let fork = option("codex-fork")
+        let options = [codex, fork]
+        let ids: Set<UUID> = [fork.id]
+        #expect(SessionComposerPalette.projectWordIndex(in: options, projectIds: ids, rawQuery: "codex", currentProjectName: nil) == nil)
+        #expect(SessionComposerPalette.projectWordIndex(in: options, projectIds: ids, rawQuery: "CODEX", currentProjectName: nil) == nil)
+        #expect(SessionComposerPalette.projectWordIndex(in: options, projectIds: ids, rawQuery: "codex-", currentProjectName: nil) == 1)
+        #expect(SessionComposerPalette.projectWordIndex(in: options, projectIds: ids, rawQuery: "cod", currentProjectName: nil) == 1, "a prefix still goes to the project")
+    }
+
     @Test func aSingleWordPrefixingAProjectHighlightsIt() {
         let codex = option("Codex"), code = option("Code")
         let options = [codex, code]
@@ -230,5 +283,35 @@ struct ComposerDownProjectsModelTests {
         #expect(SessionComposerPalette.projectWordIndex(in: options, projectIds: ids, rawQuery: "code ", currentProjectName: nil) == nil, "past the first word")
         #expect(SessionComposerPalette.projectWordIndex(in: options, projectIds: ids, rawQuery: "codex", currentProjectName: nil) == nil, "no project prefix")
         #expect(SessionComposerPalette.projectWordIndex(in: options, projectIds: ids, rawQuery: "cod", currentProjectName: "Code") == nil, "the current project already ghosts")
+    }
+}
+
+/// `precommit(atRootOf:)` — Return on a PROJECTS row — targets that project
+/// at its root without writing the composer's selected project or branch.
+@MainActor
+@Suite("Composer: project-row shell commit (store)")
+struct ComposerProjectShellCommitTests {
+    @Test func aShellAtAProjectsRootLeavesTheSelectionAlone() throws {
+        let a = Project(name: "atlas-api", rootPath: "/tmp/composer-shell-commit-a-\(UUID().uuidString)")
+        let b = Project(name: "repo", rootPath: "/tmp/composer-shell-commit-b-\(UUID().uuidString)")
+        let store = WorkspaceStore(testingProjects: [a, b], testingSessions: [])
+        let composer = SessionComposerStore(isolatedForTesting: ())
+        var started: [(Project, AgentTemplate)] = []
+        composer.dispatchOverrideForTesting = { project, template in started.append((project, template)) }
+
+        // Closed: the commit fails and nothing about the selection moves.
+        composer.selectedProjectId = a.id
+        composer.selectedWorktreePath = NSTemporaryDirectory()
+        #expect(!composer.precommit(template: .shell, coordinator: SessionCoordinator(), workspaceStore: store, atRootOf: b))
+        #expect(composer.selectedProjectId == a.id)
+        #expect(composer.selectedWorktreePath == NSTemporaryDirectory())
+        #expect(started.isEmpty)
+
+        // Open, with a branch picked for A: the shell starts in B at its root.
+        composer.open(projectBinding: .prefilled(a), workspaceStore: store)
+        composer.selectedWorktreePath = NSTemporaryDirectory()
+        #expect(composer.precommit(template: .shell, coordinator: SessionCoordinator(), workspaceStore: store, atRootOf: b))
+        #expect(started.map(\.0.id) == [b.id])
+        #expect(started.first?.1.workingDirectory == nil, "the branch picked for A doesn't carry into B")
     }
 }

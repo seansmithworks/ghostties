@@ -34,3 +34,12 @@ function_parameter_count:
 
 large_tuple:
   warning: 3
+
+custom_rules:
+  no_env_mutation_after_init:
+    name: "Process env mutation"
+    regex: '\b(setenv|unsetenv|putenv)\('
+    included: '.*macos/Sources/.*\.swift|^Sources/.*\.swift'
+    excluded: '.*Sources/App/main\.swift'
+    message: "process env must be mutated before ghostty_init; libghostty snapshots environ"
+    severity: error

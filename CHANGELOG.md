@@ -2,7 +2,7 @@
 
 All notable changes to Ghostties are documented here. Ghostties is a macOS terminal app built on top of [Ghostty](https://ghostty.org) that adds a multi-agent workspace sidebar.
 
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are pre-release betas until v0.1.0 stable.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are pre-release betas until v1.0.0 stable.
 
 ---
 
@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [0.1.0-beta.26] — 2026-10-05
+## [0.5.0-beta.26] — 2026-10-12
 
 The sidebar gets a third state, a narrow rail that morphs from the full list and opens when you rest on it, a glass tray, and one list of projects, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row in the full list, and are centered in the rail. There is now one composer, a centered single line, and Cmd+T can resume a past session from it. Ghostties also moves onto the latest upstream Ghostty.
 
@@ -34,18 +34,25 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **Ghostties now builds on the latest upstream Ghostty** (Zig 0.16), bringing in its fixes, including word selection that stops at hard line breaks and a crash fix for tmux `list-windows`.
 - **New Session moved to a + button in a glass tray at the bottom of the sidebar**, shared by the full list and the rail. The tray is two Liquid Glass capsules (solid when Reduce Transparency is on): New Session and New Project (a folder icon) in one, the sidebar toggle in the other. New Project opens the folder picker, then the composer for the new project. Hovering a button highlights it: the sidebar toggle fills its whole button, and the + and folder highlight has a visibly rounded corner. The session list scrolls under the glass instead of stopping above it, and the glass has a light and a dark look: the dark tray tints dark with a dark rim.
 - **Projects are one list by default.** Each project is a header with a monogram tile, its name and its session count; click it to fold the project, or drag it to reorder projects. A project with no live sessions shows dimmed with a count of 0. Sessions is still its own view (Cmd+Shift+2). In the rail, each project's sessions sit in a column headed by its monogram.
-- **The selected session row is tinted**, with a faint shimmering rim, in the full list and in the rail. The same chip slides between rows as you move through them, in the rail and in the Sessions, Pinned and History lists.
+- **Easier-to-read sidebar text.** Secondary text and project cards in the sidebar have more contrast in light and dark mode. In light mode a project card is now a lighter lift instead of a darker shade.
+- **Projects with no sessions now read at accessible contrast.**
+- **Pin projects to the top.** Right-click a project and choose Pin to keep it at the top of the sidebar and the rail; Unpin puts it back in its place. Dragging keeps a project with the pinned or unpinned ones it sits among.
+- **The selected session row is tinted**, with a faint shimmering rim, in the full list and in the rail. The same chip slides between rows as you move through them, in the rail and in the Sessions and History lists.
 - **Sidebar sizes sit on an 8pt grid.** Project and session tiles are 32pt in the full list and 40pt in the rail, with 16pt icons and status glyphs. A large project tile grows its header so the card still encloses it.
 - **Smaller sidebar motion is spring-driven too.** Folding a project and its chevron, the count badge on a folded project, the hover lift on tray buttons, and the gap that opens as you drag to reorder all settle with a light spring. Opacity never bounces.
 - **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win.
-- **A fully closed sidebar stays closed.** Resting the pointer at the window's left edge no longer reopens it. Reopen it with Cmd+S, Cmd+Shift+S or the View menu. Resting on the rail still opens the full list.
+- **A fully closed sidebar opens as a hover bar.** Rest the pointer at the window's left edge and the full sidebar slides out over the terminal in its own card. Drag its edge to resize it. It closes when the pointer leaves it. Cmd+S, Cmd+Shift+S or the View menu still reopen it for good, and resting on the rail still opens the full list.
+- **The closed-sidebar hover bar now takes the sidebar's background** and casts the canvas shadow over the terminal.
 - **Rounder corners.** Terminal, browser and History cards and the tray pills now share 12pt corners. The tray's shadow is lighter and sits lower in light appearance.
+- **Return on a project opens a shell.** In the composer, highlight a project and press Return to start a shell there. Clicking a project still switches the composer to it.
 
 ### Removed
 
 - **The zero-chrome composer style and the old template card** are gone. A saved composer style setting is ignored.
 - **The "Experimental Composer Field" item in the View menu is removed.** The single-line composer is the only composer, so there is nothing left to switch.
-- **Pinning sessions is turned off.** The sidebar no longer offers to pin a session, and sessions you pinned before show in their project like the rest. Pinned templates in the composer are unchanged.
+- **Sessions can no longer be pinned; pinning is for projects.** The sidebar and History no longer offer to pin a session, and sessions you pinned before show in their project like the rest. Pinned templates in the composer are unchanged.
+- **Removed the Orchestrator template and the Linear Sync preset.** Built-in templates are now Shell, Claude Code, Codex and Browser. Past Orchestrator sessions still show in the sidebar and reopen as Claude Code.
+- **The Linear Sync preset an earlier beta copied into `~/.ghostties/presets` is removed on upgrade**, unless you edited it.
 
 ### Fixed
 

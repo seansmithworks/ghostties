@@ -71,7 +71,7 @@ public struct Task {
     /// Absolute path (tilde preserved raw on disk) to the project root. Used
     /// by the macOS sidebar to launch a terminal in the right working dir.
     public var projectPath: String?
-    /// Launch template name (e.g. "Orchestrator"). Resolved at session-spawn
+    /// Launch template name (e.g. "Claude Code"). Resolved at session-spawn
     /// time by the macOS app. Stored verbatim — no case-folding.
     public var template: String?
     /// Raw frontmatter key order + values. Preserved so round-trips don't

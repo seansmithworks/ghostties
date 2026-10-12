@@ -13,7 +13,7 @@ final class Server {
     /// MCP protocol version this server speaks. Current stable as of Jan 2026.
     static let protocolVersion = "2024-11-05"
     static let serverName = "ghostties-mcp"
-    static let serverVersion = "0.1.0"
+    static let serverVersion = "0.5.0"
 
     private let tools: [Tool]
     private let resolver: TasksDirectoryResolver

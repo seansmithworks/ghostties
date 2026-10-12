@@ -276,8 +276,8 @@ struct SessionComposerPalette: View {
         // project token was typed (the common "typed-project" shape), a
         // trimmed `commandParse` meant that shape never saw the raw-text
         // path `effectiveCommandParse` otherwise gets everywhere else —
-        // `"ghostties orchestrator "` failed to resolve the operator while
-        // the implied-project equivalent `"orchestrator "` did.
+        // `"ghostties codex "` failed to resolve the operator while
+        // the implied-project equivalent `"codex "` did.
         SessionComposerCommandParser.parse(
             query: composerStore.searchText,
             projects: store.projects,
@@ -498,59 +498,26 @@ struct SessionComposerPalette: View {
     /// computes — `selectedOption?.title` was always the right segment 3,
     /// the bug was only ever the project segment.
     ///
-    /// Selection is a PROJECT-switch row (a different project than
-    /// `currentProject`): resolves THAT project's own destination via
-    /// `destination(for:)` — not `currentProject`'s.
+    /// Selection is a PROJECT row: Return opens a Shell at that project's
+    /// root (`commitShell(in:)`), so the ghost reads `destination(for:)`
+    /// — for every project row, the current project's included.
     private var ghostFullPathForField: String {
         guard let selectedOption else { return ghostPlaceholder }
         if selectedOption.template == nil,
-           let targetProject = store.projects.first(where: { $0.id == selectedOption.id }),
-           targetProject.id != currentProject?.id {
-            return SessionComposerPalette.destination(
-                for: targetProject,
-                store: store,
-                recentSelections: composerStore.recentSelections
-            )
+           let targetProject = store.projects.first(where: { $0.id == selectedOption.id }) {
+            return SessionComposerPalette.destination(for: targetProject)
         }
         return ghostPlaceholder
     }
 
-    /// The destination a Return commit would resolve to for `project` if
-    /// the user switched to it right now — used only by
-    /// `ghostFullPathForField` above, for a project OTHER than
-    /// `currentProject`. A `static` pure function (not a `self`-scoped
-    /// computed property) deliberately, so it's directly unit-testable
-    /// without constructing a `SessionComposerPalette` view — this repo's
-    /// usual private-computed-property-on-a-View test gap doesn't apply
-    /// here. Branch is always `"Default"`: this repo caches git branch
-    /// data (`SessionComposerStore.currentBranchAtProjectRoot`) for
-    /// `currentProject` alone (refreshed async on `open()`/project
-    /// switch), so a highlighted-but-not-yet-switched-to project's real
-    /// current branch is genuinely unknown without a new async git query —
-    /// out of scope here (`SessionComposerStore` persistence/git plumbing
-    /// is explicitly untouched by this task). `"Default"` mirrors
-    /// `resolutionLineSegments`'s own "no override" fallback rather than
-    /// inventing a second, differently-worded placeholder for the same
-    /// idea.
-    static func destination(
-        for project: Project,
-        store: WorkspaceStore,
-        recentSelections: [RecentComposerSelection]
-    ) -> String {
-        let templates = SessionTemplateResolver.templates(for: project, store: store)
-        let templateTitle: String
-        if let defaultId = project.defaultTemplateId,
-           let match = templates.first(where: { $0.id == defaultId }) {
-            templateTitle = match.name
-        } else if let recent = recentSelections.first(where: { $0.projectId == project.id }),
-                  let match = templates.first(where: { $0.id == recent.templateId }) {
-            templateTitle = match.name
-        } else if let first = templates.first {
-            templateTitle = first.name
-        } else {
-            templateTitle = "Shell"
-        }
-        return "\(project.name) > Default > \(templateTitle)"
+    /// What Return on `project`'s row launches: a Shell at the project
+    /// root (Sean, 2026-10-12). Before that, Return on a project row only
+    /// switched to it, and this resolved the template a SECOND Return would
+    /// have launched there (default, then recent, then first available).
+    /// `"Default"` is the branch segment's own "no override" wording, as in
+    /// `resolutionLineSegments`.
+    static func destination(for project: Project) -> String {
+        "\(project.name) > Default > \(AgentTemplate.shell.name)"
     }
 
     /// Step 4 (Composer UI 11 plan §3): the status strip's single occupant —
@@ -723,9 +690,9 @@ struct SessionComposerPalette: View {
     /// command is recognized. Blanket-running the remainder happens ONLY
     /// here, behind the same ≥2-token + project-match gate as the rest of
     /// the grammar — `filteredTemplateOptions` above still ranks any
-    /// matching template first, so `ghostties orchestrator` keeps reaching
-    /// the Orchestrator template instead of trying to exec a nonexistent
-    /// `orchestrator` binary. Fix 4 (round-2 review): gates on
+    /// matching template first, so `ghostties codex` keeps reaching
+    /// the Codex template instead of exec'ing a bare `codex` through the
+    /// Run row. Fix 4 (round-2 review): gates on
     /// `currentProject`/`effectiveCommandParse` for the same reason
     /// `templateFilterQuery` above does — a bare `cco` typed with no
     /// project prefix, against an already-implied `currentProject`, still
@@ -826,12 +793,20 @@ struct SessionComposerPalette: View {
         )
     }
 
+    /// A project row (Sean, 2026-10-12, reversing variant G's "selecting a
+    /// project starts nothing"): Return opens a Shell session in that
+    /// project via `commitShell(in:)`; a click still scopes the composer
+    /// to the project (`clickAction`) so the mouse keeps a route to that
+    /// project's other templates. Typing `<project> <command>` and Tab
+    /// completion never touch this row — see `projectWordIndex`, which
+    /// only highlights a project row for a single word.
     private func makeOption(for project: Project) -> ComposerOption {
         ComposerOption(
             id: project.id,
             title: project.name,
             subtitle: nil,
             leadingIcon: "folder",
+            action: { commitShell(in: project) },
             // `SessionComposerStore.selectProject(_:)` clears the query
             // alongside the id — load-bearing, not tidying: leaving a
             // project-scoping query like "ghos" in place after a project
@@ -848,7 +823,7 @@ struct SessionComposerPalette: View {
             // composerStore.searchText)` -> `reselectBestMatch()` (round-4
             // review swapped this trigger from `query`) re-seeds it in the
             // same update pass, so nothing is lost.
-            action: {
+            clickAction: {
                 selectedIndex = nil
                 composerStore.selectProject(project.id)
             }
@@ -982,8 +957,8 @@ struct SessionComposerPalette: View {
     /// that "the projects were going to be in the search / input results."
     /// A blank query now populates this lane with every project instead of
     /// returning empty, so browsing moved INTO the results well rather than
-    /// disappearing. Selecting a row here sets the composer's selected
-    /// project; it does not start a session.
+    /// disappearing. Return on a row here opens a Shell session in that
+    /// project; a click scopes the composer to it (`makeOption(for:)`).
     private var filteredProjectOptions: [ComposerOption] {
         // N3: `.locked` fixes the project at the write path (`commit()`
         // resolves from the bound project, never `selectedProjectId`), so
@@ -1056,7 +1031,7 @@ struct SessionComposerPalette: View {
     /// only ranks WITHIN each section — so a `.substring` match on a
     /// Templates row's subtitle used to always beat an `.exactPrefix` match
     /// on a Projects row purely because Templates renders above Projects
-    /// (e.g. typing "ghos" selected a "Linear Sync" template whose
+    /// (e.g. typing "ghos" selected a preset template whose
     /// description mentions "Ghostties" over the "ghostties" project
     /// itself). Ties — including a blank query, where every option is
     /// untiered — keep index 0, i.e. current section order, so unambiguous
@@ -1110,6 +1085,12 @@ struct SessionComposerPalette: View {
     /// Skipped when the word also prefixes the current project's name:
     /// template rows already ghost "<current project> > …" then, so the
     /// name completes without moving the highlight off the templates.
+    ///
+    /// Also skipped when the word IS a listed template's name ("codex",
+    /// any casing): Return on a project row opens a shell there, so a
+    /// project like "codex-fork" must not take "codex" + Return away from
+    /// the Codex template. A mere prefix ("Code" vs "Codex") still goes to
+    /// the project.
     static func projectWordIndex(
         in options: [ComposerOption],
         projectIds: Set<UUID>,
@@ -1119,6 +1100,9 @@ struct SessionComposerPalette: View {
         guard !rawQuery.isEmpty, rawQuery.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
         if let currentProjectName,
            currentProjectName.range(of: rawQuery, options: [.caseInsensitive, .anchored]) != nil {
+            return nil
+        }
+        if options.contains(where: { $0.template != nil && $0.title.caseInsensitiveCompare(rawQuery) == .orderedSame }) {
             return nil
         }
         return options.firstIndex { option in
@@ -1417,7 +1401,7 @@ struct SessionComposerPalette: View {
                     isSelected: !resumeState.isResumeColumnFocused && selected == index,
                     showsReturnGlyph: true,
                     titleSize: rowTitleSize,
-                    action: { option.action() }
+                    action: { (option.clickAction ?? option.action)() }
                 )
             }
         }
@@ -1438,8 +1422,8 @@ struct SessionComposerPalette: View {
     }
 
     /// A5's PROJECTS section: the composer's own project rows, filtered by
-    /// the typed text. Each row's action is the option's own
-    /// `selectProject` — the same path a project row has always taken.
+    /// the typed text. Return runs the option's own action (a Shell in that
+    /// project); a click runs its `clickAction` (scope to the project).
     private var downListProjectOptions: [ComposerOption] {
         guard resumeLayout == .list else { return [] }
         return filteredProjectOptions
@@ -1451,7 +1435,7 @@ struct SessionComposerPalette: View {
             systemImage: option.leadingIcon ?? "sparkle",
             title: option.title,
             meta: Self.startRowMeta(option),
-            action: option.action
+            action: option.clickAction ?? option.action
         )
     }
 
@@ -1793,7 +1777,7 @@ struct SessionComposerPalette: View {
         // Run row. Before this, `precommit` resolved the write target from
         // `composerStore.selectedProjectId`, which typing a command never
         // changes (see `currentProject`), so a `.exactPrefix` template row
-        // auto-selected under a command like `ghostties orchestrator` would
+        // auto-selected under a command like `ghostties codex` would
         // commit into whatever project the dropdown was still showing.
         // Setting `selectedProjectId` directly here, rather than via
         // `selectProject(_:)`, is deliberate: `selectProject` also clears
@@ -1866,6 +1850,39 @@ struct SessionComposerPalette: View {
             // `writeError` showing. `selectedIndex` was just nil'd above,
             // so Return is dead until the user types or arrows; re-seed the
             // best match (D1) so Return works again immediately.
+            selectedIndex = bestSelectionIndex(in: flattenedOptions)
+        }
+    }
+
+    /// Return on a PROJECTS row: a Shell session in THAT project, at its
+    /// root. Not routed through `commit(template:)` — that resolves the
+    /// target from the typed command (`commandProject`) and validates the
+    /// typed branch, and neither belongs to the highlighted project: a
+    /// query like "ghostties web" parses "ghostties" as the command
+    /// project while the row being committed is "ghostties web".
+    /// `precommit(atRootOf:)` targets the project and ignores the branch
+    /// pick, even for the current project — the row says the project, so
+    /// the shell starts at its root — without writing the composer's
+    /// selected project or branch, so a failed commit leaves them as they
+    /// were.
+    ///
+    /// Double-fire: `selectedIndex = nil` first (N1/F1, same as every
+    /// other row action), and `precommit`'s own `guard isOpen` rejects a
+    /// second same-keystroke call after the first one closes the store.
+    private func commitShell(in project: Project) {
+        selectedIndex = nil
+        let success = composerStore.precommit(
+            template: .shell, coordinator: coordinator, workspaceStore: store, atRootOf: project
+        )
+        if success {
+            witnessBeat = witnessBeat.next(.launch)
+            isPresented = false
+            NotificationCenter.default.post(
+                name: .workspaceDidCreateSessionInProject,
+                object: coordinator.containerView?.window,
+                userInfo: ["projectId": project.id]
+            )
+        } else {
             selectedIndex = bestSelectionIndex(in: flattenedOptions)
         }
     }
@@ -1967,8 +1984,7 @@ struct SessionComposerPalette: View {
 
     /// Feeds one key to the resume state. `true` when it took the key.
     /// Return on a template row runs that option's own start action; on a
-    /// project row, the option's own project selection, after which the
-    /// list closes onto the newly scoped field.
+    /// project row, the option's own action, which opens a Shell there.
     private func routeToResume(_ key: ComposerResumeState.Key) -> Bool {
         switch resumeState.handle(key, layout: resumeLayout, rowIDs: resumeKeyboardRowIDs) {
         case .passThrough:
@@ -2086,6 +2102,10 @@ struct ComposerOption: Identifiable, Hashable {
     let template: AgentTemplate?
     let templateGroup: SessionTemplateResolver.Group?
     let trailingMeta: TrailingMeta?
+    /// What a pointer click runs instead of `action` (Return), when the
+    /// two differ. Only project rows set it: Return opens a shell there,
+    /// a click scopes the composer to the project.
+    let clickAction: (() -> Void)?
 
     init(
         id: UUID,
@@ -2095,7 +2115,8 @@ struct ComposerOption: Identifiable, Hashable {
         action: @escaping () -> Void,
         template: AgentTemplate? = nil,
         templateGroup: SessionTemplateResolver.Group? = nil,
-        trailingMeta: TrailingMeta? = nil
+        trailingMeta: TrailingMeta? = nil,
+        clickAction: (() -> Void)? = nil
     ) {
         self.id = id
         self.title = title
@@ -2105,6 +2126,7 @@ struct ComposerOption: Identifiable, Hashable {
         self.template = template
         self.templateGroup = templateGroup
         self.trailingMeta = trailingMeta
+        self.clickAction = clickAction
     }
 
     /// Returns a copy with `trailingMeta` replaced — every other field
@@ -2121,7 +2143,8 @@ struct ComposerOption: Identifiable, Hashable {
             action: action,
             template: template,
             templateGroup: templateGroup,
-            trailingMeta: meta
+            trailingMeta: meta,
+            clickAction: clickAction
         )
     }
 

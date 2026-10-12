@@ -171,10 +171,18 @@ enum WorkspaceLayout {
     }
 
     /// A surface whose parent is the window, inset `margin` from its edges:
-    /// the terminal, browser and History cards, and the tray pills (the
-    /// pinned sidebar and the rail draw no card around the tray).
+    /// the terminal, browser, History and overlay cards, and the tray pills
+    /// outside overlay.
     static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
         concentricRadius(parent: windowCornerRadius, inset: margin)
+    }
+
+    /// The corner of the surface the tray pills sit in. Overlay: the
+    /// overlay card (itself the window margin in from the window). Every
+    /// other mode: the window — the pinned sidebar and the rail draw no
+    /// card around the tray.
+    static func trayParentCornerRadius(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
+        mode == .overlay ? concentricCornerRadius(margin: margin) : windowCornerRadius
     }
 
     /// Corner radius on the floating terminal panel (all four corners), and
@@ -196,12 +204,42 @@ enum WorkspaceLayout {
     /// Shadow opacity applied to canvas shadow hosts when the card is visible.
     static let canvasShadowOpacity: Float = 0.15
 
+    /// The closed-sidebar hover bar's shadow (beta.26, Sean): the canvas
+    /// card's colour, lighter and wider than its blur and opacity (round 2),
+    /// so the bar floating over the terminal reads as one more card in the
+    /// same stack. Cast rightward onto the canvas.
+    static let hoverBarShadowColor: CGColor = canvasShadowColor
+    static let hoverBarShadowRadius: CGFloat = 16
+    static let hoverBarShadowOpacity: Float = 0.1275
+
     /// Inset around the terminal panel when sidebar is visible (floating card effect).
     /// The design uses 8pt on all four sides (top, bottom, left, right).
     /// The compiled default of the "Window margin" dial — read it through
     /// `SidebarDialTuning.windowMargin()`, which also drives the sidebar's
     /// outer edge, so every outer gutter in the window stays one value.
     static let terminalInset: CGFloat = 8
+
+    /// Width of the invisible hover trigger strip at the left edge (closed mode).
+    /// Flow 01 (sidebar-presence): 10 → 24 — the hot zone is invisible in the
+    /// app; the `#ffffff08` fill on the design canvas is a diagram device only.
+    static let overlayTriggerWidth: CGFloat = 24
+
+    /// The closed-mode reveal strip: `overlayTriggerWidth` wide at the
+    /// leading edge, full height. The one definition of the zone: the
+    /// container installs its closed-mode tracking area from it, and only
+    /// that area's own events reveal the sidebar.
+    static func closedRevealZone(in bounds: CGRect) -> CGRect {
+        CGRect(x: bounds.minX, y: bounds.minY, width: overlayTriggerWidth, height: bounds.height)
+    }
+
+    /// The open overlay's hover zone: from the window's leading edge to the
+    /// overlay card's trailing edge — the window margin the card sits off
+    /// the window, the sidebar column, and the pinned gutter past it
+    /// (`sidebarTrailingGutter(for: .overlay)`). Full height.
+    static func overlayRevealZone(in bounds: CGRect, sidebarWidth: CGFloat, margin: CGFloat) -> CGRect {
+        let width = margin + sidebarWidth + sidebarTrailingGutter(for: .overlay, margin: margin)
+        return CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height)
+    }
 
     /// Minimum width for the browser panel when visible.
     static let browserMinWidth: CGFloat = 320
@@ -245,6 +283,13 @@ enum WorkspaceLayout {
     /// Canvas background (dark mode). Slightly lighter than chrome dark, still
     /// warm. See `canvasBackgroundLight`.
     static let canvasBackgroundDark = NSColor(white: 0.18, alpha: 1)
+
+    /// The closed-sidebar hover bar's fill (beta.26, Sean): the pinned
+    /// sidebar's chrome, so the sidebar looks the same revealed as pinned.
+    /// Follows the OS appearance, not the terminal theme.
+    static func hoverBarFill(isDark: Bool) -> NSColor {
+        isDark ? chromeBackgroundDark : chromeBackgroundLight
+    }
 
     /// Border (dark mode): DESIGN.md `darkBorder` #2a2a2a, a hairline one
     /// step above the dark chrome. The tray glass's dark rim.
@@ -318,12 +363,14 @@ enum WorkspaceLayout {
     /// backdrop it renders on. `#6b6b6b` (DESIGN.md's original documented
     /// value) still falls short at 4.44:1 on chrome and 4.08:1 on the
     /// `activeRowLight` tint — the two backdrops most of this text actually
-    /// sits on. `#636363` clears 4.5:1 on chrome, the active-row tint, and
-    /// canvas. See `docs/audits/sidebar-contrast-audit.md`.
-    static let textSecondaryLight = Color(red: 0x63 / 255.0, green: 0x63 / 255.0, blue: 0x63 / 255.0)
+    /// sits on. `#5E5E5E` (beta.26, sidebar contrast option 2) clears 4.5:1
+    /// with margin on chrome and on the project group card
+    /// (`RailProjectColumn.columnFill`). See
+    /// `docs/audits/sidebar-contrast-audit.md`.
+    static let textSecondaryLight = Color(red: 0x5E / 255.0, green: 0x5E / 255.0, blue: 0x5E / 255.0)
 
     /// Secondary/muted text foreground (dark mode). See `textSecondaryLight`.
-    static let textSecondaryDark = Color(red: 0x9A / 255.0, green: 0x9A / 255.0, blue: 0x9A / 255.0)
+    static let textSecondaryDark = Color(red: 0xA6 / 255.0, green: 0xA6 / 255.0, blue: 0xA6 / 255.0)
 
     /// Foreground for the small section-header labels in the sidebar
     /// ("Pinned", "Active Now", "Recent", "All Projects"). Muted by design so
@@ -335,10 +382,15 @@ enum WorkspaceLayout {
     }
 
     /// An empty project's header and rail monogram in the one-view sidebar
-    /// (Sean, 2026-10-08: shown dimmed, count 0). One tier below
-    /// `sectionHeaderForeground` on purpose, so it sits under the 4.5:1 that
-    /// token clears: the dimming is the signal that nothing is running there.
-    static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
+    /// (Sean, 2026-10-08: shown dimmed, count 0). The `textSecondary` token
+    /// (beta.26: was `tertiaryLabelColor`, which failed 4.5:1), resolved per
+    /// appearance. The quiet comes from the tile: a live project's monogram
+    /// is primary ink, an empty one's is this secondary grey.
+    static let emptyProjectForeground = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(textSecondaryDark)
+            : NSColor(textSecondaryLight)
+    })
 
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
@@ -439,14 +491,17 @@ enum WorkspaceLayout {
     /// sat 8pt from the window edge but 16pt from the card. Collapsed (rail
     /// A2): 0, the card butts the rail, whose own width already ends a
     /// `leadingInset` past the traffic lights (`collapsedRailWidth`).
-    /// Overlay/closed: the column's trailing edge IS the panel edge, so 0.
+    /// Overlay: the same as pinned — the overlay card is the pinned sidebar
+    /// presented over the terminal, so its column keeps the pinned gutter
+    /// and the card's trailing edge sits that far past the column
+    /// (`overlayRevealZone`). Closed: no sidebar, 0.
     static func sidebarTrailingGutter(for mode: SidebarMode, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         sidebarTrailingGutter(for: mode, margin: SidebarDialTuning.windowMargin(defaults: defaults))
     }
 
     /// `sidebarTrailingGutter(for:)` at an explicit window margin.
     static func sidebarTrailingGutter(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
-        mode == .pinned ? margin : 0
+        mode == .pinned || mode == .overlay ? margin : 0
     }
 
     /// Hit width of the sidebar drag handle on the rail: a strip over the
@@ -458,13 +513,14 @@ enum WorkspaceLayout {
     /// Width of the sidebar drag handle, whose trailing edge always sits on
     /// the card's leading edge. Pinned: the sidebar-to-card gap it sits in
     /// (`sidebarTrailingGutter`). Collapsed: `railDragHandleHitWidth`, over
-    /// the rail, so the handle never depends on the gap. Overlay/closed: 0
-    /// (the handle is hidden there).
+    /// the rail, so the handle never depends on the gap. Overlay: the same
+    /// gutter as pinned, between the column and the overlay card's edge.
+    /// Closed: 0 (the handle is hidden there).
     static func sidebarDragHandleWidth(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
         switch mode {
-        case .pinned: return sidebarTrailingGutter(for: .pinned, margin: margin)
+        case .pinned, .overlay: return sidebarTrailingGutter(for: mode, margin: margin)
         case .collapsed: return railDragHandleHitWidth
-        case .closed, .overlay: return 0
+        case .closed: return 0
         }
     }
 
@@ -613,6 +669,13 @@ enum WorkspaceLayout {
     static func sidebarTransitionAlphaDuration(reduceMotion: Bool, timing: SidebarTransitionTiming) -> TimeInterval {
         reduceMotion ? sidebarReducedMotionCrossfadeDuration : timing.duration
     }
+
+    /// Delay before the closed-state 24pt hot zone starts accepting hover
+    /// (Flow 05: "hot zone hidden → 24px at 180ms, step") — installed only
+    /// once the full-close animation has actually finished, not the instant
+    /// the toggle fires, so a fast mouse can't trigger the reveal overlay
+    /// before the card has reached the edge.
+    static let closedHotZoneActivationDelay: TimeInterval = 0.18
 
     /// Rail hover-reveal (`RailHoverReveal`): how long the pointer rests on
     /// the rail before the full sidebar reveals over the terminal, and how
@@ -889,17 +952,19 @@ private struct SidebarRailWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
 }
 
-private struct TrayShadowStateKey: EnvironmentKey {
-    static let defaultValue: SidebarDialTuning.TrayShadowState = .sidebar
+private struct SidebarModeKey: EnvironmentKey {
+    static let defaultValue: SidebarMode = .pinned
 }
 
 extension EnvironmentValues {
-    /// The sidebar state whose tray shadow dials the tray draws
-    /// (`SidebarDialTuning.trayGlass(for:state:)`), injected at the sidebar
-    /// root (`SidebarHostRoot`). The sidebar's outside it.
-    var trayShadowState: SidebarDialTuning.TrayShadowState {
-        get { self[TrayShadowStateKey.self] }
-        set { self[TrayShadowStateKey.self] = newValue }
+    /// The sidebar's mode, injected at the sidebar root (`SidebarHostRoot`)
+    /// from `store.sidebarMode` — the target mode from the start of a
+    /// transition, so a morph switches once. The tray reads it for its
+    /// pills' corner (`TrayGlassStyle.pillCornerRadius(for:)`) and shadow
+    /// (`SidebarDialTuning.trayGlass(for:state:)`). Pinned outside it.
+    var sidebarMode: SidebarMode {
+        get { self[SidebarModeKey.self] }
+        set { self[SidebarModeKey.self] = newValue }
     }
 
     /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected

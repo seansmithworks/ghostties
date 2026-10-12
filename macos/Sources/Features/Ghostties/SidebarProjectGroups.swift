@@ -42,6 +42,18 @@ enum SidebarBodyKind: Equatable {
     }
 }
 
+/// The one-view list's project order, which the rail shares: pinned
+/// projects first, then the rest, each in `WorkspaceStore.projects` order
+/// (the manual drag order). A stable partition, so unpinning a project puts
+/// it back at its own place in that order. Everything that orders one-view
+/// projects (`SidebarProjectGroup.make`, project drag and keyboard moves)
+/// reads this; `WorkspaceStore.moveProject` keeps a move inside its group.
+enum ProjectListOrder {
+    static func pinnedFirst(_ projects: [Project]) -> [Project] {
+        projects.filter(\.isPinned) + projects.filter { !$0.isPinned }
+    }
+}
+
 /// One project's live, unpinned sessions in the one-view list.
 struct SidebarProjectGroup: Equatable, Identifiable {
     /// Nil only for sessions whose project no longer exists.
@@ -55,8 +67,8 @@ struct SidebarProjectGroup: Equatable, Identifiable {
     /// of 0 and no rows. It never folds; a click selects it instead.
     var isEmpty: Bool { sessions.isEmpty }
 
-    /// Groups `active` (already in render order) by project, in `projects`
-    /// order. Every project gets a group, empty ones included (Sean,
+    /// Groups `active` (already in render order) by project, in
+    /// `ProjectListOrder` (pinned first). Every project gets a group, empty ones included (Sean,
     /// 2026-10-08: show empty projects dimmed with count 0, rather than
     /// mock B5's hidden). Sessions whose project is gone trail in one
     /// "Unknown" group, the name rows already use for them, so no live
@@ -66,7 +78,7 @@ struct SidebarProjectGroup: Equatable, Identifiable {
         for session in active {
             byProject[session.projectId, default: []].append(session)
         }
-        var groups: [SidebarProjectGroup] = projects.map { project in
+        var groups: [SidebarProjectGroup] = ProjectListOrder.pinnedFirst(projects).map { project in
             SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [])
         }
         let orphans = active.filter { byProject[$0.projectId] != nil }
@@ -523,7 +535,7 @@ struct ProjectMonogramTileFace: View {
 
     // Option D (`hRCBC`: `#28221E1A`), per appearance.
     private var tint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.tintOpacity)
+        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(isEmpty ? RailProjectTile.emptyTintOpacity : RailProjectTile.tintOpacity)
     }
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
@@ -672,6 +684,9 @@ enum RailProjectTile {
     static let cornerRadius: CGFloat = 8
     /// The tile's tint in light (option D `#28221E1A`; was 7.5%).
     static let tintOpacity: Double = 0.10
+    /// An empty project's tile tint in light (beta.26): lighter than a live
+    /// tile's, so its `textSecondary` letter clears 4.5:1 (4.61 on chrome).
+    static let emptyTintOpacity: Double = 0.085
 
     static func ink(_ colorScheme: ColorScheme) -> Color {
         colorScheme == .dark

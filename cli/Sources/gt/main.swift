@@ -6,7 +6,7 @@ struct GT: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "gt",
         abstract: "Ghostties task CLI — manipulate .ghostties/tasks/ from any shell.",
-        version: "0.1.0",
+        version: "0.5.0",
         subcommands: [
             NewCommand.self,
             ListCommand.self,

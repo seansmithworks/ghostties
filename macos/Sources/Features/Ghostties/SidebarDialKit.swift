@@ -211,15 +211,20 @@ enum SidebarDialTuning {
     static let motionCollapseBounceKey = "ghostties.sidebarDial.motion.collapseBounce"
 
     // MARK: Tray shadow per sidebar state (light appearance)
-    // The tray pills' shadow in light, tuned per state: the pinned sidebar
-    // and the rail. Dark keeps the one shared shadow (`darkGlassKeys`).
+    // The tray pills' shadow in light, tuned per state: the pinned sidebar,
+    // the rail, and the hover bar (the overlay revealed from closed).
+    // Dark keeps the one shared shadow (`darkGlassKeys`).
     enum TrayShadowState: String, CaseIterable {
-        case sidebar, rail
+        case sidebar, rail, hoverBar
 
-        /// The state whose shadow a mode's tray draws: the rail when
-        /// collapsed, the sidebar otherwise (closed has no tray on screen).
+        /// The state whose shadow a mode's tray draws. Closed has no tray
+        /// on screen; it takes the sidebar's.
         init(_ mode: SidebarMode) {
-            self = mode == .collapsed ? .rail : .sidebar
+            switch mode {
+            case .pinned, .closed: self = .sidebar
+            case .collapsed: self = .rail
+            case .overlay: self = .hoverBar
+            }
         }
     }
 
@@ -421,11 +426,16 @@ enum SidebarDialTuning {
     static func trayGlassCornerStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.CornerStyle {
         choice(trayGlassCornerStyleKey, default: TrayGlassStyle.cornerStyle, defaults: defaults)
     }
-    /// The tray pills' radius ("radius" corner style): concentric with the
-    /// window corner at the window margin they sit inside
-    /// (`WorkspaceLayout.concentricCornerRadius`), like the canvas card.
-    static func trayCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        WorkspaceLayout.concentricCornerRadius(margin: windowMargin(defaults: defaults))
+    /// The tray pills' radius ("radius" corner style) in `mode`: concentric
+    /// with the surface they sit in (`WorkspaceLayout.trayParentCornerRadius`),
+    /// the window margin in from its edges — the tray's own leading, trailing
+    /// and bottom padding in every mode.
+    static func trayCornerRadius(for mode: SidebarMode = .pinned, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        let margin = windowMargin(defaults: defaults)
+        return WorkspaceLayout.concentricRadius(
+            parent: WorkspaceLayout.trayParentCornerRadius(for: mode, margin: margin),
+            inset: margin
+        )
     }
 
     static func rowHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
@@ -586,7 +596,7 @@ enum SidebarDialTuning {
         cgFloat(trayHoverInsetKey, default: TrayGlassStyle.hoverInset, defaults: defaults)
     }
 
-    /// The project column's faint fill (`RailProjectColumn.columnTintOpacity`).
+    /// The project column's fill in dark (`RailProjectColumn.columnTintOpacity`).
     static func railColumnTintOpacity(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
         double(railColumnTintOpacityKey, default: RailProjectColumn.defaultColumnTintOpacity, defaults: defaults)
     }
@@ -1297,7 +1307,7 @@ enum RailDialPanel: FocusedDialPanel {
             .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
             // One view's selected project column (`RailProjectColumn`).
             .group("railColumn", label: "Rail column", children: [
-                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint", range: 0...0.3, step: 0.005),
+                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint (dark)", range: 0...0.3, step: 0.005),
                 .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
                 .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
                 .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
@@ -1324,10 +1334,11 @@ struct TrayShadowDialKitTuningModel: Codable, Equatable {
 
     var sidebar: Shadow
     var rail: Shadow
+    var hoverBar: Shadow
 }
 
 /// The "Tray shadow" panel: the tray pills' shadow in light appearance,
-/// independent for the pinned sidebar and the rail. Each
+/// independent for the pinned sidebar, the rail and the hover bar. Each
 /// tray reads its current mode's set live (`trayGlass(for:state:)`).
 @available(macOS 14, *)
 @MainActor
@@ -1341,13 +1352,14 @@ enum TrayShadowDialPanel: FocusedDialPanel {
             let look = SidebarDialTuning.trayGlass(for: .light, state: state, defaults: defaults)
             return .init(opacity: look.shadowOpacity, radius: Double(look.shadowRadius), yOffset: Double(look.shadowYOffset))
         }
-        return TrayShadowDialKitTuningModel(sidebar: shadow(.sidebar), rail: shadow(.rail))
+        return TrayShadowDialKitTuningModel(sidebar: shadow(.sidebar), rail: shadow(.rail), hoverBar: shadow(.hoverBar))
     }
 
     static func write(_ defaults: UserDefaults, from previous: TrayShadowDialKitTuningModel, to model: TrayShadowDialKitTuningModel) {
         let pairs: [(SidebarDialTuning.TrayShadowState, TrayShadowDialKitTuningModel.Shadow, TrayShadowDialKitTuningModel.Shadow)] = [
             (.sidebar, previous.sidebar, model.sidebar),
             (.rail, previous.rail, model.rail),
+            (.hoverBar, previous.hoverBar, model.hoverBar),
         ]
         for (state, old, new) in pairs {
             let keys = SidebarDialTuning.trayShadowKeys(state)
@@ -1372,6 +1384,7 @@ enum TrayShadowDialPanel: FocusedDialPanel {
         [
             .group("sidebar", label: "Sidebar — Light", children: controls("sidebar", \.sidebar)),
             .group("rail", label: "Rail — Light", children: controls("rail", \.rail)),
+            .group("hoverBar", label: "Hover bar — Light", children: controls("hoverBar", \.hoverBar)),
         ]
     }
 }

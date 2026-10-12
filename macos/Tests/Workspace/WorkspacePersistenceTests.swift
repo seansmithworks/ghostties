@@ -420,6 +420,36 @@ struct WorkspacePersistenceTests {
         #expect(validated.sessions[0].id == goodSession.id)
     }
 
+    /// The Orchestrator built-in was removed in 0.5.0-beta.26. A saved
+    /// session that used it must still load (dropping it as an orphan would
+    /// delete the user's history row), and loading moves it onto Claude
+    /// Code, so relaunch — which looks the session's template up by id in
+    /// `store.templates` — starts Claude Code instead of finding nothing.
+    @Test @MainActor func relaunchingAnOrchestratorSessionStartsClaudeCode() throws {
+        let orchestratorId = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
+        let project = makeProject()
+        let session = makeSession(projectId: project.id, templateId: orchestratorId, name: "orchestrator thread")
+        let data = try JSONEncoder().encode(WorkspacePersistence.State(projects: [project], sessions: [session]))
+
+        let decoded = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+        let validated = WorkspacePersistence.validate(decoded)
+
+        #expect(validated.sessions.map(\.id) == [session.id], "the session still loads")
+        #expect(validated.sessions.first?.templateId == AgentTemplate.claudeCode.id)
+        let store = WorkspaceStore(testingProjects: validated.projects, testingSessions: validated.sessions)
+        let relaunchTemplate = store.templates.first { $0.id == validated.sessions.first?.templateId }
+        #expect(relaunchTemplate?.id == AgentTemplate.claudeCode.id, "relaunch's own lookup finds Claude Code")
+    }
+
+    /// A template id that is neither known nor retired is still dropped as
+    /// an orphan — the retired-id rewrite doesn't widen what loads.
+    @Test func aSessionOnAnUnknownTemplateIsStillDropped() {
+        let project = makeProject()
+        let session = makeSession(projectId: project.id, templateId: UUID(), name: "unknown")
+        let validated = WorkspacePersistence.validate(WorkspacePersistence.State(projects: [project], sessions: [session]))
+        #expect(validated.sessions.isEmpty)
+    }
+
     // MARK: - Flag Allowlist (024)
 
     @Test func validateRejectsFlagWithBackticks() {
