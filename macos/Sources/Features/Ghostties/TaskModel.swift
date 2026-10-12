@@ -103,7 +103,7 @@ struct TaskItem: Identifiable, Codable, Equatable {
     /// Stored tilde-raw — expand via `NSString(string:).expandingTildeInPath`
     /// at the call site, never on write.
     let projectPath: String?
-    /// Optional `AgentTemplate` name override (e.g. `orchestrator`,
+    /// Optional `AgentTemplate` name override (e.g. `codex`,
     /// `claude code`). Resolved case-insensitively at spawn time against
     /// `WorkspaceStore.templates`; a non-nil value that fails to resolve logs
     /// to stderr and falls back to the user-preference / built-in default.

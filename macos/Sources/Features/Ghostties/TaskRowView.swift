@@ -95,7 +95,7 @@ struct TaskRowView: View {
     /// clicked and the task itself doesn't specify one. Empty string = use
     /// the built-in default (whatever `startOrFocusSession` falls back to).
     /// No Settings UI in v0 — set via
-    /// `defaults write com.mitchellh.ghostty ghostties.defaultTaskTemplate "Orchestrator"`.
+    /// `defaults write com.mitchellh.ghostty ghostties.defaultTaskTemplate "Codex"`.
     @AppStorage("ghostties.defaultTaskTemplate") private var defaultTaskTemplate: String = ""
     @State private var isHovered = false
 

@@ -692,8 +692,14 @@ final class SessionComposerStore: ObservableObject {
     func precommit(
         template: AgentTemplate,
         coordinator: SessionCoordinator,
-        workspaceStore: WorkspaceStore
+        workspaceStore: WorkspaceStore,
+        atRootOf rootProject: Project? = nil
     ) -> Bool {
+        // `rootProject` (Return on a PROJECTS row): launch in that project at
+        // its root, ignoring `selectedProjectId` and the branch pick, without
+        // writing either — a commit that fails below leaves the composer's
+        // selection untouched. `.locked` still wins.
+        //
         // R3 (Phase 3 review round 2): the keyboard path's double-Return
         // guard (`SessionComposerPalette.commit(template:)` nil-ing
         // `selectedIndex` synchronously) doesn't cover the mouse path —
@@ -729,7 +735,7 @@ final class SessionComposerStore: ObservableObject {
         if case .locked(let lockedProject) = currentProjectBinding {
             resolvedProjectId = lockedProject.id
         } else {
-            resolvedProjectId = selectedProjectId
+            resolvedProjectId = rootProject?.id ?? selectedProjectId
         }
 
         guard let projectId = resolvedProjectId,
@@ -754,7 +760,10 @@ final class SessionComposerStore: ObservableObject {
         // for, and its mutant-proof (delete the `workingDirectory` write
         // below and watch that test go red).
         let launchTemplate: AgentTemplate
-        switch Self.resolveLaunchTemplate(template: template, selectedWorktreePath: selectedWorktreePath) {
+        switch Self.resolveLaunchTemplate(
+            template: template,
+            selectedWorktreePath: rootProject == nil ? selectedWorktreePath : nil
+        ) {
         case .success(let resolved):
             launchTemplate = resolved
         case .failure(let error):

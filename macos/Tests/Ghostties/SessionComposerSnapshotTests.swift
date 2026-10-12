@@ -341,12 +341,10 @@ struct SessionComposerSnapshotTests {
     /// a DIFFERENT project — highlights. The field must read `Bruk`
     /// (typed, solid) + `as > Default > Shell` (ghosted): `Brukas`'s OWN
     /// destination, not `ghostties`'s. `ghostFullPath` here is the literal
-    /// string `SessionComposerPalette.destination(for:store:
-    /// recentSelections:)` produces for a fixture `Brukas` project with no
-    /// `defaultTemplateId`/recent selection
-    /// (`SessionComposerGhostSourceTests
-    /// .projectWithNoDefaultOrRecentLandsOnTheFirstAvailableTemplate`
-    /// proves that function call directly) — this test proves the
+    /// string `SessionComposerPalette.destination(for:)` produces for a
+    /// `Brukas` project (`SessionComposerGhostSourceTests
+    /// .aProjectRowGhostsAShellAtItsRoot` proves that function call
+    /// directly) — this test proves the
     /// RENDERING half, matching this file's existing precedent of
     /// constructing `ComposerGhostTextField` directly rather than
     /// threading the whole `SessionComposerPalette`/`selectedOption`

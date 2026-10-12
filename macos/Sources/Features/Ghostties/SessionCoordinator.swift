@@ -759,6 +759,11 @@ final class SessionCoordinator: ObservableObject {
             }) {
                 return match
             }
+            // A retired built-in's name (a task saved with
+            // `template: Orchestrator`) starts its replacement.
+            if let replacement = AgentTemplate.replacement(forRetiredName: requested) {
+                return store.templates.first(where: { $0.id == replacement.id }) ?? replacement
+            }
             FileHandle.standardError.write(Data(
                 "⚠️ Ghostties: template '\(requested)' not found; falling back to default\n".utf8
             ))
