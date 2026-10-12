@@ -347,7 +347,7 @@ struct ProjectAccordionHeader: View {
     @State private var clusterEdges: [ClusterPart: CGFloat] = [:]
 
     var body: some View {
-        let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
+        let ink = isEmpty ? SidebarColors.dimmedProject(colorScheme) : SidebarColors.secondaryText(colorScheme)
         let progress = morphOverride ?? widthModel.morph
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
@@ -436,7 +436,7 @@ struct ProjectAccordionHeader: View {
                 // Full-strength header ink even on an empty (dimmed) project,
                 // so the mark clears 3:1 on the light and dark sidebar alike.
                 Rectangle()
-                    .fill(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
+                    .fill(SidebarColors.secondaryText(colorScheme))
                     .frame(width: 2)
                     .allowsHitTesting(false)
             }
@@ -522,9 +522,7 @@ struct ProjectMonogramTileFace: View {
     private var isFilled: Bool { inkFill > 0.5 }
 
     // Option D (`hRCBC`: `#28221E1A`), per appearance.
-    private var tint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.tintOpacity)
-    }
+    private var tint: Color { SidebarColors.tileFill(colorScheme) }
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
         // Tint fades out as ink fades in, so each end draws exactly one
@@ -537,7 +535,7 @@ struct ProjectMonogramTileFace: View {
             .overlay {
                 Text(monogram)
                     .font(.system(size: textSize, weight: .bold))
-                    .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
+                    .foregroundStyle(isEmpty ? SidebarColors.dimmedProject(colorScheme) : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
             }
             .frame(width: size, height: size)
     }
@@ -674,12 +672,10 @@ enum RailProjectTile {
     static let tintOpacity: Double = 0.10
 
     static func ink(_ colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(red: 0xF0 / 255, green: 0xEF / 255, blue: 0xED / 255)
-            : Color(red: 0x23 / 255, green: 0x21 / 255, blue: 0x20 / 255)
+        SidebarColors.tileInk(colorScheme)
     }
     static func badgeText(_ colorScheme: ColorScheme) -> Color {
-        Color(nsColor: colorScheme == .dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight)
+        Color(nsColor: SidebarColors.background(colorScheme))
     }
 }
 

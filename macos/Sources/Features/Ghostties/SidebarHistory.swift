@@ -170,7 +170,7 @@ struct HistoryGlyph: View {
     var body: some View {
         Image(systemName: "clock.arrow.circlepath")
             .font(.system(size: size * 0.8, weight: .medium))
-            .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+            .foregroundStyle(SidebarColors.secondaryText(colorScheme))
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }

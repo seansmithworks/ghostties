@@ -783,9 +783,7 @@ class WorkspaceViewContainer: NSView {
     /// terminal card. Owned by the Ghostties design system — intentionally
     /// independent of terminal theme.
     private var chromePaletteNSColor: NSColor {
-        isLightAppearance
-            ? WorkspaceLayout.chromeBackgroundLight
-            : WorkspaceLayout.chromeBackgroundDark
+        SidebarColors.background(isLightAppearance ? .light : .dark)
     }
 
     /// Terminal card background — the canvas layer. Always the Ghostties
@@ -922,6 +920,8 @@ class WorkspaceViewContainer: NSView {
         }
         applyWindowMargin()
         #if DEBUG
+        // A live "Sidebar background" dial repaints the chrome layer.
+        applyChromeColor()
         redlineOverlay.refresh()
         #endif
     }
