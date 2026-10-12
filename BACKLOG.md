@@ -1,5 +1,17 @@
 # Ghostties — Backlog
 
+## 2026-10-12 — v0.5.0-beta.26 SHIPPED; beta.27 carry-overs (Beta 26 thread 2c42eb2c)
+- [x] v0.5.0-beta.26 tagged on 829cca013 and released (GitHub release, DMG, beta appcast, website, npm installer, Homebrew tap 12818827). #232 #233 #234 merged.
+- [ ] NEXT: publish refresh — README `product-hero.png`/`demo.gif`, web `app-*@2x` (8), `social-card.png`, `product-flow.mp4`/`product-sessions.mp4` all predate beta.26 (Aug 2–27). Stills via capture rig (fixture data only); videos need Sean recording or Remotion. | content | new
+- [ ] NEXT: GitHub repo cleanup branch — audit fork-owned files (dead / misplaced / public-hygiene / large binaries); keep upstream-owned paths untouched (merge-conflict risk). Audit agent was stopped before output. | repo | new
+- [ ] CI Homebrew auto-bump: set `HOMEBREW_TAP_REPO` + fine-grained `HOMEBREW_TAP_TOKEN` (Sean's hands); tap was hand-bumped for beta.26 and had skipped beta.25. | build | carried
+- [ ] Tests still setenv after ghostty_init (same use-after-free class as the beta.26 launch crash): `TaskStoreIncrementalReloadTests.swift:38,42`, `ComposerSingleLineStyleTests.swift:822-828`. Lint rule `no_env_mutation_after_init` excludes Tests. | quality | new
+- [ ] SwiftLint not installed locally and skipped in CI (`GITHUB_ACTIONS`), so `no_env_mutation_after_init` is unenforced. Install + add a CI step. | build | new
+- [ ] Sidebar shows "No sessions yet" and hides every project while sessions is empty (`RecentsListView.swift:146`, same in beta.25). New Project opens the composer, so it only bites if the user cancels it. Sean 2026-10-12: new installs have no projects, leave for now. | experience | new
+- [ ] **Canvas shadow vanishes — REPRO FOUND (Sean, 2026-10-12): switching light/dark loses it; any sidebar mode change restores it.** Lead (unverified): `terminalShadowHost`/`browserShadowHost` are AppKit layer-backed (`wantsLayer`), shadow set straight on `layer` only in mode transitions (`WorkspaceViewContainer.swift:2552-2588`); `viewDidChangeEffectiveAppearance` (:1269) re-sets backgrounds but never the shadow, and AppKit can re-sync a layer-backed view's shadow from `NSView.shadow` (nil). Fix: one `applyCardShadows()` from transitions + appearance change (or make the hosts layer-hosting). Test: flip appearance, assert shadowOpacity > 0. Punted to beta.27 by Sean. | app | new
+- [ ] verify-release false FAIL: `ghostties-release.yml:1031-1035` requires the release BODY to contain `v<version>`, but `extract-release-notes.py` emits only the section body (no heading). Check the release title (`Ghostties v${VERSION}`) instead. beta.26 shipped fine; run 38305178241 red on this row only. Also: `build.zig.zon` .version must match the tag base (beta.26 tag had to be moved). | build | new
+- [ ] No test pins the hover-bar shadow z-order (98) or path inset; visual-only check. | quality | new
+
 ## 2026-10-10 — sidebar audit: decisions, homes for stranded work, motion gaps
 
 - [x] DECIDED 2026-10-10: radius. Sean approved the Option D compare: 12 on group card and rail column, 8 on pills and tiles (concentric). Closes the "radius 8 vs 12 decide-or-kill" line and the dark-shadow known-failing line (expectation now 0.4/12/4, passes in the hosted run 2026-10-10).
