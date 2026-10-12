@@ -381,10 +381,15 @@ enum WorkspaceLayout {
     }
 
     /// An empty project's header and rail monogram in the one-view sidebar
-    /// (Sean, 2026-10-08: shown dimmed, count 0). One tier below
-    /// `sectionHeaderForeground` on purpose, so it sits under the 4.5:1 that
-    /// token clears: the dimming is the signal that nothing is running there.
-    static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
+    /// (Sean, 2026-10-08: shown dimmed, count 0). The `textSecondary` token
+    /// (beta.26: was `tertiaryLabelColor`, which failed 4.5:1), resolved per
+    /// appearance. The quiet comes from the tile: a live project's monogram
+    /// is primary ink, an empty one's is this secondary grey.
+    static let emptyProjectForeground = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(textSecondaryDark)
+            : NSColor(textSecondaryLight)
+    })
 
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
