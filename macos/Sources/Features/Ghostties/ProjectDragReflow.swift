@@ -4,8 +4,9 @@ import SwiftUI
 
 /// Pure geometry for dragging a project group in the one-view list — the
 /// project-level twin of `SessionDragReflow`. A project's order is its place
-/// in `WorkspaceStore.projects`, which the list and the rail both group by
-/// (`SidebarProjectGroup.make`), so a drop is one `moveProject(id:before:)`.
+/// in `ProjectListOrder.pinnedFirst(WorkspaceStore.projects)`, which the list
+/// and the rail both group by (`SidebarProjectGroup.make`), so a drop is one
+/// `moveProject(id:before:)`.
 ///
 /// Indices here count the reorderable groups (every group with a project)
 /// with the dragged one already removed — the dragged group is not rendered
