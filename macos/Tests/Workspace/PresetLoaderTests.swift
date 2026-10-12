@@ -27,8 +27,8 @@ struct PresetLoaderTests {
         #expect(PresetLoader.seedIfNeeded(presetsDirectoryPath: dir, bundledPresetsURL: missingBundle) == .alreadySeeded)
     }
 
-    /// A user who already has the Linear Sync preset keeps it: seeding
-    /// copies, it never deletes what the bundle stopped shipping.
+    /// Seeding never deletes a preset the bundle stopped shipping unless it
+    /// is retired and unmodified; an edited copy is the user's.
     @Test func seedingNeverRemovesAPresetTheBundleNoLongerShips() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("preset-seed-\(UUID().uuidString)")
@@ -41,6 +41,50 @@ struct PresetLoaderTests {
         _ = PresetLoader.seedIfNeeded(presetsDirectoryPath: dir.path, bundledPresetsURL: root.appendingPathComponent("bundle/presets"))
 
         #expect(fm.fileExists(atPath: kept.path))
+    }
+
+    /// `linear-sync/preset.json` exactly as an earlier beta seeded it.
+    private static let shippedLinearSyncPreset = """
+    {
+      "name": "Linear Sync",
+      "description": "Syncs Linear issues into Ghostties tasks",
+      "icon": "arrow.triangle.2.circlepath",
+      "model": null,
+      "permissionMode": null
+    }
+
+    """
+
+    private func seedRetired(_ name: String, contents: String) throws -> (root: URL, dir: URL, preset: URL) {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("preset-seed-\(UUID().uuidString)")
+        let dir = root.appendingPathComponent("presets")
+        let preset = dir.appendingPathComponent("\(name)/preset.json")
+        try fm.createDirectory(at: preset.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(contents.utf8).write(to: preset)
+        _ = PresetLoader.seedIfNeeded(presetsDirectoryPath: dir.path, bundledPresetsURL: root.appendingPathComponent("bundle/presets"))
+        return (root, dir, preset)
+    }
+
+    @Test func seedingRemovesAnUnmodifiedRetiredLinearSync() throws {
+        let seeded = try seedRetired("linear-sync", contents: Self.shippedLinearSyncPreset)
+        defer { try? FileManager.default.removeItem(at: seeded.root) }
+
+        #expect(!FileManager.default.fileExists(atPath: seeded.preset.deletingLastPathComponent().path))
+    }
+
+    @Test func seedingKeepsAnEditedRetiredLinearSync() throws {
+        let seeded = try seedRetired("linear-sync", contents: Self.shippedLinearSyncPreset + "// mine\n")
+        defer { try? FileManager.default.removeItem(at: seeded.root) }
+
+        #expect(FileManager.default.fileExists(atPath: seeded.preset.path))
+    }
+
+    @Test func seedingKeepsAUserPresetWithAnotherName() throws {
+        let seeded = try seedRetired("my-preset", contents: Self.shippedLinearSyncPreset)
+        defer { try? FileManager.default.removeItem(at: seeded.root) }
+
+        #expect(FileManager.default.fileExists(atPath: seeded.preset.path))
     }
 
     // MARK: - parseFrontmatter (via parsePreset)
