@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [0.1.0-beta.26] — 2026-10-05
+## [0.5.0-beta.26] — 2026-10-05
 
 The sidebar gets a third state, a narrow rail that morphs from the full list and opens when you rest on it, a glass tray, and one list of projects, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row in the full list, and are centered in the rail. There is now one composer, a centered single line, and Cmd+T can resume a past session from it. Ghostties also moves onto the latest upstream Ghostty.
 

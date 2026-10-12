@@ -420,7 +420,7 @@ struct WorkspacePersistenceTests {
         #expect(validated.sessions[0].id == goodSession.id)
     }
 
-    /// The Orchestrator built-in was removed in 0.1.0-beta.26. A saved
+    /// The Orchestrator built-in was removed in 0.5.0-beta.26. A saved
     /// session that used it must still load (dropping it as an orphan would
     /// delete the user's history row), and loading moves it onto Claude
     /// Code, so relaunch — which looks the session's template up by id in

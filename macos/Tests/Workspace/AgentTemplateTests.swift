@@ -51,7 +51,7 @@ struct AgentTemplateTests {
         #expect(AgentTemplate.defaults.map(\.name) == ["Shell", "Claude Code", "Codex", "Browser"])
     }
 
-    /// Orchestrator was retired in 0.1.0-beta.26: its id (a saved session)
+    /// Orchestrator was retired in 0.5.0-beta.26: its id (a saved session)
     /// and its name (a task's `template: Orchestrator`, any casing) both
     /// resolve to Claude Code. Anything else resolves to nothing.
     @Test func theRetiredOrchestratorResolvesToClaudeCode() {

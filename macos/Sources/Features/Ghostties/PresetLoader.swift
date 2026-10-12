@@ -47,7 +47,7 @@ struct PresetLoader {
     /// preset the bundle no longer ships.
     ///
     /// The app currently bundles no presets (Linear Sync, the last one, was
-    /// removed in 0.1.0-beta.26), so a missing bundled directory is the
+    /// removed in 0.5.0-beta.26), so a missing bundled directory is the
     /// normal case, not an error: the version marker is written and nothing
     /// is copied. Both paths are parameters so a test can seed into a temp
     /// directory instead of the real `~/.ghostties`.

@@ -8,7 +8,7 @@ struct PresetLoaderTests {
     // MARK: - Seeding
 
     /// The app bundles no presets since Linear Sync was removed
-    /// (0.1.0-beta.26). Seeding must treat that as "nothing to copy", not
+    /// (0.5.0-beta.26). Seeding must treat that as "nothing to copy", not
     /// a failure: no crash, nothing written but the version marker, and
     /// the marker so it doesn't re-run every launch.
     @Test func seedingWithNoBundledPresetsWritesOnlyTheMarker() throws {

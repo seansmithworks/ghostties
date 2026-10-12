@@ -124,7 +124,7 @@ final class SessionCoordinatorIndicatorStateTests: XCTestCase {
         )
     }
 
-    // MARK: - Retired Orchestrator template (0.1.0-beta.26)
+    // MARK: - Retired Orchestrator template (0.5.0-beta.26)
 
     /// A saved session on the retired Orchestrator template, loaded the way
     /// the app loads it (`WorkspacePersistence.validate`), is an agent-kind

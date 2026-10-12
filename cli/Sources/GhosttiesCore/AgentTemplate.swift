@@ -189,7 +189,7 @@ public struct AgentTemplate: Identifiable, Codable, Hashable {
     }
 
     /// - Orchestrator (Claude Code plus a system prompt), removed in
-    ///   0.1.0-beta.26 → Claude Code.
+    ///   0.5.0-beta.26 → Claude Code.
     public static let retiredBuiltIns: [RetiredBuiltIn] = [
         RetiredBuiltIn(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
