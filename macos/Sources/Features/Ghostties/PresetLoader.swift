@@ -36,15 +36,47 @@ struct PresetLoader {
     // MARK: - Public API
 
     /// Current seed version. Bump this when bundled presets change to trigger re-seeding.
-    static let seedVersion = 2
+    static let seedVersion = 3
+
+    /// Presets an earlier build seeded and the bundle has since retired, keyed
+    /// by directory name. Each maps a file name to the SHA-256 of every
+    /// version of that file the app ever shipped (from git history), so
+    /// the seed pass can tell an untouched copy from one the user edited.
+    private static let retiredPresets: [String: [String: Set<String>]] = [
+        "linear-sync": [
+            "README.md": [
+                "e61feec5db1a44b0eaed9efb619ea9ff3b724eb7839573a2e6747a72b068d128",
+                "08c1850323a731c89e1e3e047b0bde3fbd964d5957959d5f1e89445c1e29665e",
+            ],
+            "defaults.json": [
+                "81db3ea78393ccc4388530f450a7defcf01aa8339239074b8d0d395cbff5eff5",
+                "901cbd6993e47b19929fa2229596295a5a032b4bca3ad527fb8d669e2e248f8b",
+                "5b96baa59e40dd604aeecefdc89e76ac79e78e9c08dbcd0fea69f31d2f0cd7ca",
+            ],
+            "mcp-servers.json": [
+                "8d392b4270d6d2a951a6098f4d73182ec508ed0f3e8f9d42bd24d98ffedb95a7",
+            ],
+            "preset.json": [
+                "b34679b42468661f1736f9470f4bdc696611b3a0fe66a9229e900fd235df408c",
+            ],
+            "system.md": [
+                "6c55fc9cfdfe333a279af1b0bd9f638b7637393e50f7d72e0f003124e82b4d34",
+                "389f1a0f139c2eb957ec1bfe5e082d11af5424775dd9016e4eb742c46d0708e1",
+                "edc1e83a584d717c99ae4ce8670e9a4ef451eef5cc6e938a2f5b394d4573648b",
+                "67df928325bd08de0f9e3d68e2f36ebd34beaa1d949c36ef72c3fa47ed70d14c",
+                "6065f01c13949b43b747d3c196af7bd27f48da04e16960e7960dd641c19bb416",
+            ],
+        ],
+    ]
 
     /// Seed bundled presets to `~/.ghostties/presets/` using versioned seeding.
     ///
     /// Recursively copies the `presets/` subdirectory from the app bundle into
     /// `~/.ghostties/presets/`. After copying, rewrites any `${HOME}` literals
     /// in `.json` files to the real home path. Only copies items that don't
-    /// already exist — never overwrites user edits, and never deletes a
-    /// preset the bundle no longer ships.
+    /// already exist — never overwrites user edits. A preset the bundle has
+    /// retired (`retiredPresets`) is removed only if every file in it still
+    /// matches what the app shipped; an edited copy is the user's and stays.
     ///
     /// The app currently bundles no presets (Linear Sync, the last one, was
     /// removed in 0.5.0-beta.26), so a missing bundled directory is the
@@ -54,7 +86,8 @@ struct PresetLoader {
     @discardableResult
     static func seedIfNeeded(
         presetsDirectoryPath dirPath: String = presetsDirectoryPath,
-        bundledPresetsURL: URL? = Bundle.main.resourceURL?.appendingPathComponent("presets")
+        bundledPresetsURL: URL? = Bundle.main.resourceURL?.appendingPathComponent("presets"),
+        homeDirectoryPath: String = FileManager.default.homeDirectoryForCurrentUser.path
     ) -> SeedOutcome {
         let signpostState = Perf.signposter.beginInterval("presets.seed")
         defer { Perf.signposter.endInterval("presets.seed", signpostState) }
@@ -86,6 +119,8 @@ struct PresetLoader {
             }
         }
 
+        removeRetiredPresets(in: dirPath, home: homeDirectoryPath, fm: fm)
+
         // Locate the bundled `presets/` resource directory. None bundled:
         // write the marker so this doesn't re-run every launch.
         guard let bundledPresetsURL, fm.fileExists(atPath: bundledPresetsURL.path) else {
@@ -98,8 +133,7 @@ struct PresetLoader {
         copyResourceDirectory(from: bundledPresetsURL, to: destURL, fm: fm)
 
         // Rewrite ${HOME} literals in all .json files under the seeded directory.
-        let realHome = fm.homeDirectoryForCurrentUser.path
-        rewriteHomeInJSONFiles(in: destURL, home: realHome, fm: fm)
+        rewriteHomeInJSONFiles(in: destURL, home: homeDirectoryPath, fm: fm)
 
         // Write the new seed version marker.
         do {
@@ -121,6 +155,36 @@ struct PresetLoader {
     }
 
     // MARK: - Seed Helpers
+
+    /// Remove each retired preset directory under `dirPath` whose files all
+    /// hash to a version the app shipped. Any extra, missing-hash or edited
+    /// file means the user touched it, so the whole directory is left alone.
+    /// The seed rewrites `${HOME}` in `.json` files, so the home path is
+    /// turned back into `${HOME}` before hashing to get the bundle's bytes.
+    private static func removeRetiredPresets(in dirPath: String, home: String, fm: FileManager) {
+        for (name, shippedHashes) in retiredPresets {
+            let dirURL = URL(fileURLWithPath: dirPath).appendingPathComponent(name)
+            guard let enumerator = fm.enumerator(at: dirURL, includingPropertiesForKeys: [.isRegularFileKey]) else { continue }
+            var untouched = true
+            for case let fileURL as URL in enumerator {
+                guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                      fileURL.deletingLastPathComponent().standardizedFileURL == dirURL.standardizedFileURL,
+                      let known = shippedHashes[fileURL.lastPathComponent],
+                      let data = try? Data(contentsOf: fileURL),
+                      known.contains(SHA256.hash(data: unrewrittenHome(data, in: fileURL, home: home)).map { String(format: "%02x", $0) }.joined())
+                else {
+                    untouched = false
+                    break
+                }
+            }
+            guard untouched else { continue }
+            do {
+                try fm.removeItem(at: dirURL)
+            } catch {
+                logger.error("Failed to remove retired preset \(name): \(error.localizedDescription)")
+            }
+        }
+    }
 
     /// Recursively copy `src` directory contents into `dest`, skipping items
     /// that already exist (additive, never overwrites).
@@ -159,6 +223,13 @@ struct PresetLoader {
                 }
             }
         }
+    }
+
+    /// `data` as the bundle shipped it: for a `.json` file, the real home
+    /// path goes back to the `${HOME}` literal the seed replaced.
+    private static func unrewrittenHome(_ data: Data, in fileURL: URL, home: String) -> Data {
+        guard fileURL.pathExtension == "json", let text = String(data: data, encoding: .utf8) else { return data }
+        return Data(text.replacingOccurrences(of: home, with: "${HOME}").utf8)
     }
 
     /// Walk `directory` and rewrite `${HOME}` in any `.json` files to `home`.
