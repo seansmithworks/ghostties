@@ -51,7 +51,7 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **The zero-chrome composer style and the old template card** are gone. A saved composer style setting is ignored.
 - **The "Experimental Composer Field" item in the View menu is removed.** The single-line composer is the only composer, so there is nothing left to switch.
 - **Sessions can no longer be pinned; pinning is for projects.** The sidebar and History no longer offer to pin a session, and sessions you pinned before show in their project like the rest. Pinned templates in the composer are unchanged.
-- **Removed the Orchestrator template and the Linear Sync preset.** Built-in templates are now Shell, Claude Code, Codex and Browser. A Linear Sync preset you already have stays, and past Orchestrator sessions still show in the sidebar and reopen as Claude Code.
+- **Removed the Orchestrator template and the Linear Sync preset.** Built-in templates are now Shell, Claude Code, Codex and Browser. Past Orchestrator sessions still show in the sidebar and reopen as Claude Code.
 - **The Linear Sync preset an earlier beta copied into `~/.ghostties/presets` is removed on upgrade**, unless you edited it.
 
 ### Fixed
