@@ -123,6 +123,77 @@
       <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Auto-updates aren't reliable yet in early betas. Download the latest release manually from the <a href="/download">download page</a>.</p>
     </div>
 
+    <!-- beta.26 -->
+    <div class="release">
+      <div class="release-heading">
+        <h2>v0.5.0-beta.26</h2>
+        <span class="date">October 12, 2026</span>
+      </div>
+      <p class="release-summary">The sidebar gets a third state, a narrow rail that morphs from the full list and opens when you rest on it, a glass tray, and one list of projects, and session status is back at a glance: spinner, <code>?</code>, check and cross glyphs return on the right of every row in the full list, and are centered in the rail. There is now one composer, a centered single line, and Cmd+T can resume a past session from it. Ghostties also moves onto the latest upstream Ghostty.</p>
+
+      <div class="release-section">
+        <h3>Added</h3>
+        <ul>
+          <li><strong>A collapsed sidebar rail.</strong> The sidebar now has three states: the full list, a narrow rail of session icons, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width. It is one list that resizes in place, not two views swapped: labels fade out in reverse reading order on the way to the rail and drift back in on the way out, and the terminal resizes in step with the sidebar edge. The motion is a spring; opening overshoots slightly, closing doesn’t. With Reduce Motion on, it snaps with a short fade. In the rail, status glyphs are centered. Session shortcuts (Cmd+W, Cmd+1–9, next and previous session and project) work there too.</li>
+          <li><strong>Rest on the rail to open the sidebar.</strong> Hold the pointer on the rail for just over a second and the full list opens, pushing the terminal over just like Cmd+S, then closes shortly after the pointer leaves. Clicking a session acts, then collapses the sidebar; clicking elsewhere collapses it too. Cmd+S while it’s open keeps it open. The rail no longer shows a popover on hover.</li>
+          <li><strong>Hover a session in the full list to see what it needs or is doing.</strong> A session that needs approval shows what it wants to run and why. A running session shows your last prompt and the current step. Esc dismisses it while your pointer is on the card.</li>
+          <li><strong>Resume a past session from Cmd+T.</strong> In the composer, press ↓ to list your past sessions under Resume, then your Templates below them; typing filters both. Each section shows three rows, then a “Show N more” row. Return on a past session resumes it.</li>
+          <li><strong>View → Refresh Appearance</strong> re-applies the current light or dark appearance to every terminal, for a window that still shows the wrong colors.</li>
+          <li><strong>Templates are managed in Project settings.</strong> Right-click a project, in the list or the rail, and choose Settings…. Create, edit, duplicate, pin and delete templates in a Templates section there. Templates are shared across projects, and changes apply immediately, without Save or Cancel.</li>
+          <li><strong>Rail buttons are announced by VoiceOver</strong> with the session name, project and status.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Changed</h3>
+        <ul>
+          <li><strong>Status glyphs are back on session rows</strong>, on the right edge: a spinner while a session is working, <code>?</code> when it needs you, a check when it’s done, a cross on error, and nothing when it has stopped. Sessions listed under a project in the Projects tab show the same glyphs instead of a ghost.</li>
+          <li><strong>There is now one composer.</strong> The New Session button in the tray and Cmd+T open the same centered single-line composer.</li>
+          <li><strong>Cmd+Shift+E no longer toggles the sidebar.</strong> Cmd+S toggles it (it already worked as a hidden shortcut), and Cmd+Shift+S closes it completely.</li>
+          <li><strong>The sidebar is wider by default</strong>, 256pt instead of 220pt.</li>
+          <li><strong>The default theme now follows macOS.</strong> With no theme set, Ghostties uses Apple System Colors and switches between light and dark with your system appearance. A theme in your config still wins.</li>
+          <li><strong>Ghostties now builds on the latest upstream Ghostty</strong> (Zig 0.16), bringing in its fixes, including word selection that stops at hard line breaks and a crash fix for tmux <code>list-windows</code>.</li>
+          <li><strong>New Session moved to a + button in a glass tray at the bottom of the sidebar</strong>, shared by the full list and the rail. The tray is two Liquid Glass capsules (solid when Reduce Transparency is on): New Session and New Project (a folder icon) in one, the sidebar toggle in the other. New Project opens the folder picker, then the composer for the new project. Hovering a button highlights it: the sidebar toggle fills its whole button, and the + and folder highlight has a visibly rounded corner. The session list scrolls under the glass instead of stopping above it, and the glass has a light and a dark look: the dark tray tints dark with a dark rim.</li>
+          <li><strong>Projects are one list by default.</strong> Each project is a header with a monogram tile, its name and its session count; click it to fold the project, or drag it to reorder projects. A project with no live sessions shows dimmed with a count of 0. Sessions is still its own view (Cmd+Shift+2). In the rail, each project’s sessions sit in a column headed by its monogram.</li>
+          <li><strong>Easier-to-read sidebar text.</strong> Secondary text and project cards in the sidebar have more contrast in light and dark mode. In light mode a project card is now a lighter lift instead of a darker shade.</li>
+          <li><strong>Projects with no sessions now read at accessible contrast.</strong></li>
+          <li><strong>Pin projects to the top.</strong> Right-click a project and choose Pin to keep it at the top of the sidebar and the rail; Unpin puts it back in its place. Dragging keeps a project with the pinned or unpinned ones it sits among.</li>
+          <li><strong>The selected session row is tinted</strong>, with a faint shimmering rim, in the full list and in the rail. The same chip slides between rows as you move through them, in the rail and in the Sessions and History lists.</li>
+          <li><strong>Sidebar sizes sit on an 8pt grid.</strong> Project and session tiles are 32pt in the full list and 40pt in the rail, with 16pt icons and status glyphs. A large project tile grows its header so the card still encloses it.</li>
+          <li><strong>Smaller sidebar motion is spring-driven too.</strong> Folding a project and its chevron, the count badge on a folded project, the hover lift on tray buttons, and the gap that opens as you drag to reorder all settle with a light spring. Opacity never bounces.</li>
+          <li><strong>Terminals now have 20pt of padding by default.</strong> Your own <code>window-padding-x</code> and <code>window-padding-y</code> settings still win.</li>
+          <li><strong>A fully closed sidebar opens as a hover bar.</strong> Rest the pointer at the window’s left edge and the full sidebar slides out over the terminal in its own card. Drag its edge to resize it. It closes when the pointer leaves it. Cmd+S, Cmd+Shift+S or the View menu still reopen it for good, and resting on the rail still opens the full list.</li>
+          <li><strong>The closed-sidebar hover bar now takes the sidebar’s background</strong> and casts the canvas shadow over the terminal.</li>
+          <li><strong>Rounder corners.</strong> Terminal, browser and History cards and the tray pills now share 12pt corners. The tray’s shadow is lighter and sits lower in light appearance.</li>
+          <li><strong>Return on a project opens a shell.</strong> In the composer, highlight a project and press Return to start a shell there. Clicking a project still switches the composer to it.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Removed</h3>
+        <ul>
+          <li><strong>The zero-chrome composer style and the old template card</strong> are gone. A saved composer style setting is ignored.</li>
+          <li><strong>The “Experimental Composer Field” item in the View menu is removed.</strong> The single-line composer is the only composer, so there is nothing left to switch.</li>
+          <li><strong>Sessions can no longer be pinned; pinning is for projects.</strong> The sidebar and History no longer offer to pin a session, and sessions you pinned before show in their project like the rest. Pinned templates in the composer are unchanged.</li>
+          <li><strong>Removed the Orchestrator template and the Linear Sync preset.</strong> Built-in templates are now Shell, Claude Code, Codex and Browser. Past Orchestrator sessions still show in the sidebar and reopen as Claude Code.</li>
+          <li><strong>The Linear Sync preset an earlier beta copied into <code>~/.ghostties/presets</code> is removed on upgrade</strong>, unless you edited it.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Fixed</h3>
+        <ul>
+          <li><strong>Release builds no longer ship with code-coverage instrumentation.</strong> The app no longer drops stray <code>default.profraw</code> files into the folder it ran from.</li>
+          <li><strong>Every terminal follows macOS light and dark.</strong> Sessions in the background, and windows that were hidden, kept the old colors after you switched appearance.</li>
+          <li><strong>A session moves to the project whose folder it is working in.</strong> When you <code>cd</code> into another project’s directory, its sidebar row follows.</li>
+          <li><strong>Typing a project’s name in the composer now reaches that project.</strong></li>
+          <li><strong>The first Return on a new branch creates its worktree.</strong> Under load it could be rejected, and you had to press Return a second time.</li>
+          <li><strong>Deleting a template that sessions use now names those sessions</strong> in the warning (the first three, then “and N more”).</li>
+          <li><strong>Closing the embedded browser no longer crashes the app.</strong></li>
+        </ul>
+      </div>
+    </div>
+
     <!-- beta.25 -->
     <div class="release">
       <div class="release-heading">
