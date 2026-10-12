@@ -1438,7 +1438,10 @@ class WorkspaceViewContainer: NSView {
         // blur top and bottom: the bar shares the card's top, leading and
         // bottom edges, where the card's own shadow already reads as the
         // stack's edge, so the bar only casts onto the canvas — no second
-        // band in the window margin above and below it.
+        // band in the window margin above and below it. The inset tracks the
+        // blur, not the 8pt margin: how far the shadow bleeds past the path
+        // scales with the blur, and at blur 16 an 8pt inset would put a band
+        // ~2–6× darker than before into the margin above and below the bar.
         let hoverBarShadowBounds = backgroundEffectView.bounds.insetBy(dx: 0, dy: WorkspaceLayout.hoverBarShadowRadius)
         if !hoverBarShadowBounds.isEmpty {
             backgroundEffectView.layer?.shadowPath = CGPath(
@@ -3608,7 +3611,7 @@ class WorkspaceViewContainer: NSView {
         // Enable layers for z-ordering in overlay mode.
         sidebarHostingView.wantsLayer = true
 
-        // Shadow host: the canvas card's shadow (`hoverBarShadow*`, beta.26),
+        // Shadow host: the hover bar's shadow (`hoverBarShadow*`, beta.26),
         // offset (12, 0) — cast right, onto the terminal. Opacity is toggled
         // per-mode in `transitionTo` (0 except in overlay).
         backgroundEffectView.wantsLayer = true

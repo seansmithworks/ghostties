@@ -64,20 +64,47 @@ struct SidebarBeta26FeedbackGateTests {
                 "hover bar fill \(fill.rgb) is not the pinned sidebar chrome \(want.rgb), \(scheme)")
     }
 
-    /// The shadow is the canvas card's shadow (colour, blur, opacity), live
-    /// and visible: it floats above the terminal.
-    // GATE: builder adds `WorkspaceLayout.hoverBarShadowColor: CGColor`,
-    // `.hoverBarShadowRadius: CGFloat`, `.hoverBarShadowOpacity: Float`, each
-    // defined as the matching `canvasShadow*` token and applied to the
-    // overlay's shadow host (offset stays a rightward cast).
-    @Test func hoverBarShadowIsTheCanvasCardShadow() {
-        #expect(WorkspaceLayout.hoverBarShadowRadius > 0)
-        #expect(WorkspaceLayout.hoverBarShadowOpacity > 0)
-        #expect(WorkspaceLayout.hoverBarShadowRadius == WorkspaceLayout.canvasShadowRadius,
-                "hover bar blur \(WorkspaceLayout.hoverBarShadowRadius) vs canvas \(WorkspaceLayout.canvasShadowRadius)")
-        #expect(WorkspaceLayout.hoverBarShadowOpacity == WorkspaceLayout.canvasShadowOpacity,
-                "hover bar opacity \(WorkspaceLayout.hoverBarShadowOpacity) vs canvas \(WorkspaceLayout.canvasShadowOpacity)")
+    /// Round 2 (Sean, beta.26): the hover bar's shadow is lighter and wider
+    /// than the canvas card's, on the hover bar only. The canvas tokens stay.
+    @Test func hoverBarShadowIsLighterAndWiderThanTheCanvasCard() {
+        #expect(WorkspaceLayout.hoverBarShadowRadius == 16,
+                "hover bar blur \(WorkspaceLayout.hoverBarShadowRadius)")
+        #expect(abs(WorkspaceLayout.hoverBarShadowOpacity - 0.1275) < 0.0001,
+                "hover bar opacity \(WorkspaceLayout.hoverBarShadowOpacity)")
         #expect(WorkspaceLayout.hoverBarShadowColor == WorkspaceLayout.canvasShadowColor)
+        // The canvas card's own shadow is untouched.
+        #expect(WorkspaceLayout.canvasShadowRadius == 8)
+        #expect(abs(WorkspaceLayout.canvasShadowOpacity - 0.15) < 0.0001)
+    }
+
+    /// Round 2 (Sean, beta.26): in the hover bar each tray pill keeps 12pt on
+    /// three corners; only the corner in the bar's outer corner nests (left
+    /// pill bottom-left, right pill bottom-right: 12 - 8 = 4 at the default
+    /// margin).
+    // GATE: builder adds `TrayGlassStyle.hoverBarPillCorners(side: HorizontalEdge)
+    // -> (topLeading: CGFloat, topTrailing: CGFloat, bottomLeading: CGFloat, bottomTrailing: CGFloat)`
+    // (.leading = Create pill, .trailing = Toggle pill), at the default margin.
+    @Test func hoverBarPillsNestOnlyTheOuterCorner() {
+        let left = TrayGlassStyle.hoverBarPillCorners(side: .leading)
+        #expect(left.topLeading == 12 && left.topTrailing == 12 && left.bottomTrailing == 12,
+                "left pill non-outer corners \(left)")
+        #expect(left.bottomLeading == 4, "left pill outer corner \(left.bottomLeading)")
+
+        let right = TrayGlassStyle.hoverBarPillCorners(side: .trailing)
+        #expect(right.topLeading == 12 && right.topTrailing == 12 && right.bottomLeading == 12,
+                "right pill non-outer corners \(right)")
+        #expect(right.bottomTrailing == 4, "right pill outer corner \(right.bottomTrailing)")
+    }
+
+    /// Pinned and rail (.collapsed) pills keep their uniform radius (window 20 - margin 8).
+    /// An isolated defaults suite, so Dev's dial values never leak in.
+    @Test func pinnedAndRailPillRadiiAreUnchanged() throws {
+        let name = "SidebarBeta26FeedbackGateTests.pillRadii"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defaults.removePersistentDomain(forName: name)
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(SidebarDialTuning.trayCornerRadius(for: .pinned, defaults: defaults) == 12)
+        #expect(SidebarDialTuning.trayCornerRadius(for: .collapsed, defaults: defaults) == 12)
     }
 
     // MARK: B. Empty projects
