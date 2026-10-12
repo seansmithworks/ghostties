@@ -83,14 +83,11 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// hash-derived ghost or a plain colored indicator — never re-rolled on render).
     var ghostCharacter: GhostCharacter?
 
-    /// Whether this session is pinned in the Sessions tab's Pinned section
-    /// (see `SessionSection`). Independent of whether the terminal is open —
-    /// a pinned session stays in Pinned whether `SessionBucket.membership`
-    /// would otherwise place it in Active, Inactive, or Archive; its ghost
-    /// glyph still reflects live state. Toggled via the Sessions-tab context
-    /// menu ("Pin"/"Unpin") and `WorkspaceStore.setSessionPinned(id:_:)` /
-    /// `toggleSessionPin(id:)`. Defaults to `false` so existing sessions are
-    /// unaffected. Project-view rows do not read this field.
+    /// A session pin written by older builds. Kept for decoding only, so
+    /// workspace files that carry it still load and keep the value. Pinning
+    /// is a project-only concept: no surface sets or shows a session pin,
+    /// and every render path reads `isPinnedForDisplay()`, which is `false`
+    /// while `SessionPinning.isAvailable` is. Defaults to `false`.
     var isPinned: Bool
 
     /// Explicit ordering within whichever Sessions-tab section this session
@@ -342,9 +339,10 @@ extension AgentSession {
 /// The one switch for session pinning (not project pinning). While `false`,
 /// no surface offers pin/unpin and every partition and render path treats a
 /// session as unpinned, so it shows in its normal project group or bucket.
-/// The persisted `AgentSession.isPinned` field, its Codable, and the
-/// `WorkspaceStore` mutators are untouched, so existing pins reappear if
-/// this flips back (persistent agents will bring pinning back).
+/// The persisted `AgentSession.isPinned` field and its Codable remain, but
+/// every Pin/Unpin control is gone, so flipping this alone would show old
+/// pins with no way to change them; bringing session pinning back means
+/// rebuilding those controls.
 enum SessionPinning {
     static let isAvailable = false
 }

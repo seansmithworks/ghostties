@@ -151,8 +151,7 @@ extension HistoryEntry {
                 projectName: projects.first { $0.id == session.projectId }?.name ?? "Unknown",
                 title: session.name,
                 lastActiveAt: session.displayTimestamp ?? .distantPast,
-                isArchived: archivedIds.contains(session.id),
-                isPinned: session.isPinnedForDisplay()
+                isArchived: archivedIds.contains(session.id)
             )
         }
     }
@@ -217,11 +216,10 @@ struct HistoryRowView: View {
 // MARK: - Canvas Host
 
 /// The history browser's actions, wired to the existing flows: resume →
-/// `SessionCoordinator.resumeFromHistory` (the relaunch flow), pin → the
-/// sidebar's pin action, close → back to the prior selection.
+/// `SessionCoordinator.resumeFromHistory` (the relaunch flow), close → back
+/// to the prior selection.
 struct HistoryActions {
     let resume: (UUID) -> Void
-    let togglePin: (UUID) -> Void
     let close: () -> Void
 
     @MainActor
@@ -235,7 +233,6 @@ struct HistoryActions {
                 guard let store, let coordinator else { return }
                 coordinator.resumeFromHistory(id: id, in: store, relaunch: relaunch)
             },
-            togglePin: { [weak store] id in store?.toggleSessionPin(id: id) },
             close: { [weak coordinator] in coordinator?.dismissHistory() }
         )
     }
@@ -243,7 +240,7 @@ struct HistoryActions {
 
 /// Hosted in the canvas card by `WorkspaceViewContainer` while
 /// `SessionCoordinator.isHistoryPresented`. Builds the entries live from the
-/// store so the list tracks sessions starting, stopping and pinning.
+/// store so the list tracks sessions starting and stopping.
 struct HistoryCanvasHost: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -259,7 +256,6 @@ struct HistoryCanvasHost: View {
         HistoryBrowserView(
             entries: HistoryEntry.entries(from: sections, projects: store.projects),
             onResume: actions.resume,
-            onTogglePin: actions.togglePin,
             onClose: actions.close
         )
         // The canvas card's own fill, opaque over the terminal underneath.

@@ -10,34 +10,34 @@ final class HistoryBrowserRenderTests: XCTestCase {
     static let size = NSSize(width: 760, height: 460)
 
     /// ~12 invented sessions, newest first after sorting; a mix of
-    /// inactive/archived and two pinned.
+    /// inactive and archived.
     static func fixture(now: Date = Date()) -> [HistoryEntry] {
-        let rows: [(String, String, Double, Bool, Bool)] = [
-            ("atlas-api", "migrate auth tokens", 2, false, true),
-            ("harbor", "stripe webhook retry", 5, false, false),
-            ("fieldwork", "offline sync spike", 26, false, false),
-            ("lumen", "hero image crops", 50, true, false),
-            ("orchard-web", "composer tab inserts space", 75, true, true),
-            ("tidepool", "cart totals rounding", 100, true, false),
-            ("harbor", "release notes draft", 150, true, false),
-            ("atlas-api", "rate limit headers", 200, true, false),
-            ("lumen", "job board scraper", 260, true, false),
-            ("fieldwork", "map tile cache", 340, true, false),
-            ("orchard-web", "case study: checkout", 420, true, false),
-            ("tidepool", "flaky snapshot test", 520, true, false),
+        let rows: [(String, String, Double, Bool)] = [
+            ("atlas-api", "migrate auth tokens", 2, false),
+            ("harbor", "stripe webhook retry", 5, false),
+            ("fieldwork", "offline sync spike", 26, false),
+            ("lumen", "hero image crops", 50, true),
+            ("orchard-web", "composer tab inserts space", 75, true),
+            ("tidepool", "cart totals rounding", 100, true),
+            ("harbor", "release notes draft", 150, true),
+            ("atlas-api", "rate limit headers", 200, true),
+            ("lumen", "job board scraper", 260, true),
+            ("fieldwork", "map tile cache", 340, true),
+            ("orchard-web", "case study: checkout", 420, true),
+            ("tidepool", "flaky snapshot test", 520, true),
         ]
         return rows.enumerated().map { i, r in
             HistoryEntry(
                 id: UUID(uuidString: String(format: "00000000-0000-4000-8000-%012d", i))!,
                 projectName: r.0, title: r.1,
                 lastActiveAt: now.addingTimeInterval(-r.2 * 3600 - 60),
-                isArchived: r.3, isPinned: r.4
+                isArchived: r.3
             )
         }
     }
 
     static func render(entries: [HistoryEntry], appearance: NSAppearance.Name) -> NSBitmapImageRep? {
-        let view = HistoryBrowserView(entries: entries, onResume: { _ in }, onTogglePin: { _ in }, onClose: {})
+        let view = HistoryBrowserView(entries: entries, onResume: { _ in }, onClose: {})
             .frame(width: size.width, height: size.height)
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: size)

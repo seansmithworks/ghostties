@@ -49,9 +49,8 @@ enum SessionDragReflow {
     }
 
     /// Insertion point for hovering a section's end-of-list drop zone, or an
-    /// empty section's drop zone (e.g. "Drop to pin" on an empty Pinned
-    /// section) — always "at the end" of whatever the section resolves to
-    /// when the drop isn't rejected.
+    /// empty section's drop zone — always "at the end" of whatever the
+    /// section resolves to when the drop isn't rejected.
     static func endInsertionPoint(
         draggedSection: SessionSection,
         draggedIsOpen: Bool,

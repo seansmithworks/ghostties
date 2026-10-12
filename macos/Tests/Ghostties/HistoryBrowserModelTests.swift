@@ -7,11 +7,11 @@ import XCTest
 final class HistoryBrowserModelTests: XCTestCase {
     private let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
-    private func entry(_ project: String, _ title: String, hoursAgo: Double, archived: Bool = false, pinned: Bool = false) -> HistoryEntry {
+    private func entry(_ project: String, _ title: String, hoursAgo: Double, archived: Bool = false) -> HistoryEntry {
         HistoryEntry(
             id: UUID(), projectName: project, title: title,
             lastActiveAt: now.addingTimeInterval(-hoursAgo * 3600),
-            isArchived: archived, isPinned: pinned
+            isArchived: archived
         )
     }
 
@@ -132,13 +132,13 @@ final class HistoryBrowserModelTests: XCTestCase {
         let selected = model.selectedID!
         let updated = fixture.map {
             $0.id == selected
-                ? HistoryEntry(id: $0.id, projectName: $0.projectName, title: $0.title, lastActiveAt: $0.lastActiveAt, isArchived: $0.isArchived, isPinned: true)
+                ? HistoryEntry(id: $0.id, projectName: $0.projectName, title: $0.title, lastActiveAt: $0.lastActiveAt, isArchived: true)
                 : $0
         }
         model.setEntries(updated)
         XCTAssertEqual(model.query, "a")
         XCTAssertEqual(model.selectedID, selected)
-        XCTAssertEqual(model.rows[model.selectedIndex!].entry.isPinned, true)
+        XCTAssertEqual(model.rows[model.selectedIndex!].entry.isArchived, true)
     }
 
     // MARK: - Empty states
@@ -158,10 +158,9 @@ final class HistoryBrowserModelTests: XCTestCase {
 
     private final class Recorder {
         var resumed: [UUID] = []
-        var pinned: [UUID] = []
         var closed = 0
         var actions: HistoryBrowserModel.Actions {
-            .init(onResume: { self.resumed.append($0) }, onTogglePin: { self.pinned.append($0) }, onClose: { self.closed += 1 })
+            .init(onResume: { self.resumed.append($0) }, onClose: { self.closed += 1 })
         }
     }
 
@@ -173,25 +172,21 @@ final class HistoryBrowserModelTests: XCTestCase {
         XCTAssertEqual(model.selectedID, second)
 
         model.handle(.resume, actions: r.actions)
-        model.handle(.togglePin, actions: r.actions)
         model.handle(.up, actions: r.actions)
-        model.handle(.togglePin, actions: r.actions)
+        model.handle(.resume, actions: r.actions)
         model.handle(.close, actions: r.actions)
 
-        XCTAssertEqual(r.resumed, [second])
-        XCTAssertEqual(r.pinned, [second, model.rows[0].id])
+        XCTAssertEqual(r.resumed, [second, model.rows[0].id])
         XCTAssertEqual(r.closed, 1)
     }
 
-    func testResumeAndPinDoNothingWithoutASelectionButCloseStillFires() {
+    func testResumeDoesNothingWithoutASelectionButCloseStillFires() {
         var model = HistoryBrowserModel(entries: fixture)
         model.query = "nothing-matches-this"
         let r = Recorder()
         model.handle(.resume, actions: r.actions)
-        model.handle(.togglePin, actions: r.actions)
         model.handle(.close, actions: r.actions)
         XCTAssertEqual(r.resumed, [])
-        XCTAssertEqual(r.pinned, [])
         XCTAssertEqual(r.closed, 1)
     }
 

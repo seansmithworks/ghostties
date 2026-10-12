@@ -8,7 +8,6 @@ struct HistoryEntry: Identifiable, Equatable {
     let title: String
     let lastActiveAt: Date
     let isArchived: Bool
-    let isPinned: Bool
 }
 
 /// The terminal-style (fzf-like) history picker shown in the canvas card
@@ -17,7 +16,7 @@ struct HistoryEntry: Identifiable, Equatable {
 ///     history › <query>
 ///     12/148 ── history ─────────
 ///     ▌ ghostties · tray glass pass        2h  inactive
-///     ↑↓ move   ⏎ resume   ⌘P pin   esc close
+///     ↑↓ move   ⏎ resume   esc close
 ///
 /// All filtering/selection lives in `HistoryBrowserModel`; this view only
 /// renders it and routes keys through `HistoryBrowserModel.handle`.
@@ -32,11 +31,10 @@ struct HistoryBrowserView: View {
     init(
         entries: [HistoryEntry],
         onResume: @escaping (UUID) -> Void,
-        onTogglePin: @escaping (UUID) -> Void,
         onClose: @escaping () -> Void
     ) {
         self.entries = entries
-        self.actions = .init(onResume: onResume, onTogglePin: onTogglePin, onClose: onClose)
+        self.actions = .init(onResume: onResume, onClose: onClose)
         _model = State(initialValue: HistoryBrowserModel(entries: entries))
     }
 
@@ -146,7 +144,6 @@ struct HistoryBrowserView: View {
         HStack(spacing: 24) {
             hint("↑↓", "move")
             hint("⏎", "resume")
-            if SessionPinning.isAvailable { hint("⌘P", "pin") }
             hint("esc", "close")
         }
         .font(Style.font)
@@ -162,7 +159,7 @@ struct HistoryBrowserView: View {
 
     // MARK: - Keys
 
-    /// Arrow keys and ⌘P as zero-size shortcut buttons — the same pattern
+    /// Arrow keys as zero-size shortcut buttons — the same pattern
     /// `CommandPaletteQuery` uses, because a focused single-line field
     /// doesn't reliably deliver up/down through `onMoveCommand`.
     private var keyShortcuts: some View {
@@ -171,10 +168,6 @@ struct HistoryBrowserView: View {
                 .keyboardShortcut(.upArrow, modifiers: [])
             Button { handle(.down) } label: { Color.clear }
                 .keyboardShortcut(.downArrow, modifiers: [])
-            if SessionPinning.isAvailable {
-                Button { handle(.togglePin) } label: { Color.clear }
-                    .keyboardShortcut("p", modifiers: [.command])
-            }
         }
         .buttonStyle(.plain)
         .frame(width: 0, height: 0)
@@ -217,17 +210,8 @@ private struct HistoryBrowserRow: View {
                 .frame(width: 3, height: 15)
                 .padding(.leading, Style.barInset)
                 .frame(width: Style.horizontalInset, alignment: .leading)
-            Group {
-                if row.entry.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 9))
-                        .foregroundColor(Style.muted(colorScheme))
-                        .accessibilityLabel("Pinned")
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(width: Style.pinSlot)
+            Color.clear
+                .frame(width: Style.pinSlot)
             Text(line)
                 .font(Style.font)
                 .lineLimit(1)
@@ -241,12 +225,11 @@ private struct HistoryBrowserRow: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// "project, title, age, archived|inactive[, pinned]" — the padded,
-    /// truncated visual line reads badly aloud.
+    /// "project, title, age, archived|inactive" — the padded, truncated
+    /// visual line reads badly aloud.
     private var accessibilityText: String {
         let e = row.entry
-        var parts = [e.projectName, e.title, HistoryBrowserModel.age(of: e.lastActiveAt, now: columns.now), e.isArchived ? "archived" : "inactive"]
-        if e.isPinned { parts.append("pinned") }
+        let parts = [e.projectName, e.title, HistoryBrowserModel.age(of: e.lastActiveAt, now: columns.now), e.isArchived ? "archived" : "inactive"]
         return parts.joined(separator: ", ")
     }
 
@@ -296,8 +279,9 @@ private enum Style {
     static let font = Font.system(size: 13, design: .monospaced)
 
     static let horizontalInset: CGFloat = 24
-    /// Rows put a pin slot before their text; the query/count/footer lines
-    /// indent by the same amount so all text shares one left edge.
+    /// Rows put an empty slot (once the session pin badge's) before their
+    /// text; the query/count/footer lines indent by the same amount so all
+    /// text shares one left edge.
     static let pinSlot: CGFloat = 20
     static let gutter: CGFloat = pinSlot
     static let barInset: CGFloat = 12
