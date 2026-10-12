@@ -36,6 +36,10 @@ final class SidebarRetiredDialsTests: XCTestCase {
         XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 12, "20 − the 8pt window margin")
         d.set(20.0, forKey: SidebarDialTuning.retiredTrayCornerRadiusKey)
         XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 12, "the retired dial is ignored")
+        // Radii nest: the rail's pills sit in the window like pinned's; the
+        // hover bar's sit 8 inside the overlay card (20 − 8 = 12), so 12 − 8.
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(for: .collapsed, defaults: d), 12, "rail: window − margin")
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(for: .overlay, defaults: d), 4, "hover bar: overlay card − margin")
         for margin in [0.0, 4.0, 12.0, 24.0] {
             d.set(margin, forKey: SidebarDialTuning.windowMarginKey)
             XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), max(0, 20 - CGFloat(margin)), "margin \(margin)")

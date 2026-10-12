@@ -216,7 +216,7 @@ private struct SidebarHostRoot: View {
             }
             .environment(\.sidebarTrailingGutter, trailingGutter)
             .environment(\.sidebarRailWidth, model.railWidth)
-            .environment(\.trayShadowState, SidebarDialTuning.TrayShadowState(store.sidebarMode))
+            .environment(\.sidebarMode, store.sidebarMode)
     }
 
     /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
@@ -989,6 +989,7 @@ class WorkspaceViewContainer: NSView {
         terminalContainer.layer?.cornerRadius = radius
         terminalShadowHost.layer?.cornerRadius = radius
         historyHostingView.layer?.cornerRadius = radius
+        sidebarOverlayBackground.layer?.cornerRadius = radius
         if sidebarMode != .overlay {
             browserShadowHost.layer?.cornerRadius = radius
         }
@@ -1445,8 +1446,8 @@ class WorkspaceViewContainer: NSView {
         if !backgroundEffectView.bounds.isEmpty {
             backgroundEffectView.layer?.shadowPath = CGPath(
                 roundedRect: backgroundEffectView.bounds,
-                cornerWidth: 18,
-                cornerHeight: 18,
+                cornerWidth: WorkspaceLayout.terminalCornerRadius,
+                cornerHeight: WorkspaceLayout.terminalCornerRadius,
                 transform: nil
             )
         }
@@ -1864,7 +1865,8 @@ class WorkspaceViewContainer: NSView {
     /// width straight to the narrow rail. `closed` is left in the model
     /// (persistence, the hot zone, and the overlay reveal all still work),
     /// but the toggle can no longer reach or leave it — a persisted `closed`
-    /// state only exits via the hot zone → overlay → promote-to-pinned path.
+    /// state exits via Cmd+Shift+S / the View menu, or the hot zone →
+    /// overlay → promote-to-pinned path.
     /// Overlay isn't part of the cycle — it's a transient hover state, not
     /// one of the persisted widths — so the toggle promotes it straight to
     /// pinned, same as before Flow 01.
@@ -3058,9 +3060,8 @@ class WorkspaceViewContainer: NSView {
             activeTrackingArea = area
 
         case .pinned, .collapsed:
-            // No tracking areas needed — decision 2: the rail gets no
-            // hover-reveal of its own; the only way back to 244pt from a
-            // non-pinned state is the closed-mode hot zone above.
+            // No tracking areas needed. The rail's hover reveal runs on its
+            // own gate (`RailHoverReveal`), not here.
             break
         }
     }
@@ -3620,11 +3621,13 @@ class WorkspaceViewContainer: NSView {
         // to the static canvas token before a surface is observed. This
         // initial value is immediately superseded by `applyChromeColor()`
         // below, which is the real source of truth and repaints on every
-        // session swap and theme reload. Radius 18, 1pt stroke `#00000026`,
+        // session swap and theme reload. Concentric with the window corner
+        // at the window margin it sits inside, like the terminal card
+        // (`applyWindowMargin` keeps it live); 1pt stroke `#00000026`,
         // clipped to the rounded rect.
         sidebarOverlayBackground.wantsLayer = true
         sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
-        sidebarOverlayBackground.layer?.cornerRadius = 18
+        sidebarOverlayBackground.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
         sidebarOverlayBackground.layer?.masksToBounds = true
         sidebarOverlayBackground.layer?.borderWidth = 1
         sidebarOverlayBackground.layer?.borderColor = NSColor.black.withAlphaComponent(CGFloat(0x26) / 255.0).cgColor
