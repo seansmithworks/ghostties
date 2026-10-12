@@ -204,6 +204,13 @@ enum WorkspaceLayout {
     /// Shadow opacity applied to canvas shadow hosts when the card is visible.
     static let canvasShadowOpacity: Float = 0.15
 
+    /// The closed-sidebar hover bar's shadow (beta.26, Sean): the canvas
+    /// card's own shadow, so the bar floating over the terminal reads as
+    /// one more card in the same stack. Cast rightward onto the canvas.
+    static let hoverBarShadowColor: CGColor = canvasShadowColor
+    static let hoverBarShadowRadius: CGFloat = canvasShadowRadius
+    static let hoverBarShadowOpacity: Float = canvasShadowOpacity
+
     /// Inset around the terminal panel when sidebar is visible (floating card effect).
     /// The design uses 8pt on all four sides (top, bottom, left, right).
     /// The compiled default of the "Window margin" dial — read it through
@@ -275,6 +282,13 @@ enum WorkspaceLayout {
     /// Canvas background (dark mode). Slightly lighter than chrome dark, still
     /// warm. See `canvasBackgroundLight`.
     static let canvasBackgroundDark = NSColor(white: 0.18, alpha: 1)
+
+    /// The closed-sidebar hover bar's fill (beta.26, Sean): the pinned
+    /// sidebar's chrome, so the sidebar looks the same revealed as pinned.
+    /// Follows the OS appearance, not the terminal theme.
+    static func hoverBarFill(isDark: Bool) -> NSColor {
+        isDark ? chromeBackgroundDark : chromeBackgroundLight
+    }
 
     /// Border (dark mode): DESIGN.md `darkBorder` #2a2a2a, a hairline one
     /// step above the dark chrome. The tray glass's dark rim.
