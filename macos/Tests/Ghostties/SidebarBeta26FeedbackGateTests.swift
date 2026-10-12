@@ -108,10 +108,14 @@ struct SidebarBeta26FeedbackGateTests {
             let chromeRGB = try rgba(chrome(scheme)).rgb
             let card = over(try rgba(NSColor(RailProjectColumn.columnFill(scheme))), chromeRGB)
             // `ProjectMonogramTileFace.tint`, unselected: white 7% dark,
-            // (40,34,30) at `RailProjectTile.tintOpacity` light.
+            // (40,34,30) at `RailProjectTile.emptyTintOpacity` light: an empty
+            // project's tile is lighter than a live one's.
+            // GATE: builder adds RailProjectTile.emptyTintOpacity
+            #expect(RailProjectTile.emptyTintOpacity < RailProjectTile.tintOpacity,
+                    "empty tile tint must read quieter than a live project's")
             let tintColor = scheme == .dark
                 ? Color.white.opacity(0.07)
-                : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.tintOpacity)
+                : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.emptyTintOpacity)
             let tint = try rgba(NSColor(tintColor))
             for (name, base) in [("chrome", chromeRGB), ("group card", card)] {
                 let tile = over(tint, base)
