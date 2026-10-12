@@ -73,6 +73,34 @@ struct PresetLoaderTests {
         #expect(!FileManager.default.fileExists(atPath: seeded.preset.deletingLastPathComponent().path))
     }
 
+    /// The whole shipped file set, with the home path rewritten into
+    /// `mcp-servers.json` the way the seed does it. Uses an injected home,
+    /// never the real one.
+    @Test func seedingRemovesTheFullShippedLinearSyncSetWithHomeRewritten() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("preset-seed-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let home = "/Users/someone-else"
+        let dir = root.appendingPathComponent("presets")
+        let linear = dir.appendingPathComponent("linear-sync")
+        try fm.createDirectory(at: linear, withIntermediateDirectories: true)
+        for (name, data) in LinearSyncShippedFixture.files {
+            let text = String(decoding: data, as: UTF8.self)
+            let onDisk = name.hasSuffix(".json") ? text.replacingOccurrences(of: "${HOME}", with: home) : text
+            try Data(onDisk.utf8).write(to: linear.appendingPathComponent(name))
+        }
+        let mcp = try String(contentsOf: linear.appendingPathComponent("mcp-servers.json"), encoding: .utf8)
+        #expect(mcp.contains(home) && !mcp.contains("${HOME}"))
+
+        _ = PresetLoader.seedIfNeeded(
+            presetsDirectoryPath: dir.path,
+            bundledPresetsURL: root.appendingPathComponent("bundle/presets"),
+            homeDirectoryPath: home
+        )
+
+        #expect(!fm.fileExists(atPath: linear.path))
+    }
+
     @Test func seedingKeepsAnEditedRetiredLinearSync() throws {
         let seeded = try seedRetired("linear-sync", contents: Self.shippedLinearSyncPreset + "// mine\n")
         defer { try? FileManager.default.removeItem(at: seeded.root) }

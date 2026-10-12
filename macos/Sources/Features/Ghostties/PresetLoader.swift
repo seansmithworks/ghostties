@@ -86,7 +86,8 @@ struct PresetLoader {
     @discardableResult
     static func seedIfNeeded(
         presetsDirectoryPath dirPath: String = presetsDirectoryPath,
-        bundledPresetsURL: URL? = Bundle.main.resourceURL?.appendingPathComponent("presets")
+        bundledPresetsURL: URL? = Bundle.main.resourceURL?.appendingPathComponent("presets"),
+        homeDirectoryPath: String = FileManager.default.homeDirectoryForCurrentUser.path
     ) -> SeedOutcome {
         let signpostState = Perf.signposter.beginInterval("presets.seed")
         defer { Perf.signposter.endInterval("presets.seed", signpostState) }
@@ -118,7 +119,7 @@ struct PresetLoader {
             }
         }
 
-        removeRetiredPresets(in: dirPath, fm: fm)
+        removeRetiredPresets(in: dirPath, home: homeDirectoryPath, fm: fm)
 
         // Locate the bundled `presets/` resource directory. None bundled:
         // write the marker so this doesn't re-run every launch.
@@ -132,8 +133,7 @@ struct PresetLoader {
         copyResourceDirectory(from: bundledPresetsURL, to: destURL, fm: fm)
 
         // Rewrite ${HOME} literals in all .json files under the seeded directory.
-        let realHome = fm.homeDirectoryForCurrentUser.path
-        rewriteHomeInJSONFiles(in: destURL, home: realHome, fm: fm)
+        rewriteHomeInJSONFiles(in: destURL, home: homeDirectoryPath, fm: fm)
 
         // Write the new seed version marker.
         do {
@@ -159,7 +159,9 @@ struct PresetLoader {
     /// Remove each retired preset directory under `dirPath` whose files all
     /// hash to a version the app shipped. Any extra, missing-hash or edited
     /// file means the user touched it, so the whole directory is left alone.
-    private static func removeRetiredPresets(in dirPath: String, fm: FileManager) {
+    /// The seed rewrites `${HOME}` in `.json` files, so the home path is
+    /// turned back into `${HOME}` before hashing to get the bundle's bytes.
+    private static func removeRetiredPresets(in dirPath: String, home: String, fm: FileManager) {
         for (name, shippedHashes) in retiredPresets {
             let dirURL = URL(fileURLWithPath: dirPath).appendingPathComponent(name)
             guard let enumerator = fm.enumerator(at: dirURL, includingPropertiesForKeys: [.isRegularFileKey]) else { continue }
@@ -169,7 +171,7 @@ struct PresetLoader {
                       fileURL.deletingLastPathComponent().standardizedFileURL == dirURL.standardizedFileURL,
                       let known = shippedHashes[fileURL.lastPathComponent],
                       let data = try? Data(contentsOf: fileURL),
-                      known.contains(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
+                      known.contains(SHA256.hash(data: unrewrittenHome(data, in: fileURL, home: home)).map { String(format: "%02x", $0) }.joined())
                 else {
                     untouched = false
                     break
@@ -221,6 +223,13 @@ struct PresetLoader {
                 }
             }
         }
+    }
+
+    /// `data` as the bundle shipped it: for a `.json` file, the real home
+    /// path goes back to the `${HOME}` literal the seed replaced.
+    private static func unrewrittenHome(_ data: Data, in fileURL: URL, home: String) -> Data {
+        guard fileURL.pathExtension == "json", let text = String(data: data, encoding: .utf8) else { return data }
+        return Data(text.replacingOccurrences(of: home, with: "${HOME}").utf8)
     }
 
     /// Walk `directory` and rewrite `${HOME}` in any `.json` files to `home`.
