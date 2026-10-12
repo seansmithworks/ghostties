@@ -41,6 +41,7 @@ struct SidebarContrastTests {
     /// picked, so a token drifting back toward the pre-beta.26 values fails
     /// here even while it still clears AA.
     private func floors(_ scheme: ColorScheme) -> (card: Double, chrome: Double, chip: Double) {
+        // Light chip floor 4.65, not 4.7: unrounded float compositing gives 4.69 (4.71 only after 8-bit hex rounding).
         scheme == .dark ? (5.6, 6.3, 4.1) : (5.8, 5.35, 4.65)
     }
 
