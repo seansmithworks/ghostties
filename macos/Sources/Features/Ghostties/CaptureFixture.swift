@@ -682,7 +682,7 @@ enum CaptureFixture {
         #!/bin/zsh
         clear
         printf '\033[1m╭─────────────────────────────────────────╮\033[0m\n'
-        printf '\033[1m│ \033[35m✻\033[0m\033[1m Claude Code\033[0m                              │\n'
+        printf '\033[1m│ \033[35m✻\033[0m\033[1m Claude Code\033[0m                           │\n'
         printf '\033[1m╰─────────────────────────────────────────╯\033[0m\n'
         printf '\n'
         printf '\033[1m> \033[0mFix the race condition in the reconnect handler and add a regression test\n'
