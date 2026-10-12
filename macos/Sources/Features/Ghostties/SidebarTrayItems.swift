@@ -316,15 +316,15 @@ enum TrayGlassStyle {
 
     /// The pill shape the tray and the selected row share, from the corner
     /// style dial.
-    static func pillShape() -> RoundedRectangle {
-        RoundedRectangle(cornerRadius: pillCornerRadius(), style: .continuous)
+    static func pillShape(for mode: SidebarMode = .pinned) -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: pillCornerRadius(for: mode), style: .continuous)
     }
 
-    /// The pill's corner radius, from the corner style dial.
-    static func pillCornerRadius() -> CGFloat {
+    /// The pill's corner radius in `mode`, from the corner style dial.
+    static func pillCornerRadius(for mode: SidebarMode = .pinned) -> CGFloat {
         SidebarDialTuning.trayGlassCornerStyle() == .capsule
             ? capsuleCornerRadius
-            : SidebarDialTuning.trayCornerRadius()
+            : SidebarDialTuning.trayCornerRadius(for: mode)
     }
 
     static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
@@ -464,11 +464,12 @@ enum TrayGlassStyle {
     /// radius `cornerRadius − innerPadding` (capsule style: a capsule).
     static func buttonHitShape(
         soleInCapsule: Bool,
+        mode: SidebarMode = .pinned,
         cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
-        cornerRadius: CGFloat = SidebarDialTuning.trayCornerRadius(),
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
     ) -> AnyShape {
-        if soleInCapsule { return AnyShape(pillShape()) }
+        let cornerRadius = SidebarDialTuning.trayCornerRadius(for: mode)
+        if soleInCapsule { return AnyShape(pillShape(for: mode)) }
         switch cornerStyle {
         case .capsule:
             return AnyShape(Capsule(style: .continuous))
@@ -602,14 +603,14 @@ struct TrayGlassSurface: ViewModifier {
     /// Which state's light shadow to draw (`SidebarHostRoot` injects the
     /// sidebar's mode; the target mode as soon as a transition starts, so a
     /// morph switches once rather than flickering).
-    @Environment(\.trayShadowState) private var shadowState
+    @Environment(\.sidebarMode) private var sidebarMode
     var forceOpaque = false
     var interactive = false
 
-    private var shape: RoundedRectangle { TrayGlassStyle.pillShape() }
+    private var shape: RoundedRectangle { TrayGlassStyle.pillShape(for: sidebarMode) }
 
     func body(content: Content) -> some View {
-        let look = SidebarDialTuning.trayGlass(for: colorScheme, state: shadowState)
+        let look = SidebarDialTuning.trayGlass(for: colorScheme, state: .init(sidebarMode))
         if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
             GlassEffectContainer {
                 content
@@ -992,6 +993,7 @@ struct TrayIconButton: View {
     @State private var tapEffectTrigger = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.sidebarMode) private var sidebarMode
 
     var body: some View {
         let size = cellSize
@@ -1026,7 +1028,8 @@ struct TrayIconButton: View {
                     GeometryReader { proxy in
                         let chip = TrayGlassStyle.hoverChip(
                             cell: CGRect(origin: .zero, size: proxy.size),
-                            soleInCapsule: fillsCapsule
+                            soleInCapsule: fillsCapsule,
+                            pillCornerRadius: TrayGlassStyle.pillCornerRadius(for: sidebarMode)
                         )
                         // Placed by `.position` (layout), not `.offset` (a
                         // draw-time shift), so the published redline frame
@@ -1052,7 +1055,7 @@ struct TrayIconButton: View {
     }
 
     private var hitShape: AnyShape {
-        TrayGlassStyle.buttonHitShape(soleInCapsule: fillsCapsule)
+        TrayGlassStyle.buttonHitShape(soleInCapsule: fillsCapsule, mode: sidebarMode)
     }
 
     private var showsHover: Bool {

@@ -142,6 +142,12 @@ extension View {
 /// two it narrows on a straight line, every edge at once
 /// (`SidebarMorphMetrics.card`), so collapsing reads as one shape.
 struct ProjectGroupCard: View {
+    /// The sidebar's own coordinate space, named on its root
+    /// (`SidebarHostRoot`): x = 0 at the sidebar's leading edge, wherever
+    /// the sidebar sits in the window. Hosts without it (previews, render
+    /// tests) fall back to `.global`, where the two coincide.
+    static let sidebarSpace = "ghostties.sidebar"
+
     /// Re-renders on every dial write; the body reads the column dials.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @EnvironmentObject private var widthModel: SidebarWidthModel
@@ -179,7 +185,7 @@ struct ProjectGroupCard: View {
                     hasRows: anchors.count > 1,
                     unionMinY: union.minY,
                     unionMaxY: union.maxY,
-                    originX: proxy.frame(in: .global).minX
+                    originX: proxy.frame(in: .named(Self.sidebarSpace)).minX
                 )
             }
         }

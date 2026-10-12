@@ -25,7 +25,8 @@ struct SidebarPresenceTests {
         #expect(WorkspaceViewContainer.nextSidebarMode(after: .collapsed) == .pinned)
     }
 
-    /// `.closed` is left in the model (persistence) but is no longer reachable from
+    /// `.closed` is left in the model (persistence, the hot zone, and the
+    /// overlay reveal all still function) but is no longer reachable from
     /// the toggle — a persisted `closed` state (raw value 1) must still
     /// load and, if the toggle somehow fires from it, land on `.pinned`
     /// rather than dead-ending or cycling back into `.closed`.
@@ -268,6 +269,15 @@ struct SidebarPresenceTests {
             == collapseTiming.duration)
     }
 
+    /// The closed-state hot zone activates only after the full-close motion
+    /// (180ms) has actually finished — the delay must be at least as long as
+    /// the close animation itself, or the reveal overlay could fire before
+    /// the card has reached the edge.
+    @Test func closedHotZoneActivatesNoSoonerThanCloseFinishes() {
+        let closeTiming = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .closed)
+        #expect(WorkspaceLayout.closedHotZoneActivationDelay >= closeTiming.duration)
+    }
+
     // MARK: - Closed-State Card Inset
 
     /// Sean's closed-state layout call (overrides Flow 05's own "card
@@ -416,12 +426,13 @@ private extension TimeInterval {
     }
 }
 
-/// A fully closed sidebar stays closed (Sean, 2026-10-11): the container
-/// installs no tracking area in `.closed`, so hovering the window's left
-/// edge cannot reopen it. Reopening is keyboard / menu only.
+/// The closed sidebar's hover bar: in `.closed` the container installs
+/// exactly one tracking area, the leading-edge strip
+/// (`WorkspaceLayout.closedRevealZone(in:)`), and only once the close
+/// motion has finished. The rail never installs it.
 @MainActor
 @Suite(.serialized)
-struct ClosedSidebarHasNoHotZoneTests {
+struct ClosedSidebarEdgeStripTests {
     @MainActor private final class StubViewModel: TerminalViewModel {
         @Published var surfaceTree: SplitTree<Ghostty.SurfaceView> = .init()
         @Published var commandPaletteIsShowing = false
@@ -464,24 +475,70 @@ struct ClosedSidebarHasNoHotZoneTests {
         window.close()
     }
 
-    /// Closing from a visible mode leaves no tracking area, including after
-    /// the old 180ms hot-zone activation delay has passed.
-    @Test func closingInstallsNoTrackingArea() {
+    private func expectOnlyTheEdgeStrip(_ container: WorkspaceViewContainer) {
+        #expect(container.trackingAreas.count == 1)
+        #expect(container.trackingAreas.first?.rect == WorkspaceLayout.closedRevealZone(in: container.bounds))
+    }
+
+    /// Closing from pinned installs no strip while the card is still
+    /// closing, then exactly the leading-edge strip once it has finished.
+    /// Async: the strip installs from a main-queue `asyncAfter`, which a
+    /// nested run-loop spin inside this main-queue test can't drain; an
+    /// `await` releases the main actor so it can.
+    @Test func closingInstallsOnlyTheEdgeStripAfterTheClose() async throws {
         let (container, window) = makeWindow(mode: .pinned)
         defer { close(window) }
         container.toggleSidebarFullyClosed()
-        spin(0.5)
         #expect(container.sidebarModeForTesting == .closed)
-        container.updateTrackingAreas()
         #expect(container.trackingAreas.isEmpty)
+        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        #expect(container.sidebarModeForTesting == .closed)
+        expectOnlyTheEdgeStrip(container)
     }
 
-    /// A persisted `.closed` sidebar launches with no tracking area either.
-    @Test func persistedClosedHasNoTrackingArea() {
+    /// A persisted `.closed` sidebar launches with exactly the strip.
+    @Test func persistedClosedInstallsOnlyTheEdgeStrip() {
         let (container, window) = makeWindow(mode: .closed)
         defer { close(window) }
         spin(0.5)
         #expect(container.sidebarModeForTesting == .closed)
+        container.updateTrackingAreas()
+        expectOnlyTheEdgeStrip(container)
+    }
+
+    private func enterEvent(_ type: NSEvent.EventType, area: NSTrackingArea?, in window: NSWindow) -> NSEvent {
+        NSEvent.enterExitEvent(
+            with: type, location: NSPoint(x: 4, y: 300), modifierFlags: [],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+            trackingNumber: area.map { unsafeBitCast($0, to: Int.self) } ?? 0,
+            userData: nil
+        )!
+    }
+
+    /// Entering the strip's own tracking area reveals the hover bar
+    /// (`.overlay`); an enter forwarded from any other area (a subview's,
+    /// such as the terminal surface's) does not.
+    @Test func edgeStripRevealsTheOverlayOnlyFromItsOwnArea() throws {
+        let (container, window) = makeWindow(mode: .closed)
+        defer { close(window) }
+        spin(0.5)
+        container.updateTrackingAreas()
+        let strip = try #require(container.trackingAreas.first)
+
+        let foreign = NSTrackingArea(rect: container.bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: nil, userInfo: nil)
+        container.mouseEntered(with: enterEvent(.mouseEntered, area: foreign, in: window))
+        #expect(container.sidebarModeForTesting == .closed)
+
+        container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+        #expect(container.sidebarModeForTesting == .overlay)
+    }
+
+    /// The rail never gets the strip: its hover reveal has its own gate.
+    @Test func railInstallsNoEdgeStrip() {
+        let (container, window) = makeWindow(mode: .collapsed)
+        defer { close(window) }
+        spin(0.5)
+        #expect(container.sidebarModeForTesting == .collapsed)
         container.updateTrackingAreas()
         #expect(container.trackingAreas.isEmpty)
     }

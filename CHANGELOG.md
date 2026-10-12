@@ -38,7 +38,7 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **Sidebar sizes sit on an 8pt grid.** Project and session tiles are 32pt in the full list and 40pt in the rail, with 16pt icons and status glyphs. A large project tile grows its header so the card still encloses it.
 - **Smaller sidebar motion is spring-driven too.** Folding a project and its chevron, the count badge on a folded project, the hover lift on tray buttons, and the gap that opens as you drag to reorder all settle with a light spring. Opacity never bounces.
 - **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win.
-- **A fully closed sidebar stays closed.** Resting the pointer at the window's left edge no longer reopens it. Reopen it with Cmd+S, Cmd+Shift+S or the View menu. Resting on the rail still opens the full list.
+- **A fully closed sidebar opens as a hover bar.** Rest the pointer at the window's left edge and the full sidebar slides out over the terminal in its own card. Drag its edge to resize it. It closes when the pointer leaves it. Cmd+S, Cmd+Shift+S or the View menu still reopen it for good, and resting on the rail still opens the full list.
 - **Rounder corners.** Terminal, browser and History cards and the tray pills now share 12pt corners. The tray's shadow is lighter and sits lower in light appearance.
 
 ### Removed

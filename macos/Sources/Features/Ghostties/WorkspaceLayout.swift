@@ -171,10 +171,18 @@ enum WorkspaceLayout {
     }
 
     /// A surface whose parent is the window, inset `margin` from its edges:
-    /// the terminal, browser and History cards, and the tray pills (the
-    /// pinned sidebar and the rail draw no card around the tray).
+    /// the terminal, browser, History and overlay cards, and the tray pills
+    /// outside overlay.
     static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
         concentricRadius(parent: windowCornerRadius, inset: margin)
+    }
+
+    /// The corner of the surface the tray pills sit in. Overlay: the
+    /// overlay card (itself the window margin in from the window). Every
+    /// other mode: the window — the pinned sidebar and the rail draw no
+    /// card around the tray.
+    static func trayParentCornerRadius(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
+        mode == .overlay ? concentricCornerRadius(margin: margin) : windowCornerRadius
     }
 
     /// Corner radius on the floating terminal panel (all four corners), and
@@ -202,6 +210,28 @@ enum WorkspaceLayout {
     /// `SidebarDialTuning.windowMargin()`, which also drives the sidebar's
     /// outer edge, so every outer gutter in the window stays one value.
     static let terminalInset: CGFloat = 8
+
+    /// Width of the invisible hover trigger strip at the left edge (closed mode).
+    /// Flow 01 (sidebar-presence): 10 → 24 — the hot zone is invisible in the
+    /// app; the `#ffffff08` fill on the design canvas is a diagram device only.
+    static let overlayTriggerWidth: CGFloat = 24
+
+    /// The closed-mode reveal strip: `overlayTriggerWidth` wide at the
+    /// leading edge, full height. The one definition of the zone: the
+    /// container installs its closed-mode tracking area from it, and only
+    /// that area's own events reveal the sidebar.
+    static func closedRevealZone(in bounds: CGRect) -> CGRect {
+        CGRect(x: bounds.minX, y: bounds.minY, width: overlayTriggerWidth, height: bounds.height)
+    }
+
+    /// The open overlay's hover zone: from the window's leading edge to the
+    /// overlay card's trailing edge — the window margin the card sits off
+    /// the window, the sidebar column, and the pinned gutter past it
+    /// (`sidebarTrailingGutter(for: .overlay)`). Full height.
+    static func overlayRevealZone(in bounds: CGRect, sidebarWidth: CGFloat, margin: CGFloat) -> CGRect {
+        let width = margin + sidebarWidth + sidebarTrailingGutter(for: .overlay, margin: margin)
+        return CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height)
+    }
 
     /// Minimum width for the browser panel when visible.
     static let browserMinWidth: CGFloat = 320
@@ -439,14 +469,17 @@ enum WorkspaceLayout {
     /// sat 8pt from the window edge but 16pt from the card. Collapsed (rail
     /// A2): 0, the card butts the rail, whose own width already ends a
     /// `leadingInset` past the traffic lights (`collapsedRailWidth`).
-    /// Overlay/closed: the column's trailing edge IS the panel edge, so 0.
+    /// Overlay: the same as pinned — the overlay card is the pinned sidebar
+    /// presented over the terminal, so its column keeps the pinned gutter
+    /// and the card's trailing edge sits that far past the column
+    /// (`overlayRevealZone`). Closed: no sidebar, 0.
     static func sidebarTrailingGutter(for mode: SidebarMode, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         sidebarTrailingGutter(for: mode, margin: SidebarDialTuning.windowMargin(defaults: defaults))
     }
 
     /// `sidebarTrailingGutter(for:)` at an explicit window margin.
     static func sidebarTrailingGutter(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
-        mode == .pinned ? margin : 0
+        mode == .pinned || mode == .overlay ? margin : 0
     }
 
     /// Hit width of the sidebar drag handle on the rail: a strip over the
@@ -458,13 +491,14 @@ enum WorkspaceLayout {
     /// Width of the sidebar drag handle, whose trailing edge always sits on
     /// the card's leading edge. Pinned: the sidebar-to-card gap it sits in
     /// (`sidebarTrailingGutter`). Collapsed: `railDragHandleHitWidth`, over
-    /// the rail, so the handle never depends on the gap. Overlay/closed: 0
-    /// (the handle is hidden there).
+    /// the rail, so the handle never depends on the gap. Overlay: the same
+    /// gutter as pinned, between the column and the overlay card's edge.
+    /// Closed: 0 (the handle is hidden there).
     static func sidebarDragHandleWidth(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
         switch mode {
-        case .pinned: return sidebarTrailingGutter(for: .pinned, margin: margin)
+        case .pinned, .overlay: return sidebarTrailingGutter(for: mode, margin: margin)
         case .collapsed: return railDragHandleHitWidth
-        case .closed, .overlay: return 0
+        case .closed: return 0
         }
     }
 
@@ -613,6 +647,13 @@ enum WorkspaceLayout {
     static func sidebarTransitionAlphaDuration(reduceMotion: Bool, timing: SidebarTransitionTiming) -> TimeInterval {
         reduceMotion ? sidebarReducedMotionCrossfadeDuration : timing.duration
     }
+
+    /// Delay before the closed-state 24pt hot zone starts accepting hover
+    /// (Flow 05: "hot zone hidden → 24px at 180ms, step") — installed only
+    /// once the full-close animation has actually finished, not the instant
+    /// the toggle fires, so a fast mouse can't trigger the reveal overlay
+    /// before the card has reached the edge.
+    static let closedHotZoneActivationDelay: TimeInterval = 0.18
 
     /// Rail hover-reveal (`RailHoverReveal`): how long the pointer rests on
     /// the rail before the full sidebar reveals over the terminal, and how
@@ -889,17 +930,19 @@ private struct SidebarRailWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
 }
 
-private struct TrayShadowStateKey: EnvironmentKey {
-    static let defaultValue: SidebarDialTuning.TrayShadowState = .sidebar
+private struct SidebarModeKey: EnvironmentKey {
+    static let defaultValue: SidebarMode = .pinned
 }
 
 extension EnvironmentValues {
-    /// The sidebar state whose tray shadow dials the tray draws
-    /// (`SidebarDialTuning.trayGlass(for:state:)`), injected at the sidebar
-    /// root (`SidebarHostRoot`). The sidebar's outside it.
-    var trayShadowState: SidebarDialTuning.TrayShadowState {
-        get { self[TrayShadowStateKey.self] }
-        set { self[TrayShadowStateKey.self] = newValue }
+    /// The sidebar's mode, injected at the sidebar root (`SidebarHostRoot`)
+    /// from `store.sidebarMode` — the target mode from the start of a
+    /// transition, so a morph switches once. The tray reads it for its
+    /// pills' corner (`TrayGlassStyle.pillCornerRadius(for:)`) and shadow
+    /// (`SidebarDialTuning.trayGlass(for:state:)`). Pinned outside it.
+    var sidebarMode: SidebarMode {
+        get { self[SidebarModeKey.self] }
+        set { self[SidebarModeKey.self] = newValue }
     }
 
     /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected
