@@ -367,7 +367,7 @@ enum TrayGlassStyle {
     static let opaqueDarkEdgeWidth: CGFloat = 1
 
 
-    /// Canvas icon fill `#636363` = `textSecondaryLight`.
+    /// Canvas icon fill: `textSecondaryLight`.
     static func iconColor(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
     }

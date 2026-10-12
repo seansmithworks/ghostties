@@ -64,9 +64,10 @@ final class SidebarRetiredDialsTests: XCTestCase {
             XCTAssertEqual(survivor.pixelsWide, migrated.pixelsWide)
             XCTAssertEqual(survivor.pixelsHigh, migrated.pixelsHigh)
             XCTAssertEqual(differingPixels(survivor, migrated), 0, "stored removed options changed the render (rail: \(rail))")
-            // The rail marks the selected session with a tile-sized chip in
-            // its project column (`RailProjectColumn`), not a row-tall card.
-            let minimum = rail ? RailProjectColumn.chipSize(.rail) - 10 : SidebarDialTuning.rowHeight() - 8
+            // Both mark the selected session with a tile-sized chip over its
+            // project's card or column (`RailProjectColumn`), not a row-tall
+            // card.
+            let minimum = RailProjectColumn.chipSize(rail ? .rail : .sidebar) - 10
             XCTAssertGreaterThan(longestTintRun(migrated, width: rail ? 80 : 260, rail: rail), minimum, "the selected row is not blank (rail: \(rail))")
         }
     }
@@ -157,16 +158,25 @@ final class SidebarRetiredDialsTests: XCTestCase {
     }
 
     /// The longest run, in points, of pixels the selected row's tint darkens
-    /// below the chrome, down one column clear of the rim and the row's ink.
-    /// In the rail that line runs 4pt inside the selected chip, and the
-    /// floor sits above the project column's faint tint (~0.08).
+    /// below the chrome, down one column clear of the rim and the row's ink:
+    /// 4pt inside the selected chip, in the rail's centre or the expanded
+    /// list's leading glyph slot. In light the card and column are a white
+    /// lift (alpha `a` raises the summed RGB to `chromeSum * (1 - a) + 3a`)
+    /// and the chip a black tint over them (alpha `c` scales that by
+    /// `1 - c`); the floor sits midway between the lift's drop (negative)
+    /// and the chip's, so only the chip counts.
     private func longestTintRun(_ rep: NSBitmapImageRep, width: CGFloat, rail: Bool) -> CGFloat {
         guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB) else { return 0 }
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         let scale = CGFloat(rep.pixelsWide) / width
-        let x = rail ? width / 2 - RailProjectColumn.chipSize(.rail) / 2 + 4 : SidebarDialTuning.windowMargin() + 6
+        let chipCentre = rail ? width / 2
+            : SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading()
+                + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
+        let x = chipCentre - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4
         let px = Int(x * scale)
-        let floor: CGFloat = rail ? 0.12 : 0.08
+        let cardAlpha = RailProjectColumn.columnFillOpacity(.light)
+        let cardSum = base * (1 - cardAlpha) + 3 * cardAlpha
+        let floor = ((base - cardSum) + (base - cardSum * (1 - RailProjectColumn.selectedChipTintOpacity))) / 2
         var longest = 0, run = 0
         for y in 0..<rep.pixelsHigh {
             guard let c = rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { run = 0; continue }

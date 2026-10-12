@@ -7,7 +7,7 @@ colors:
   chromeBackground: "#F0E9E6"
   canvasBackground: "#FAF7F3"
   textPrimary: "#1a1a1a"
-  textSecondary: "#636363"
+  textSecondary: "#5E5E5E"
   accent: "#C97350"
   border: "#e5e5e3"
   destructive: "#dc3545"
@@ -16,7 +16,7 @@ colors:
   darkChromeBackground: "#242424" # white:0.14
   darkCanvasBackground: "#2D2D2D" # white:0.18
   darkTextPrimary: "#f0efed"
-  darkTextSecondary: "#9a9a9a"
+  darkTextSecondary: "#a6a6a6"
   darkBorder: "#2a2a2a"
 typography:
   ui:
@@ -100,7 +100,7 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 | **Chrome background** | `#F0E9E6` | `#242424` | `chromeBackgroundLight/Dark` |
 | **Canvas background** | `#FAF7F3` | `#2D2D2D` | `canvasBackgroundLight/Dark` |
 | **Text Primary**      | `#1a1a1a` | `#f0efed` | `textPrimary`                |
-| **Text Secondary**    | `#636363` | `#9a9a9a` | `textSecondary`              |
+| **Text Secondary**    | `#5e5e5e` | `#a6a6a6` | `textSecondary`              |
 | **Accent (waiting)**  | `#C97350` | `#C97350` | `waitingTerracotta`          |
 | **Composer selection** | `#5B8DEF` | `#5B8DEF` | `composerSelectionAccent`   |
 | **Border**            | `#e5e5e3` | `#2a2a2a` | `border`                     |

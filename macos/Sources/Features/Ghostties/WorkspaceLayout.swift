@@ -318,12 +318,14 @@ enum WorkspaceLayout {
     /// backdrop it renders on. `#6b6b6b` (DESIGN.md's original documented
     /// value) still falls short at 4.44:1 on chrome and 4.08:1 on the
     /// `activeRowLight` tint — the two backdrops most of this text actually
-    /// sits on. `#636363` clears 4.5:1 on chrome, the active-row tint, and
-    /// canvas. See `docs/audits/sidebar-contrast-audit.md`.
-    static let textSecondaryLight = Color(red: 0x63 / 255.0, green: 0x63 / 255.0, blue: 0x63 / 255.0)
+    /// sits on. `#5E5E5E` (beta.26, sidebar contrast option 2) clears 4.5:1
+    /// with margin on chrome and on the project group card
+    /// (`RailProjectColumn.columnFill`). See
+    /// `docs/audits/sidebar-contrast-audit.md`.
+    static let textSecondaryLight = Color(red: 0x5E / 255.0, green: 0x5E / 255.0, blue: 0x5E / 255.0)
 
     /// Secondary/muted text foreground (dark mode). See `textSecondaryLight`.
-    static let textSecondaryDark = Color(red: 0x9A / 255.0, green: 0x9A / 255.0, blue: 0x9A / 255.0)
+    static let textSecondaryDark = Color(red: 0xA6 / 255.0, green: 0xA6 / 255.0, blue: 0xA6 / 255.0)
 
     /// Foreground for the small section-header labels in the sidebar
     /// ("Pinned", "Active Now", "Recent", "All Projects"). Muted by design so
