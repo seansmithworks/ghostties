@@ -157,7 +157,6 @@ final class SidebarSectionsHistoryTests: XCTestCase {
         XCTAssertEqual(entries.map(\.projectName), ["ghostties", "ghostties", "brukas"])
         XCTAssertEqual(entries.map(\.title), ["tray glass pass", "migrate auth", "job board scraper"])
         XCTAssertEqual(entries[0].lastActiveAt, f.inactive.displayTimestamp)
-        XCTAssertFalse(entries.contains(where: \.isPinned))
     }
 
     // MARK: - Selecting History
@@ -235,17 +234,6 @@ final class SidebarSectionsHistoryTests: XCTestCase {
 
         XCTAssertEqual(calls.map(\.0), [withResume.id, without.id])
         XCTAssertEqual(calls.map(\.1), [.resume, .fresh])
-    }
-
-    func testTogglePinUsesTheSidebarPinAction() {
-        let past = session("old thread", ago: 86_400)
-        let store = WorkspaceStore(testingProjects: [projectA], testingSessions: [past])
-        let actions = HistoryActions.make(store: store, coordinator: SessionCoordinator())
-
-        actions.togglePin(past.id)
-        XCTAssertEqual(store.sessions.first?.isPinned, true)
-        actions.togglePin(past.id)
-        XCTAssertEqual(store.sessions.first?.isPinned, false)
     }
 
     // MARK: - Canvas

@@ -86,7 +86,7 @@ struct ComposerResumeStateTests {
     @Test func rowsFilterByWhatIsTypedNewestFirst() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         func entry(_ title: String, _ project: String, ago: TimeInterval) -> HistoryEntry {
-            HistoryEntry(id: UUID(), projectName: project, title: title, lastActiveAt: now.addingTimeInterval(-ago), isArchived: true, isPinned: false)
+            HistoryEntry(id: UUID(), projectName: project, title: title, lastActiveAt: now.addingTimeInterval(-ago), isArchived: true)
         }
         let old = entry("flaky e2e retries", "atlas-api", ago: 2 * 86_400)
         let new = entry("rate limits", "atlas-api", ago: 7_200)

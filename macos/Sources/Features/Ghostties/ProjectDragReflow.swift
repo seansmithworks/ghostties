@@ -31,6 +31,18 @@ enum ProjectDragReflow {
         return working.indices.contains(gapIndex) ? working[gapIndex] : nil
     }
 
+    /// The gaps a drag of `dragged` may open, so it stays inside its own
+    /// pin group (`WorkspaceStore.moveProject` lands it there regardless):
+    /// a pinned project among the pinned ones, any other below them.
+    /// `order` is the pinned-first list order (`ProjectListOrder`); indices
+    /// count it with the dragged project removed, like `gapIndex`.
+    static func allowedGaps(order: [Project], dragged: UUID) -> ClosedRange<Int> {
+        let working = order.filter { $0.id != dragged }
+        let pinnedCount = working.filter(\.isPinned).count
+        let isPinned = order.first { $0.id == dragged }?.isPinned ?? false
+        return isPinned ? 0...pinnedCount : pinnedCount...working.count
+    }
+
     /// Each rendered header's and row's place in its group, keyed by item
     /// id. `groups` is the rendered list (dragged group removed); the
     /// "Unknown" group has no project, so its items get no slot and never
@@ -91,15 +103,19 @@ struct ProjectDropSlot {
 struct ProjectDropTarget {
     let slot: ProjectDropSlot
     let state: Binding<ProjectDragState>
+    /// `ProjectDragReflow.allowedGaps` for the live drag; nil when none.
+    let allowedGaps: ClosedRange<Int>?
     let performDrop: (UUID, Int) -> Bool
 
     func gapIndex(at location: CGPoint) -> Int {
-        ProjectDragReflow.insertionIndex(
+        let index = ProjectDragReflow.insertionIndex(
             hoveredIndex: slot.groupIndex,
             slot: slot.slot,
             slotCount: slot.slotCount,
             fraction: location.y / slot.height
         )
+        guard let allowedGaps else { return index }
+        return min(max(index, allowedGaps.lowerBound), allowedGaps.upperBound)
     }
 }
 
