@@ -178,14 +178,21 @@ public struct AgentTemplate: Identifiable, Codable, Hashable {
     /// All built-in templates, in display order.
     public static let defaults: [AgentTemplate] = [shell, claudeCode, codex, browser]
 
-    /// Ids of built-in templates that have been removed. A saved session can
-    /// still name one, so loading keeps those sessions instead of dropping
-    /// them as orphans; anything that looks the template up finds nothing
-    /// and takes its usual not-found path. Never reuse an id listed here.
-    /// - `…0003`: Orchestrator, removed in 0.1.0-beta.26.
-    public static let retiredBuiltInIds: Set<UUID> = [
-        UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+    /// Built-in templates that have been removed, each mapped to the
+    /// built-in that replaces it. A saved session can still name a retired
+    /// id: loading keeps the session instead of dropping it as an orphan,
+    /// and relaunching it starts the replacement
+    /// (`SessionCoordinator.relaunchTemplate`). Never reuse an id listed here.
+    /// - `…0003`: Orchestrator (Claude Code plus a system prompt), removed
+    ///   in 0.1.0-beta.26 → Claude Code.
+    public static let retiredBuiltInReplacements: [UUID: AgentTemplate] = [
+        UUID(uuidString: "00000000-0000-0000-0000-000000000003")!: claudeCode,
     ]
+
+    /// The ids in `retiredBuiltInReplacements`.
+    public static var retiredBuiltInIds: Set<UUID> {
+        Set(retiredBuiltInReplacements.keys)
+    }
 
     // MARK: - CLI Construction
 

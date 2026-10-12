@@ -479,7 +479,7 @@ final class SessionCoordinator: ObservableObject {
     func relaunch(session: AgentSession, mode: RelaunchMode) async -> Bool {
         let store = WorkspaceStore.shared
         guard let project = store.projects.first(where: { $0.id == session.projectId }),
-              let template = store.templates.first(where: { $0.id == session.templateId }) else {
+              let template = Self.relaunchTemplate(for: session, templates: store.templates) else {
             Self.logger.warning("Cannot relaunch '\(session.name, privacy: .public)': template or project not found")
             return false
         }
@@ -493,6 +493,18 @@ final class SessionCoordinator: ObservableObject {
             project: project,
             commandOverride: override
         )
+    }
+
+    /// The template a relaunch starts: the session's own, or, when its
+    /// built-in was retired, that built-in's replacement
+    /// (`AgentTemplate.retiredBuiltInReplacements` — an Orchestrator
+    /// session relaunches as Claude Code). The cwd is unaffected: neither
+    /// template sets `workingDirectory`, so both start at the project root.
+    /// A template id that is neither known nor retired stays `nil`, and
+    /// relaunch keeps its not-found path.
+    static func relaunchTemplate(for session: AgentSession, templates: [AgentTemplate]) -> AgentTemplate? {
+        templates.first(where: { $0.id == session.templateId })
+            ?? AgentTemplate.retiredBuiltInReplacements[session.templateId]
     }
 
     /// `ResumePlan.command`, gated at click time (not menu render — see

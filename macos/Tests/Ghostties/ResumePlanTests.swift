@@ -97,3 +97,41 @@ struct ResumePlanTests {
         #expect(output == path)
     }
 }
+
+/// `SessionCoordinator.relaunchTemplate(for:templates:)`: the one place a
+/// relaunch resolves its template.
+@MainActor
+struct RelaunchTemplateTests {
+    private let orchestratorId = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+
+    private func session(templateId: UUID) -> AgentSession {
+        AgentSession(name: "thread", templateId: templateId, projectId: UUID())
+    }
+
+    /// Orchestrator was removed in 0.1.0-beta.26. Relaunching a saved
+    /// Orchestrator session starts Claude Code (what Orchestrator ran,
+    /// minus its prompt) at the project root, and resumes its transcript
+    /// through `claude`, instead of silently doing nothing.
+    @Test func relaunchingAnOrchestratorSessionStartsClaudeCode() {
+        let template = SessionCoordinator.relaunchTemplate(
+            for: session(templateId: orchestratorId), templates: AgentTemplate.defaults
+        )
+        #expect(template?.id == AgentTemplate.claudeCode.id)
+        #expect(template?.workingDirectory == nil, "starts at the project root, as Orchestrator did")
+        let resume = AgentResume(agent: .claude, sessionId: "abc-123", transcriptPath: nil, cwd: nil, launcher: nil)
+        #expect(template.flatMap { ResumePlan.command(resume: resume, template: $0) } == "'claude' --resume 'abc-123'")
+    }
+
+    /// A template id that is neither known nor retired is unchanged: no
+    /// template, so relaunch keeps its not-found path.
+    @Test func anUnknownTemplateIdStillResolvesToNothing() {
+        #expect(SessionCoordinator.relaunchTemplate(for: session(templateId: UUID()), templates: AgentTemplate.defaults) == nil)
+    }
+
+    @Test func aKnownTemplateResolvesToItself() {
+        let template = SessionCoordinator.relaunchTemplate(
+            for: session(templateId: AgentTemplate.codex.id), templates: AgentTemplate.defaults
+        )
+        #expect(template?.id == AgentTemplate.codex.id)
+    }
+}

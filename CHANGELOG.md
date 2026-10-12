@@ -47,7 +47,7 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **The zero-chrome composer style and the old template card** are gone. A saved composer style setting is ignored.
 - **The "Experimental Composer Field" item in the View menu is removed.** The single-line composer is the only composer, so there is nothing left to switch.
 - **Pinning sessions is turned off.** The sidebar no longer offers to pin a session, and sessions you pinned before show in their project like the rest. Pinned templates in the composer are unchanged.
-- **Removed the Orchestrator template and the Linear Sync preset.** Built-in templates are now Shell, Claude Code, Codex and Browser. A Linear Sync preset you already have stays, and past Orchestrator sessions still show in the sidebar.
+- **Removed the Orchestrator template and the Linear Sync preset.** Built-in templates are now Shell, Claude Code, Codex and Browser. A Linear Sync preset you already have stays, and past Orchestrator sessions still show in the sidebar and reopen as Claude Code.
 
 ### Fixed
 
