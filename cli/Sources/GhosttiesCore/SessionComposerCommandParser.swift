@@ -49,7 +49,7 @@ public enum SessionComposerCopy {
 /// tokenizes the remainder `cco -n test`, and offers a `Run "cco -n test"`
 /// row that spawns a real session running that command — without ever
 /// blanket-executing the remainder as a shell command (that would break
-/// `ghostties orchestrator`, which must still reach the Orchestrator
+/// `ghostties codex`, which must still reach the Codex
 /// template via the ordinary template-matching path).
 public enum SessionComposerCommandParser {
 
@@ -275,7 +275,7 @@ public enum SessionComposerCommandParser {
         /// being typed — see `openedByFinalUnterminatedToken` in
         /// `parsePath`) and can report `.branch`/`.project` even while the
         /// open run underneath it is truly a thread run (e.g.
-        /// `"ghostties orchestrator te"` with a real `orchestrator`
+        /// `"ghostties codex te"` with a real `codex`
         /// template: the operator resolves via the template match, leaving
         /// `.branch` as the first unfilled type `activeKind` reports, while
         /// the run opened by the trailing `"te"` is genuinely `.thread`).
@@ -594,8 +594,8 @@ public enum SessionComposerCommandParser {
                     // because "nothing matched"; this covers the run opened
                     // by an explicit `>` (rule 4, case 1), which otherwise
                     // bypassed the template check entirely and let
-                    // `ghostties > orchestrator` report an ad-hoc/thread
-                    // segment instead of resolving the Orchestrator
+                    // `ghostties > codex` report an ad-hoc/thread
+                    // segment instead of resolving the Codex
                     // template (D4). A match resolves the operator exactly
                     // like the ordinary path does — round-3 review defect
                     // fix: that means returning matching to LIVE (`nil`),
@@ -608,11 +608,11 @@ public enum SessionComposerCommandParser {
                     // character into the thread name instead of treating it
                     // as the separator that advances from operator to
                     // thread (rule 4's `nil` branch) — `ghostties >
-                    // orchestrator > mythread` yielded thread name
+                    // codex > mythread` yielded thread name
                     // "> mythread" instead of "mythread". Reverting to live
                     // matching here means that next `>` goes through the
                     // SAME rule-4-case-1 path the no-leading-chevron shape
-                    // (`ghostties orchestrator > mythread`) already used
+                    // (`ghostties codex > mythread`) already used
                     // correctly, so both shapes now resolve identically.
                     segments.append(Segment(kind: .operation, range: range, resolved: .template(template.id)))
                     filled.insert(.operation)
@@ -847,7 +847,7 @@ public enum SessionComposerCommandParser {
         //    `openedByFinalUnterminatedToken` in `parsePath`), and reports
         //    the first unfilled type among project/branch/operation even
         //    while the actually-open run underneath is genuinely a thread
-        //    run (`"ghostties orchestrator te"` with a real `orchestrator`
+        //    run (`"ghostties codex te"` with a real `codex`
         //    template: the operator resolves via the template match, branch
         //    is still unfilled, so `activeKind` reports `.branch` — but the
         //    run opened by "te" is genuinely `.thread`). `path.openRunIsThreadRun`

@@ -40,12 +40,14 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win.
 - **A fully closed sidebar stays closed.** Resting the pointer at the window's left edge no longer reopens it. Reopen it with Cmd+S, Cmd+Shift+S or the View menu. Resting on the rail still opens the full list.
 - **Rounder corners.** Terminal, browser and History cards and the tray pills now share 12pt corners. The tray's shadow is lighter and sits lower in light appearance.
+- **Return on a project opens a shell.** In the composer, highlight a project and press Return to start a shell there. Clicking a project still switches the composer to it.
 
 ### Removed
 
 - **The zero-chrome composer style and the old template card** are gone. A saved composer style setting is ignored.
 - **The "Experimental Composer Field" item in the View menu is removed.** The single-line composer is the only composer, so there is nothing left to switch.
 - **Pinning sessions is turned off.** The sidebar no longer offers to pin a session, and sessions you pinned before show in their project like the rest. Pinned templates in the composer are unchanged.
+- **Removed the Orchestrator template and the Linear Sync preset.** Built-in templates are now Shell, Claude Code, Codex and Browser. A Linear Sync preset you already have stays, and past Orchestrator sessions still show in the sidebar.
 
 ### Fixed
 

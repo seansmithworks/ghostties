@@ -148,20 +148,6 @@ public struct AgentTemplate: Identifiable, Codable, Hashable {
         isGlobal: true
     )
 
-    /// Orchestrator agent — Claude Code with system prompt and opus model.
-    public static let orchestrator = AgentTemplate(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
-        name: "Orchestrator",
-        kind: .claudeCode,
-        command: "claude",
-        isDefault: true,
-        isGlobal: true,
-        agent: AgentConfig(
-            systemPromptFile: "~/.claude/orchestrator-prompt.md",
-            model: "opus"
-        )
-    )
-
     /// Embedded Chromium browser session.
     public static let browser = AgentTemplate(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
@@ -190,7 +176,16 @@ public struct AgentTemplate: Identifiable, Codable, Hashable {
     )
 
     /// All built-in templates, in display order.
-    public static let defaults: [AgentTemplate] = [shell, claudeCode, codex, orchestrator, browser]
+    public static let defaults: [AgentTemplate] = [shell, claudeCode, codex, browser]
+
+    /// Ids of built-in templates that have been removed. A saved session can
+    /// still name one, so loading keeps those sessions instead of dropping
+    /// them as orphans; anything that looks the template up finds nothing
+    /// and takes its usual not-found path. Never reuse an id listed here.
+    /// - `…0003`: Orchestrator, removed in 0.1.0-beta.26.
+    public static let retiredBuiltInIds: Set<UUID> = [
+        UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+    ]
 
     // MARK: - CLI Construction
 

@@ -5,6 +5,44 @@ import GhosttiesCore
 
 struct PresetLoaderTests {
 
+    // MARK: - Seeding
+
+    /// The app bundles no presets since Linear Sync was removed
+    /// (0.1.0-beta.26). Seeding must treat that as "nothing to copy", not
+    /// a failure: no crash, nothing written but the version marker, and
+    /// the marker so it doesn't re-run every launch.
+    @Test func seedingWithNoBundledPresetsWritesOnlyTheMarker() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("preset-seed-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let dir = root.appendingPathComponent("presets").path
+        let missingBundle = root.appendingPathComponent("bundle/presets")
+
+        let outcome = PresetLoader.seedIfNeeded(presetsDirectoryPath: dir, bundledPresetsURL: missingBundle)
+
+        #expect(outcome == .nothingBundled)
+        #expect(try fm.contentsOfDirectory(atPath: dir) == [".seed-version"])
+        let marker = try String(contentsOfFile: dir + "/.seed-version", encoding: .utf8)
+        #expect(marker == "\(PresetLoader.seedVersion)")
+        #expect(PresetLoader.seedIfNeeded(presetsDirectoryPath: dir, bundledPresetsURL: missingBundle) == .alreadySeeded)
+    }
+
+    /// A user who already has the Linear Sync preset keeps it: seeding
+    /// copies, it never deletes what the bundle stopped shipping.
+    @Test func seedingNeverRemovesAPresetTheBundleNoLongerShips() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("preset-seed-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let dir = root.appendingPathComponent("presets")
+        let kept = dir.appendingPathComponent("linear-sync/preset.json")
+        try fm.createDirectory(at: kept.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: kept)
+
+        _ = PresetLoader.seedIfNeeded(presetsDirectoryPath: dir.path, bundledPresetsURL: root.appendingPathComponent("bundle/presets"))
+
+        #expect(fm.fileExists(atPath: kept.path))
+    }
+
     // MARK: - parseFrontmatter (via parsePreset)
 
     @Test func testParseFrontmatterSimple() throws {

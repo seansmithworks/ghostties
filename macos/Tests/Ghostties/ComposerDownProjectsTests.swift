@@ -91,13 +91,13 @@ struct ComposerDownProjectsHostedTests {
     private static let tab = #selector(NSResponder.insertTab(_:))
 
     /// The bug, end to end: "Code" ghosts the project, and ↓ walks to a
-    /// PROJECTS row whose Return selects the project the way a project row
-    /// always has (`selectProject`: project set, field cleared).
+    /// PROJECTS row whose Return opens a Shell in that project (Sean,
+    /// 2026-10-12 — it used to only scope the composer to the project).
     @Test func typingAProjectNameGhostsItAndTheDownListReachesIt() throws {
-        var started = 0
+        var started: [(Project, AgentTemplate)] = []
         let m = try mount()
         defer { m.window.orderOut(nil) }
-        m.composerStore.dispatchOverrideForTesting = { _, _ in started += 1 }
+        m.composerStore.dispatchOverrideForTesting = { project, template in started.append((project, template)) }
 
         type("Code", in: m)
         #expect(ghost(m).hasPrefix(" > "), "the ghost continues the project's path: \"\(ghost(m))\"")
@@ -107,9 +107,31 @@ struct ComposerDownProjectsHostedTests {
         press(Self.down, times: 8, in: m)
         press(Self.enter, in: m)
 
-        #expect(m.composerStore.selectedProjectId == m.code.id, "Return on the PROJECTS row selects Code")
-        #expect(m.composerStore.searchText.isEmpty, "selecting a project clears the field, as it always has")
-        #expect(started == 0, "selecting a project starts nothing")
+        #expect(started.map(\.0.id) == [m.code.id], "Return on the PROJECTS row starts one session in Code")
+        #expect(started.first?.1.id == AgentTemplate.shell.id, "the session is a Shell")
+    }
+
+    /// Return on a highlighted project row with the list closed opens
+    /// exactly one Shell in that project, at its root — and a second
+    /// Return fired in the same turn (`.onSubmit` + `onKeyPress` both
+    /// firing on macOS 14+) can't start a second one.
+    @Test func returnOnAProjectRowOpensOneShellAtItsRoot() throws {
+        var started: [(Project, AgentTemplate)] = []
+        let m = try mount()
+        defer { m.window.orderOut(nil) }
+        m.composerStore.dispatchOverrideForTesting = { project, template in started.append((project, template)) }
+
+        // One word prefixing a project highlights its row (`projectWordIndex`).
+        type("rep", in: m)
+        #expect(ghost(m) == "o > Default > Shell", "the ghost names what Return opens: \"\(ghost(m))\"")
+        m.field.doCommand(by: Self.enter)
+        m.field.doCommand(by: Self.enter)
+        settle(m.window.contentView!)
+
+        #expect(started.count == 1, "one Return-pair, one session: got \(started.count)")
+        #expect(started.first?.0.id == m.repo.id, "the shell starts in the highlighted project, not the prefilled one")
+        #expect(started.first?.1.id == AgentTemplate.shell.id, "the template is Shell")
+        #expect(started.first?.1.workingDirectory == nil, "no branch carried over: the shell starts at the project root")
     }
 
     /// Control for the root cause: a project's full name with no template

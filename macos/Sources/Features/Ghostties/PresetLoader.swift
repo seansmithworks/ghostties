@@ -43,12 +43,22 @@ struct PresetLoader {
     /// Recursively copies the `presets/` subdirectory from the app bundle into
     /// `~/.ghostties/presets/`. After copying, rewrites any `${HOME}` literals
     /// in `.json` files to the real home path. Only copies items that don't
-    /// already exist — never overwrites user edits.
-    static func seedIfNeeded() {
+    /// already exist — never overwrites user edits, and never deletes a
+    /// preset the bundle no longer ships.
+    ///
+    /// The app currently bundles no presets (Linear Sync, the last one, was
+    /// removed in 0.1.0-beta.26), so a missing bundled directory is the
+    /// normal case, not an error: the version marker is written and nothing
+    /// is copied. Both paths are parameters so a test can seed into a temp
+    /// directory instead of the real `~/.ghostties`.
+    @discardableResult
+    static func seedIfNeeded(
+        presetsDirectoryPath dirPath: String = presetsDirectoryPath,
+        bundledPresetsURL: URL? = Bundle.main.resourceURL?.appendingPathComponent("presets")
+    ) -> SeedOutcome {
         let signpostState = Perf.signposter.beginInterval("presets.seed")
         defer { Perf.signposter.endInterval("presets.seed", signpostState) }
         let fm = FileManager.default
-        let dirPath = presetsDirectoryPath
         let versionFilePath = (dirPath as NSString).appendingPathComponent(".seed-version")
 
         // Check the current seed version.
@@ -62,7 +72,7 @@ struct PresetLoader {
         }
 
         // Skip if already at or above the current seed version.
-        guard currentVersion < seedVersion else { return }
+        guard currentVersion < seedVersion else { return .alreadySeeded }
 
         // Create the destination directory if it doesn't exist.
         if !fm.fileExists(atPath: dirPath) {
@@ -72,16 +82,15 @@ struct PresetLoader {
                 ])
             } catch {
                 logger.error("Failed to create presets directory: \(error.localizedDescription)")
-                return
+                return .failed
             }
         }
 
-        // Locate the bundled `presets/` resource directory.
-        guard let bundledPresetsURL = Bundle.main.resourceURL?.appendingPathComponent("presets") else {
-            logger.warning("No bundled presets directory found in app bundle")
-            // Write seed version marker anyway to avoid repeated attempts.
+        // Locate the bundled `presets/` resource directory. None bundled:
+        // write the marker so this doesn't re-run every launch.
+        guard let bundledPresetsURL, fm.fileExists(atPath: bundledPresetsURL.path) else {
             try? "\(seedVersion)".write(toFile: versionFilePath, atomically: true, encoding: .utf8)
-            return
+            return .nothingBundled
         }
 
         // Recursively copy subdirectories (folder-format presets).
@@ -97,7 +106,18 @@ struct PresetLoader {
             try "\(seedVersion)".write(toFile: versionFilePath, atomically: true, encoding: .utf8)
         } catch {
             logger.error("Failed to write seed version marker: \(error.localizedDescription)")
+            return .failed
         }
+        return .seeded
+    }
+
+    /// What `seedIfNeeded` did — returned so a test can tell "nothing to
+    /// seed" apart from a failure without reading the log.
+    enum SeedOutcome: Equatable {
+        case alreadySeeded
+        case nothingBundled
+        case seeded
+        case failed
     }
 
     // MARK: - Seed Helpers

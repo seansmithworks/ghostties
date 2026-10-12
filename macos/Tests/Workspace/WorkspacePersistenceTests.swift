@@ -420,6 +420,25 @@ struct WorkspacePersistenceTests {
         #expect(validated.sessions[0].id == goodSession.id)
     }
 
+    /// The Orchestrator built-in was removed in 0.1.0-beta.26. A saved
+    /// session that used it must still load: dropping it as an orphan
+    /// would delete the user's history row. It keeps its template id and
+    /// nothing resolves it, so relaunch takes its usual not-found path.
+    @Test @MainActor func aSavedSessionOnTheRemovedOrchestratorTemplateStillLoads() throws {
+        let orchestratorId = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
+        let project = makeProject()
+        let session = makeSession(projectId: project.id, templateId: orchestratorId, name: "orchestrator thread")
+        let data = try JSONEncoder().encode(WorkspacePersistence.State(projects: [project], sessions: [session]))
+
+        let decoded = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+        let validated = WorkspacePersistence.validate(decoded)
+
+        #expect(validated.sessions.map(\.id) == [session.id])
+        #expect(validated.sessions.first?.templateId == orchestratorId)
+        #expect(!AgentTemplate.defaults.contains { $0.id == orchestratorId }, "the template itself is gone")
+        #expect(!WorkspaceStore.mergedTemplates(presets: [], persisted: decoded.templates).contains { $0.id == orchestratorId })
+    }
+
     // MARK: - Flag Allowlist (024)
 
     @Test func validateRejectsFlagWithBackticks() {

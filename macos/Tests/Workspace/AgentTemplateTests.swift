@@ -24,16 +24,6 @@ struct AgentTemplateTests {
         #expect(cc.isDefault == true)
     }
 
-    @Test func builtInOrchestratorTemplate() {
-        let orch = AgentTemplate.orchestrator
-        #expect(orch.kind == .claudeCode)
-        #expect(orch.command == "claude")
-        #expect(orch.agent != nil)
-        #expect(orch.agent?.model == "opus")
-        #expect(orch.agent?.systemPromptFile != nil)
-        #expect(orch.isDefault == true)
-    }
-
     @Test func builtInBrowserTemplate() {
         let browser = AgentTemplate.browser
         #expect(browser.kind == .browser)
@@ -57,15 +47,14 @@ struct AgentTemplateTests {
     }
 
     @Test func defaultsContainsAllBuiltIns() {
-        #expect(AgentTemplate.defaults.count == 5)
-        #expect(AgentTemplate.defaults.map(\.name) == ["Shell", "Claude Code", "Codex", "Orchestrator", "Browser"])
+        #expect(AgentTemplate.defaults.count == 4)
+        #expect(AgentTemplate.defaults.map(\.name) == ["Shell", "Claude Code", "Codex", "Browser"])
     }
 
     @Test func deterministicUUIDs() {
         // UUIDs must be stable across launches for persistence
         #expect(AgentTemplate.shell.id.uuidString == "00000000-0000-0000-0000-000000000001")
         #expect(AgentTemplate.claudeCode.id.uuidString == "00000000-0000-0000-0000-000000000002")
-        #expect(AgentTemplate.orchestrator.id.uuidString == "00000000-0000-0000-0000-000000000003")
         #expect(AgentTemplate.browser.id.uuidString == "00000000-0000-0000-0000-000000000004")
         #expect(AgentTemplate.codex.id.uuidString == "00000000-0000-0000-0000-000000000005")
     }
