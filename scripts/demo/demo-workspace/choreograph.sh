@@ -36,10 +36,10 @@ set -euo pipefail
 # PATHS
 # =============================================================================
 
-REPO_ROOT="/Users/seansmith/Code/ghostties"
-TASKS_DIR="${REPO_ROOT}/examples/demo-workspace/switchboard/.ghostties/tasks"
+REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+TASKS_DIR="${REPO_ROOT}/scripts/demo/demo-workspace/switchboard/.ghostties/tasks"
 GT_BIN="${REPO_ROOT}/cli/.build/release/gt"
-SWITCHBOARD_DIR="${REPO_ROOT}/examples/demo-workspace/switchboard"
+SWITCHBOARD_DIR="${REPO_ROOT}/scripts/demo/demo-workspace/switchboard"
 
 # =============================================================================
 # BEAT SEQUENCE CONFIGURATION
@@ -97,8 +97,8 @@ restore_from_snapshot() {
 
 restore_from_git() {
   echo "[choreograph] Restoring switchboard tasks from git…"
-  git -C "${REPO_ROOT}" checkout -- "examples/demo-workspace/switchboard/.ghostties/tasks/"
-  git -C "${REPO_ROOT}" clean -fd "examples/demo-workspace/switchboard/.ghostties/tasks/" > /dev/null
+  git -C "${REPO_ROOT}" checkout -- "scripts/demo/demo-workspace/switchboard/.ghostties/tasks/"
+  git -C "${REPO_ROOT}" clean -fd "scripts/demo/demo-workspace/switchboard/.ghostties/tasks/" > /dev/null
   echo "[choreograph] Restore complete."
 }
 

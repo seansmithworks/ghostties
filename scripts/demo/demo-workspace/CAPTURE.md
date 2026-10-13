@@ -33,7 +33,7 @@ structurally impossible to shoot from a stale build:
 
 See `scripts/demo/README.md` for the full procedure. `demo-ready.sh` resolves the newest release
 tag, refreshes the demo app only if it's stale or missing, always reseeds the 10 fixtures in
-`examples/demo-workspace/` into `~/Library/Application Support/Ghostties Demo/repos/<name>/` as
+`scripts/demo/demo-workspace/` into `~/Library/Application Support/Ghostties Demo/repos/<name>/` as
 real git repos, and points the demo app's `workspace.json` at those copies — not at this checkout,
 so the demo doesn't break when this repo changes branch.
 
@@ -327,4 +327,4 @@ video: {
 
 ## 5. Reuse Note
 
-This fixture and runbook are the source for social-media promo clips — the same scene, same terracotta moment, same three-ways shot. Keep `examples/demo-workspace/` task content and this CAPTURE.md in sync as the app evolves so every reseed produces consistent captures.
+This fixture and runbook are the source for social-media promo clips — the same scene, same terracotta moment, same three-ways shot. Keep `scripts/demo/demo-workspace/` task content and this CAPTURE.md in sync as the app evolves so every reseed produces consistent captures.

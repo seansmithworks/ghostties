@@ -30,10 +30,10 @@ set -euo pipefail
 # PATHS
 # =============================================================================
 
-REPO_ROOT="/Users/seansmith/Code/ghostties"
-TASKS_DIR="${REPO_ROOT}/examples/demo-workspace/switchboard/.ghostties/tasks"
+REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+TASKS_DIR="${REPO_ROOT}/scripts/demo/demo-workspace/switchboard/.ghostties/tasks"
 GT_BIN="${REPO_ROOT}/cli/.build/release/gt"
-SWITCHBOARD_DIR="${REPO_ROOT}/examples/demo-workspace/switchboard"
+SWITCHBOARD_DIR="${REPO_ROOT}/scripts/demo/demo-workspace/switchboard"
 
 # =============================================================================
 # DRY-RUN HOLD OVERRIDE (seconds)

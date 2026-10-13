@@ -493,8 +493,7 @@ footer a:hover {
    tall slot down the left with its own red-lit edge; and glowing RED
    type (not white/orange) — hotter than the field behind it, still
    unmistakably red. Direction is the user's own close-up reference photo
-   (a backlit 25c / INSERT COIN TO PLAY panel) — see docs/design/
-   web-redesign/coin-slot-spec.md. Colour is scoped locally to this
+   (a backlit 25c / INSERT COIN TO PLAY panel). Colour is scoped locally to this
    component (--coin-*), never --amber, which stays the page's CTA
    colour. State is never colour-alone: the label line text and the
    credit digit both swap on arm/disarm (script in v3.html), which is
