@@ -33,11 +33,11 @@ struct CaptureFixtureSeedingTests {
     @Test func seededStatesAreTheOnesTheCoordinatorDerives() {
         let (coordinator, _) = seeded()
         let byName = Dictionary(grouping: CaptureFixture.sessions, by: \.name)
-        // Claude Code 4 / 3: processing; Claude Code 6: needs attention.
-        #expect(coordinator.indicatorState(for: byName["Claude Code 4"]![0].id) == .processing)
-        #expect(coordinator.indicatorState(for: byName["Claude Code 6"]![0].id) == .needsAttention)
+        // reconnect race / rate limiter: processing; auth migration: needs attention.
+        #expect(coordinator.indicatorState(for: byName["reconnect race"]![0].id) == .processing)
+        #expect(coordinator.indicatorState(for: byName["auth migration"]![0].id) == .needsAttention)
         // Agent sessions with no evidence resolve to idle, never waiting.
-        #expect(coordinator.indicatorState(for: byName["Claude Code 2"]![0].id) == .idle)
+        #expect(coordinator.indicatorState(for: byName["flaky ci"]![0].id) == .idle)
     }
 
     @Test func processingDoesNotDecay() {

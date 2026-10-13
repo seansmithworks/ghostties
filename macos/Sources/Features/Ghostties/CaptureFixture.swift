@@ -232,13 +232,13 @@ enum CaptureFixture {
     }
 
     private static let fixtureSessions: [FixtureSession] = [
-        FixtureSession(name: "Claude Code 4", project: "switchboard", ghost: .mist, state: .processing, hoursAgo: 0),
-        FixtureSession(name: "Claude Code 3", project: "switchboard", ghost: .gloom, state: .processing, hoursAgo: 0.02),
-        FixtureSession(name: "Claude Code 2", project: "switchboard", ghost: .polter, state: .waiting, hoursAgo: 0.05),
-        FixtureSession(name: "Claude Code 1", project: "switchboard", ghost: .wraith, state: .waiting, hoursAgo: 0.07),
-        FixtureSession(name: "Claude Code 1", project: "fieldwork", ghost: .shade, state: .waiting, hoursAgo: 0.1),
-        FixtureSession(name: "Claude Code 6", project: "atlas-api", ghost: .hex, state: .needsAttention, hoursAgo: 0.03),
-        FixtureSession(name: "Claude Code 5", project: "pendulum", ghost: .spike, state: .inactive, hoursAgo: 2),
+        FixtureSession(name: "reconnect race", project: "switchboard", ghost: .mist, state: .processing, hoursAgo: 0),
+        FixtureSession(name: "rate limiter", project: "switchboard", ghost: .gloom, state: .processing, hoursAgo: 0.02),
+        FixtureSession(name: "flaky ci", project: "switchboard", ghost: .polter, state: .waiting, hoursAgo: 0.05),
+        FixtureSession(name: "deps bump", project: "switchboard", ghost: .wraith, state: .waiting, hoursAgo: 0.07),
+        FixtureSession(name: "offline sync", project: "fieldwork", ghost: .shade, state: .waiting, hoursAgo: 0.1),
+        FixtureSession(name: "auth migration", project: "atlas-api", ghost: .hex, state: .needsAttention, hoursAgo: 0.03),
+        FixtureSession(name: "chart polish", project: "pendulum", ghost: .spike, state: .inactive, hoursAgo: 2),
         FixtureSession(name: "docs pass", project: "silo", ghost: .drift, state: .inactive, hoursAgo: 24),
         FixtureSession(name: "build fix", project: "trove", ghost: .chill, state: .error, hoursAgo: 48),
         FixtureSession(name: "release notes", project: "trove", ghost: .clyde, state: .inactive, hoursAgo: 72),
@@ -248,7 +248,7 @@ enum CaptureFixture {
     /// Round 6 follow-up: the one session the fixture marks focused, so a
     /// capture actually exercises the sidebar's selected-row styling
     /// (the expanded list's chip, `SidebarRowChipBackground`)
-    /// instead of leaving every row in its resting state. The first entry ("Claude Code 4", switchboard, top of
+    /// instead of leaving every row in its resting state. The first entry ("reconnect race", switchboard, top of
     /// Active) — same row position Flow 07's own "portfolio" occupies.
     /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
     /// called from both `WorkspaceSidebarView.onAppear` and
@@ -388,9 +388,9 @@ enum CaptureFixture {
     /// (processing) row for `running`.
     static var popoverTargetSessionId: UUID? {
         switch popoverScenario {
-        case .needsBash, .needsEdit: return sessions.first { $0.name == "Claude Code 6" }?.id
+        case .needsBash, .needsEdit: return sessions.first { $0.name == "auth migration" }?.id
         case .running: return sessions.first?.id
-        case .done: return sessions.first { $0.name == "Claude Code 2" }?.id
+        case .done: return sessions.first { $0.name == "flaky ci" }?.id
         case nil: return nil
         }
     }

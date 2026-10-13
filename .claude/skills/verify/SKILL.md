@@ -33,7 +33,7 @@ Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action it
 
 ## Drive
 Each flow is `down`, `up` with that flow's env, `doctor`, wait ~5s, `shot <name>`. Then Read the PNG.
-- **A. Expanded sidebar, Sessions tab** (`MODE=pinned TAB=sessions`). Look for: Active/Inactive/Archive sections; status glyphs (spinner, `?`, check, x) on the right edge of rows, with the hover/selected row showing a kebab instead; tray at the bottom with + / folder / gear / sidebar; 8pt card margin; sidebar bg follows the terminal theme. Fixture "Claude Code 6" is the `?` row.
+- **A. Expanded sidebar, Sessions tab** (`MODE=pinned TAB=sessions`). Look for: Active/Inactive/Archive sections; status glyphs (spinner, `?`, check, x) on the right edge of rows, with the hover/selected row showing a kebab instead; tray at the bottom with + / folder / gear / sidebar; 8pt card margin; sidebar bg follows the terminal theme. Fixture "auth migration" is the `?` row.
 - **B. Collapsed rail** (`MODE=collapsed TAB=sessions`). Look for: ~128pt-ish narrow rail, glyphs centered in the rail (not right-aligned), section chevrons, and the tray as a thin centered pill with + / folder / gear / sidebar stacked.
 - **C. Projects tab** (`MODE=pinned TAB=projects`). Look for: project list instead of sessions; same tray.
 - **D. Popover states** (`MODE=pinned POPOVER=<needs-bash|needs-edit|running|done>`, one launch each). Look for: card anchored to its row, tool/command or file path (needs-*), prompt + current step (running). `done` shows no card by design. If the popover is its own window, the largest-window capture misses it: check the first PNG.

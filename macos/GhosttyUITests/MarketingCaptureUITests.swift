@@ -107,7 +107,7 @@ final class MarketingCaptureUITests: XCTestCase {
         // user takes to resume a session that shows as exited after
         // restart (persisted sessions never carry a live runtime across
         // launches — see `AgentSession`'s doc comment).
-        let sessionRow = app.staticTexts["Claude Code 4"].firstMatch
+        let sessionRow = app.staticTexts["reconnect race"].firstMatch
         if sessionRow.waitForExistence(timeout: 5) {
             sessionRow.rightClick()
             let relaunch = app.menuItems["Relaunch"].firstMatch
