@@ -631,20 +631,20 @@ enum RailCountBadge {
 
     static func style(selected _: Bool, colorScheme: ColorScheme) -> Style {
         let theme = ChromeTheme.active(colorScheme)
-        // A theme the chrome derived: the same tile-ink wash, over its own
-        // chrome rather than the Ghostties greys below.
-        guard ChromeTheme.activeIsGhostties(colorScheme) else {
+        let dark = colorScheme == .dark
+        // Tile ink at 12% (dark) / 14% (light) over the base, every theme.
+        let alpha = dark ? 0.12 : 0.14
+        let base: UInt32
+        if ChromeTheme.activeIsGhostties(colorScheme) {
+            // The Ghostties pair's greys: #3D3C3C dark, #D3CDCA light.
+            base = dark ? 0x3D3C3C : 0xD3CDCA
+        } else {
+            // A theme the chrome derived: the same wash over its own chrome.
             let chrome = theme.chrome.usingColorSpace(.sRGB) ?? theme.chrome
             func byte(_ v: CGFloat, _ shift: UInt32) -> UInt32 { UInt32((v * 255).rounded()) << shift }
-            let base = byte(chrome.redComponent, 16) | byte(chrome.greenComponent, 8) | byte(chrome.blueComponent, 0)
-            return Style(fill: blend(ink: theme.tileInk, over: base, alpha: colorScheme == .dark ? 0.12 : 0.14),
-                         text: theme.inkSecondaryColor)
+            base = byte(chrome.redComponent, 16) | byte(chrome.greenComponent, 8) | byte(chrome.blueComponent, 0)
         }
-        return colorScheme == .dark
-            // Tile ink 12% over #3D3C3C.
-            ? Style(fill: blend(ink: theme.tileInk, over: 0x3D3C3C, alpha: 0.12), text: theme.inkSecondaryColor)
-            // Tile ink 14% over #D3CDCA.
-            : Style(fill: blend(ink: theme.tileInk, over: 0xD3CDCA, alpha: 0.14), text: theme.inkSecondaryColor)
+        return Style(fill: blend(ink: theme.tileInk, over: base, alpha: alpha), text: theme.inkSecondaryColor)
     }
 
     /// `ink` at `alpha` over `base`, flattened to one opaque colour.

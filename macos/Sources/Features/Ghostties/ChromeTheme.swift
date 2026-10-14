@@ -267,17 +267,30 @@ extension ChromeTheme {
     /// appearance is the theme's polarity), else the Ghostties pair. Before a
     /// config has loaded, and in unit tests, it is the Ghostties pair.
     static func active(_ scheme: ColorScheme) -> ChromeTheme {
-        let store = ChromeThemeStore.shared
-        if let current = store.current, current.polarity == Polarity(scheme) { return current }
+        if let current = published, current.polarity == Polarity(scheme) { return current }
         return ghostties(scheme)
+    }
+
+    /// The store's theme, read from the token accessors (plain static
+    /// functions, also called from dynamic `NSColor` providers). The store is
+    /// main-actor; every drawing caller is on the main thread, so the read
+    /// is isolated there. Off the main thread (a background unit test) there
+    /// is no store to read, and the Ghostties pair answers.
+    private static var published: ChromeTheme? {
+        guard Thread.isMainThread else { return nil }
+        return MainActor.assumeIsolated { ChromeThemeStore.shared.current }
+    }
+
+    private static var publishedIsGhostties: Bool {
+        guard Thread.isMainThread else { return true }
+        return MainActor.assumeIsolated { ChromeThemeStore.shared.isGhostties }
     }
 
     /// Whether `active(scheme)` is the hand-tuned Ghostties pair. DialKit's
     /// colour overrides apply only then.
     static func activeIsGhostties(_ scheme: ColorScheme) -> Bool {
-        let store = ChromeThemeStore.shared
-        guard let current = store.current, current.polarity == Polarity(scheme) else { return true }
-        return store.isGhostties
+        guard let current = published, current.polarity == Polarity(scheme) else { return true }
+        return publishedIsGhostties
     }
 }
 
@@ -295,7 +308,7 @@ extension ChromeTheme.Polarity {
 /// reload, or the light/dark flip that re-resolves a `light:…,dark:…`
 /// theme) before anything else reacts to that config. SwiftUI readers
 /// depend on it through `ChromeScheme`; AppKit readers observe `didChange`.
-/// Main thread only.
+@MainActor
 final class ChromeThemeStore: ObservableObject {
     static let shared = ChromeThemeStore()
 
@@ -338,6 +351,7 @@ final class ChromeThemeStore: ObservableObject {
 /// same value, plus a dependency on `ChromeThemeStore`, so the view redraws
 /// when the theme changes without a light/dark flip (one dark theme to
 /// another).
+@MainActor
 @propertyWrapper
 struct ChromeScheme: DynamicProperty {
     @Environment(\.colorScheme) private var scheme
@@ -346,7 +360,26 @@ struct ChromeScheme: DynamicProperty {
     var wrappedValue: ColorScheme { scheme }
 }
 
-/// sRGB <-> OKLab and WCAG contrast, for the derivation.
+/// WCAG 2.x relative luminance and contrast, on sRGB channels in 0...1.
+/// The one copy of the formula: the chrome derivation and the DEBUG "Sidebar
+/// colors" panel (`SidebarColorTuning.contrastRatio`) both read it.
+enum WCAG {
+    /// The sRGB transfer function, encoded -> linear.
+    static func linear(_ v: Double) -> Double {
+        v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+    }
+
+    static func relativeLuminance(r: Double, g: Double, b: Double) -> Double {
+        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    }
+
+    /// Contrast between two relative luminances, either order.
+    static func contrastRatio(_ l1: Double, _ l2: Double) -> Double {
+        (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+    }
+}
+
+/// sRGB <-> OKLab, for the derivation.
 private struct Oklab {
     var l: Double
     var a: Double
@@ -372,10 +405,6 @@ private struct Oklab {
         NSColor(srgbRed: CGFloat(rgb[0]), green: CGFloat(rgb[1]), blue: CGFloat(rgb[2]), alpha: 1)
     }
 
-    private static func linear(_ v: Double) -> Double {
-        v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
-    }
-
     private static func gamma(_ v: Double) -> Double {
         let c = min(max(v, 0), 1)
         return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1 / 2.4) - 0.055
@@ -390,7 +419,7 @@ private struct Oklab {
     init(_ color: NSColor) { self.init(Oklab.srgb(color)) }
 
     init(_ rgb: RGB) {
-        let r = Oklab.linear(rgb[0]), g = Oklab.linear(rgb[1]), bl = Oklab.linear(rgb[2])
+        let r = WCAG.linear(rgb[0]), g = WCAG.linear(rgb[1]), bl = WCAG.linear(rgb[2])
         let l_ = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * bl)
         let m_ = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * bl)
         let s_ = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * bl)
@@ -423,13 +452,9 @@ private struct Oklab {
         zip(over, base).map { $1 + ($0 - $1) * alpha }
     }
 
-    static func luminance(_ c: RGB) -> Double {
-        0.2126 * linear(c[0]) + 0.7152 * linear(c[1]) + 0.0722 * linear(c[2])
-    }
-
     static func contrast(_ x: RGB, _ y: RGB) -> Double {
-        let (lx, ly) = (luminance(x), luminance(y))
-        return (max(lx, ly) + 0.05) / (min(lx, ly) + 0.05)
+        WCAG.contrastRatio(WCAG.relativeLuminance(r: x[0], g: x[1], b: x[2]),
+                           WCAG.relativeLuminance(r: y[0], g: y[1], b: y[2]))
     }
 
     /// Binary search along `from` -> `to` for a mix that passes: the

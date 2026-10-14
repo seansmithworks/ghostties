@@ -72,6 +72,33 @@ struct ChromeThemeRepaintTests {
         #expect((container.cardLayerForTesting?.shadowOpacity ?? 0) == before)
     }
 
+    /// Overlay mode pins the sidebar to the store's polarity, the one rule.
+    /// Hot Dog Stand's red background is light by WCAG polarity but read as
+    /// dark under the old BT.601 0.5 cut, which drew dark tokens over it.
+    @Test func overlaySidebarAppearanceIsTheThemePolarityOnHotDogStand() throws {
+        let store = WorkspaceStore(testingProjects: [])
+        store.updateSidebarMode(.overlay)
+        let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 900, height: 600),
+                              styleMask: [.titled], backing: .buffered, defer: true)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = container
+        defer {
+            ChromeThemeStore.shared.reset()
+            window.contentView = nil
+        }
+        #expect(container.sidebarModeForTesting == .overlay)
+
+        let foreground = try #require(ThemeFile.foreground(named: "Hot Dog Stand"))
+        ChromeThemeStore.shared.update(background: ThemeFile.background(named: "Hot Dog Stand"), foreground: foreground)
+        let polarity = try #require(ChromeThemeStore.shared.current?.polarity)
+        #expect(polarity == .light, "Hot Dog Stand is light by WCAG polarity")
+
+        let override = container.sidebarHostingViewForTesting.appearance
+        #expect(override?.bestMatch(from: [.aqua, .darkAqua]) == (polarity == .dark ? .darkAqua : .aqua),
+                "overlay sidebar appearance \(String(describing: override?.name)) != store polarity \(polarity)")
+    }
+
     /// A reload that leaves the terminal's colours alone publishes nothing.
     @Test func unchangedColoursDoNotRepublish() {
         defer { ChromeThemeStore.shared.reset() }

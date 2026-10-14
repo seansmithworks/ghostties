@@ -775,13 +775,14 @@ class WorkspaceViewContainer: NSView {
         return effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
     }
 
-    /// `sidebarHostingView`'s appearance: pinned to the overlay fill's
-    /// luminance in overlay mode, and nil (follow the window) in every other
-    /// mode. (The DEBUG appearance preview sets the whole app's appearance,
-    /// so the window carries it here.)
+    /// `sidebarHostingView`'s appearance: pinned to `chromeScheme` (the
+    /// theme's polarity, the same rule as the container's own appearance) in
+    /// overlay mode, and nil (follow the container) in every other mode.
+    /// (The DEBUG appearance preview sets the whole app's appearance, so the
+    /// window carries it here.)
     private var sidebarAppearanceOverride: NSAppearance? {
         return sidebarMode == .overlay
-            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
+            ? NSAppearance(named: chromeScheme == .dark ? .darkAqua : .aqua)
             : nil
     }
 
@@ -832,18 +833,6 @@ class WorkspaceViewContainer: NSView {
     /// and appearance change (`applyChromeColor`).
     private var overlayBackgroundNSColor: NSColor {
         ChromeTheme.active(chromeScheme).chrome
-    }
-
-    /// Whether `overlayBackgroundNSColor` reads as dark, so the overlay's
-    /// SwiftUI content (`sidebarHostingView`) should render its dark-token
-    /// (light-on-dark) text/icon set instead of the light-token one — kept
-    /// legible against a dark terminal theme even when the OS is in light
-    /// mode. Threshold is the standard WCAG-adjacent 0.5 midpoint on
-    /// perceptual (ITU-R BT.601) luminance.
-    private var overlayBackgroundIsDark: Bool {
-        guard let rgb = overlayBackgroundNSColor.usingColorSpace(.deviceRGB) else { return !isLightAppearance }
-        let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
-        return luminance < 0.5
     }
 
     init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil, store: WorkspaceStore = .shared) {
@@ -2374,8 +2363,8 @@ class WorkspaceViewContainer: NSView {
 
         // Re-derive the overlay's text/icon legibility override — only
         // overlay mode needs `sidebarHostingView`'s appearance pinned to
-        // `overlayBackgroundNSColor`'s luminance; every other mode must
-        // clear it and fall back to the OS appearance.
+        // the theme's polarity; every other mode must clear it and follow
+        // the container (the same polarity).
         applyChromeColor()
 
         let inset = SidebarDialTuning.windowMargin()
@@ -4092,12 +4081,12 @@ class WorkspaceViewContainer: NSView {
     /// repaints here, in every mode, with `overlayBackgroundNSColor` — the
     /// pinned sidebar's chrome (beta.26) — so it's already correct the next
     /// time overlay mode shows it. `sidebarHostingView`'s
-    /// appearance is overridden to match that same fill's luminance while
+    /// appearance is pinned to the theme's polarity (`chromeScheme`) while
     /// overlay mode is active, so its SwiftUI text/icon tokens
     /// (`ChromeTheme.inkSecondary` and friends, which read
-    /// `@Environment(\.colorScheme)`) stay legible against it; outside
-    /// overlay mode the override is cleared so the sidebar follows the OS
-    /// appearance as usual.
+    /// `@ChromeScheme`) resolve on the same side as that fill; outside
+    /// overlay mode the override is cleared and the sidebar follows the
+    /// container, whose appearance is the same theme polarity.
     ///
     /// The rest of this function no-ops in overlay mode, which intentionally
     /// clears the card/canvas layers to let the vibrancy material show

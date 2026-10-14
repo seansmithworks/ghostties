@@ -251,8 +251,7 @@ enum SidebarColorTuning {
     }
 
     static func relativeLuminance(_ c: RGBA) -> Double {
-        func lin(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
-        return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+        WCAG.relativeLuminance(r: c.r, g: c.g, b: c.b)
     }
 
     /// WCAG contrast of `foreground` drawn on `background`. The background is
@@ -260,8 +259,7 @@ enum SidebarColorTuning {
     static func contrastRatio(_ foreground: RGBA, on background: RGBA) -> Double {
         let bg = background.opaque
         let fg = composite(foreground, over: bg)
-        let l1 = relativeLuminance(fg), l2 = relativeLuminance(bg)
-        return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+        return WCAG.contrastRatio(relativeLuminance(fg), relativeLuminance(bg))
     }
 
     /// The pairs the panel reads out, for one appearance's colours.
