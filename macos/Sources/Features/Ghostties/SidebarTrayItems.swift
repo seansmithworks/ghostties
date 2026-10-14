@@ -217,9 +217,11 @@ enum TrayGlassStyle {
         // 8). Sean (2026-10-11): too heavy and riding high, and light-mode
         // shadows stay at or under 20% — lightened to 10% and dropped 3pt
         // (SwiftUI's positive y is down), so less of it shows above the pill.
-        shadowOpacity: 0.10,
+        // Sean's "Tray shadow" DialKit tune (beta.27): 12%, radius 8, y 4,
+        // the default for every state (sidebar, rail, hover bar).
+        shadowOpacity: 0.12,
         shadowRadius: 8,
-        shadowYOffset: 6,
+        shadowYOffset: 4,
         // Tuned in the Dev DialKit (re-baked 2026-10-11, second export).
         chromaticIntensity: 0.15,
         chromaticWidth: 1.5,
