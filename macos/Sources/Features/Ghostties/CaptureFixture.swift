@@ -253,8 +253,30 @@ enum CaptureFixture {
     /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
     /// called from both `WorkspaceSidebarView.onAppear` and
     /// `SidebarRailColumn.onAppear`.
+    /// `GHOSTTIES_CAPTURE_FOCUS_SESSION=<fixture session name>` picks a
+    /// different one, so a capture can show that session's terminal.
     static var focusedSessionId: UUID? {
-        sessions.first?.id
+        focusedSessionId(named: env("GHOSTTIES_CAPTURE_FOCUS_SESSION"), in: sessions)
+    }
+
+    /// The named session's id; unset or unknown names fall back to the
+    /// first fixture session ("reconnect race").
+    static func focusedSessionId(named name: String?, in sessions: [AgentSession]) -> UUID? {
+        if let name, let match = sessions.first(where: { $0.name == name }) { return match.id }
+        return sessions.first?.id
+    }
+
+    /// The fixture sessions that get a real terminal surface at launch: every
+    /// session the fixture shows as running, plus the focused one. A row
+    /// click (`SessionCoordinator.focusSession(id:)`) only switches to a
+    /// session that has a surface, so without these the terminal never
+    /// changed when a row was picked.
+    static var spawnedSessionIds: [UUID] {
+        let focused = focusedSessionId
+        return zip(fixtureSessions, sessions).compactMap { fs, session in
+            let live = fs.state != .inactive && fs.state != .error
+            return live || session.id == focused ? session.id : nil
+        }
     }
 
     static func seededSessions(_ knobs: SeedKnobs, projects: [Project]) -> [AgentSession] {

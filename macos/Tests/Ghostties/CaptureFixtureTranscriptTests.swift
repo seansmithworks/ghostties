@@ -39,3 +39,16 @@ struct CaptureFixtureTranscriptTests {
         }
     }
 }
+
+struct CaptureFixtureFocusSessionHookTests {
+
+    @Test func focusSessionHookPicksByNameAndDefaultsToReconnectRace() {
+        let sessions = CaptureFixture.sessions
+        let id = { (name: String) in sessions.first { $0.name == name }?.id }
+        #expect(id("reconnect race") != nil && id("auth migration") != nil)
+        #expect(CaptureFixture.focusedSessionId(named: nil, in: sessions) == id("reconnect race"))
+        #expect(CaptureFixture.focusedSessionId(named: "auth migration", in: sessions) == id("auth migration"))
+        #expect(CaptureFixture.focusedSessionId(named: "no such session", in: sessions) == id("reconnect race"))
+        #expect(CaptureFixture.focusedSessionId(named: "", in: sessions) == id("reconnect race"))
+    }
+}
