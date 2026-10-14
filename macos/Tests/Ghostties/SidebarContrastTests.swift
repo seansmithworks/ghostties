@@ -48,8 +48,8 @@ struct SidebarContrastTests {
     @Test(arguments: [ColorScheme.light, .dark])
     func secondaryTextClearsAAOnCardAndChrome(_ scheme: ColorScheme) throws {
         try withDials {
-            let chrome = scheme == .dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight
-            let secondary = scheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+            let chrome = scheme == .dark ? ChromeTheme.ghostties(.dark).chrome : ChromeTheme.ghostties(.light).chrome
+            let secondary = scheme == .dark ? ChromeTheme.ghostties(.dark).inkSecondaryColor : ChromeTheme.ghostties(.light).inkSecondaryColor
             let text = try rgba(NSColor(secondary)).rgb
             let card = try composite(RailProjectColumn.columnFill(scheme), over: chrome)
             let cardColor = NSColor(srgbRed: card.r, green: card.g, blue: card.b, alpha: 1)

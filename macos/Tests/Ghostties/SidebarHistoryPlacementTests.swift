@@ -100,7 +100,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
                 RecentsListView()
             })
         }
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         // The list and rail read the sidebar tab from store-less
         // `@AppStorage` (`.standard`, the Dev app's domain); pin it to the
         // Projects tab in a private suite so the saved tab can't swap in the
@@ -138,7 +138,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// Off the chrome either way: the selected tint darkens it, the opaque
     /// tray lifts it.
     private func isMarked(_ r: Render, px x: Int, _ y: Int) -> Bool {
-        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+        guard let chrome = ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB),
               let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
         let delta = (c.redComponent + c.greenComponent + c.blueComponent)
             - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
@@ -147,7 +147,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
 
     /// Lighter than the chrome: the opaque tray's white fill.
     private func isLifted(_ r: Render, px x: Int, _ y: Int) -> Bool {
-        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+        guard let chrome = ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB),
               let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
         return (c.redComponent + c.greenComponent + c.blueComponent)
             - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent) > 0.06
@@ -273,7 +273,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// The chip's corner trims the run's ends equally, so its centre is the
     /// chip's.
     private func selectedChip(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         let cardAlpha = RailProjectColumn.columnFillOpacity(.light)
         let chipAlpha = RailProjectColumn.selectedChipTintOpacity

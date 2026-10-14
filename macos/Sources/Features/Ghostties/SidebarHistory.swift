@@ -259,6 +259,6 @@ struct HistoryCanvasHost: View {
             onClose: actions.close
         )
         // The canvas card's own fill, opaque over the terminal underneath.
-        .background(Color(nsColor: colorScheme == .dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight))
+        .background(Color(nsColor: ChromeTheme.ghostties(colorScheme).canvas))
     }
 }

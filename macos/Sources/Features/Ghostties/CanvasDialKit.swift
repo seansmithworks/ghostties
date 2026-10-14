@@ -20,14 +20,14 @@ enum CanvasStyle {
         #if DEBUG
         if let tuned = CanvasTuning.hex(.background, scheme, defaults: defaults) { return tuned.nsColor }
         #endif
-        return scheme == .dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight
+        return ChromeTheme.ghostties(scheme).canvas
     }
 
     static func shadowColor(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> CGColor {
         #if DEBUG
         if let tuned = CanvasTuning.hex(.shadowColor, scheme, defaults: defaults) { return tuned.nsColor.cgColor }
         #endif
-        return scheme == .dark ? WorkspaceLayout.canvasShadowColorDark : WorkspaceLayout.canvasShadowColorLight
+        return ChromeTheme.ghostties(scheme).shadow.cgColor
     }
 
     /// The opacity a card casts while it casts at all.

@@ -391,7 +391,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     private var expandedContainerBackground: some View {
         if isExpanded {
             RoundedRectangle(cornerRadius: 8)
-                .fill(colorScheme == .dark ? WorkspaceLayout.expandedContainerDark : WorkspaceLayout.expandedContainerLight)
+                .fill(Color(ChromeTheme.ghostties(colorScheme).lifted(.container)))
         }
     }
 
@@ -566,7 +566,7 @@ private struct SessionGroupHeader: View {
                 Text("\(label.uppercased()) \(count)")
                     .font(.system(size: 9, weight: .semibold))
                     .tracking(0.5)
-                    .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground(for: colorScheme))
+                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
                 Spacer(minLength: 0)
             }
@@ -580,7 +580,7 @@ private struct SessionGroupHeader: View {
         // cause of "Archive renders darker": SwiftUI dims a disabled plain
         // button's label content by default, so Active/Inactive (disabled)
         // rendered lighter than Archive (enabled) even though both read the
-        // same `sessionGroupHeaderForeground` color.
+        // same `ChromeTheme.inkSecondary` color.
         .accessibilityElement(children: .combine)
         .accessibilityLabel(isCollapsible ? "\(label), \(count), \(isExpanded ? "expanded" : "collapsed")" : "\(label), \(count)")
         .accessibilityAddTraits(.isHeader)

@@ -98,10 +98,10 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 
 | Role                  | Light     | Dark      | Token                        |
 | --------------------- | --------- | --------- | ---------------------------- |
-| **Chrome background** | `#F0E9E6` | `#242424` | `chromeBackgroundLight/Dark` |
-| **Canvas background** | `#FAF7F3` | `#141413` | `canvasBackgroundLight/Dark` |
+| **Chrome background** | `#F0E9E6` | `#242424` | `ChromeTheme.chrome`         |
+| **Canvas background** | `#FAF7F3` | `#141413` | `ChromeTheme.canvas`         |
 | **Text Primary**      | `#1a1a1a` | `#f0efed` | `textPrimary`                |
-| **Text Secondary**    | `#5e5e5e` | `#a6a6a6` | `textSecondary`              |
+| **Text Secondary**    | `#5e5e5e` | `#a6a6a6` | `ChromeTheme.inkSecondary`   |
 | **Accent (waiting)**  | `#C97350` | `#C97350` | `waitingTerracotta`          |
 | **Composer selection** | `#5B8DEF` | `#5B8DEF` | `composerSelectionAccent`   |
 | **Border**            | `#e5e5e3` | `#2a2a2a` | `border`                     |
@@ -112,9 +112,24 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 
 ### Implementation
 
-All tokens live in `macos/Sources/Features/Ghostties/WorkspaceLayout.swift`. Never hardcode hex or pt values in view files — always pull from `WorkspaceLayout`.
+Every chrome colour that changes with appearance lives in one value type, `ChromeTheme` (`macos/Sources/Features/Ghostties/ChromeTheme.swift`), resolved per appearance as `ChromeTheme.ghostties(colorScheme)`. It holds five base colours; everything else the chrome draws is one of them at a named step. A new colour is a reuse of one of these, never a new token. `ColorLiteralLintTests` fails on any colour literal outside `ChromeTheme.swift` that is not already on its frozen allowlist, and `TokenSyncTests` fails when this file's frontmatter, the Swift tokens and the `Ghostties Light` / `Ghostties Dark` theme files disagree.
 
-**Legacy tokens** still in `WorkspaceLayout.swift` (`cardBackgroundLight/Dark`, `expandedContainerLight/Dark`, `activeRowLight/Dark`) are kept for row/hover state — do not confuse with the bg-layer tokens above.
+| Token          | Light                          | Dark                       | Replaces                                              |
+| -------------- | ------------------------------ | -------------------------- | ----------------------------------------------------- |
+| `canvas`       | `#FAF7F3`                      | `#141413`                  | The theme file's `background`. No Swift copy.         |
+| `chrome`       | `#F0E9E6`                      | `#242424`                  | Chrome background, hover-bar fill, tray glass base.   |
+| `ink`          | black                          | white                      | The base of every translucent tint (rows, chips).    |
+| `inkSecondary` | `#5E5E5E`                      | `#A6A6A6`                  | Secondary text, section and group headers, empty-project ink, tray icons. |
+| `shadow`       | `#0F0F0F`                      | `#FFFFFF`                  | The canvas card's shadow colour.                      |
+
+Named steps on those five:
+
+- `Step.row` ink at 4% (light) / 6% (dark): the active and hovered session row. `Step.composerRow` 6% / 10%: the highlighted row in the Cmd+T composer. `Step.tile` 7%: a project tile's plain fill in dark.
+- `Lift.container` and `Lift.border`: the chrome lifted toward white. `container` is the expanded project group's surface (white in light, `0.16` grey in dark); `border` is the tray glass's rim (`#2A2A2A` in dark).
+
+Two values sit outside the five because no step of them reproduces the shipped colour: `tileInk` (`#232120` / `#F0EFED`, a project tile's monogram and the selected project's fill) and `tileFillBase` (`#28221E`, the light tile fill's base). Each is a candidate to merge into `ink` when a design pass allows a visible shift.
+
+`WorkspaceLayout.swift` keeps geometry and the theme-invariant brand and status colours (`waitingTerracotta`, the status dots, `composerSelectionAccent`, the source dots). Never hardcode hex or pt values in view files: pull colours from `ChromeTheme` and the brand block in `WorkspaceLayout`.
 
 ### Terminal theme
 
@@ -168,7 +183,7 @@ Query field height: 38pt. Row vertical padding: 8pt (the 4pt spacing scale's own
 
 ```swift
 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-// light #0F0F0F, dark #FFFFFF (WorkspaceLayout.canvasShadowColorLight/Dark)
+// light #0F0F0F, dark #FFFFFF (ChromeTheme.shadow)
 .shadow(color: canvasShadowColor.opacity(0.06), radius: 16, y: 2)
 // shadowPath must be set explicitly in layout() — see Gotchas
 ```
@@ -210,7 +225,7 @@ Background is layered `.regularMaterial` (a translucent system blur) with the su
 
 ### Row / hover states
 
-Use `cardBackgroundLight/Dark`, `expandedContainerLight/Dark`, `activeRowLight/Dark` tokens from `WorkspaceLayout.swift`. Do not create new hover colors.
+Use `ChromeTheme.ink(.row)` for the active and hovered row, `ChromeTheme.lifted(.container)` for the expanded group surface, and `RailProjectColumn.columnFill` for the group card. Do not create new hover colors.
 
 ### Session status glyph (pattern D, "type is the icon" — BACKLOG J/K, 2026-09-13)
 
@@ -220,10 +235,10 @@ status icon per row, never a ghost plus a glyph.
 
 | Session state (`SessionIndicatorState`)      | Glyph          | Color              |
 | --------------------------------------------- | -------------- | ------------------- |
-| `.processing` / `.longRunning`                | Braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧, ~80ms/frame) | `textSecondaryLight/Dark` |
+| `.processing` / `.longRunning`                | Braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧, ~80ms/frame) | `ChromeTheme.inkSecondary` |
 | `.needsAttention`                             | `?`            | `.primary` — the only emphasis; no accent color |
-| `.idle` / `.waiting`                          | `✓`            | `textSecondaryLight/Dark` |
-| `.error`                                      | `✕`            | `textSecondaryLight/Dark` |
+| `.idle` / `.waiting`                          | `✓`            | `ChromeTheme.inkSecondary` |
+| `.error`                                      | `✕`            | `ChromeTheme.inkSecondary` |
 | `.inactive`                                   | (empty slot)   | —                    |
 
 `✓` also covers `.waiting` — `SessionCoordinator`'s silent/unknown fallback when there's no
@@ -231,7 +246,7 @@ observed evidence the session is doing anything, not confirmed work. It must not
 indefinitely, so it reads at the same low salience as a confirmed-idle session.
 
 Reduce Motion replaces the spinner with a static `…` in the same color; no other state animates.
-No new colors — glyph colors are the existing `WorkspaceLayout` text tokens, not the
+No new colors — glyph colors are the existing `ChromeTheme` text tokens, not the
 `waitingTerracotta`/gold/blue/orange status-dot palette used elsewhere in the sidebar.
 
 ## 5. Layout Tokens
@@ -283,7 +298,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 
 ### Do
 
-- Define all color tokens in `WorkspaceLayout.swift` — view files pull from there
+- Define all chrome color tokens in `ChromeTheme.swift` (brand and status colours in `WorkspaceLayout.swift`) — view files pull from there
 - Use chrome/canvas tokens for background layers — never bind to terminal theme
 - Set `shadowPath` explicitly in `layout()` before the card renders
 - Keep sidebar UI at 11pt SF Pro Text — resist upsizing for "readability"
@@ -295,7 +310,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 ### Don't
 
 - Bind chrome or canvas background to the user's terminal theme (`surface.derivedConfig.backgroundColor`)
-- Hardcode hex or pt values in view files — always use `WorkspaceLayout` tokens
+- Hardcode hex or pt values in view files — use `ChromeTheme` and `WorkspaceLayout` tokens
 - Use terracotta for hover, selection, or states other than `waiting`
 - Mix corner radii — 12pt continuous everywhere on the terminal card
 - Add shadows outside the card, overlay, browser, and floating-modal contexts listed in §1
@@ -327,7 +342,7 @@ When converting dark ↔ light in Paper or in code:
 When generating SwiftUI or AppKit views for this project:
 
 - Read this file first — do not guess tokens
-- All colors from `WorkspaceLayout.swift` — never `Color(red:green:blue:)` in view files
+- All colors from `ChromeTheme.swift` (chrome) or `WorkspaceLayout.swift` (brand, status) — never `Color(red:green:blue:)` in view files
 - Chrome and canvas are the only two background layers — never bind to the user's terminal theme
 - Terracotta (`#C97350`) is reserved for the `waiting` indicator state only
 - Corner radius is 12pt `.continuous` on the terminal card — nowhere else unless explicitly specified

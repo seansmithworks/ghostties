@@ -56,7 +56,7 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
 
             let width: CGFloat = rail ? try railWidth() : 260
             let height: CGFloat = 400
-            let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+            let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
             // The list reads the tab from store-less `@AppStorage`; pin it to
             // Sessions in a private suite, never the Dev app's domain.
             let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
@@ -94,7 +94,7 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
     /// Darker than the chrome by a tint (selected chip or row card), lighter
     /// than text ink.
     private func isTint(_ r: Render, px x: Int, _ y: Int) -> Bool {
-        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+        guard let chrome = ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB),
               x >= 0, y >= 0, x < r.rep.pixelsWide, y < r.rep.pixelsHigh,
               let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent

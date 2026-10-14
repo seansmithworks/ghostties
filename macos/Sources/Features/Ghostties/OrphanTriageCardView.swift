@@ -260,15 +260,13 @@ struct OrphanTriageCardView: View {
         Text(text)
             .font(.system(size: 9.5, weight: .semibold))
             .tracking(0.6)
-            .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+            .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
     }
 
     // MARK: - Background
 
     private var cardBackground: some View {
-        Color(nsColor: colorScheme == .dark
-            ? WorkspaceLayout.canvasBackgroundDark
-            : WorkspaceLayout.canvasBackgroundLight)
+        Color(nsColor: ChromeTheme.ghostties(colorScheme).canvas)
     }
 
     // MARK: - Animation (D18, D19) — tokens from WorkspaceLayout.Animation

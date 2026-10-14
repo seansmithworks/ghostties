@@ -117,8 +117,8 @@ enum WorkspaceLayout {
     /// Breadcrumb project chip background, resting state (composer
     /// breadcrumb spec, Slice A). Named token rather than an ad-hoc
     /// `Color.secondary.opacity(0.15)` inlined at the call site (DESIGN.md
-    /// review finding) — same rationale as `activeRowLight`/`activeRowDark`
-    /// below: one place to retune the chip's surface color from.
+    /// review finding) — same rationale as `ChromeTheme.Step.row`:
+    /// one place to retune the chip's surface color from.
     static let composerChipBackground = Color.secondary.opacity(0.15)
 
     /// Breadcrumb project chip background while its inline picker is open.
@@ -192,12 +192,6 @@ enum WorkspaceLayout {
         concentricCornerRadius(margin: SidebarDialTuning.windowMargin())
     }
 
-    /// Shadow color applied to canvas shadow hosts (terminal + browser cards),
-    /// per appearance (beta.27, Sean's DialKit tune): a near-black lift in
-    /// light, a white glow in dark, where a dark shadow can't read.
-    static let canvasShadowColorLight: CGColor = NSColor(red: 0x0F / 255.0, green: 0x0F / 255.0, blue: 0x0F / 255.0, alpha: 1).cgColor
-    static let canvasShadowColorDark: CGColor = NSColor(red: 1, green: 1, blue: 1, alpha: 1).cgColor
-
     /// Shadow blur radius applied to canvas shadow hosts.
     static let canvasShadowRadius: CGFloat = 16
 
@@ -250,54 +244,6 @@ enum WorkspaceLayout {
 
     /// Default split ratio for terminal vs browser (terminal gets this fraction).
     static let browserSplitRatio: CGFloat = 0.5
-
-    /// Background for expanded project group container (dark mode).
-    static let expandedContainerDark = Color(white: 0.16)
-
-    /// Background for expanded project group container (light mode).
-    static let expandedContainerLight = Color.white
-
-    /// Background for active session row (dark mode): 6% white.
-    static let activeRowDark = Color.white.opacity(0.06)
-
-    /// Background for active session row (light mode): 4% black.
-    static let activeRowLight = Color.black.opacity(0.04)
-
-    /// The highlighted row in the Cmd+T composer's lists (Resume, A4's start
-    /// column), and its key caps. Heavier than `activeRowLight/Dark`: the
-    /// composer floats over live terminal output, not the quiet sidebar.
-    static let composerRowSelectedLight = Color.black.opacity(0.06)
-    static let composerRowSelectedDark = Color.white.opacity(0.10)
-
-    /// Chrome background (light mode). Covers the left sidebar column and the
-    /// gutter padding around the terminal card. The outer of the two Ghostties
-    /// design-system layers — warm pink-cream, independent of terminal theme.
-    static let chromeBackgroundLight = NSColor(red: 0xF0 / 255.0, green: 0xE9 / 255.0, blue: 0xE6 / 255.0, alpha: 1)
-
-    /// Chrome background (dark mode). See `chromeBackgroundLight`.
-    static let chromeBackgroundDark = NSColor(white: 0.14, alpha: 1)
-
-    /// Canvas background (light mode). Covers the terminal card background
-    /// (internal header strip + card rim around the GPU-rendered terminal).
-    /// Slightly lighter and cooler than chrome — the inner of the two
-    /// Ghostties design-system layers. Also independent of terminal theme;
-    /// the terminal content area itself is painted by GhosttyKit.
-    static let canvasBackgroundLight = NSColor(red: 0xFA / 255.0, green: 0xF7 / 255.0, blue: 0xF3 / 255.0, alpha: 1)
-
-    /// Canvas background (dark mode): #141413 (beta.27, Sean's DialKit tune).
-    /// See `canvasBackgroundLight`.
-    static let canvasBackgroundDark = NSColor(red: 0x14 / 255.0, green: 0x14 / 255.0, blue: 0x13 / 255.0, alpha: 1)
-
-    /// The closed-sidebar hover bar's fill (beta.26, Sean): the pinned
-    /// sidebar's chrome, so the sidebar looks the same revealed as pinned.
-    /// Follows the OS appearance, not the terminal theme.
-    static func hoverBarFill(isDark: Bool) -> NSColor {
-        isDark ? chromeBackgroundDark : chromeBackgroundLight
-    }
-
-    /// Border (dark mode): DESIGN.md `darkBorder` #2a2a2a, a hairline one
-    /// step above the dark chrome. The tray glass's dark rim.
-    static let borderDark = NSColor(red: 0x2A / 255.0, green: 0x2A / 255.0, blue: 0x2A / 255.0, alpha: 1)
 
     /// Terracotta/warm rust accent used as a brand/UI accent (pin notices, callout
     /// cards, task-row highlights, browser-toggle tint). #c97350
@@ -361,48 +307,16 @@ enum WorkspaceLayout {
     /// the long tail" — quietest tier above pure invisible.
     static let activityMutedForeground = Color(.tertiaryLabelColor)
 
-    /// Secondary/muted text foreground (light mode). DESIGN.md `textSecondary`.
-    /// A fixed value, not a system dynamic color — `NSColor.tertiaryLabelColor`
-    /// (25% opacity) fails WCAG 4.5:1 for low-emphasis UI text against every
-    /// backdrop it renders on. `#6b6b6b` (DESIGN.md's original documented
-    /// value) still falls short at 4.44:1 on chrome and 4.08:1 on the
-    /// `activeRowLight` tint — the two backdrops most of this text actually
-    /// sits on. `#5E5E5E` (beta.26, sidebar contrast option 2) clears 4.5:1
-    /// with margin on chrome and on the project group card
-    /// (`RailProjectColumn.columnFill`). See
-    /// `docs/audits/sidebar-contrast-audit.md`.
-    static let textSecondaryLight = Color(red: 0x5E / 255.0, green: 0x5E / 255.0, blue: 0x5E / 255.0)
-
-    /// Secondary/muted text foreground (dark mode). See `textSecondaryLight`.
-    static let textSecondaryDark = Color(red: 0xA6 / 255.0, green: 0xA6 / 255.0, blue: 0xA6 / 255.0)
-
-    /// Foreground for the small section-header labels in the sidebar
-    /// ("Pinned", "Active Now", "Recent", "All Projects"). Muted by design so
-    /// the project rows themselves stay the dominant visual. Uses the fixed
-    /// `textSecondary` token (not `tertiaryLabelColor`) because this text must
-    /// clear WCAG 4.5:1.
-    static func sectionHeaderForeground(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? textSecondaryDark : textSecondaryLight
-    }
-
     /// An empty project's header and rail monogram in the one-view sidebar
-    /// (Sean, 2026-10-08: shown dimmed, count 0). The `textSecondary` token
+    /// (Sean, 2026-10-08: shown dimmed, count 0). `ChromeTheme.inkSecondary`
     /// (beta.26: was `tertiaryLabelColor`, which failed 4.5:1), resolved per
     /// appearance. The quiet comes from the tile: a live project's monogram
     /// is primary ink, an empty one's is this secondary grey.
     static let emptyProjectForeground = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(textSecondaryDark)
-            : NSColor(textSecondaryLight)
+            ? ChromeTheme.ghostties(.dark).inkSecondary
+            : ChromeTheme.ghostties(.light).inkSecondary
     })
-
-    /// Foreground for the smaller in-row session group headers ("Active",
-    /// "Recent", "Idle") inside an expanded project. One tier quieter than the
-    /// top-level section headers since they're nested. Same `textSecondary`
-    /// token as `sectionHeaderForeground` — both must clear 4.5:1.
-    static func sessionGroupHeaderForeground(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? textSecondaryDark : textSecondaryLight
-    }
 
     // MARK: - Sidebar Icon Column
 

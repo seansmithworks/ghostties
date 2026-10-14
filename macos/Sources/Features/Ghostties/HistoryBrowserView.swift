@@ -289,15 +289,15 @@ private enum Style {
     /// The card's own background — DESIGN.md: canvas is never bound to the
     /// terminal theme.
     static func background(_ scheme: ColorScheme) -> Color {
-        Color(nsColor: scheme == .dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight)
+        Color(nsColor: ChromeTheme.ghostties(scheme).canvas)
     }
 
     static func muted(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+        ChromeTheme.ghostties(scheme).inkSecondaryColor
     }
 
     static func selectionFill(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? WorkspaceLayout.activeRowDark : WorkspaceLayout.activeRowLight
+        ChromeTheme.ghostties(scheme).ink(.row)
     }
 
     /// DESIGN.md reserves terracotta, so the selection bar and match

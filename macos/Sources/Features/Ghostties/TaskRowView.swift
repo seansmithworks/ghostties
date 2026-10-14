@@ -270,7 +270,7 @@ struct TaskRowView: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 Text(statusPhrase)
                     .font(.system(size: 11))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
             }
         }
@@ -307,7 +307,7 @@ struct TaskRowView: View {
 
                 Text(compactMetaLine)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -324,7 +324,7 @@ struct TaskRowView: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 Text(trailingTime)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
                     .padding(.top, 2)
             }
@@ -537,9 +537,7 @@ struct TaskRowView: View {
             return Color.white.opacity(0.04)
         }
         guard isHovered else { return .clear }
-        return colorScheme == .dark
-            ? WorkspaceLayout.activeRowDark
-            : WorkspaceLayout.activeRowLight
+        return ChromeTheme.ghostties(colorScheme).ink(.row)
     }
 
     // Keep the old name as an alias so future callers that read the property

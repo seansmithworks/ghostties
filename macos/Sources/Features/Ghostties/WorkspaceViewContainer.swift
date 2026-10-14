@@ -823,11 +823,11 @@ class WorkspaceViewContainer: NSView {
     }
 
     /// Overlay panel fill (beta.26, Sean): the pinned sidebar's chrome
-    /// (`WorkspaceLayout.hoverBarFill`), resolved for the current OS
+    /// (`ChromeTheme.chrome`), resolved for the current OS
     /// appearance. Was the focused terminal's own background. Re-read on
     /// every appearance change (`viewDidChangeEffectiveAppearance`).
     private var overlayBackgroundNSColor: NSColor {
-        WorkspaceLayout.hoverBarFill(isDark: !isLightAppearance)
+        ChromeTheme.ghostties(isLightAppearance ? .light : .dark).chrome
     }
 
     /// Whether `overlayBackgroundNSColor` reads as dark, so the overlay's
@@ -4069,7 +4069,7 @@ class WorkspaceViewContainer: NSView {
     /// time overlay mode shows it. `sidebarHostingView`'s
     /// appearance is overridden to match that same fill's luminance while
     /// overlay mode is active, so its SwiftUI text/icon tokens
-    /// (`sectionHeaderForeground(for:)` and friends, which read
+    /// (`ChromeTheme.inkSecondary` and friends, which read
     /// `@Environment(\.colorScheme)`) stay legible against it; outside
     /// overlay mode the override is cleared so the sidebar follows the OS
     /// appearance as usual.

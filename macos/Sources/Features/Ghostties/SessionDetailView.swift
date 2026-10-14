@@ -88,16 +88,14 @@ struct SessionRow: View {
         switch indicatorState {
         case .waiting, .needsAttention, .processing, .longRunning: return .primary
         case .idle:     return Color(.secondaryLabelColor)
-        case .inactive: return colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+        case .inactive: return ChromeTheme.ghostties(colorScheme).inkSecondaryColor
         case .error:    return .primary
         }
     }
 
     private var rowBackground: Color {
         if isActive {
-            return colorScheme == .dark
-                ? WorkspaceLayout.activeRowDark
-                : WorkspaceLayout.activeRowLight
+            return ChromeTheme.ghostties(colorScheme).ink(.row)
         }
         if isHovered {
             return Color.primary.opacity(0.04)

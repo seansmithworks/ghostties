@@ -34,7 +34,7 @@ final class SelectedRowFootprintTests: XCTestCase {
     }
 
     private func renderInScope<V: View>(_ view: V, width: CGFloat) throws -> (NSBitmapImageRep, CGFloat) {
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let hosting = NSHostingView(rootView: view
             .frame(width: width, height: height, alignment: .top)
             .background(Color(nsColor: chrome)))
@@ -53,7 +53,7 @@ final class SelectedRowFootprintTests: XCTestCase {
     /// True where the selected surface's tint darkens the pixel below the
     /// chrome.
     private func isSurface(_ rep: NSBitmapImageRep, scale: CGFloat, x: CGFloat, y: CGFloat) throws -> Bool {
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         guard let c = rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB) else { return false }
         let tint = (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
             - (c.redComponent + c.greenComponent + c.blueComponent)

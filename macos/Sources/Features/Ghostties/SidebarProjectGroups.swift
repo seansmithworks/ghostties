@@ -630,20 +630,23 @@ enum RailCountBadge {
     }
 
     static func style(selected _: Bool, colorScheme: ColorScheme) -> Style {
-        colorScheme == .dark
-            // Ink 12% over #3D3C3C.
-            ? Style(fill: blend(ink: 0xF0EFED, over: 0x3D3C3C, alpha: 0.12), text: WorkspaceLayout.textSecondaryDark)
-            // Ink 14% over #D3CDCA.
-            : Style(fill: blend(ink: 0x232120, over: 0xD3CDCA, alpha: 0.14), text: WorkspaceLayout.textSecondaryLight)
+        let theme = ChromeTheme.ghostties(colorScheme)
+        return colorScheme == .dark
+            // Tile ink 12% over #3D3C3C.
+            ? Style(fill: blend(ink: theme.tileInk, over: 0x3D3C3C, alpha: 0.12), text: theme.inkSecondaryColor)
+            // Tile ink 14% over #D3CDCA.
+            : Style(fill: blend(ink: theme.tileInk, over: 0xD3CDCA, alpha: 0.14), text: theme.inkSecondaryColor)
     }
 
     /// `ink` at `alpha` over `base`, flattened to one opaque colour.
-    private static func blend(ink: UInt32, over base: UInt32, alpha: Double) -> Color {
-        func channel(_ shift: UInt32) -> Double {
-            let i = Double((ink >> shift) & 0xFF), b = Double((base >> shift) & 0xFF)
-            return (i * alpha + b * (1 - alpha)) / 255
+    private static func blend(ink: NSColor, over base: UInt32, alpha: Double) -> Color {
+        let inkRGB = ink.usingColorSpace(.sRGB) ?? ink
+        func channel(_ ink: CGFloat, _ shift: UInt32) -> Double {
+            let b = Double((base >> shift) & 0xFF)
+            return (Double(ink) * 255 * alpha + b * (1 - alpha)) / 255
         }
-        return Color(.sRGB, red: channel(16), green: channel(8), blue: channel(0), opacity: 1)
+        return Color(.sRGB, red: channel(inkRGB.redComponent, 16), green: channel(inkRGB.greenComponent, 8),
+                     blue: channel(inkRGB.blueComponent, 0), opacity: 1)
     }
 }
 

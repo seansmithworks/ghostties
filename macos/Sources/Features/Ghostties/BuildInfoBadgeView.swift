@@ -171,7 +171,7 @@ struct BuildInfoBadgeView: View {
         if isEnabled && !CaptureFixture.isActive {
             Text(justCopied ? "Copied build info" : info.shortLabel)
                 .font(.system(size: 9))
-                .foregroundColor(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundColor(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4, style: .continuous))

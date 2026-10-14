@@ -67,7 +67,7 @@ struct NeedsYouZoneView: View {
 
             Text("\(taskStore.needsYou.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                 .fixedSize()
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)

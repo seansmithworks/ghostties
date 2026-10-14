@@ -81,7 +81,7 @@ struct ChromeColorGoldenTests {
 
         // Chrome and canvas layers.
         add("chrome.background") { rgba(SidebarColors.background($0, defaults: d), $0) }
-        add("chrome.hoverBarFill") { rgba(WorkspaceLayout.hoverBarFill(isDark: $0 == .dark), $0) }
+        add("chrome.hoverBarFill") { rgba(ChromeTheme.ghostties($0).chrome, $0) }
         add("canvas.background") { rgba(CanvasStyle.background($0, defaults: d), $0) }
         add("canvas.shadowColor") { rgba(CanvasStyle.shadowColor($0, defaults: d), $0) }
         add("canvas.hoverBarShadowColor") { rgba(WorkspaceLayout.hoverBarShadowColor, $0) }
@@ -89,9 +89,9 @@ struct ChromeColorGoldenTests {
         // Text.
         add("text.primary") { rgba(SidebarColors.primaryText($0, defaults: d), $0) }
         add("text.secondary") { rgba(SidebarColors.secondaryText($0, defaults: d), $0) }
-        add("text.secondary.token") { rgba($0 == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight, $0) }
-        add("text.sectionHeader") { rgba(WorkspaceLayout.sectionHeaderForeground(for: $0), $0) }
-        add("text.sessionGroupHeader") { rgba(WorkspaceLayout.sessionGroupHeaderForeground(for: $0), $0) }
+        add("text.secondary.token") { rgba(ChromeTheme.ghostties($0).inkSecondaryColor, $0) }
+        add("text.sectionHeader") { rgba(ChromeTheme.ghostties($0).inkSecondaryColor, $0) }
+        add("text.sessionGroupHeader") { rgba(ChromeTheme.ghostties($0).inkSecondaryColor, $0) }
         add("text.emptyProject") { rgba(WorkspaceLayout.emptyProjectForeground, $0) }
         add("text.dimmedProject") { rgba(SidebarColors.dimmedProject($0, defaults: d), $0) }
         add("text.activityNormal") { rgba(WorkspaceLayout.activityNormalForeground, $0) }
@@ -112,9 +112,9 @@ struct ChromeColorGoldenTests {
         add("column.lightLift") { rgba(Color.white.opacity(RailProjectColumn.lightColumnLiftOpacity), $0) }
         add("column.selectedChip") { rgba(RailProjectColumn.tintInk($0).opacity(RailProjectColumn.selectedChipTintOpacity), $0) }
         add("column.hoverChip") { rgba(RailProjectColumn.tintInk($0).opacity(RailProjectColumn.hoverChipTintOpacity), $0) }
-        add("row.expandedContainer") { rgba($0 == .dark ? WorkspaceLayout.expandedContainerDark : WorkspaceLayout.expandedContainerLight, $0) }
-        add("row.active") { rgba($0 == .dark ? WorkspaceLayout.activeRowDark : WorkspaceLayout.activeRowLight, $0) }
-        add("row.composerSelected") { rgba($0 == .dark ? WorkspaceLayout.composerRowSelectedDark : WorkspaceLayout.composerRowSelectedLight, $0) }
+        add("row.expandedContainer") { rgba(ChromeTheme.ghostties($0).lifted(.container), $0) }
+        add("row.active") { rgba(ChromeTheme.ghostties($0).ink(.row), $0) }
+        add("row.composerSelected") { rgba(ChromeTheme.ghostties($0).ink(.composerRow), $0) }
         add("composer.chip") { rgba(WorkspaceLayout.composerChipBackground, $0) }
         add("composer.chipActive") { rgba(WorkspaceLayout.composerChipBackgroundActive, $0) }
 
