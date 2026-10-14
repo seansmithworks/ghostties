@@ -4165,7 +4165,7 @@ private final class CardShadowHostView: NSView {
         layer.shadowColor = CanvasStyle.shadowColor(scheme)
         layer.shadowRadius = CanvasStyle.shadowRadius(scheme)
         layer.shadowOffset = CanvasStyle.shadowOffset(scheme)
-        layer.shadowOpacity = castsShadow ? CanvasStyle.shadowOpacity(scheme) : 0
+        layer.shadowOpacity = castsShadow ? Float(CanvasStyle.shadowOpacity(scheme)) : 0
     }
 }
 

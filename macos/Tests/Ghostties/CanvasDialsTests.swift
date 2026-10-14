@@ -44,7 +44,8 @@ final class CanvasDialsTests: XCTestCase {
         XCTAssertEqual(model.light.shadowColor, "#0F0F0F")
         XCTAssertEqual(model.dark.shadowColor, "#FFFFFF")
         for a in [model.light, model.dark] {
-            XCTAssertEqual(a.shadowOpacity, 0.06, accuracy: 1e-6)
+            // Exact: no Float noise reaches the readout (was 0.15000000596046448).
+            XCTAssertEqual(a.shadowOpacity, 0.06)
             XCTAssertEqual(a.shadowRadius, 16)
             XCTAssertEqual(a.shadowOffsetY, -2)
         }

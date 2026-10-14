@@ -205,7 +205,7 @@ enum WorkspaceLayout {
     static let canvasShadowOffset: CGSize = CGSize(width: 0, height: -2)
 
     /// Shadow opacity applied to canvas shadow hosts when the card is visible.
-    static let canvasShadowOpacity: Float = 0.06
+    static let canvasShadowOpacity: Double = 0.06
 
     /// The closed-sidebar hover bar's shadow (beta.26, Sean): black, wider
     /// and lighter than the canvas card's beta.26 shadow (round 2), so the

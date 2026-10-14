@@ -31,9 +31,9 @@ enum CanvasStyle {
     }
 
     /// The opacity a card casts while it casts at all.
-    static func shadowOpacity(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Float {
+    static func shadowOpacity(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Double {
         #if DEBUG
-        if let tuned = CanvasTuning.number(.shadowOpacity, scheme, defaults: defaults) { return Float(tuned) }
+        if let tuned = CanvasTuning.number(.shadowOpacity, scheme, defaults: defaults) { return tuned }
         #endif
         return WorkspaceLayout.canvasShadowOpacity
     }
@@ -125,7 +125,7 @@ enum CanvasDialPanel: FocusedDialPanel {
                 shadowColor: SidebarColorTuning.RGBA(
                     NSColor(cgColor: CanvasStyle.shadowColor(scheme, defaults: defaults)) ?? .black, scheme
                 ).hex,
-                shadowOpacity: Double(CanvasStyle.shadowOpacity(scheme, defaults: defaults)),
+                shadowOpacity: CanvasStyle.shadowOpacity(scheme, defaults: defaults),
                 shadowRadius: Double(CanvasStyle.shadowRadius(scheme, defaults: defaults)),
                 shadowOffsetY: Double(CanvasStyle.shadowOffset(scheme, defaults: defaults).height)
             )

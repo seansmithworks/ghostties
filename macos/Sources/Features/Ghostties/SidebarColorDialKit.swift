@@ -357,17 +357,21 @@ enum SidebarColorsDialPanel: FocusedDialPanel {
             func c(_ role: SidebarColors.Role) -> SidebarColorTuning.RGBA {
                 SidebarColorTuning.resolved(role, scheme, defaults: defaults)
             }
+            // A shipped colour's alpha can come back with binary noise
+            // (system colours, Float-backed components); the opacity dials
+            // step at 0.01, so show the 2-decimal value.
+            func opacity(_ a: Double) -> Double { (a * 100).rounded() / 100 }
             return Appearance(
                 background: c(.background).hex,
                 primaryText: c(.primaryText).hex,
-                primaryTextOpacity: c(.primaryText).a,
+                primaryTextOpacity: opacity(c(.primaryText).a),
                 secondaryText: c(.secondaryText).hex,
                 tileFill: c(.tileFill).hex,
-                tileFillOpacity: c(.tileFill).a,
+                tileFillOpacity: opacity(c(.tileFill).a),
                 tileInk: c(.tileInk).hex,
                 selectedRowTint: c(.selectedRowTint).hex,
-                selectedRowTintOpacity: c(.selectedRowTint).a,
-                dimmedProjectOpacity: SidebarColorTuning.resolvedDimmedOpacity(scheme, defaults: defaults)
+                selectedRowTintOpacity: opacity(c(.selectedRowTint).a),
+                dimmedProjectOpacity: opacity(SidebarColorTuning.resolvedDimmedOpacity(scheme, defaults: defaults))
             )
         }
         var model = Model(light: appearance(.light), dark: appearance(.dark))

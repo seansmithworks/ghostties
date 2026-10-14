@@ -1075,9 +1075,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .select("\(prefix)Variant", keyPath: glass.appending(path: \.variant), label: "Glass variant",
                     options: TrayGlassStyle.Variant.allCases.map(\.rawValue)),
             .slider("\(prefix)TintOpacity", keyPath: glass.appending(path: \.tintOpacity),
-                    label: prefix == "dark" ? "Glass warm tint" : "Glass white tint", range: 0...1, step: 0.05),
+                    label: prefix == "dark" ? "Glass warm tint" : "Glass white tint", range: 0...1, step: 0.01),
             .slider("\(prefix)SurfaceOpacity", keyPath: glass.appending(path: \.surfaceOpacity),
-                    label: prefix == "dark" ? "Grey layer opacity" : "White layer opacity", range: 0...1, step: 0.05),
+                    label: prefix == "dark" ? "Grey layer opacity" : "White layer opacity", range: 0...1, step: 0.01),
             // Blur. The native glass has no blur amount (only its variant:
             // `regular` frosts, `clear` barely does, `identity` is no glass),
             // so the blur is a system material under the layer above. It
@@ -1086,13 +1086,13 @@ final class SidebarDialKitCoordinator: ObservableObject {
                     label: "Backdrop blur (thicker = more)",
                     options: TrayGlassStyle.BackdropMaterial.allCases.map(\.rawValue)),
             .slider("\(prefix)BackdropOpacity", keyPath: glass.appending(path: \.backdropOpacity),
-                    label: "Backdrop blur opacity", range: 0...1, step: 0.05),
+                    label: "Backdrop blur opacity", range: 0...1, step: 0.01),
             .slider("\(prefix)SurfaceBlur", keyPath: glass.appending(path: \.surfaceBlur),
                     label: prefix == "dark" ? "Grey layer edge blur" : "White layer edge blur",
                     range: 0...16, step: 0.5, unit: "pt"),
             .slider("\(prefix)RimWidth", keyPath: glass.appending(path: \.rimWidth), label: "Rim width", range: 0...4, step: 0.25, unit: "pt"),
-            .slider("\(prefix)RimOpacity", keyPath: glass.appending(path: \.rimOpacity), label: "Rim opacity", range: 0...1, step: 0.02),
-            .slider("\(prefix)ChromaticIntensity", keyPath: glass.appending(path: \.chromaticIntensity), label: "Chromatic rim intensity", range: 0...1, step: 0.05),
+            .slider("\(prefix)RimOpacity", keyPath: glass.appending(path: \.rimOpacity), label: "Rim opacity", range: 0...1, step: 0.01),
+            .slider("\(prefix)ChromaticIntensity", keyPath: glass.appending(path: \.chromaticIntensity), label: "Chromatic rim intensity", range: 0...1, step: 0.01),
             .slider("\(prefix)ChromaticWidth", keyPath: glass.appending(path: \.chromaticWidth), label: "Chromatic rim width", range: 0.5...6, step: 0.25, unit: "pt"),
             .slider("\(prefix)ChromaticRotation", keyPath: glass.appending(path: \.chromaticRotation), label: "Chromatic rim rotation", range: 0...360, step: 0.1, unit: "°"),
             .slider("\(prefix)ChromaticBlur", keyPath: glass.appending(path: \.chromaticBlur), label: "Chromatic rim blur", range: 0...3, step: 0.1, unit: "pt"),
@@ -1100,7 +1100,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
                     options: TrayGlassStyle.ChromaticPalette.allCases.map(\.rawValue)),
             .select("\(prefix)ChromaticBlend", keyPath: glass.appending(path: \.chromaticBlend), label: "Chromatic blend",
                     options: TrayGlassStyle.ChromaticBlend.allCases.map(\.rawValue)),
-            .slider("\(prefix)SpecularStrength", keyPath: glass.appending(path: \.specularStrength), label: "Specular strength", range: 0...1, step: 0.05),
+            .slider("\(prefix)SpecularStrength", keyPath: glass.appending(path: \.specularStrength), label: "Specular strength", range: 0...1, step: 0.01),
             .slider("\(prefix)SpecularAngle", keyPath: glass.appending(path: \.specularAngle), label: "Specular angle", range: 0...360, step: 1, unit: "°")
         ]
     }
@@ -1348,10 +1348,10 @@ enum RailDialPanel: FocusedDialPanel {
             .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
             // One view's selected project column (`RailProjectColumn`).
             .group("railColumn", label: "Rail column", children: [
-                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint (dark)", range: 0...0.3, step: 0.005),
+                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint (dark)", range: 0...0.3, step: 0.01),
                 .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
                 .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
-                .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
+                .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.01),
             ]),
             // The column's project tile and its rows' thread tiles (chips).
             .group("railTiles", label: "Rail tiles", children: [
