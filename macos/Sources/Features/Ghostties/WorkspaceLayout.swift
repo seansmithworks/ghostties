@@ -192,23 +192,27 @@ enum WorkspaceLayout {
         concentricCornerRadius(margin: SidebarDialTuning.windowMargin())
     }
 
-    /// Shadow color applied to canvas shadow hosts (terminal + browser cards).
-    static let canvasShadowColor: CGColor = NSColor.black.cgColor
+    /// Shadow color applied to canvas shadow hosts (terminal + browser cards),
+    /// per appearance (beta.27, Sean's DialKit tune): a near-black lift in
+    /// light, a white glow in dark, where a dark shadow can't read.
+    static let canvasShadowColorLight: CGColor = NSColor(red: 0x0F / 255.0, green: 0x0F / 255.0, blue: 0x0F / 255.0, alpha: 1).cgColor
+    static let canvasShadowColorDark: CGColor = NSColor(red: 1, green: 1, blue: 1, alpha: 1).cgColor
 
     /// Shadow blur radius applied to canvas shadow hosts.
-    static let canvasShadowRadius: CGFloat = 8
+    static let canvasShadowRadius: CGFloat = 16
 
     /// Shadow offset applied to canvas shadow hosts (slight downward cast).
     static let canvasShadowOffset: CGSize = CGSize(width: 0, height: -2)
 
     /// Shadow opacity applied to canvas shadow hosts when the card is visible.
-    static let canvasShadowOpacity: Float = 0.15
+    static let canvasShadowOpacity: Float = 0.06
 
-    /// The closed-sidebar hover bar's shadow (beta.26, Sean): the canvas
-    /// card's colour, lighter and wider than its blur and opacity (round 2),
-    /// so the bar floating over the terminal reads as one more card in the
-    /// same stack. Cast rightward onto the canvas.
-    static let hoverBarShadowColor: CGColor = canvasShadowColor
+    /// The closed-sidebar hover bar's shadow (beta.26, Sean): black, wider
+    /// and lighter than the canvas card's beta.26 shadow (round 2), so the
+    /// bar floating over the terminal reads as one more card in the same
+    /// stack. Cast rightward onto the canvas. Its own constants since the
+    /// canvas shadow went per-appearance (beta.27).
+    static let hoverBarShadowColor: CGColor = NSColor.black.cgColor
     static let hoverBarShadowRadius: CGFloat = 16
     static let hoverBarShadowOpacity: Float = 0.1275
 
@@ -280,9 +284,9 @@ enum WorkspaceLayout {
     /// the terminal content area itself is painted by GhosttyKit.
     static let canvasBackgroundLight = NSColor(red: 0xFA / 255.0, green: 0xF7 / 255.0, blue: 0xF3 / 255.0, alpha: 1)
 
-    /// Canvas background (dark mode). Slightly lighter than chrome dark, still
-    /// warm. See `canvasBackgroundLight`.
-    static let canvasBackgroundDark = NSColor(white: 0.18, alpha: 1)
+    /// Canvas background (dark mode): #141413 (beta.27, Sean's DialKit tune).
+    /// See `canvasBackgroundLight`.
+    static let canvasBackgroundDark = NSColor(red: 0x14 / 255.0, green: 0x14 / 255.0, blue: 0x13 / 255.0, alpha: 1)
 
     /// The closed-sidebar hover bar's fill (beta.26, Sean): the pinned
     /// sidebar's chrome, so the sidebar looks the same revealed as pinned.

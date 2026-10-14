@@ -14,7 +14,7 @@ colors:
   success: "#2d7d46"
   # Dark mode
   darkChromeBackground: "#242424" # white:0.14
-  darkCanvasBackground: "#2D2D2D" # white:0.18
+  darkCanvasBackground: "#141413"
   darkTextPrimary: "#f0efed"
   darkTextSecondary: "#a6a6a6"
   darkBorder: "#2a2a2a"
@@ -45,9 +45,10 @@ rounded:
 components:
   terminal-card:
     cornerRadius: 12
-    shadowOpacity: 0.15
+    shadowColor: "#0F0F0F (light) / #FFFFFF (dark)"
+    shadowOpacity: 0.06
     shadowOffset: "0, 2"
-    shadowRadius: 8
+    shadowRadius: 16
   overlay-sidebar:
     shadowOpacity: 0.20
   composer-modal:
@@ -89,7 +90,7 @@ Ghostties has exactly two design-system background layers. Neither is bound to t
 | Layer      | Coverage                                     | Light     | Dark                   | Token name         |
 | ---------- | -------------------------------------------- | --------- | ---------------------- | ------------------ |
 | **Chrome** | Left sidebar column + gutter padding         | `#F0E9E6` | `#242424` (white:0.14) | `chromeBackground` |
-| **Canvas** | Terminal card body (header strip + card rim) | `#FAF7F3` | `#2D2D2D` (white:0.18) | `canvasBackground` |
+| **Canvas** | Terminal card body (header strip + card rim) | `#FAF7F3` | `#141413`              | `canvasBackground` |
 
 The sidebar itself is `.background(.clear)` in both modes — chrome reads through from the container layer.
 
@@ -98,7 +99,7 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 | Role                  | Light     | Dark      | Token                        |
 | --------------------- | --------- | --------- | ---------------------------- |
 | **Chrome background** | `#F0E9E6` | `#242424` | `chromeBackgroundLight/Dark` |
-| **Canvas background** | `#FAF7F3` | `#2D2D2D` | `canvasBackgroundLight/Dark` |
+| **Canvas background** | `#FAF7F3` | `#141413` | `canvasBackgroundLight/Dark` |
 | **Text Primary**      | `#1a1a1a` | `#f0efed` | `textPrimary`                |
 | **Text Secondary**    | `#5e5e5e` | `#a6a6a6` | `textSecondary`              |
 | **Accent (waiting)**  | `#C97350` | `#C97350` | `waitingTerracotta`          |
@@ -153,7 +154,8 @@ Query field height: 38pt. Row vertical padding: 8pt (the 4pt spacing scale's own
 
 ```swift
 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-.shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+// light #0F0F0F, dark #FFFFFF (WorkspaceLayout.canvasShadowColorLight/Dark)
+.shadow(color: canvasShadowColor.opacity(0.06), radius: 16, y: 2)
 // shadowPath must be set explicitly in layout() — see Gotchas
 ```
 
@@ -241,7 +243,7 @@ Three shadow levels.
 
 | Level                  | Opacity | Radius | Y   | Usage                          |
 | ---------------------- | ------- | ------ | --- | ------------------------------- |
-| Card (pinned)          | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar, and browser card |
+| Card (pinned)          | `0.06`  | `16`   | `2` | Terminal card in pinned sidebar, and browser card. Colour per appearance: `#0F0F0F` light, `#FFFFFF` dark |
 | Overlay (documented)   | `0.20`  | `12`   | `0` | Sidebar in overlay mode         |
 | Centered composer card | `0.30`  | `24`   | `8` | Session composer (`WorkspaceLayout.composerModalShadowOpacity`/`composerModalShadowRadius`/`composerModalShadowYOffset`) — no scrim behind it (shadow-only elevation, PR #132), so it needs to read heavier than the Overlay row it used to (coincidentally) match |
 

@@ -27,7 +27,7 @@ enum CanvasStyle {
         #if DEBUG
         if let tuned = CanvasTuning.hex(.shadowColor, scheme, defaults: defaults) { return tuned.nsColor.cgColor }
         #endif
-        return WorkspaceLayout.canvasShadowColor
+        return scheme == .dark ? WorkspaceLayout.canvasShadowColorDark : WorkspaceLayout.canvasShadowColorLight
     }
 
     /// The opacity a card casts while it casts at all.

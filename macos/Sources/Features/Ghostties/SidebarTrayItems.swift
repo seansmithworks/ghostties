@@ -387,14 +387,15 @@ enum TrayGlassStyle {
     /// path draws no glass rim or chromatic stroke, and its chrome-coloured
     /// fill sits on the chrome, so without this hairline only a shadow,
     /// invisible on dark chrome, separated the pill. A dark-mode stroke like
-    /// the glass rim, at the canvas grey (`canvasBackgroundDark` #2D2D2D):
+    /// the glass rim, at the beta.26 canvas grey #2D2D2D (pinned here when
+    /// `canvasBackgroundDark` moved to #141413, below the chrome, in beta.27):
     /// the strongest dark token step off the #242424 chrome (1.13:1, the
     /// same step that sets the terminal card off the chrome; `borderDark`
     /// is 1.08:1). 3:1 needs about #717171, a light grey, which is the
     /// bright outline this replaces. The icons, which identify the buttons,
     /// keep 5.45:1. An edge, not a fill: the pill stays at the chrome's
     /// lightness.
-    static let opaqueDarkEdgeColor = Color(WorkspaceLayout.canvasBackgroundDark)
+    static let opaqueDarkEdgeColor = Color(NSColor(white: 0.18, alpha: 1))
     static let opaqueDarkEdgeWidth: CGFloat = 1
 
 

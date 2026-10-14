@@ -26,23 +26,26 @@ final class CanvasDialsTests: XCTestCase {
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertEqual(CanvasStyle.background(scheme, defaults: d),
                            scheme == .dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight)
-            XCTAssertEqual(CanvasStyle.shadowColor(scheme, defaults: d), WorkspaceLayout.canvasShadowColor)
+            XCTAssertEqual(CanvasStyle.shadowColor(scheme, defaults: d),
+                           scheme == .dark ? WorkspaceLayout.canvasShadowColorDark : WorkspaceLayout.canvasShadowColorLight)
             XCTAssertEqual(CanvasStyle.shadowOpacity(scheme, defaults: d), WorkspaceLayout.canvasShadowOpacity)
             XCTAssertEqual(CanvasStyle.shadowRadius(scheme, defaults: d), WorkspaceLayout.canvasShadowRadius)
             XCTAssertEqual(CanvasStyle.shadowOffset(scheme, defaults: d), WorkspaceLayout.canvasShadowOffset)
         }
     }
 
-    /// What each dial shows unset: the shipped values. Reading writes nothing.
+    /// What each dial shows unset: the shipped values (beta.27, Sean's
+    /// DialKit tune), which Release reads too. Reading writes nothing.
     func testPanelShowsTheShippedValues() {
         let d = suite("panel-defaults")
         let model = CanvasDialPanel.read(d)
         XCTAssertEqual(model.light.background, "#FAF7F3")
-        XCTAssertEqual(model.dark.background, "#2E2E2E")
+        XCTAssertEqual(model.dark.background, "#141413")
+        XCTAssertEqual(model.light.shadowColor, "#0F0F0F")
+        XCTAssertEqual(model.dark.shadowColor, "#FFFFFF")
         for a in [model.light, model.dark] {
-            XCTAssertEqual(a.shadowColor, "#000000")
-            XCTAssertEqual(a.shadowOpacity, 0.15, accuracy: 1e-6)
-            XCTAssertEqual(a.shadowRadius, 8)
+            XCTAssertEqual(a.shadowOpacity, 0.06, accuracy: 1e-6)
+            XCTAssertEqual(a.shadowRadius, 16)
             XCTAssertEqual(a.shadowOffsetY, -2)
         }
         for key in CanvasTuning.allKeys { XCTAssertNil(d.object(forKey: key), key) }

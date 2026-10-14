@@ -65,16 +65,15 @@ struct SidebarBeta26FeedbackGateTests {
     }
 
     /// Round 2 (Sean, beta.26): the hover bar's shadow is lighter and wider
-    /// than the canvas card's, on the hover bar only. The canvas tokens stay.
+    /// than the beta.26 canvas card's, on the hover bar only.
     @Test func hoverBarShadowIsLighterAndWiderThanTheCanvasCard() {
         #expect(WorkspaceLayout.hoverBarShadowRadius == 16,
                 "hover bar blur \(WorkspaceLayout.hoverBarShadowRadius)")
         #expect(abs(WorkspaceLayout.hoverBarShadowOpacity - 0.1275) < 0.0001,
                 "hover bar opacity \(WorkspaceLayout.hoverBarShadowOpacity)")
-        #expect(WorkspaceLayout.hoverBarShadowColor == WorkspaceLayout.canvasShadowColor)
-        // The canvas card's own shadow is untouched.
-        #expect(WorkspaceLayout.canvasShadowRadius == 8)
-        #expect(abs(WorkspaceLayout.canvasShadowOpacity - 0.15) < 0.0001)
+        // Black, its own constant since the canvas card's shadow went
+        // per-appearance in beta.27 (CanvasDialsTests holds those values).
+        #expect(WorkspaceLayout.hoverBarShadowColor == NSColor.black.cgColor)
     }
 
     /// Round 2 (Sean, beta.26): in the hover bar each tray pill keeps 12pt on
