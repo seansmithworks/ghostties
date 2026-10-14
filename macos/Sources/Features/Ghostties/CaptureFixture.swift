@@ -634,6 +634,22 @@ enum CaptureFixture {
               width > 0, height > 0 else { return nil }
         return CGSize(width: width, height: height)
     }
+    /// `GHOSTTIES_CAPTURE_SETTINGS=1`: opens the Settings window on its
+    /// Appearance tab shortly after launch, so the pane can be captured
+    /// without a keystroke.
+    static var opensSettings: Bool { env("GHOSTTIES_CAPTURE_SETTINGS") == "1" }
+
+    /// `GHOSTTIES_CAPTURE_THEME_PICKS=<light>|<dark>`: the Appearance pick
+    /// for this launch, written to the fixture's throwaway defaults suite
+    /// (`SidebarDialTuning.store`), never the Dev app's domain.
+    static func applyThemePicks() {
+        guard let raw = env("GHOSTTIES_CAPTURE_THEME_PICKS") else { return }
+        let sides = raw.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard sides.count == 2 else { return }
+        GhosttiesThemePicks(light: sides[0].isEmpty ? nil : sides[0], dark: sides[1].isEmpty ? nil : sides[1])
+            .save(to: defaults(fixtureActive: true))
+    }
+
     /// `GHOSTTIES_CAPTURE_APPEARANCE=light|dark`: the launch value of
     /// `SidebarAppearancePreview`, so a capture can show either glass set
     /// regardless of the terminal theme.

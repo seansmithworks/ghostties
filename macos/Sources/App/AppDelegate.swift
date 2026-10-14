@@ -225,6 +225,9 @@ class AppDelegate: NSObject,
         }
 
         #if DEBUG
+        // Before anything (window restoration included) loads the config,
+        // so a capture's pick is in the first one.
+        CaptureFixture.applyThemePicks()
         if
             let suite = UserDefaults.ghosttySuite,
             let clear = ProcessInfo.processInfo.environment["GHOSTTY_CLEAR_USER_DEFAULTS"],
@@ -271,6 +274,11 @@ class AppDelegate: NSObject,
 
         #if DEBUG
         CaptureFixture.applySidebarTabOverride()
+        if CaptureFixture.opensSettings {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                GhosttiesSettingsWindowController.shared.show(tab: .appearance)
+            }
+        }
         // A background capture never activates, so the first window can't
         // wait for `applicationDidBecomeActive` (`CaptureFixture.staysInBackground`).
         if CaptureFixture.staysInBackground {
@@ -1666,8 +1674,9 @@ class AppDelegate: NSObject,
 
     // MARK: - IB Actions
 
-    @IBAction func openConfig(_ sender: Any?) {
-        ghostty.openConfig()
+    /// App menu "Settings…" (Cmd+,): the Settings window.
+    @IBAction func openSettings(_ sender: Any?) {
+        GhosttiesSettingsWindowController.shared.show()
     }
 
     @IBAction func showMCPSources(_ sender: Any?) {

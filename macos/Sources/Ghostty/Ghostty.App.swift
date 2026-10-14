@@ -28,7 +28,7 @@ extension Ghostty {
         @Published private(set) var config: Config
 
         /// Preferred config file than the default ones
-        private var configPath: String?
+        private(set) var configPath: String?
         /// The ghostty app instance. We only have one of these for the entire app, although I guess
         /// in theory you can have multiple... I don't know why you would...
         @Published var app: ghostty_app_t? {
@@ -47,7 +47,7 @@ extension Ghostty {
         init(configPath: String? = nil) {
             self.configPath = configPath
             // Initialize the global configuration.
-            self.config = Config(at: configPath)
+            self.config = Config(at: configPath, picks: .stored(in: GhosttiesThemePicks.appDefaults))
             if self.config.config == nil {
                 readiness = .error
                 return
@@ -121,12 +121,6 @@ extension Ghostty {
             ghostty_app_tick(app)
         }
 
-        private static func openConfig(_ app: ghostty_app_t) {
-            guard let app_ud = ghostty_app_userdata(app) else { return }
-            let app = Unmanaged<App>.fromOpaque(app_ud).takeUnretainedValue()
-            app.openConfig()
-        }
-
         func openConfig() {
             let str = configPath ?? Ghostty.AllocatedString(ghostty_config_open_path()).string
             guard !str.isEmpty else { return }
@@ -151,7 +145,7 @@ extension Ghostty {
             }
 
             // Hard or full updates have to reload the full configuration
-            let newConfig = Config(at: configPath)
+            let newConfig = Config(at: configPath, picks: .stored(in: GhosttiesThemePicks.appDefaults))
             guard newConfig.loaded else {
                 Ghostty.logger.warning("failed to reload configuration")
                 return
@@ -171,7 +165,7 @@ extension Ghostty {
             // Hard or full updates have to reload the full configuration.
             // NOTE: We never set this on self.config because this is a surface-only
             // config. We free it after the call.
-            let newConfig = Config(at: configPath)
+            let newConfig = Config(at: configPath, picks: .stored(in: GhosttiesThemePicks.appDefaults))
             guard newConfig.loaded else {
                 Ghostty.logger.warning("failed to reload configuration")
                 return
@@ -667,7 +661,11 @@ extension Ghostty {
                 pwdChanged(app, target: target, v: action.action.pwd)
 
             case GHOSTTY_ACTION_OPEN_CONFIG:
-                openConfig(app)
+                // MARK: - Ghostties fork fence (Cmd+, opens Settings)
+                // `open_config` (Cmd+, by default) opens the Settings window;
+                // its Appearance pane has "Open config" for the file itself.
+                DispatchQueue.main.async { GhosttiesSettingsWindowController.shared.show() }
+                // MARK: - End Ghostties fork fence (Cmd+, opens Settings)
 
             case GHOSTTY_ACTION_FLOAT_WINDOW:
                 toggleFloatWindow(app, target: target, mode: action.action.float_window)

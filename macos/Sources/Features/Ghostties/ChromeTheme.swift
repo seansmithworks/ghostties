@@ -142,10 +142,25 @@ enum ThemeFile {
         color("background", in: text)
     }
 
+    /// `name`'s `palette = <index>=<hex>` entry, or nil if it has none (the
+    /// Settings pane's theme previews draw a few ANSI colours from it).
+    static func palette(_ index: Int, named name: String) -> NSColor? {
+        guard let text = text(named: name) else { return nil }
+        for line in text.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: "=", maxSplits: 2).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 3, parts[0] == "palette", Int(parts[1]) == index else { continue }
+            return color(hex: parts[2])
+        }
+        return nil
+    }
+
+    private static func text(named name: String) -> String? {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("ghostty/themes/\(name)") else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
     private static func color(_ key: String, named name: String) -> NSColor? {
-        guard let url = Bundle.main.resourceURL?.appendingPathComponent("ghostty/themes/\(name)"),
-              let text = try? String(contentsOf: url, encoding: .utf8)
-        else { return nil }
+        guard let text = text(named: name) else { return nil }
         return color(key, in: text)
     }
 
@@ -153,17 +168,21 @@ enum ThemeFile {
         for line in text.split(whereSeparator: \.isNewline) {
             let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count == 2, parts[0] == key else { continue }
-            var hex = parts[1]
-            if hex.hasPrefix("#") { hex.removeFirst() }
-            guard hex.count == 6, let v = UInt32(hex, radix: 16) else { return nil }
-            return NSColor(
-                srgbRed: CGFloat((v >> 16) & 0xFF) / 255,
-                green: CGFloat((v >> 8) & 0xFF) / 255,
-                blue: CGFloat(v & 0xFF) / 255,
-                alpha: 1
-            )
+            return color(hex: parts[1])
         }
         return nil
+    }
+
+    private static func color(hex value: String) -> NSColor? {
+        var hex = value
+        if hex.hasPrefix("#") { hex.removeFirst() }
+        guard hex.count == 6, let v = UInt32(hex, radix: 16) else { return nil }
+        return NSColor(
+            srgbRed: CGFloat((v >> 16) & 0xFF) / 255,
+            green: CGFloat((v >> 8) & 0xFF) / 255,
+            blue: CGFloat(v & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
 
