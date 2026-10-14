@@ -673,6 +673,7 @@ class WorkspaceViewContainer: NSView {
     var sidebarModeForTesting: SidebarMode { sidebarMode }
     /// Test seam: the terminal card's and the sidebar's frames.
     var cardFrameForTesting: NSRect { terminalShadowHost.frame }
+    var cardLayerForTesting: CALayer? { terminalShadowHost.layer }
     var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
     var sidebarHostingViewForTesting: NSView { sidebarHostingView }
     var sidebarDragHandleFrameForTesting: NSRect { sidebarDragHandle.frame }
