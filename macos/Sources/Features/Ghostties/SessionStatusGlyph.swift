@@ -109,6 +109,10 @@ struct SessionStatusGlyph: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    #if DEBUG
+    /// Re-renders on a "Sidebar colors" dial write.
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    #endif
 
     private static let spinnerFrameInterval: TimeInterval = 0.08
 
@@ -128,7 +132,7 @@ struct SessionStatusGlyph: View {
                 }
             case .needsInput:
                 // The only emphasis glyph — primary text color, no accent.
-                glyph(kind.symbol ?? "", color: .primary, scale: 0.8, weight: .semibold)
+                glyph(kind.symbol ?? "", color: SidebarColors.primaryText(colorScheme), scale: 0.8, weight: .semibold)
             case .done:
                 glyph(kind.symbol ?? "", color: secondaryTextColor, scale: 0.65)
             case .error:
@@ -141,7 +145,7 @@ struct SessionStatusGlyph: View {
     }
 
     private var secondaryTextColor: Color {
-        colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+        SidebarColors.secondaryText(colorScheme)
     }
 
     /// Option D spec: the glyphs sit in a 16pt slot (`WorkspaceLayout.sessionGhostSize`) at the 0.8 / 0.65 scales, so `?` ≈ 12.8 and `✓` ≈ 10.4.

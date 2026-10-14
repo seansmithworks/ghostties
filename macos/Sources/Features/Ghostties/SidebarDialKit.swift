@@ -647,7 +647,17 @@ enum SidebarDialTuning {
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
         uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
-    ] + railKeys + trayShadowStateKeys
+    ] + railKeys + trayShadowStateKeys + colorKeys
+
+    /// The "Sidebar colors" panel's keys (`SidebarColorTuning.allKeys`),
+    /// DEBUG only: a Release build has no colour dials to clear.
+    static var colorKeys: [String] {
+        #if DEBUG
+        SidebarColorTuning.allKeys
+        #else
+        []
+        #endif
+    }
 
     /// The keys the Rail panel owns (`RailDialPanel`): its own
     /// "Reset rail" clears only these. Part of `allKeys`, so "Reset all
@@ -1146,6 +1156,14 @@ protocol FocusedDialPanel {
     static func read(_ defaults: UserDefaults) -> Model
     /// Writes only the fields that moved between `old` and `new`.
     static func write(_ defaults: UserDefaults, from old: Model, to new: Model)
+    /// Recomputes any read-only fields from the rest of the model (the
+    /// colours panel's contrast rows). Never writes defaults.
+    static func derive(_ model: inout Model, defaults: UserDefaults)
+}
+
+@available(macOS 14, *)
+extension FocusedDialPanel {
+    static func derive(_ model: inout Model, defaults: UserDefaults) {}
 }
 
 /// Owns one `FocusedDialPanel`'s `DialPanelState`: the same diff-based
@@ -1209,6 +1227,20 @@ final class FocusedDialKitCoordinator<Panel: FocusedDialPanel>: ObservableObject
         Panel.write(defaults, from: previous, to: model)
         defaults.set(SidebarDialTuning.epoch(defaults: defaults) + 1, forKey: SidebarDialTuning.epochKey)
         onChange()
+        var derived = model
+        Panel.derive(&derived, defaults: defaults)
+        guard derived != model else { return }
+        // Next turn, not inside this `values` sink: re-derive from whatever
+        // the panel holds by then so a value still arriving is never undone.
+        DispatchQueue.main.async { [weak self] in self?.applyDerived() }
+    }
+
+    private func applyDerived() {
+        var derived = state.values
+        Panel.derive(&derived, defaults: defaults)
+        guard derived != state.values else { return }
+        lastKnownModel = derived
+        state.values = derived
     }
 
     private static var resetActionPath: String { "reset" }
@@ -1528,6 +1560,7 @@ enum SidebarDialInspector {
     private static var sidebarListCoordinator: FocusedDialKitCoordinator<SidebarListDialPanel>?
     private static var railCoordinator: FocusedDialKitCoordinator<RailDialPanel>?
     private static var trayShadowCoordinator: FocusedDialKitCoordinator<TrayShadowDialPanel>?
+    private static var colorsCoordinator: FocusedDialKitCoordinator<SidebarColorsDialPanel>?
 
     static func start() {
         guard coordinator == nil else { return }
@@ -1543,6 +1576,7 @@ enum SidebarDialInspector {
         sidebarListCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         railCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         trayShadowCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
+        colorsCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         DialKitAgent.shared.start(appName: "Ghostties")
     }
 }

@@ -205,6 +205,7 @@ struct SidebarListRowTitle: View {
     let isActive: Bool
 
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Text(text)
@@ -212,7 +213,7 @@ struct SidebarListRowTitle: View {
                 size: SidebarDialTuning.rowTitleSize(),
                 weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
             ))
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(SidebarColors.primaryText(colorScheme))
             .lineLimit(1)
     }
 }
@@ -282,7 +283,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
 
                 Text(subtitle)
                     .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                    .foregroundStyle(SidebarColors.secondaryText(colorScheme))
                     .lineLimit(1)
             }
             .redlineFrame(redlineID + ".label")

@@ -288,7 +288,7 @@ struct SidebarRowChipBackground: View {
             // the morph's scale, so the travel is exact at any scale. Only
             // its geometry bounces; its fade in and out settles.
             if isActive {
-                face(shape.fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.selectedChipTintOpacity)), redlineID: nil)
+                face(shape.fill(SidebarColors.selectedRowTint(colorScheme)), redlineID: nil)
                     .modifier(SelectionChipTravel(namespace: selectionNamespace))
                     .transition(AnyTransition.opacity.animation(SidebarUISpring.move.settle()))
             }
