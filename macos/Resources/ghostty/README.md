@@ -8,7 +8,7 @@ of the zig build.
 ## Why
 
 `zig build` is broken on macOS 26 (undefined libc symbols like `_abort`,
-`_free`, `_malloc` — see `docs/SESSION_NOTES.md` session 14). When the
+`_free`, `_malloc`). When the
 build fails, `zig-out/share/ghostty/themes/` ends up empty. Xcode copies
 from there into the app bundle, so the app then has no bundled themes
 and errors out on launch with:

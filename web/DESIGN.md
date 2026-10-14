@@ -419,7 +419,7 @@ Self-hosted from `web/assets/fonts/` (`font-src 'self'` blocks any CDN) — same
 three families as the "Round-4 board fonts" set in §4 above, which only
 covered `index.html`'s two lifted sections; `/v2` uses them page-wide.
 
-### House vocabulary (locked, `docs/design/web-redesign/README.md`)
+### House vocabulary (locked)
 
 Square status marks, never circles or pills. Block labels butted together
 sharing hairlines. **No rounded corners or drop shadows on chrome** — the one

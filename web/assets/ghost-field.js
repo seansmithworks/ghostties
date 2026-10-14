@@ -311,8 +311,7 @@
   var EYE_COLOR = "#0d0b12";
   var LIT_COLOR = "#fffbe8";
 
-  // ── Tonal shading (ported from
-  // docs/design/web-redesign/robot-ghosts/preview.html) ────────────────────
+  // ── Tonal shading ───────────────────────────────────────────────────────
   // A continuous shading level (1.0..4.0) drives per-cell highlight/shadow
   // tint on "X" body cells, via a flood fill that tells true silhouette
   // edges (reachable from outside the sprite) from interior holes (eye
@@ -539,7 +538,7 @@
   // 16x16 right-facing pixel bust (Sean's likeness, low-fi). Three glyphs:
   // "o" coin face (gold), "#" relief/shading (a shade darker, reads as
   // depth against the gold), "+" the single lens glint. COIN_PX 5 renders
-  // the 16x16 grid at 80px — see docs/design/web-redesign/coin-plate/Quarter.dc.html.
+  // the 16x16 grid at 80px.
   var COIN_GRID = [
     "......oooo......",
     "....oooooooo....",

@@ -109,7 +109,7 @@ NS_ASSUME_NONNULL_BEGIN
 // crash in the ordinary sense). This guard runs before `CefInitialize` on
 // every launch and moves such a profile aside before it is ever opened.
 //
-// E3/E4 (see docs/plans lab notes) proved the poison is not confined to one
+// E3/E4 lab experiments proved the poison is not confined to one
 // preference key or file: the remediation below moves the ENTIRE `CEF/`
 // directory aside, never a targeted rewrite.
 

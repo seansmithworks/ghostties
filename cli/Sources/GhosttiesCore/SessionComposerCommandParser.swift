@@ -172,10 +172,8 @@ public enum SessionComposerCommandParser {
     // MARK: - Path grammar (greedy, terminated-token walk)
     //
     // Replaces the old two-fixed-position `<project> [> <branch>]
-    // <remainder...>` grammar above. See
-    // `docs/plans` composer path-grammar plan (2026-08-23) for the full
-    // derivation; the load-bearing rules, restated here since they're easy
-    // to get backwards:
+    // <remainder...>` grammar above. The load-bearing rules, restated here
+    // since they're easy to get backwards:
     //
     // 1. Only a TERMINATED token (followed by whitespace or `>`) can ever
     //    resolve to a segment. The trailing, still-being-typed token is a
