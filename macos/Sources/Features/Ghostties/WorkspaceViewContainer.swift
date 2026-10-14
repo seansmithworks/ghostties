@@ -371,18 +371,10 @@ class WorkspaceViewContainer: NSView {
     /// Shadow host wraps the terminal container so the drop shadow renders
     /// outside `masksToBounds` clipping. The shadow host carries the shadow;
     /// the inner terminal container clips its corners.
-    private let terminalShadowHost: NSView = {
-        let view = NSView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
-    }()
+    private let terminalShadowHost = CardShadowHostView()
 
     /// Shadow host for the browser panel — identical layer config to terminalShadowHost.
-    private let browserShadowHost: NSView = {
-        let view = NSView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
-    }()
+    private let browserShadowHost = CardShadowHostView()
 
     /// The browser panel content (navigation bar + content area placeholder).
     private let browserPanelView = BrowserPanelView()
@@ -673,6 +665,7 @@ class WorkspaceViewContainer: NSView {
     var sidebarModeForTesting: SidebarMode { sidebarMode }
     /// Test seam: the terminal card's and the sidebar's frames.
     var cardFrameForTesting: NSRect { terminalShadowHost.frame }
+    var cardLayerForTesting: CALayer? { terminalShadowHost.layer }
     var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
     var sidebarHostingViewForTesting: NSView { sidebarHostingView }
     var sidebarDragHandleFrameForTesting: NSRect { sidebarDragHandle.frame }
@@ -1974,7 +1967,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Shadow + corner radius (non-animatable).
-        browserShadowHost.layer?.shadowOpacity = visible ? WorkspaceLayout.canvasShadowOpacity : 0
+        browserShadowHost.castShadowOpacity = visible ? WorkspaceLayout.canvasShadowOpacity : 0
 
         invalidateIntrinsicContentSize()
     }
@@ -2549,12 +2542,12 @@ class WorkspaceViewContainer: NSView {
         case .pinned, .collapsed:
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castShadowOpacity = WorkspaceLayout.canvasShadowOpacity
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-            browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
+            browserShadowHost.castShadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .closed:
@@ -2565,12 +2558,12 @@ class WorkspaceViewContainer: NSView {
             // token the pinned state uses, not a distinct "closed" radius.
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castShadowOpacity = WorkspaceLayout.canvasShadowOpacity
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-            browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
+            browserShadowHost.castShadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .overlay:
@@ -2578,14 +2571,14 @@ class WorkspaceViewContainer: NSView {
             // always reads as a floating card, even while the sidebar hovers.
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castShadowOpacity = WorkspaceLayout.canvasShadowOpacity
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             // Browser panel is force-collapsed on entry to overlay (see above);
             // leave its own card styling untouched.
             browserShadowHost.layer?.cornerRadius = 0
             browserShadowHost.layer?.backgroundColor = nil
-            browserShadowHost.layer?.shadowOpacity = 0
+            browserShadowHost.castShadowOpacity = 0
             layer?.backgroundColor = canvasBackgroundCGColor
             // The shadow lives on `backgroundEffectView`, not
             // `sidebarOverlayBackground` — the latter is now the opaque,
@@ -3827,11 +3820,10 @@ class WorkspaceViewContainer: NSView {
 
         // Configure shadow on the host layer. Must happen after addSubview so the
         // layer exists (wantsLayer in a property closure may not create it in time).
+        // The host owns color/radius/offset and re-applies them with the opacity
+        // (`CardShadowHostView`).
         terminalShadowHost.wantsLayer = true
-        terminalShadowHost.layer?.shadowColor = WorkspaceLayout.canvasShadowColor
-        terminalShadowHost.layer?.shadowOpacity = hasCardInset ? WorkspaceLayout.canvasShadowOpacity : 0
-        terminalShadowHost.layer?.shadowRadius = WorkspaceLayout.canvasShadowRadius
-        terminalShadowHost.layer?.shadowOffset = WorkspaceLayout.canvasShadowOffset
+        terminalShadowHost.castShadowOpacity = hasCardInset ? WorkspaceLayout.canvasShadowOpacity : 0
 
         // Card background behind the title bar region. No masksToBounds — shadow
         // must render outside the layer bounds.
@@ -3841,10 +3833,7 @@ class WorkspaceViewContainer: NSView {
 
         // Browser shadow host — identical layer config to terminal shadow host.
         browserShadowHost.wantsLayer = true
-        browserShadowHost.layer?.shadowColor = WorkspaceLayout.canvasShadowColor
-        browserShadowHost.layer?.shadowOpacity = 0  // hidden initially
-        browserShadowHost.layer?.shadowRadius = WorkspaceLayout.canvasShadowRadius
-        browserShadowHost.layer?.shadowOffset = WorkspaceLayout.canvasShadowOffset
+        browserShadowHost.castShadowOpacity = 0  // hidden initially
         browserShadowHost.layer?.cornerRadius = hasCardInset ? initialTerminalRadius : 0
         browserShadowHost.layer?.cornerCurve = .continuous
         browserShadowHost.layer?.backgroundColor = hasCardInset ? browserCardBackgroundCGColor : nil
@@ -4130,6 +4119,50 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
             return true
         }
         return false
+    }
+}
+
+// MARK: - Card Shadow Host
+
+/// The terminal and browser cards' shadow host. It is the single owner of its
+/// layer's drop shadow: callers set `castShadowOpacity` and never write
+/// `layer.shadow*` themselves.
+///
+/// Why it has to own it: on every effective-appearance change (a light/dark
+/// switch, and attaching to a window) AppKit's `-[NSView
+/// _viewDidChangeAppearance:]` re-syncs a layer-backed view's layer shadow
+/// from `NSView.shadow` — nil here — which zeroes `layer.shadowOpacity`. That
+/// reset runs on this view after any ancestor's appearance callback, so only
+/// the view itself can re-apply in time; it does so in
+/// `viewDidChangeEffectiveAppearance`.
+private final class CardShadowHostView: NSView {
+    /// The opacity the card casts. Mode transitions and the browser toggle
+    /// set this; every other shadow property is the fixed DESIGN.md canvas
+    /// shadow.
+    var castShadowOpacity: Float = 0 {
+        didSet { applyShadow() }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyShadow()
+    }
+
+    private func applyShadow() {
+        guard let layer else { return }
+        layer.shadowColor = WorkspaceLayout.canvasShadowColor
+        layer.shadowRadius = WorkspaceLayout.canvasShadowRadius
+        layer.shadowOffset = WorkspaceLayout.canvasShadowOffset
+        layer.shadowOpacity = castShadowOpacity
     }
 }
 
