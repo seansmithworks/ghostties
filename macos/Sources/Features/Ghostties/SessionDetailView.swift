@@ -19,7 +19,7 @@ struct SessionRow: View {
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @State private var isHovered = false
 
     var body: some View {
@@ -88,14 +88,14 @@ struct SessionRow: View {
         switch indicatorState {
         case .waiting, .needsAttention, .processing, .longRunning: return .primary
         case .idle:     return Color(.secondaryLabelColor)
-        case .inactive: return ChromeTheme.ghostties(colorScheme).inkSecondaryColor
+        case .inactive: return ChromeTheme.active(colorScheme).inkSecondaryColor
         case .error:    return .primary
         }
     }
 
     private var rowBackground: Color {
         if isActive {
-            return ChromeTheme.ghostties(colorScheme).ink(.row)
+            return ChromeTheme.active(colorScheme).ink(.row)
         }
         if isHovered {
             return Color.primary.opacity(0.04)

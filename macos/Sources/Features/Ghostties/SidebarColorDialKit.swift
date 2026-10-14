@@ -42,23 +42,25 @@ enum SidebarColors {
 
     static func background(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> NSColor {
         #if DEBUG
-        if let tuned = SidebarColorTuning.override(.background, scheme, defaults: defaults) { return tuned.nsColor }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.background, scheme, defaults: defaults) { return tuned.nsColor }
         #endif
-        return ChromeTheme.ghostties(scheme).chrome
+        return ChromeTheme.active(scheme).chrome
     }
 
     static func primaryText(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
         #if DEBUG
-        if let tuned = SidebarColorTuning.override(.primaryText, scheme, defaults: defaults) { return tuned.color }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.primaryText, scheme, defaults: defaults) { return tuned.color }
         #endif
-        return Color.primary
+        // The Ghostties pair keeps the system label colour; a theme the
+        // chrome derived draws its own ink.
+        return ChromeTheme.activeIsGhostties(scheme) ? Color.primary : Color(ChromeTheme.active(scheme).ink)
     }
 
     static func secondaryText(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
         #if DEBUG
-        if let tuned = SidebarColorTuning.override(.secondaryText, scheme, defaults: defaults) { return tuned.color }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.secondaryText, scheme, defaults: defaults) { return tuned.color }
         #endif
-        return ChromeTheme.ghostties(scheme).inkSecondaryColor
+        return ChromeTheme.active(scheme).inkSecondaryColor
     }
 
     /// Option D (`hRCBC`: `#28221E1A`) in light; 7% white in dark. An
@@ -66,9 +68,9 @@ enum SidebarColors {
     /// "Tile fill" reaches live and empty tiles alike.
     static func tileFill(_ scheme: ColorScheme, isEmpty: Bool = false, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
         #if DEBUG
-        if let tuned = SidebarColorTuning.override(.tileFill, scheme, defaults: defaults) { return tuned.color }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.tileFill, scheme, defaults: defaults) { return tuned.color }
         #endif
-        let theme = ChromeTheme.ghostties(scheme)
+        let theme = ChromeTheme.active(scheme)
         return scheme == .dark
             ? theme.ink(.tile)
             : Color(theme.tileFillBase).opacity(isEmpty ? RailProjectTile.emptyTintOpacity : RailProjectTile.tintOpacity)
@@ -76,15 +78,15 @@ enum SidebarColors {
 
     static func tileInk(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
         #if DEBUG
-        if let tuned = SidebarColorTuning.override(.tileInk, scheme, defaults: defaults) { return tuned.color }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.tileInk, scheme, defaults: defaults) { return tuned.color }
         #endif
-        return Color(ChromeTheme.ghostties(scheme).tileInk)
+        return Color(ChromeTheme.active(scheme).tileInk)
     }
 
     /// The canvas's alpha on solid ink (`RailProjectColumn.tintInk`).
     static func selectedRowTint(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
         #if DEBUG
-        if let tuned = SidebarColorTuning.override(.selectedRowTint, scheme, defaults: defaults) { return tuned.color }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.selectedRowTint, scheme, defaults: defaults) { return tuned.color }
         #endif
         return RailProjectColumn.tintInk(scheme).opacity(RailProjectColumn.selectedChipTintOpacity)
     }
@@ -94,7 +96,7 @@ enum SidebarColors {
     /// since beta.26).
     static func dimmedProject(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
         #if DEBUG
-        if let tuned = SidebarColorTuning.dimmedOverride(scheme, defaults: defaults) { return tuned.color }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.dimmedOverride(scheme, defaults: defaults) { return tuned.color }
         #endif
         return WorkspaceLayout.emptyProjectForeground
     }

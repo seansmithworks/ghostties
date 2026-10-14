@@ -27,7 +27,7 @@ struct OrphanTriageCardView: View {
     @ObservedObject var workspaceStore: WorkspaceStore
     @ObservedObject var handlers: RowClickHandlersBox
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - Derived state
@@ -260,13 +260,13 @@ struct OrphanTriageCardView: View {
         Text(text)
             .font(.system(size: 9.5, weight: .semibold))
             .tracking(0.6)
-            .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+            .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
     }
 
     // MARK: - Background
 
     private var cardBackground: some View {
-        Color(nsColor: ChromeTheme.ghostties(colorScheme).canvas)
+        Color(nsColor: ChromeTheme.active(colorScheme).canvas)
     }
 
     // MARK: - Animation (D18, D19) — tokens from WorkspaceLayout.Animation

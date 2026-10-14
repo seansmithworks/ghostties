@@ -20,7 +20,7 @@ struct GraveyardZoneView: View {
 
     /// Reduced-motion preference for D18 / D19 animation grammar.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// True when the Done lane is empty. Drives a single muted
     /// "nothing here yet" line so the zone doesn't read as broken.
@@ -63,7 +63,7 @@ struct GraveyardZoneView: View {
             Text("Graveyard".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
         }
@@ -103,7 +103,7 @@ struct GraveyardZoneView: View {
 
                     Text("\(tasks.count)")
                         .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                        .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                 }
                 .padding(.horizontal, TaskRowMetrics.horizontalPadding)
                 .frame(height: 32)

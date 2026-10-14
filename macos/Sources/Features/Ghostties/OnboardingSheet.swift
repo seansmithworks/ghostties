@@ -8,7 +8,7 @@ import SwiftUI
 struct OnboardingSheet: View {
     let onDismiss: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     private let buildVersion: String = {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
@@ -77,7 +77,7 @@ struct OnboardingSheet: View {
 
                     Text("Version \(buildVersion) (build \(buildNumber)) · Updated \(buildDate)")
                         .font(.system(size: 10))
-                        .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                        .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                 }
                 .padding(20)
             }

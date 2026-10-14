@@ -87,7 +87,7 @@ struct TaskRowView: View {
     /// Non-nil while a write to disk has failed for this task id.
     var rowError: String? = nil
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @EnvironmentObject private var taskStore: TaskStore
     @EnvironmentObject private var coordinator: SessionCoordinator
     @EnvironmentObject private var workspaceStore: WorkspaceStore
@@ -270,7 +270,7 @@ struct TaskRowView: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 Text(statusPhrase)
                     .font(.system(size: 11))
-                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                    .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
             }
         }
@@ -307,7 +307,7 @@ struct TaskRowView: View {
 
                 Text(compactMetaLine)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                    .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -324,7 +324,7 @@ struct TaskRowView: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 Text(trailingTime)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                    .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
                     .padding(.top, 2)
             }
@@ -537,7 +537,7 @@ struct TaskRowView: View {
             return Color.white.opacity(0.04)
         }
         guard isHovered else { return .clear }
-        return ChromeTheme.ghostties(colorScheme).ink(.row)
+        return ChromeTheme.active(colorScheme).ink(.row)
     }
 
     // Keep the old name as an alias so future callers that read the property

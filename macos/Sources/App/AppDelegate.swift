@@ -1459,6 +1459,15 @@ class AppDelegate: NSObject,
     }
 
     private func ghosttyConfigDidChange(config: Ghostty.Config) {
+        // MARK: - Ghostties fork fence (chrome follows the terminal theme)
+        // The one entry point for the chrome's theme: launch, every reload,
+        // and every light/dark flip (which re-resolves the config here
+        // synchronously, inside `applyAppearanceToAllSurfaces`). First, so
+        // nothing below that changes the app appearance can paint the
+        // chrome with the previous theme.
+        ChromeThemeStore.shared.update(config: config)
+        // MARK: - End Ghostties fork fence (chrome follows the terminal theme)
+
         // Update the config we need to store
         self.derivedConfig = DerivedConfig(config)
 

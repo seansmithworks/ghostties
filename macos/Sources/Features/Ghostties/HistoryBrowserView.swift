@@ -26,7 +26,7 @@ struct HistoryBrowserView: View {
 
     @State private var model: HistoryBrowserModel
     @FocusState private var isQueryFocused: Bool
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     init(
         entries: [HistoryEntry],
@@ -120,8 +120,7 @@ struct HistoryBrowserView: View {
                             HistoryBrowserRow(
                                 row: row,
                                 columns: columns,
-                                isSelected: row.id == model.selectedID,
-                                colorScheme: colorScheme
+                                isSelected: row.id == model.selectedID
                             )
                             .id(row.id)
                             .contentShape(Rectangle())
@@ -201,7 +200,7 @@ private struct HistoryBrowserRow: View {
     let row: HistoryBrowserModel.Row
     let columns: Columns
     let isSelected: Bool
-    let colorScheme: ColorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         HStack(spacing: 0) {
@@ -286,18 +285,18 @@ private enum Style {
     static let gutter: CGFloat = pinSlot
     static let barInset: CGFloat = 12
 
-    /// The card's own background — DESIGN.md: canvas is never bound to the
-    /// terminal theme.
+    /// The card's own background: the active theme's canvas (DESIGN.md:
+    /// the canvas is the terminal theme's background).
     static func background(_ scheme: ColorScheme) -> Color {
-        Color(nsColor: ChromeTheme.ghostties(scheme).canvas)
+        Color(nsColor: ChromeTheme.active(scheme).canvas)
     }
 
     static func muted(_ scheme: ColorScheme) -> Color {
-        ChromeTheme.ghostties(scheme).inkSecondaryColor
+        ChromeTheme.active(scheme).inkSecondaryColor
     }
 
     static func selectionFill(_ scheme: ColorScheme) -> Color {
-        ChromeTheme.ghostties(scheme).ink(.row)
+        ChromeTheme.active(scheme).ink(.row)
     }
 
     /// DESIGN.md reserves terracotta, so the selection bar and match

@@ -14,7 +14,7 @@ struct NeedsYouZoneView: View {
     /// hold an independent @ObservedObject on the singleton.
     @ObservedObject private var router = RowClickRouter.shared
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// Reserved minimum height when the zone is empty. Keeps the divider
     /// below from walking up the sidebar when the list clears out.
@@ -67,7 +67,7 @@ struct NeedsYouZoneView: View {
 
             Text("\(taskStore.needsYou.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                 .fixedSize()
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)

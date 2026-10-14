@@ -348,7 +348,7 @@ struct ProjectAccordionHeader: View {
     static let chevronWidth: CGFloat = 18
     static let countMinWidth: CGFloat = 18
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
@@ -525,7 +525,7 @@ struct ProjectMonogramTileFace: View {
 
     /// Re-renders on every dial write; the fill reads "Selected tile fill".
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// Ink laid over the tile tint: 0 unselected, the dial when selected.
     private var inkFill: Double { isSelectedProject ? RailProjectColumn.selectedTileFill : 0 }
@@ -568,7 +568,7 @@ struct MorphTileFace: View, Animatable {
     /// The folded project's session count; nil while it is unfolded.
     let badgeCount: Int?
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var animatableData: CGFloat {
         get { progress }
@@ -630,7 +630,16 @@ enum RailCountBadge {
     }
 
     static func style(selected _: Bool, colorScheme: ColorScheme) -> Style {
-        let theme = ChromeTheme.ghostties(colorScheme)
+        let theme = ChromeTheme.active(colorScheme)
+        // A theme the chrome derived: the same tile-ink wash, over its own
+        // chrome rather than the Ghostties greys below.
+        guard ChromeTheme.activeIsGhostties(colorScheme) else {
+            let chrome = theme.chrome.usingColorSpace(.sRGB) ?? theme.chrome
+            func byte(_ v: CGFloat, _ shift: UInt32) -> UInt32 { UInt32((v * 255).rounded()) << shift }
+            let base = byte(chrome.redComponent, 16) | byte(chrome.greenComponent, 8) | byte(chrome.blueComponent, 0)
+            return Style(fill: blend(ink: theme.tileInk, over: base, alpha: colorScheme == .dark ? 0.12 : 0.14),
+                         text: theme.inkSecondaryColor)
+        }
         return colorScheme == .dark
             // Tile ink 12% over #3D3C3C.
             ? Style(fill: blend(ink: theme.tileInk, over: 0x3D3C3C, alpha: 0.12), text: theme.inkSecondaryColor)

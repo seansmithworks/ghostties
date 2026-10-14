@@ -28,7 +28,7 @@ struct NewTaskComposerView: View {
     @EnvironmentObject private var workspaceStore: WorkspaceStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// Allows the view to programmatically focus the title field via
     /// `FocusState`. Toggled by `store.focusTitleFieldTrigger`.
@@ -127,7 +127,7 @@ struct NewTaskComposerView: View {
             Text("in")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.5)
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                 .textCase(.uppercase)
                 .frame(width: 20, alignment: .leading)
 
@@ -195,7 +195,7 @@ struct NewTaskComposerView: View {
             Text("via")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.5)
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                 .textCase(.uppercase)
                 .frame(width: 20, alignment: .leading)
 
@@ -219,7 +219,7 @@ struct NewTaskComposerView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(
                             store.selectedTemplateName == nil
-                                ? (ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                                ? (ChromeTheme.active(colorScheme).inkSecondaryColor)
                                 : Color.primary.opacity(0.85)
                         )
                     Image(systemName: "chevron.down")
@@ -305,7 +305,7 @@ struct NewTaskComposerView: View {
     // MARK: - Background
 
     private var cardBackground: Color {
-        Color(nsColor: ChromeTheme.ghostties(colorScheme).chrome)
+        Color(nsColor: ChromeTheme.active(colorScheme).chrome)
         .opacity(0.0)   // transparent — inherits from sidebar chrome
     }
 

@@ -158,7 +158,7 @@ struct BuildInfoSnapshot {
 struct BuildInfoBadgeView: View {
     @AppStorage(buildInfoBadgeStorageKey) private var isEnabled: Bool = buildInfoBadgeDefaultEnabled
     @State private var justCopied = false
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     private let info = BuildInfoSnapshot.current
 
@@ -171,7 +171,7 @@ struct BuildInfoBadgeView: View {
         if isEnabled && !CaptureFixture.isActive {
             Text(justCopied ? "Copied build info" : info.shortLabel)
                 .font(.system(size: 9))
-                .foregroundColor(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundColor(ChromeTheme.active(colorScheme).inkSecondaryColor)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4, style: .continuous))

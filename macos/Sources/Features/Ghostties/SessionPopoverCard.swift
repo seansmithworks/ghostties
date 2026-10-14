@@ -37,12 +37,12 @@ struct SessionPopoverCard: View {
     @ObservedObject var model: SessionPopoverModel
     let onHover: (Bool) -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     private var dark: Bool { colorScheme == .dark }
     private var primaryText: Color { dark ? Color(white: 0.94) : Color(white: 0x1A / 255.0) }
-    private var secondaryText: Color { ChromeTheme.ghostties(colorScheme).inkSecondaryColor }
-    private var surface: Color { Color(ChromeTheme.ghostties(colorScheme).lifted(.container)) }
+    private var secondaryText: Color { ChromeTheme.active(colorScheme).inkSecondaryColor }
+    private var surface: Color { Color(ChromeTheme.active(colorScheme).lifted(.container)) }
     private var hairline: Color { dark ? Color.white.opacity(0.10) : Color.black.opacity(0.07) }
 
     var body: some View {

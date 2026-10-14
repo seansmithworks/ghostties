@@ -108,7 +108,7 @@ struct SessionStatusGlyph: View {
     var size: CGFloat = WorkspaceLayout.sessionGhostSize
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     #if DEBUG
     /// Re-renders on a "Sidebar colors" dial write.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
