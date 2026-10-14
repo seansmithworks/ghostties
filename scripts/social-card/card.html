@@ -95,16 +95,19 @@
   <div id="gx-field"></div>
   <script>
     // Card shows a row of 8: the first eight of ghost-field.js's roster,
-    // in source order.
+    // in source order. <html data-ready> is "ok" or "missing"; render.sh
+    // reads it and refuses to write the PNG unless it is "ok".
     window.addEventListener("load", function () {
       var row = document.getElementById("ghosts");
       var svgs = document.querySelectorAll("#gx-field .gx-ghost svg");
       if (svgs.length < 8) {
         row.innerHTML = '<div class="missing">GHOSTS MISSING: ' + svgs.length +
           " rendered — ghost-field.js did not take its reduced-motion path</div>";
+        document.documentElement.dataset.ready = "missing";
         return;
       }
       for (var i = 0; i < 8; i++) row.appendChild(svgs[i]);
+      document.documentElement.dataset.ready = "ok";
     });
   </script>
   <script src="/web/assets/ghost-field.js"></script>
