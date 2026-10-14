@@ -232,13 +232,13 @@ enum CaptureFixture {
     }
 
     private static let fixtureSessions: [FixtureSession] = [
-        FixtureSession(name: "Claude Code 4", project: "switchboard", ghost: .mist, state: .processing, hoursAgo: 0),
-        FixtureSession(name: "Claude Code 3", project: "switchboard", ghost: .gloom, state: .processing, hoursAgo: 0.02),
-        FixtureSession(name: "Claude Code 2", project: "switchboard", ghost: .polter, state: .waiting, hoursAgo: 0.05),
-        FixtureSession(name: "Claude Code 1", project: "switchboard", ghost: .wraith, state: .waiting, hoursAgo: 0.07),
-        FixtureSession(name: "Claude Code 1", project: "fieldwork", ghost: .shade, state: .waiting, hoursAgo: 0.1),
-        FixtureSession(name: "Claude Code 6", project: "atlas-api", ghost: .hex, state: .needsAttention, hoursAgo: 0.03),
-        FixtureSession(name: "Claude Code 5", project: "pendulum", ghost: .spike, state: .inactive, hoursAgo: 2),
+        FixtureSession(name: "reconnect race", project: "switchboard", ghost: .mist, state: .processing, hoursAgo: 0),
+        FixtureSession(name: "rate limiter", project: "switchboard", ghost: .gloom, state: .processing, hoursAgo: 0.02),
+        FixtureSession(name: "flaky ci", project: "switchboard", ghost: .polter, state: .waiting, hoursAgo: 0.05),
+        FixtureSession(name: "deps bump", project: "switchboard", ghost: .wraith, state: .waiting, hoursAgo: 0.07),
+        FixtureSession(name: "offline sync", project: "fieldwork", ghost: .shade, state: .waiting, hoursAgo: 0.1),
+        FixtureSession(name: "auth migration", project: "atlas-api", ghost: .hex, state: .needsAttention, hoursAgo: 0.03),
+        FixtureSession(name: "chart polish", project: "pendulum", ghost: .spike, state: .inactive, hoursAgo: 2),
         FixtureSession(name: "docs pass", project: "silo", ghost: .drift, state: .inactive, hoursAgo: 24),
         FixtureSession(name: "build fix", project: "trove", ghost: .chill, state: .error, hoursAgo: 48),
         FixtureSession(name: "release notes", project: "trove", ghost: .clyde, state: .inactive, hoursAgo: 72),
@@ -248,13 +248,35 @@ enum CaptureFixture {
     /// Round 6 follow-up: the one session the fixture marks focused, so a
     /// capture actually exercises the sidebar's selected-row styling
     /// (the expanded list's chip, `SidebarRowChipBackground`)
-    /// instead of leaving every row in its resting state. The first entry ("Claude Code 4", switchboard, top of
+    /// instead of leaving every row in its resting state. The first entry ("reconnect race", switchboard, top of
     /// Active) — same row position Flow 07's own "portfolio" occupies.
     /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
     /// called from both `WorkspaceSidebarView.onAppear` and
     /// `SidebarRailColumn.onAppear`.
+    /// `GHOSTTIES_CAPTURE_FOCUS_SESSION=<fixture session name>` picks a
+    /// different one, so a capture can show that session's terminal.
     static var focusedSessionId: UUID? {
-        sessions.first?.id
+        focusedSessionId(named: env("GHOSTTIES_CAPTURE_FOCUS_SESSION"), in: sessions)
+    }
+
+    /// The named session's id; unset or unknown names fall back to the
+    /// first fixture session ("reconnect race").
+    static func focusedSessionId(named name: String?, in sessions: [AgentSession]) -> UUID? {
+        if let name, let match = sessions.first(where: { $0.name == name }) { return match.id }
+        return sessions.first?.id
+    }
+
+    /// The fixture sessions that get a real terminal surface at launch: every
+    /// session the fixture shows as running, plus the focused one. A row
+    /// click (`SessionCoordinator.focusSession(id:)`) only switches to a
+    /// session that has a surface, so without these the terminal never
+    /// changed when a row was picked.
+    static var spawnedSessionIds: [UUID] {
+        let focused = focusedSessionId
+        return zip(fixtureSessions, sessions).compactMap { fs, session in
+            let live = fs.state != .inactive && fs.state != .error
+            return live || session.id == focused ? session.id : nil
+        }
     }
 
     static func seededSessions(_ knobs: SeedKnobs, projects: [Project]) -> [AgentSession] {
@@ -388,9 +410,9 @@ enum CaptureFixture {
     /// (processing) row for `running`.
     static var popoverTargetSessionId: UUID? {
         switch popoverScenario {
-        case .needsBash, .needsEdit: return sessions.first { $0.name == "Claude Code 6" }?.id
+        case .needsBash, .needsEdit: return sessions.first { $0.name == "auth migration" }?.id
         case .running: return sessions.first?.id
-        case .done: return sessions.first { $0.name == "Claude Code 2" }?.id
+        case .done: return sessions.first { $0.name == "flaky ci" }?.id
         case nil: return nil
         }
     }
@@ -642,12 +664,12 @@ enum CaptureFixture {
 
     // MARK: - Transcript Script Writer
 
-    /// Writes `transcriptScript` to a uniquely-named launcher script under
+    /// Writes `script` to a uniquely-named launcher script under
     /// `~/.ghostties/cache/launchers` (the same directory and permissions
     /// the real launch-banner script mechanism already uses — see
     /// `SessionCoordinator.captureFixtureCommand(for:)` and
     /// `createSession`'s banner-script block) and returns its path. Shared
-    /// by every surface-creation call site that needs to substitute the
+    /// by every surface-creation call site that needs to substitute a
     /// canned transcript for a real shell while fixture mode is active:
     /// `SessionCoordinator.createSession` (session rows) and
     /// `TerminalController.init` (the default/untitled window opened at
@@ -655,7 +677,7 @@ enum CaptureFixture {
     /// Falls back to `/bin/true` (an inert, silent no-op) if the write
     /// fails, so a broken fixture never accidentally falls through to a
     /// real shell and leaks real state.
-    static func writeTranscriptScript(id: String) -> String {
+    static func writeTranscriptScript(id: String, script: String) -> String {
         let scriptDir = ("~/.ghostties/cache/launchers" as NSString).expandingTildeInPath
         let fm = FileManager.default
         if !fm.fileExists(atPath: scriptDir) {
@@ -664,68 +686,299 @@ enum CaptureFixture {
             ])
         }
         let scriptPath = (scriptDir as NSString).appendingPathComponent("capture-fixture-\(id).sh")
-        guard (try? transcriptScript.write(toFile: scriptPath, atomically: true, encoding: .utf8)) != nil else {
+        guard (try? script.write(toFile: scriptPath, atomically: true, encoding: .utf8)) != nil else {
             return "/bin/true"
         }
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptPath)
         return scriptPath
     }
 
-    // MARK: - Canned Terminal Transcript
+    // MARK: - Canned Terminal Transcripts
 
-    /// A dense, plausible Claude Code session transcript — real chrome, real
-    /// rendering, staged data only. No real hostname or path appears; the
-    /// engineering problem is invented and scoped to the `switchboard`
-    /// fixture project. Deliberately NOT near-empty — the site's previous
-    /// replica was rejected specifically for a sparse-looking terminal pane.
-    static let transcriptScript: String = #"""
-        #!/bin/zsh
-        clear
-        printf '\033[1m╭─────────────────────────────────────────╮\033[0m\n'
-        printf '\033[1m│ \033[35m✻\033[0m\033[1m Claude Code\033[0m                              │\n'
-        printf '\033[1m╰─────────────────────────────────────────╯\033[0m\n'
-        printf '\n'
-        printf '\033[1m> \033[0mFix the race condition in the reconnect handler and add a regression test\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m Read(sync/reconnect.go)\n'
-        printf '  \033[2m⎿  Read 142 lines\033[0m\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m I see it — the retry loop swaps the socket without holding the\n'
-        printf '  connection lock, so a concurrent Send() can grab a half-closed fd.\n'
-        printf '  Checking the call sites before widening the lock scope.\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m Search(pattern: "reconnect(", path: "sync/")\n'
-        printf '  \033[2m⎿  Found 3 matches across 2 files\033[0m\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m Edit(sync/reconnect.go)\n'
-        printf '  \033[2m⎿  Updated sync/reconnect.go with 8 additions and 2 removals\033[0m\n'
-        printf '  \033[2m     41\033[0m   func (c *Client) reconnect(ctx context.Context) error {\n'
-        printf '  \033[2m42\033[0m \033[31m-\033[0m    c.socket = nil\n'
-        printf '  \033[2m43\033[0m \033[32m+\033[0m    c.mu.Lock()\n'
-        printf '  \033[2m44\033[0m \033[32m+\033[0m    defer c.mu.Unlock()\n'
-        printf '  \033[2m45\033[0m \033[32m+\033[0m    old := c.socket\n'
-        printf '  \033[2m46\033[0m \033[32m+\033[0m    c.socket = nil\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m Bash(go test ./sync/... -run TestReconnect -v)\n'
-        printf '  \033[2m⎿  === RUN   TestReconnect_ConcurrentSend\033[0m\n'
-        printf '  \033[2m   --- PASS: TestReconnect_ConcurrentSend (0.04s)\033[0m\n'
-        printf '  \033[2m   PASS\033[0m\n'
-        printf '  \033[2m   ok      switchboard/sync    0.312s\033[0m\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m Tests pass. The lock now covers the full swap, so Send() either sees\n'
-        printf '  the old live socket or blocks until the new one is ready — no\n'
-        printf '  half-closed window. Want me to open a PR?\n'
-        printf '\n'
-        printf '\033[1m> \033[0myes, and add a one-line changelog entry\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m Write(CHANGELOG.md)\n'
-        printf '  \033[2m⎿  Wrote 1 line\033[0m\n'
-        printf '\n'
-        printf '\033[35m⏺\033[0m Bash(gh pr create --title "fix: hold connection lock across socket swap")\n'
-        printf '  \033[2m⎿  https://github.com/example/switchboard/pull/412\033[0m\n'
-        printf '\n'
-        exec cat > /dev/null
+    /// The script a fixture session's terminal runs: that session's own
+    /// transcript from `sessionTranscripts`, so selecting a different row
+    /// shows a different terminal. Any session the fixture didn't seed (one
+    /// created during a capture) gets `newSessionTranscript`.
+    static func transcriptScript(forSessionId id: UUID?) -> String {
+        #if DEBUG
+        if let id, let name = sessions.first(where: { $0.id == id })?.name,
+           let body = sessionTranscripts[name] {
+            return script(body)
+        }
+        #endif
+        return script(newSessionTranscript)
+    }
+
+    /// The cold-launch window shows the focused fixture session's transcript,
+    /// so the terminal matches the row the sidebar marks selected.
+    static var defaultWindowTranscriptScript: String {
+        #if DEBUG
+        return transcriptScript(forSessionId: focusedSessionId)
+        #else
+        return script(newSessionTranscript)
+        #endif
+    }
+
+    static func script(_ body: String) -> String {
+        "#!/bin/zsh\nclear\n" + banner + "printf '\\n'\n" + body + "printf '\\n'\nexec cat > /dev/null\n"
+    }
+
+    /// `printf` lines for a bold box. Padding is computed from each row's
+    /// `plain` (visible) text, so every row is the same cell width whatever
+    /// escapes `styled` carries. Rows must not contain `'` or `%`.
+    static func boxLines(_ rows: [(plain: String, styled: String)], minWidth: Int = 0) -> String {
+        let inner = max(minWidth, rows.map(\.plain.count).max() ?? 0)
+        let rule = String(repeating: "─", count: inner + 2)
+        var out = #"printf '\033[1m╭"# + rule + #"╮\033[0m\n'"# + "\n"
+        for row in rows {
+            let pad = String(repeating: " ", count: inner - row.plain.count)
+            out += #"printf '\033[1m│\033[0m "# + row.styled + pad + #" \033[1m│\033[0m\n'"# + "\n"
+        }
+        out += #"printf '\033[1m╰"# + rule + #"╯\033[0m\n'"# + "\n"
+        return out
+    }
+
+    private static let banner = boxLines(
+        [(plain: "✻ Claude Code", styled: #"\033[35m✻\033[0m\033[1m Claude Code\033[0m"#)],
+        minWidth: 39
+    )
+
+    /// A session the fixture didn't seed: an empty Claude Code prompt.
+    static let newSessionTranscript = #"""
+        printf '\033[2m  Try "fix the flaky test in dispatch"\033[0m\n'
+
         """#
+
+    /// One canned transcript per fixture session (all 11), keyed by session name
+    /// (fixture names are unique). Invented engineering work scoped to each
+    /// fixture project; no real hostname or path, links only under
+    /// github.com/example. Each fits a 1280x705pt window without scrolling
+    /// the banner away. A live state ends mid-work, a done one ends on the
+    /// result, the needs-you one ends on a permission prompt.
+    static let sessionTranscripts: [String: String] = [
+        "reconnect race": #"""
+            printf '\033[1m> \033[0mFix the race condition in the reconnect handler and add a regression test\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Read(sync/reconnect.go)\n'
+            printf '  \033[2m⎿  Read 142 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m I see it — the retry loop swaps the socket without holding the\n'
+            printf '  connection lock, so a concurrent Send() can grab a half-closed fd.\n'
+            printf '  Checking the call sites before widening the lock scope.\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Search(pattern: "reconnect(", path: "sync/")\n'
+            printf '  \033[2m⎿  Found 3 matches across 2 files\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(sync/reconnect.go)\n'
+            printf '  \033[2m⎿  Updated sync/reconnect.go with 8 additions and 2 removals\033[0m\n'
+            printf '  \033[2m     41\033[0m   func (c *Client) reconnect(ctx context.Context) error {\n'
+            printf '  \033[2m42\033[0m \033[31m-\033[0m    c.socket = nil\n'
+            printf '  \033[2m43\033[0m \033[32m+\033[0m    c.mu.Lock()\n'
+            printf '  \033[2m44\033[0m \033[32m+\033[0m    defer c.mu.Unlock()\n'
+            printf '  \033[2m45\033[0m \033[32m+\033[0m    old := c.socket\n'
+            printf '  \033[2m46\033[0m \033[32m+\033[0m    c.socket = nil\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Write(sync/reconnect_test.go)\n'
+            printf '  \033[2m⎿  Wrote 38 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(go test ./sync/... -run TestReconnect -race -v)\n'
+            printf '  \033[2m⎿  === RUN   TestReconnect_ConcurrentSend\033[0m\n'
+            printf '\n'
+            printf '\033[35m✻ Running tests…\033[0m \033[2m(14s · esc to interrupt)\033[0m\n'
+
+            """#,
+        "rate limiter": #"""
+            printf '\033[1m> \033[0mAdd a token-bucket rate limiter to the public API, 100 requests a minute per key\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Search(pattern: "func .*Middleware", path: "middleware/")\n'
+            printf '  \033[2m⎿  Found 4 matches across 3 files\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Read(middleware/chain.go)\n'
+            printf '  \033[2m⎿  Read 64 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Plan: a per-key token bucket in middleware/ratelimit.go, refilled\n'
+            printf '  lazily on each request and wired in after auth, so the key is\n'
+            printf '  already resolved. An empty bucket answers 429 with Retry-After.\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Write(middleware/ratelimit.go)\n'
+            printf '  \033[2m⎿  Wrote 71 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(middleware/ratelimit.go)\n'
+            printf '  \033[2m⎿  Updated middleware/ratelimit.go with 5 additions and 1 removal\033[0m\n'
+            printf '  \033[2m     28\033[0m   func (l *Limiter) Allow(key string) bool {\n'
+            printf '  \033[2m29\033[0m \033[31m-\033[0m    b := l.buckets[key]\n'
+            printf '  \033[2m29\033[0m \033[32m+\033[0m    l.mu.Lock()\n'
+            printf '  \033[2m30\033[0m \033[32m+\033[0m    defer l.mu.Unlock()\n'
+            printf '  \033[2m31\033[0m \033[32m+\033[0m    b, ok := l.buckets[key]\n'
+            printf '  \033[2m32\033[0m \033[32m+\033[0m    if !ok {\n'
+            printf '  \033[2m33\033[0m \033[32m+\033[0m        b = newBucket(l.rate, l.burst)\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(middleware/chain.go)\n'
+            printf '\n'
+            printf '\033[35m✻ Editing…\033[0m \033[2m(6s · esc to interrupt)\033[0m\n'
+
+            """#,
+        "flaky ci": #"""
+            printf '\033[1m> \033[0mTestDispatch_Timeout fails about 1 in 10 CI runs. Find out why and fix it\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(go test ./dispatch/... -run TestDispatch_Timeout -count=50)\n'
+            printf '  \033[2m⎿  --- FAIL: TestDispatch_Timeout (0.21s)\033[0m\n'
+            printf '  \033[2m       dispatch_test.go:88: expected ErrTimeout, got <nil>\033[0m\n'
+            printf '  \033[2m   FAIL  4 of 50 runs\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m The test sleeps 200ms and expects a 200ms timeout to have fired.\n'
+            printf '  On a loaded runner the timer and the sleep race. It needs a clock\n'
+            printf '  the test controls, not wall time.\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(dispatch/dispatch.go)\n'
+            printf '  \033[2m⎿  Updated dispatch/dispatch.go with 3 additions and 2 removals\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(dispatch/dispatch_test.go)\n'
+            printf '  \033[2m⎿  Updated dispatch/dispatch_test.go with 9 additions and 4 removals\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(go test ./dispatch/... -run TestDispatch_Timeout -count=500)\n'
+            printf '  \033[2m⎿  ok      switchboard/dispatch    1.904s\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(gh workflow run ci.yml --ref fix/dispatch-clock)\n'
+            printf '  \033[2m⎿  \033[0m\033[32m✓\033[0m\033[2m ci #812   \033[0m\033[32m✓\033[0m\033[2m ci #813   \033[0m\033[32m✓\033[0m\033[2m ci #814\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Fixed. Dispatch now takes a Clock, and the test advances a fake\n'
+            printf '  clock past the deadline instead of sleeping.\n'
+            printf '  CI green on 3 consecutive runs.\n'
+
+            """#,
+        "deps bump": #"""
+            printf '\033[1m> \033[0mBump our Go dependencies, minor versions only, and make sure tests pass\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(go list -m -u all)\n'
+            printf '  \033[2m⎿  github.com/example/pgx v1.14.2 [v1.15.0]\033[0m\n'
+            printf '  \033[2m   github.com/example/zap v1.26.0 [v1.27.1]\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(go get -u ./... && go mod tidy)\n'
+            printf '  \033[2m⎿  go: upgraded github.com/example/pgx v1.14.2 => v1.15.0\033[0m\n'
+            printf '  \033[2m   go: upgraded github.com/example/zap v1.26.0 => v1.27.1\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(go test ./...)\n'
+            printf '  \033[2m⎿  ok      switchboard/api         0.512s\033[0m\n'
+            printf '  \033[2m   ok      switchboard/dispatch    0.204s\033[0m\n'
+            printf '  \033[2m   ok      switchboard/sync        0.331s\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bumped pgx to v1.15.0 and zap to v1.27.1. All tests pass.\n'
+
+            """#,
+        "offline sync": #"""
+            printf '\033[1m> \033[0mEdits queued offline overwrite newer server changes on reconnect. Fix it\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Read(sync/queue.ts)\n'
+            printf '  \033[2m⎿  Read 188 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m The queue replays edits blindly. Each edit needs the server revision\n'
+            printf '  it was based on, so a stale edit can be detected and merged.\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(sync/queue.ts)\n'
+            printf '  \033[2m⎿  Updated sync/queue.ts with 14 additions and 3 removals\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Write(sync/resolve.ts)\n'
+            printf '  \033[2m⎿  Wrote 52 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(npm test -- sync)\n'
+            printf '  \033[2m⎿  PASS  sync/queue.test.ts (9 tests)\033[0m\n'
+            printf '  \033[2m   PASS  sync/resolve.test.ts (6 tests)\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(gh pr create --title "fix: resolve offline edit conflicts by revision")\n'
+            printf '  \033[2m⎿  https://github.com/example/fieldwork/pull/88\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Done. Stale edits now carry their base revision. Field-level changes\n'
+            printf '  merge; a true conflict keeps the server value and flags the edit.\n'
+
+            """#,
+        "auth migration": #"""
+            printf '\033[1m> \033[0mMove session storage from the sessions table to signed JWTs\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Read(migrations/0041_sessions_index.sql)\n'
+            printf '  \033[2m⎿  Read 12 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Write(migrations/0042_sessions_to_jwt.sql)\n'
+            printf '  \033[2m⎿  Wrote 27 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(auth/session.go)\n'
+            printf '  \033[2m⎿  Updated auth/session.go with 31 additions and 18 removals\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(go test ./auth/...)\n'
+            printf '  \033[2m⎿  ok      atlas-api/auth    0.418s\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Code and tests are ready. Next, apply the migration to the local\n'
+            printf '  database.\n'
+            printf '\n'
+
+            """# + boxLines([
+                (plain: "Bash command", styled: #"\033[1mBash command\033[0m"#),
+                (plain: "", styled: ""),
+                (plain: "  psql -f migrations/0042_sessions_to_jwt.sql", styled: "  psql -f migrations/0042_sessions_to_jwt.sql"),
+                (plain: "  Apply migration 0042: move sessions to JWT", styled: #"\033[2m  Apply migration 0042: move sessions to JWT\033[0m"#),
+                (plain: "", styled: ""),
+                (plain: "Do you want to proceed?", styled: "Do you want to proceed?"),
+                (plain: "❯ 1. Yes", styled: #"\033[36m❯ 1. Yes\033[0m"#),
+                (plain: "  2. Yes, and do not ask again for psql commands", styled: "  2. Yes, and do not ask again for psql commands"),
+                (plain: "  3. No, and tell Claude what to do differently (esc)", styled: "  3. No, and tell Claude what to do differently (esc)"),
+            ]),
+        "chart polish": #"""
+            printf '\033[1m> \033[0mTighten the axis labels on the latency chart and fix the legend overlap\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(src/charts/LatencyChart.tsx)\n'
+            printf '  \033[2m⎿  Updated src/charts/LatencyChart.tsx with 5 additions and 3 removals\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(npm test -- LatencyChart)\n'
+            printf '  \033[2m⎿  PASS  src/charts/LatencyChart.test.tsx (4 tests)\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Axis labels now use compact units (1.2k, 340ms) and the legend sits\n'
+            printf '  below the plot, clear of the p99 line.\n'
+
+            """#,
+        "docs pass": #"""
+            printf '\033[1m> \033[0mThe README install steps are out of date. Update them for v2\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Edit(README.md)\n'
+            printf '  \033[2m⎿  Updated README.md with 11 additions and 14 removals\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Install now takes one command, and the old config migration\n'
+            printf '  steps moved to docs/upgrading.md.\n'
+
+            """#,
+        "build fix": #"""
+            printf '\033[1m> \033[0mThe release build fails on the asset step. Fix it\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(make release)\n'
+            printf '  \033[2m⎿  \033[0m\033[31merror: assets/manifest.json: unexpected end of JSON input\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Read(assets/manifest.json)\n'
+            printf '  \033[2m⎿  Read 0 lines\033[0m\n'
+            printf '\n'
+            printf '\033[31mProcess exited with code 1\033[0m\n'
+
+            """#,
+        "release notes": #"""
+            printf '\033[1m> \033[0mDraft release notes for v1.8 from the merged PRs\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(gh pr list --state merged --base main --limit 30)\n'
+            printf '  \033[2m⎿  23 pull requests\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Write(CHANGELOG.md)\n'
+            printf '  \033[2m⎿  Wrote 19 lines\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Drafted v1.8: 4 features, 9 fixes, grouped by area.\n'
+
+            """#,
+        "icon pass": #"""
+            printf '\033[1m> \033[0mExport the new toolbar icons at 1x and 2x\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m Bash(npm run icons)\n'
+            printf '  \033[2m⎿  Exported 24 icons to public/icons\033[0m\n'
+            printf '\n'
+            printf '\033[35m⏺\033[0m All 12 toolbar icons exported at 1x and 2x.\n'
+
+            """#,
+    ]
 }
 
 #if DEBUG

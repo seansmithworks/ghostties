@@ -57,7 +57,8 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         let resolvedBase: Ghostty.SurfaceConfiguration? = {
             guard CaptureFixture.isActive, tree == nil else { return base }
             var config = base ?? Ghostty.SurfaceConfiguration()
-            config.command = CaptureFixture.writeTranscriptScript(id: "default-window")
+            config.command = CaptureFixture.writeTranscriptScript(
+                id: "default-window", script: CaptureFixture.defaultWindowTranscriptScript)
             return config
         }()
 
