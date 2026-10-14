@@ -1196,9 +1196,10 @@ final class SessionCoordinator: ObservableObject {
     // MARK: - Marketing Capture Fixture
 
     /// The command every fixture-mode session runs instead of a real shell —
-    /// see `CaptureFixture.writeTranscriptScript(id:)`.
+    /// see `CaptureFixture.transcriptScript(forSessionId:)`.
     nonisolated private static func captureFixtureCommand(for sessionId: UUID) -> String {
-        CaptureFixture.writeTranscriptScript(id: sessionId.uuidString)
+        CaptureFixture.writeTranscriptScript(
+            id: sessionId.uuidString, script: CaptureFixture.transcriptScript(forSessionId: sessionId))
     }
 
     // MARK: - Launcher Script Lifecycle
