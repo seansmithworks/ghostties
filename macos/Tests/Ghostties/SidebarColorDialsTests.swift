@@ -167,9 +167,10 @@ final class SidebarColorDialsTests: XCTestCase {
         // #777777 on white: the classic 4.48:1 near-miss.
         let grey = SidebarColorTuning.RGBA(hex: "#777777")!
         XCTAssertEqual(SidebarColorTuning.contrastRatio(grey, on: white), 4.48, accuracy: 0.01)
-        // A translucent foreground is composited first: 50% black on white
-        // is #808080 (3.95:1).
-        XCTAssertEqual(SidebarColorTuning.contrastRatio(SidebarColorTuning.RGBA(r: 0, g: 0, b: 0, a: 0.5), on: white), 3.95, accuracy: 0.02)
+        // A translucent foreground is composited first, in gamma sRGB:
+        // 50% black on white is 0.5 per channel (linear 0.21404), so
+        // 1.05 / 0.26404 = 3.9766. (The 8-bit #808080 would give 3.95.)
+        XCTAssertEqual(SidebarColorTuning.contrastRatio(SidebarColorTuning.RGBA(r: 0, g: 0, b: 0, a: 0.5), on: white), 3.9766, accuracy: 0.001)
     }
 
     /// The ratios at the shipped colours (the panel's readout untouched).
@@ -179,16 +180,22 @@ final class SidebarColorDialsTests: XCTestCase {
     func testShippedContrastRatios() {
         let d = suite("ratios")
         func pairs(_ scheme: ColorScheme) -> SidebarColorTuning.ContrastPairs {
+            // The panel rebuilds every colour from its dials: 8-bit hex and
+            // opacity at two decimals (dark chrome 0.14 is #242424, not
+            // 0.14: 10.94:1 on the tile, not 10.99). Quantize the same way.
+            func q(_ c: SidebarColorTuning.RGBA) -> SidebarColorTuning.RGBA {
+                SidebarColorTuning.RGBA(hex: c.hex, a: (c.a * 100).rounded() / 100)!
+            }
             let card = scheme == .dark
                 ? SidebarDialTuning.railColumnTintOpacity(defaults: d)
                 : RailProjectColumn.lightColumnLiftOpacity
             return SidebarColorTuning.contrastPairs(
-                background: SidebarColorTuning.base(.background, scheme),
-                primary: SidebarColorTuning.base(.primaryText, scheme),
-                secondary: SidebarColorTuning.base(.secondaryText, scheme),
-                tileFill: SidebarColorTuning.base(.tileFill, scheme),
-                tileInk: SidebarColorTuning.base(.tileInk, scheme),
-                dimmed: SidebarColorTuning.baseDimmed(scheme),
+                background: q(SidebarColorTuning.base(.background, scheme)),
+                primary: q(SidebarColorTuning.base(.primaryText, scheme)),
+                secondary: q(SidebarColorTuning.base(.secondaryText, scheme)),
+                tileFill: q(SidebarColorTuning.base(.tileFill, scheme)),
+                tileInk: q(SidebarColorTuning.base(.tileInk, scheme)),
+                dimmed: q(SidebarColorTuning.baseDimmed(scheme)),
                 cardTint: SidebarColorTuning.RGBA(r: 1, g: 1, b: 1, a: card)
             )
         }
