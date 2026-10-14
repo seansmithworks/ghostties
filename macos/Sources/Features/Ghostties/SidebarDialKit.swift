@@ -647,7 +647,26 @@ enum SidebarDialTuning {
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
         uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
-    ] + railKeys + trayShadowStateKeys
+    ] + railKeys + trayShadowStateKeys + colorKeys + canvasKeys
+
+    /// The "Sidebar colors" panel's keys (`SidebarColorTuning.allKeys`),
+    /// DEBUG only: a Release build has no colour dials to clear.
+    static var colorKeys: [String] {
+        #if DEBUG
+        SidebarColorTuning.allKeys
+        #else
+        []
+        #endif
+    }
+
+    /// The "Canvas" panel's keys (`CanvasTuning.allKeys`), DEBUG only.
+    static var canvasKeys: [String] {
+        #if DEBUG
+        CanvasTuning.allKeys
+        #else
+        []
+        #endif
+    }
 
     /// The keys the Rail panel owns (`RailDialPanel`): its own
     /// "Reset rail" clears only these. Part of `allKeys`, so "Reset all
@@ -1056,9 +1075,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .select("\(prefix)Variant", keyPath: glass.appending(path: \.variant), label: "Glass variant",
                     options: TrayGlassStyle.Variant.allCases.map(\.rawValue)),
             .slider("\(prefix)TintOpacity", keyPath: glass.appending(path: \.tintOpacity),
-                    label: prefix == "dark" ? "Glass warm tint" : "Glass white tint", range: 0...1, step: 0.05),
+                    label: prefix == "dark" ? "Glass warm tint" : "Glass white tint", range: 0...1, step: 0.01),
             .slider("\(prefix)SurfaceOpacity", keyPath: glass.appending(path: \.surfaceOpacity),
-                    label: prefix == "dark" ? "Grey layer opacity" : "White layer opacity", range: 0...1, step: 0.05),
+                    label: prefix == "dark" ? "Grey layer opacity" : "White layer opacity", range: 0...1, step: 0.01),
             // Blur. The native glass has no blur amount (only its variant:
             // `regular` frosts, `clear` barely does, `identity` is no glass),
             // so the blur is a system material under the layer above. It
@@ -1067,13 +1086,13 @@ final class SidebarDialKitCoordinator: ObservableObject {
                     label: "Backdrop blur (thicker = more)",
                     options: TrayGlassStyle.BackdropMaterial.allCases.map(\.rawValue)),
             .slider("\(prefix)BackdropOpacity", keyPath: glass.appending(path: \.backdropOpacity),
-                    label: "Backdrop blur opacity", range: 0...1, step: 0.05),
+                    label: "Backdrop blur opacity", range: 0...1, step: 0.01),
             .slider("\(prefix)SurfaceBlur", keyPath: glass.appending(path: \.surfaceBlur),
                     label: prefix == "dark" ? "Grey layer edge blur" : "White layer edge blur",
                     range: 0...16, step: 0.5, unit: "pt"),
             .slider("\(prefix)RimWidth", keyPath: glass.appending(path: \.rimWidth), label: "Rim width", range: 0...4, step: 0.25, unit: "pt"),
-            .slider("\(prefix)RimOpacity", keyPath: glass.appending(path: \.rimOpacity), label: "Rim opacity", range: 0...1, step: 0.02),
-            .slider("\(prefix)ChromaticIntensity", keyPath: glass.appending(path: \.chromaticIntensity), label: "Chromatic rim intensity", range: 0...1, step: 0.05),
+            .slider("\(prefix)RimOpacity", keyPath: glass.appending(path: \.rimOpacity), label: "Rim opacity", range: 0...1, step: 0.01),
+            .slider("\(prefix)ChromaticIntensity", keyPath: glass.appending(path: \.chromaticIntensity), label: "Chromatic rim intensity", range: 0...1, step: 0.01),
             .slider("\(prefix)ChromaticWidth", keyPath: glass.appending(path: \.chromaticWidth), label: "Chromatic rim width", range: 0.5...6, step: 0.25, unit: "pt"),
             .slider("\(prefix)ChromaticRotation", keyPath: glass.appending(path: \.chromaticRotation), label: "Chromatic rim rotation", range: 0...360, step: 0.1, unit: "°"),
             .slider("\(prefix)ChromaticBlur", keyPath: glass.appending(path: \.chromaticBlur), label: "Chromatic rim blur", range: 0...3, step: 0.1, unit: "pt"),
@@ -1081,7 +1100,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
                     options: TrayGlassStyle.ChromaticPalette.allCases.map(\.rawValue)),
             .select("\(prefix)ChromaticBlend", keyPath: glass.appending(path: \.chromaticBlend), label: "Chromatic blend",
                     options: TrayGlassStyle.ChromaticBlend.allCases.map(\.rawValue)),
-            .slider("\(prefix)SpecularStrength", keyPath: glass.appending(path: \.specularStrength), label: "Specular strength", range: 0...1, step: 0.05),
+            .slider("\(prefix)SpecularStrength", keyPath: glass.appending(path: \.specularStrength), label: "Specular strength", range: 0...1, step: 0.01),
             .slider("\(prefix)SpecularAngle", keyPath: glass.appending(path: \.specularAngle), label: "Specular angle", range: 0...360, step: 1, unit: "°")
         ]
     }
@@ -1146,6 +1165,14 @@ protocol FocusedDialPanel {
     static func read(_ defaults: UserDefaults) -> Model
     /// Writes only the fields that moved between `old` and `new`.
     static func write(_ defaults: UserDefaults, from old: Model, to new: Model)
+    /// Recomputes any read-only fields from the rest of the model (the
+    /// colours panel's contrast rows). Never writes defaults.
+    static func derive(_ model: inout Model, defaults: UserDefaults)
+}
+
+@available(macOS 14, *)
+extension FocusedDialPanel {
+    static func derive(_ model: inout Model, defaults: UserDefaults) {}
 }
 
 /// Owns one `FocusedDialPanel`'s `DialPanelState`: the same diff-based
@@ -1209,6 +1236,20 @@ final class FocusedDialKitCoordinator<Panel: FocusedDialPanel>: ObservableObject
         Panel.write(defaults, from: previous, to: model)
         defaults.set(SidebarDialTuning.epoch(defaults: defaults) + 1, forKey: SidebarDialTuning.epochKey)
         onChange()
+        var derived = model
+        Panel.derive(&derived, defaults: defaults)
+        guard derived != model else { return }
+        // Next turn, not inside this `values` sink: re-derive from whatever
+        // the panel holds by then so a value still arriving is never undone.
+        DispatchQueue.main.async { [weak self] in self?.applyDerived() }
+    }
+
+    private func applyDerived() {
+        var derived = state.values
+        Panel.derive(&derived, defaults: defaults)
+        guard derived != state.values else { return }
+        lastKnownModel = derived
+        state.values = derived
     }
 
     private static var resetActionPath: String { "reset" }
@@ -1307,10 +1348,10 @@ enum RailDialPanel: FocusedDialPanel {
             .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
             // One view's selected project column (`RailProjectColumn`).
             .group("railColumn", label: "Rail column", children: [
-                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint (dark)", range: 0...0.3, step: 0.005),
+                .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint (dark)", range: 0...0.3, step: 0.01),
                 .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
                 .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
-                .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
+                .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.01),
             ]),
             // The column's project tile and its rows' thread tiles (chips).
             .group("railTiles", label: "Rail tiles", children: [
@@ -1528,6 +1569,8 @@ enum SidebarDialInspector {
     private static var sidebarListCoordinator: FocusedDialKitCoordinator<SidebarListDialPanel>?
     private static var railCoordinator: FocusedDialKitCoordinator<RailDialPanel>?
     private static var trayShadowCoordinator: FocusedDialKitCoordinator<TrayShadowDialPanel>?
+    private static var colorsCoordinator: FocusedDialKitCoordinator<SidebarColorsDialPanel>?
+    private static var canvasCoordinator: FocusedDialKitCoordinator<CanvasDialPanel>?
 
     static func start() {
         guard coordinator == nil else { return }
@@ -1543,6 +1586,8 @@ enum SidebarDialInspector {
         sidebarListCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         railCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         trayShadowCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
+        colorsCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
+        canvasCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         DialKitAgent.shared.start(appName: "Ghostties")
     }
 }

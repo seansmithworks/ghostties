@@ -217,9 +217,11 @@ enum TrayGlassStyle {
         // 8). Sean (2026-10-11): too heavy and riding high, and light-mode
         // shadows stay at or under 20% — lightened to 10% and dropped 3pt
         // (SwiftUI's positive y is down), so less of it shows above the pill.
-        shadowOpacity: 0.10,
+        // Sean's "Tray shadow" DialKit tune (beta.27): 12%, radius 8, y 4,
+        // the default for every state (sidebar, rail, hover bar).
+        shadowOpacity: 0.12,
         shadowRadius: 8,
-        shadowYOffset: 6,
+        shadowYOffset: 4,
         // Tuned in the Dev DialKit (re-baked 2026-10-11, second export).
         chromaticIntensity: 0.15,
         chromaticWidth: 1.5,
@@ -387,14 +389,15 @@ enum TrayGlassStyle {
     /// path draws no glass rim or chromatic stroke, and its chrome-coloured
     /// fill sits on the chrome, so without this hairline only a shadow,
     /// invisible on dark chrome, separated the pill. A dark-mode stroke like
-    /// the glass rim, at the canvas grey (`canvasBackgroundDark` #2D2D2D):
+    /// the glass rim, at the beta.26 canvas grey #2D2D2D (pinned here when
+    /// `canvasBackgroundDark` moved to #141413, below the chrome, in beta.27):
     /// the strongest dark token step off the #242424 chrome (1.13:1, the
     /// same step that sets the terminal card off the chrome; `borderDark`
     /// is 1.08:1). 3:1 needs about #717171, a light grey, which is the
     /// bright outline this replaces. The icons, which identify the buttons,
     /// keep 5.45:1. An edge, not a fill: the pill stays at the chrome's
     /// lightness.
-    static let opaqueDarkEdgeColor = Color(WorkspaceLayout.canvasBackgroundDark)
+    static let opaqueDarkEdgeColor = Color(NSColor(white: 0.18, alpha: 1))
     static let opaqueDarkEdgeWidth: CGFloat = 1
 
 

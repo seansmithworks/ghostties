@@ -790,9 +790,7 @@ class WorkspaceViewContainer: NSView {
     /// around the GPU-rendered terminal area). Owned by the Ghostties design
     /// system — intentionally independent of terminal theme.
     private var canvasPaletteNSColor: NSColor {
-        isLightAppearance
-            ? WorkspaceLayout.canvasBackgroundLight
-            : WorkspaceLayout.canvasBackgroundDark
+        CanvasStyle.background(isLightAppearance ? .light : .dark)
     }
 
     /// Chrome palette color for the current OS appearance. The chrome layer
@@ -800,9 +798,7 @@ class WorkspaceViewContainer: NSView {
     /// terminal card. Owned by the Ghostties design system — intentionally
     /// independent of terminal theme.
     private var chromePaletteNSColor: NSColor {
-        isLightAppearance
-            ? WorkspaceLayout.chromeBackgroundLight
-            : WorkspaceLayout.chromeBackgroundDark
+        SidebarColors.background(isLightAppearance ? .light : .dark)
     }
 
     /// Terminal card background — the canvas layer. Always the Ghostties
@@ -927,6 +923,11 @@ class WorkspaceViewContainer: NSView {
         }
         applyWindowMargin()
         #if DEBUG
+        // A live "Sidebar background" or "Canvas" dial repaints the chrome
+        // and card layers and re-casts the card shadows.
+        applyChromeColor()
+        terminalShadowHost.applyShadow()
+        browserShadowHost.applyShadow()
         redlineOverlay.refresh()
         #endif
     }
@@ -1967,7 +1968,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Shadow + corner radius (non-animatable).
-        browserShadowHost.castShadowOpacity = visible ? WorkspaceLayout.canvasShadowOpacity : 0
+        browserShadowHost.castsShadow = visible
 
         invalidateIntrinsicContentSize()
     }
@@ -2542,12 +2543,12 @@ class WorkspaceViewContainer: NSView {
         case .pinned, .collapsed:
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.castShadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castsShadow = true
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-            browserShadowHost.castShadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
+            browserShadowHost.castsShadow = isBrowserVisible
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .closed:
@@ -2558,12 +2559,12 @@ class WorkspaceViewContainer: NSView {
             // token the pinned state uses, not a distinct "closed" radius.
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.castShadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castsShadow = true
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-            browserShadowHost.castShadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
+            browserShadowHost.castsShadow = isBrowserVisible
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .overlay:
@@ -2571,14 +2572,14 @@ class WorkspaceViewContainer: NSView {
             // always reads as a floating card, even while the sidebar hovers.
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.castShadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castsShadow = true
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             // Browser panel is force-collapsed on entry to overlay (see above);
             // leave its own card styling untouched.
             browserShadowHost.layer?.cornerRadius = 0
             browserShadowHost.layer?.backgroundColor = nil
-            browserShadowHost.castShadowOpacity = 0
+            browserShadowHost.castsShadow = false
             layer?.backgroundColor = canvasBackgroundCGColor
             // The shadow lives on `backgroundEffectView`, not
             // `sidebarOverlayBackground` — the latter is now the opaque,
@@ -3823,7 +3824,7 @@ class WorkspaceViewContainer: NSView {
         // The host owns color/radius/offset and re-applies them with the opacity
         // (`CardShadowHostView`).
         terminalShadowHost.wantsLayer = true
-        terminalShadowHost.castShadowOpacity = hasCardInset ? WorkspaceLayout.canvasShadowOpacity : 0
+        terminalShadowHost.castsShadow = hasCardInset
 
         // Card background behind the title bar region. No masksToBounds — shadow
         // must render outside the layer bounds.
@@ -3833,7 +3834,7 @@ class WorkspaceViewContainer: NSView {
 
         // Browser shadow host — identical layer config to terminal shadow host.
         browserShadowHost.wantsLayer = true
-        browserShadowHost.castShadowOpacity = 0  // hidden initially
+        browserShadowHost.castsShadow = false  // hidden initially
         browserShadowHost.layer?.cornerRadius = hasCardInset ? initialTerminalRadius : 0
         browserShadowHost.layer?.cornerCurve = .continuous
         browserShadowHost.layer?.backgroundColor = hasCardInset ? browserCardBackgroundCGColor : nil
@@ -4125,8 +4126,9 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
 // MARK: - Card Shadow Host
 
 /// The terminal and browser cards' shadow host. It is the single owner of its
-/// layer's drop shadow: callers set `castShadowOpacity` and never write
-/// `layer.shadow*` themselves.
+/// layer's drop shadow: callers set `castsShadow` and never write
+/// `layer.shadow*` themselves. The shadow itself is the DESIGN.md canvas
+/// shadow for this view's appearance (`CanvasStyle`).
 ///
 /// Why it has to own it: on every effective-appearance change (a light/dark
 /// switch, and attaching to a window) AppKit's `-[NSView
@@ -4136,10 +4138,9 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
 /// the view itself can re-apply in time; it does so in
 /// `viewDidChangeEffectiveAppearance`.
 private final class CardShadowHostView: NSView {
-    /// The opacity the card casts. Mode transitions and the browser toggle
-    /// set this; every other shadow property is the fixed DESIGN.md canvas
-    /// shadow.
-    var castShadowOpacity: Float = 0 {
+    /// Whether the card casts its shadow. Mode transitions and the browser
+    /// toggle set this.
+    var castsShadow = false {
         didSet { applyShadow() }
     }
 
@@ -4157,12 +4158,14 @@ private final class CardShadowHostView: NSView {
         applyShadow()
     }
 
-    private func applyShadow() {
+    /// Also called on a live "Canvas" dial change (DEBUG).
+    func applyShadow() {
         guard let layer else { return }
-        layer.shadowColor = WorkspaceLayout.canvasShadowColor
-        layer.shadowRadius = WorkspaceLayout.canvasShadowRadius
-        layer.shadowOffset = WorkspaceLayout.canvasShadowOffset
-        layer.shadowOpacity = castShadowOpacity
+        let scheme: ColorScheme = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+        layer.shadowColor = CanvasStyle.shadowColor(scheme)
+        layer.shadowRadius = CanvasStyle.shadowRadius(scheme)
+        layer.shadowOffset = CanvasStyle.shadowOffset(scheme)
+        layer.shadowOpacity = castsShadow ? Float(CanvasStyle.shadowOpacity(scheme)) : 0
     }
 }
 
