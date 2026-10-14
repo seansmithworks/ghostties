@@ -3,7 +3,7 @@
 #
 # Usage: bash scripts/social-card/render.sh [output.png]
 #
-# Needs Google Chrome (headless) and python3 — nothing to install. Override the
+# Needs Google Chrome (headless) and python3; nothing to install. Override the
 # browser with CHROME=/path/to/chrome. Serves the repo root on a free local port
 # so the card can load web/assets/ghost-field.js and the self-hosted DM Mono.
 # The page sets <html data-ready="ok"> once all 8 ghosts are in the row; the

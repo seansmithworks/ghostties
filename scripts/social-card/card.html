@@ -2,7 +2,7 @@
 <!--
   ghostties.org social card (og:image / twitter:image), 2560x1280.
   Rendered to web/assets/social-card.png by scripts/social-card/render.sh,
-  which serves the REPO ROOT — hence the /web/... paths below. Lives outside
+  which serves the REPO ROOT, hence the /web/... paths below. Lives outside
   web/ so it never deploys as a page.
 
   Ghosts are not drawn here. The page loads the live site's own
@@ -11,13 +11,16 @@
   row. Redraw a ghost in ghost-field.js and the card follows on re-render.
 
   Values (web/DESIGN.md): --bg, --ink, --font-mono from §8 (the v2/v3 token
-  set the live homepage uses); diff colours from §3 "Hero terminal".
+  set the live homepage uses); the success green is --diff-add-fg from §3
+  "Hero terminal". Command is the homepage's own (web/index.html). No version
+  number on purpose: it would go stale.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>ghostties social card</title>
 <link rel="preload" href="/web/assets/fonts/dmmono-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/web/assets/fonts/dmmono-500-latin.woff2" as="font" type="font/woff2" crossorigin>
 <style>
   @font-face {
     font-family: "DM Mono";
@@ -26,14 +29,19 @@
     font-display: block;
     src: url("/web/assets/fonts/dmmono-400-latin.woff2") format("woff2");
   }
+  @font-face {
+    font-family: "DM Mono";
+    font-style: normal;
+    font-weight: 500;
+    font-display: block;
+    src: url("/web/assets/fonts/dmmono-500-latin.woff2") format("woff2");
+  }
   :root {
     --bg: #06060e;
     --ink: #e9e6f5;
+    --ink-dim: rgba(233, 230, 245, 0.66);
     --font-mono: "DM Mono", monospace;
     --diff-add-fg: rgba(100, 220, 120, 0.9);
-    --diff-add-bg: rgba(80, 210, 100, 0.13);
-    --diff-del-fg: rgba(255, 100, 100, 0.7);
-    --diff-del-bg: rgba(255, 80, 80, 0.13);
   }
   html, body {
     margin: 0;
@@ -52,15 +60,12 @@
     line-height: 136px;
     color: var(--ink);
   }
-  /* Text column starts at 192px; the diff gutter (+/-) hangs left of it. */
+  /* Text column starts at 192px. Three lines + ghost row sit centred:
+     304px above and below. */
   .line { padding-left: 192px; white-space: pre; }
-  /* Both diff bars share one width (the longer line + 48px), starting 92px
-     left of the text column so the +/- sits in the gutter. */
-  .diffs { display: inline-block; margin-left: 100px; }
-  .diff { position: relative; padding: 0 48px 0 92px; white-space: pre; }
-  .diff .sign { position: absolute; left: 12px; }
-  .del { background: var(--diff-del-bg); color: var(--diff-del-fg); }
-  .add { background: var(--diff-add-bg); color: var(--diff-add-fg); }
+  .prompt { color: var(--ink-dim); }
+  .cmd { font-weight: 500; }
+  .ok { color: var(--diff-add-fg); }
   .ghosts {
     display: flex;
     gap: 48px;
@@ -69,7 +74,7 @@
   }
   .ghosts svg {
     display: block;
-    width: 192px;   /* 12 cells x 16px — integer scale, no seams */
+    width: 192px;   /* 12 cells x 16px: integer scale, no seams */
     height: 192px;
     overflow: visible;
     shape-rendering: crispEdges;
@@ -84,11 +89,8 @@
 </head>
 <body>
   <div class="card">
-    <div class="line">cd ~/ghostties</div>
-    <div class="diffs">
-      <div class="diff del"><span class="sign">-</span>ghostties % install soon</div>
-      <div class="diff add"><span class="sign">+</span>ghostties % install now</div>
-    </div>
+    <div class="line"><span class="prompt">~ % </span><span class="cmd">npx ghostties-install</span></div>
+    <div class="line ok">✓ Ghostties installed</div>
     <div class="line">ghostties.org</div>
     <div class="ghosts" id="ghosts"></div>
   </div>
@@ -102,7 +104,7 @@
       var svgs = document.querySelectorAll("#gx-field .gx-ghost svg");
       if (svgs.length < 8) {
         row.innerHTML = '<div class="missing">GHOSTS MISSING: ' + svgs.length +
-          " rendered — ghost-field.js did not take its reduced-motion path</div>";
+          " rendered: ghost-field.js did not take its reduced-motion path</div>";
         document.documentElement.dataset.ready = "missing";
         return;
       }
