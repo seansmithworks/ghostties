@@ -647,13 +647,22 @@ enum SidebarDialTuning {
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
         uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
-    ] + railKeys + trayShadowStateKeys + colorKeys
+    ] + railKeys + trayShadowStateKeys + colorKeys + canvasKeys
 
     /// The "Sidebar colors" panel's keys (`SidebarColorTuning.allKeys`),
     /// DEBUG only: a Release build has no colour dials to clear.
     static var colorKeys: [String] {
         #if DEBUG
         SidebarColorTuning.allKeys
+        #else
+        []
+        #endif
+    }
+
+    /// The "Canvas" panel's keys (`CanvasTuning.allKeys`), DEBUG only.
+    static var canvasKeys: [String] {
+        #if DEBUG
+        CanvasTuning.allKeys
         #else
         []
         #endif
@@ -1561,6 +1570,7 @@ enum SidebarDialInspector {
     private static var railCoordinator: FocusedDialKitCoordinator<RailDialPanel>?
     private static var trayShadowCoordinator: FocusedDialKitCoordinator<TrayShadowDialPanel>?
     private static var colorsCoordinator: FocusedDialKitCoordinator<SidebarColorsDialPanel>?
+    private static var canvasCoordinator: FocusedDialKitCoordinator<CanvasDialPanel>?
 
     static func start() {
         guard coordinator == nil else { return }
@@ -1577,6 +1587,7 @@ enum SidebarDialInspector {
         railCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         trayShadowCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         colorsCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
+        canvasCoordinator = FocusedDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         DialKitAgent.shared.start(appName: "Ghostties")
     }
 }
