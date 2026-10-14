@@ -164,6 +164,16 @@ enum ProjectAccordionState {
         return encode(ids)
     }
 
+    #if DEBUG
+    /// The capture script's fold/unfold: the stored set with `ids` folded
+    /// or unfolded.
+    static func setFolded(_ raw: String, ids: [UUID], folded: Bool) -> String {
+        var set = decode(raw)
+        if folded { set.formUnion(ids) } else { set.subtract(ids) }
+        return encode(set)
+    }
+    #endif
+
     static func expanded(_ raw: String, _ projectId: UUID) -> String {
         var ids = decode(raw)
         ids.remove(projectId)
@@ -696,7 +706,26 @@ struct ProjectAccordionAutoExpand: ViewModifier {
         content
             .onReceive(NotificationCenter.default.publisher(for: .workspaceDidCreateSessionInProject)) { expand($0) }
             .onReceive(NotificationCenter.default.publisher(for: .workspaceDidFocusSessionFromShortcut)) { expand($0) }
+            #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: .captureProjectFold)) { captureFold($0) }
+            #endif
     }
+
+    #if DEBUG
+    /// The capture script's fold ops in One view: written through the same
+    /// `@AppStorage` string and spring as a header click
+    /// (`ProjectAccordionState.headerClicked`). The tabs layout is handled by
+    /// `WorkspaceSidebarView`.
+    private func captureFold(_ notification: Notification) {
+        guard SidebarDialTuning.projectsLayout() == .oneView,
+              notification.object as? NSWindow === window(),
+              let ids = notification.userInfo?["projectIds"] as? [UUID],
+              let fold = notification.userInfo?["fold"] as? Bool else { return }
+        withAnimation(ProjectAccordionState.toggleAnimation(unfolding: !fold)) {
+            collapsedRaw = ProjectAccordionState.setFolded(collapsedRaw, ids: ids, folded: fold)
+        }
+    }
+    #endif
 
     private func expand(_ notification: Notification) {
         guard SidebarDialTuning.projectsLayout() == .oneView,

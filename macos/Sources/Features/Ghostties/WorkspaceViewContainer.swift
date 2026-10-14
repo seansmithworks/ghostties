@@ -4227,5 +4227,39 @@ extension WorkspaceViewContainer: CaptureScript.Host {
     }
 
     func setPref(_ value: Bool?) { CaptureScript.applyPref(value) }
+
+    // MARK: Sidebar ops
+
+    private func postCaptureFold(_ ids: [UUID], fold: Bool, selectProject: Bool) {
+        NotificationCenter.default.post(
+            name: .captureProjectFold, object: window,
+            userInfo: ["projectIds": ids, "fold": fold, "selectProject": selectProject])
+    }
+
+    func foldAll() { postCaptureFold(store.projects.map(\.id), fold: true, selectProject: false) }
+
+    func setFolded(project name: String, folded: Bool) throws {
+        let project = try CaptureScript.resolveProject(name, in: store.projects, op: folded ? "fold" : "unfold")
+        postCaptureFold([project.id], fold: folded, selectProject: true)
+    }
+
+    func select(session name: String) throws {
+        let session = try CaptureScript.resolveSession(name, in: store.sessions)
+        // A row click on a visible row; unfold first, without moving the
+        // project selection, in case the row's project is folded.
+        postCaptureFold([session.projectId], fold: false, selectProject: false)
+        coordinator.focusSession(id: session.id)
+    }
+
+    func setPinned(project name: String, pinned: Bool) throws {
+        let op = pinned ? "pin" : "unpin"
+        let project = try CaptureScript.resolveProject(name, in: store.projects, op: op)
+        // A no-op here would be a shot with nothing moving.
+        guard project.isPinned != pinned else {
+            throw CaptureScript.Failure("\(op): '\(project.name)' is already \(pinned ? "pinned" : "unpinned")")
+        }
+        // The project context menu's Pin / Unpin.
+        store.togglePin(id: project.id)
+    }
 }
 #endif

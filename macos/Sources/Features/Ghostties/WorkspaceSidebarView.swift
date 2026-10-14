@@ -171,6 +171,21 @@ struct WorkspaceSidebarView: View {
             expandedProjectIds.insert(projectId)
         }
         .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .captureProjectFold)) { notification in
+            // The capture script's fold ops, tabs layout: `expandedProjectIds`
+            // with the header click's spring and selection. One view is
+            // handled by `ProjectAccordionAutoExpand`.
+            guard SidebarDialTuning.projectsLayout() == .tabs,
+                  notification.object as? NSWindow === coordinator.containerView?.window,
+                  let ids = notification.userInfo?["projectIds"] as? [UUID],
+                  let fold = notification.userInfo?["fold"] as? Bool else { return }
+            withAnimation(SidebarUISpring.fold.animation(entering: !fold)) {
+                if fold { expandedProjectIds.subtract(ids) } else { expandedProjectIds.formUnion(ids) }
+            }
+            if notification.userInfo?["selectProject"] as? Bool == true, let id = ids.first { selectedProjectId = id }
+        }
+        #endif
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
             set: { _ in }

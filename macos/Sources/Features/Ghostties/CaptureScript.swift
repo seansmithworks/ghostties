@@ -31,6 +31,14 @@ enum CaptureScript {
         case mark(String)
         case wait(TimeInterval)
         case pref(Bool?)
+        /// Sidebar ops (Projects-tab shots). Project and session names resolve
+        /// at run time against the live store; an unknown name is an error.
+        case foldAll
+        case fold(project: String)
+        case unfold(project: String)
+        case select(session: String)
+        case pin(project: String)
+        case unpin(project: String)
     }
 
     static let namedKeys: Set<String> = ["return", "escape", "tab", "up", "down", "left", "right", "delete"]
@@ -67,6 +75,8 @@ enum CaptureScript {
         "composer.open": ["op"], "newSession": ["op"], "newSessionInstant": ["op"],
         "rowPlus": ["op", "project", "option"], "type": ["op", "text"], "key": ["op", "key", "modifiers"],
         "mark": ["op", "name"], "wait": ["op", "seconds"], "pref": ["op", "key", "value"],
+        "foldAll": ["op"], "fold": ["op", "project"], "unfold": ["op", "project"],
+        "select": ["op", "session"], "pin": ["op", "project"], "unpin": ["op", "project"],
     ]
 
     private static func parseStep(_ d: [String: Any]) throws -> Step {
@@ -107,9 +117,20 @@ enum CaptureScript {
             if value is NSNull { return .pref(nil) }
             guard let bool = try optionalBool(value, field: "value") else { throw Failure("pref value must be true, false or null") }
             return .pref(bool)
+        case "foldAll": return .foldAll
+        case "fold": return .fold(project: try name(d, "project", op: op))
+        case "unfold": return .unfold(project: try name(d, "project", op: op))
+        case "pin": return .pin(project: try name(d, "project", op: op))
+        case "unpin": return .unpin(project: try name(d, "project", op: op))
+        case "select": return .select(session: try name(d, "session", op: op))
         default:
             throw Failure("unknown op '\(op)'")
         }
+    }
+
+    private static func name(_ d: [String: Any], _ field: String, op: String) throws -> String {
+        guard let value = d[field] as? String, !value.isEmpty else { throw Failure("\(op) needs a \(field) string") }
+        return value
     }
 
     private static func optionalBool(_ value: Any?, field: String) throws -> Bool? {
@@ -135,6 +156,26 @@ enum CaptureScript {
             }
         }
         return flags
+    }
+
+    // MARK: - Name resolution
+
+    /// Case-insensitive, and exactly one match: a typo or a duplicate name
+    /// stops the script rather than acting on the wrong row.
+    static func resolveProject(_ name: String, in projects: [Project], op: String) throws -> Project {
+        let matches = projects.filter { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        guard let project = matches.first else {
+            throw Failure("\(op): no project named '\(name)' (have: \(projects.map(\.name).joined(separator: ", ")))")
+        }
+        guard matches.count == 1 else { throw Failure("\(op): \(matches.count) projects named '\(name)'") }
+        return project
+    }
+
+    static func resolveSession(_ name: String, in sessions: [AgentSession]) throws -> AgentSession {
+        let matches = sessions.filter { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        guard let session = matches.first else { throw Failure("select: no session named '\(name)'") }
+        guard matches.count == 1 else { throw Failure("select: \(matches.count) sessions named '\(name)'") }
+        return session
     }
 
     // MARK: - Pref
@@ -192,6 +233,12 @@ enum CaptureScript {
         func type(_ text: String)
         func key(_ spec: KeySpec)
         func setPref(_ value: Bool?)
+        /// Sidebar ops. Each throws `Failure` for a name that matches nothing
+        /// (or more than one thing), so a typo stops the script loudly.
+        func foldAll()
+        func setFolded(project: String, folded: Bool) throws
+        func select(session: String) throws
+        func setPinned(project: String, pinned: Bool) throws
     }
 
     /// Runs steps against a host and reports through files in `stateDir`:
@@ -244,6 +291,12 @@ enum CaptureScript {
             case .type(let text): host.type(text)
             case .key(let spec): host.key(spec)
             case .pref(let value): host.setPref(value)
+            case .foldAll: host.foldAll()
+            case .fold(let project): try host.setFolded(project: project, folded: true)
+            case .unfold(let project): try host.setFolded(project: project, folded: false)
+            case .select(let session): try host.select(session: session)
+            case .pin(let project): try host.setPinned(project: project, pinned: true)
+            case .unpin(let project): try host.setPinned(project: project, pinned: false)
             case .wait(let seconds): try await Task.sleep(for: .seconds(seconds))
             case .mark(let name): try await mark(name)
             }
@@ -283,6 +336,14 @@ enum CaptureScript {
         try? await Task.sleep(for: .seconds(1))
         await runner.run(scriptAt: path)
     }
+}
+
+extension Notification.Name {
+    /// Posted by the script's fold ops; the sidebar views that own the fold
+    /// state animate it. `object` is the window. userInfo: `projectIds`
+    /// ([UUID]; every project for `foldAll`), `fold` (Bool), `selectProject`
+    /// (Bool: a header click also selects the project).
+    static let captureProjectFold = Notification.Name("com.seansmithdesign.ghostties.capture.projectFold")
 }
 
 extension CaptureFixture {
