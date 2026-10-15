@@ -1027,6 +1027,7 @@ class WorkspaceViewContainer: NSView {
         // Clean up previous window's observers (handles view moving between windows).
         NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: NSWindow.willEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: fullScreenObservedWindow)
@@ -1069,6 +1070,16 @@ class WorkspaceViewContainer: NSView {
             self,
             selector: #selector(windowDidBecomeKey),
             name: NSWindow.didBecomeKeyNotification,
+            object: window
+        )
+
+        // Closing this window while it owns the composer (the red button,
+        // with the app still active) tears the composer down here rather
+        // than waiting on SwiftUI's `.onDisappear`.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillCloseComposerOwner),
+            name: NSWindow.willCloseNotification,
             object: window
         )
 
@@ -3195,6 +3206,16 @@ class WorkspaceViewContainer: NSView {
         dismissComposerOverlayIfPresented()
     }
 
+    /// This window is closing: if it owns the composer, close the composer
+    /// and revert any theme preview now.
+    @objc private func windowWillCloseComposerOwner() {
+        guard SessionComposerStore.shared.owningWindow === window else { return }
+        dismissComposerOverlayIfPresented()
+        // The overlay may not be installed yet (opened this runloop turn),
+        // so the store is closed here too; it no-ops when already closed.
+        SessionComposerStore.shared.closeForOverlayTeardown()
+    }
+
     @objc private func windowDidBecomeKey() {
         // Sidebar smart-sections freeze-on-focus (plan unit 4):
         // freeze the section layout while this window is the user's focus.
@@ -3427,6 +3448,23 @@ class WorkspaceViewContainer: NSView {
     /// overlay back out mid-animation.
     private var composerOverlayTransitionGeneration = 0
 
+    #if DEBUG
+    /// Whether the composer overlay is installed and not on its way out.
+    var isComposerOverlayPresentedForTesting: Bool {
+        composerOverlayHostingView.superview != nil && !isDismissingComposerOverlay
+    }
+
+    /// Fade-ins/outs run by a dismiss or re-present (one per call that
+    /// actually starts one).
+    var composerOverlayTransitionCountForTesting: Int { composerOverlayTransitionGeneration }
+    #endif
+
+    /// True from the start of a dismiss until its fade removes the overlay
+    /// (or a re-present supersedes it). Makes the dismiss path idempotent:
+    /// the store's `isOpen` sink re-enters it after the teardown closes the
+    /// store, and that second call must not restart the fade.
+    private var isDismissingComposerOverlay = false
+
     /// Adds the composer overlay hosting view as a subview, pinned to the
     /// container's full bounds — not `layout()` — so its dismiss layer can
     /// span the whole terminal. Fades in (F8, Phase 3 review) to match
@@ -3437,6 +3475,7 @@ class WorkspaceViewContainer: NSView {
     /// re-adding it.
     private func installComposerOverlayIfNeeded() {
         composerOverlayTransitionGeneration += 1
+        isDismissingComposerOverlay = false
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         // R3 (Phase 3 review round 2): re-enable hit-testing on (re-)present
         // — a fast dismiss-then-reopen can land here while a previous
@@ -3515,8 +3554,9 @@ class WorkspaceViewContainer: NSView {
     /// tab-title editing (`TerminalWindow.tabTitleEditor(_:didFinishEditing:)`).
     /// Without this, Escape (or any other dismiss) leaves the terminal
     /// keyboard-dead until the user clicks it.
-    private func dismissComposerOverlayIfPresented() {
-        guard composerOverlayHostingView.superview != nil else { return }
+    func dismissComposerOverlayIfPresented() {
+        guard composerOverlayHostingView.superview != nil, !isDismissingComposerOverlay else { return }
+        isDismissingComposerOverlay = true
 
         // Close the store (and revert a theme preview) here, not via the
         // palette's `.onDisappear`, which only runs once the fade below
@@ -3579,6 +3619,7 @@ class WorkspaceViewContainer: NSView {
         }, completionHandler: { [weak self] in
             guard let self, self.composerOverlayTransitionGeneration == myGeneration else { return }
             self.composerOverlayHostingView.removeFromSuperview()
+            self.isDismissingComposerOverlay = false
         })
     }
 

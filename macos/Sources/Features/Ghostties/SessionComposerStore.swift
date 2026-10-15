@@ -51,7 +51,7 @@ final class SessionComposerStore: ObservableObject {
     /// The theme picker `theme` / `/theme` turns the composer into. Owned
     /// here so closing the composer by any route reverts its live preview
     /// (`isOpen`'s `didSet`).
-    let themePicker: ComposerThemePickerModel
+    private(set) var themePicker: ComposerThemePickerModel
 
     /// The live picker: previews through `Ghostty.App`'s reload and stores
     /// picks where Settings > Appearance does.
@@ -97,6 +97,16 @@ final class SessionComposerStore: ObservableObject {
     init(isolatedForTesting suiteName: String, themePicker: ComposerThemePickerModel? = nil) {
         self.defaults = UserDefaults(suiteName: suiteName) ?? .standard
         self.themePicker = themePicker ?? ComposerThemePickerModel(defaults: defaults, reload: { _ in })
+    }
+
+    /// Swaps in a picker with a recording reload hook so a test can drive
+    /// the shared store's teardown without reloading the host app's config.
+    /// Returns the previous picker to restore.
+    @discardableResult
+    func swapThemePickerForTesting(_ picker: ComposerThemePickerModel) -> ComposerThemePickerModel {
+        let previous = themePicker
+        themePicker = picker
+        return previous
     }
 
     /// Test-only override for `precommit`'s session-dispatch call — see the
