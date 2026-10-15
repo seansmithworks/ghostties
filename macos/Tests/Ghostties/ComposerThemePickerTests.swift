@@ -187,19 +187,20 @@ struct ComposerThemePickerTests {
     /// Polarity outranks prefix: a dark prefix match sits below a light
     /// non-prefix match when the window is light.
     @Test func polarityOutranksPrefixThenPrefixThenCatalogOrder() {
-        // Query "r": light matches are Rose Pine Dawn (prefix), Gruvbox Light,
-        // iTerm2 Solarized Light; dark matches are Rose Pine (prefix), Gruvbox
-        // Dark, Dracula, Nord. Light window: all light first (prefix leading),
-        // then dark (prefix leading); capped at 6.
+        // Substring "r" over theme name or family (lowercased):
+        //   light: Gruvbox Light, Rose Pine Dawn (prefix), iTerm2 Solarized Light
+        //   dark:  Ghostties Dark ("dark"), Gruvbox Dark, Rose Pine (prefix), Dracula, Nord
+        //   no match: Ghostties Light, Catppuccin Latte/Mocha, TokyoNight
+        // Ranked: polarity, then prefix, then catalog order; capped at 6.
         let light = ComposerThemeMatcher.chips(query: "r", families: catalog, applied: ghosttiesApplied, appearance: .light)
         #expect(light.map(\.name) == [
             "Rose Pine Dawn", "Gruvbox Light", "iTerm2 Solarized Light",
-            "Rose Pine", "Gruvbox Dark", "Dracula",
+            "Rose Pine", "Ghostties Dark", "Gruvbox Dark",
         ])
         let dark = ComposerThemeMatcher.chips(query: "r", families: catalog, applied: ghosttiesApplied, appearance: .dark)
         #expect(dark.map(\.name) == [
-            "Rose Pine", "Gruvbox Dark", "Dracula", "Nord",
-            "Rose Pine Dawn", "Gruvbox Light",
+            "Rose Pine", "Ghostties Dark", "Gruvbox Dark", "Dracula",
+            "Nord", "Rose Pine Dawn",
         ])
     }
 
