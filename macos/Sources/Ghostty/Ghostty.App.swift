@@ -121,6 +121,12 @@ extension Ghostty {
             ghostty_app_tick(app)
         }
 
+        private static func openConfig(_ app: ghostty_app_t) {
+            guard let app_ud = ghostty_app_userdata(app) else { return }
+            let app = Unmanaged<App>.fromOpaque(app_ud).takeUnretainedValue()
+            app.openConfig()
+        }
+
         func openConfig() {
             let str = configPath ?? Ghostty.AllocatedString(ghostty_config_open_path()).string
             guard !str.isEmpty else { return }
@@ -661,11 +667,7 @@ extension Ghostty {
                 pwdChanged(app, target: target, v: action.action.pwd)
 
             case GHOSTTY_ACTION_OPEN_CONFIG:
-                // MARK: - Ghostties fork fence (Cmd+, opens Settings)
-                // `open_config` (Cmd+, by default) opens the Settings window;
-                // its Appearance pane has "Open config" for the file itself.
-                DispatchQueue.main.async { GhosttiesSettingsWindowController.shared.show() }
-                // MARK: - End Ghostties fork fence (Cmd+, opens Settings)
+                openConfig(app)
 
             case GHOSTTY_ACTION_FLOAT_WINDOW:
                 toggleFloatWindow(app, target: target, mode: action.action.float_window)

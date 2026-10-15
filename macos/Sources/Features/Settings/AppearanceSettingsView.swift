@@ -34,17 +34,20 @@ struct AppearanceSettingsView: View {
             }
 
             Section {
-                ThemeSidePicker(title: "Light theme", selection: model.lightBinding, names: model.themeNames)
-                ThemeSidePicker(title: "Dark theme", selection: model.darkBinding, names: model.themeNames)
+                Group {
+                    ThemeSidePicker(title: "Light theme", selection: model.lightBinding, names: model.themeNames)
+                    ThemeSidePicker(title: "Dark theme", selection: model.darkBinding, names: model.themeNames)
+                }
+                .disabled(model.locked)
             } footer: {
-                if let reset = model.resetLabel {
-                    HStack {
-                        Spacer()
+                HStack {
+                    Button("Open Config File", action: model.openConfig)
+                    Spacer()
+                    if let reset = model.resetLabel {
                         Button(reset) { model.clearPicks() }
                     }
                 }
             }
-            .disabled(model.locked)
         }
         .formStyle(.grouped)
         .frame(width: 560)
@@ -131,7 +134,9 @@ final class AppearanceSettingsModel: ObservableObject {
                     && !isCustomSelected
             )
         }
-        if probe.kind == .themeOnly, let name = probe.themeName {
+        // Shown whenever the config names a theme, so the card row and the
+        // pickers (which show that theme) agree, locked state included.
+        if probe.kind != .none, let name = probe.themeName {
             let base = baseline
             cards.append(Card(
                 kind: .custom, title: "Custom", subtitle: name,
@@ -190,8 +195,8 @@ final class AppearanceSettingsModel: ObservableObject {
     }
 
     private func reload() {
-        refresh()
         ghostty?.reloadConfig()
+        refresh()
     }
 
     func preview(_ name: String) -> ThemePreview {
@@ -229,6 +234,7 @@ private struct ThemePairCard: View {
     let card: AppearanceSettingsModel.Card
     let preview: (String) -> ThemePreview
     let action: () -> Void
+    @FocusState private var focused: Bool
 
     var body: some View {
         Button(action: action) {
@@ -258,9 +264,17 @@ private struct ThemePairCard: View {
                     .strokeBorder(card.selected ? Color.accentColor : Color(nsColor: .separatorColor),
                                   lineWidth: card.selected ? 2 : 1)
             )
+            .overlay(
+                // The plain style draws no focus ring; this is the system's.
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
+                    .padding(-4)
+                    .opacity(focused ? 1 : 0)
+            )
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .focused($focused)
         .accessibilityLabel(card.subtitle.map { "\(card.title), \($0)" } ?? card.title)
         .accessibilityAddTraits(card.selected ? .isSelected : [])
     }
@@ -344,7 +358,7 @@ private struct SetByConfigBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Button("Open Config", action: openConfig)
+            Button("Open Config File", action: openConfig)
         }
     }
 }

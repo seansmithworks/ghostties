@@ -98,7 +98,7 @@ enum GhosttiesThemeProbe {
     static func probe(configPath: String?) -> Result {
         let files = configPath.map { [URL(fileURLWithPath: $0)] } ?? defaultFiles()
         var scan = Scan()
-        for file in files { scan.read(file) }
+        scan.load(files)
         if scan.explicitColors { return Result(kind: .explicitColors, themeName: scan.theme) }
         if let theme = scan.theme { return Result(kind: .themeOnly, themeName: theme) }
         return Result(kind: .none, themeName: nil)
@@ -139,35 +139,72 @@ enum GhosttiesThemeProbe {
 
     private static let colorKeys: Set<String> = ["background", "foreground", "palette"]
 
+    /// Mirrors Ghostty's load order (`Config.loadRecursiveFiles`): every
+    /// top-level file in order, then the queued `config-file` includes in
+    /// queue order, each include appending its own to the end of the queue.
+    /// An include loads once; top-level files are not deduplicated.
     private struct Scan {
         var theme: String?
-        var explicitColors = false
-        private var visited: Set<String> = []
+        private var explicitKeys: Set<String> = []
+        private var includes: [URL] = []
+        private var loadedIncludes: Set<String> = []
 
-        mutating func read(_ url: URL) {
-            let path = url.standardizedFileURL.path
-            guard visited.insert(path).inserted,
-                  let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        var explicitColors: Bool { !explicitKeys.isEmpty }
+
+        mutating func load(_ files: [URL]) {
+            for file in files { read(file) }
+            var i = 0
+            while i < includes.count {
+                let include = includes[i]
+                i += 1
+                guard loadedIncludes.insert(include.standardizedFileURL.path).inserted else { continue }
+                read(include)
+            }
+        }
+
+        private mutating func read(_ url: URL) {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
             for raw in text.split(whereSeparator: \.isNewline) {
-                let line = raw.trimmingCharacters(in: .whitespaces)
+                // `cli.args.LineIterator`: trim, skip comments, unquote a
+                // fully quoted value.
+                let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !line.hasPrefix("#"),
                       let eq = line.firstIndex(of: "=") else { continue }
                 let key = line[..<eq].trimmingCharacters(in: .whitespaces)
                 let value = Self.unquote(line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces))
                 if key == "theme" {
                     theme = value.isEmpty ? nil : value
-                } else if GhosttiesThemeProbe.colorKeys.contains(key), !value.isEmpty {
-                    explicitColors = true
-                } else if key == "config-file", !value.isEmpty {
-                    var include = value
-                    if include.hasPrefix("?") { include.removeFirst() }
-                    include = (include as NSString).expandingTildeInPath
-                    let target = include.hasPrefix("/")
-                        ? URL(fileURLWithPath: include)
-                        : url.deletingLastPathComponent().appendingPathComponent(include)
-                    read(target)
+                } else if GhosttiesThemeProbe.colorKeys.contains(key) {
+                    // An empty value resets the key to its default.
+                    if value.isEmpty { explicitKeys.remove(key) } else { explicitKeys.insert(key) }
+                } else if key == "config-file" {
+                    queueInclude(value, from: url)
                 }
             }
+        }
+
+        /// `RepeatablePath.parseCLI` + `Path.parse`: an empty value clears
+        /// the queue; the optional `?` comes off before the quotes; a value
+        /// empty after that is ignored. A relative path resolves against the
+        /// including file's directory, `~/` against home.
+        private mutating func queueInclude(_ raw: String, from file: URL) {
+            guard !raw.isEmpty else {
+                includes.removeAll()
+                return
+            }
+            var path = raw
+            if path.hasPrefix("?") { path.removeFirst() }
+            path = Self.unquote(path)
+            guard !path.isEmpty else { return }
+            let target: URL
+            if path.hasPrefix("/") {
+                target = URL(fileURLWithPath: path)
+            } else if path.hasPrefix("~/") {
+                target = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(String(path.dropFirst(2)))
+            } else {
+                target = file.deletingLastPathComponent().appendingPathComponent(path)
+            }
+            includes.append(target)
         }
 
         private static func unquote(_ s: String) -> String {
