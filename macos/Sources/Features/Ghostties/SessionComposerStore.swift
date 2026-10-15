@@ -48,18 +48,33 @@ final class SessionComposerStore: ObservableObject {
     /// silently writing real app state (`.standard`) — see that initializer.
     private let defaults: UserDefaults
 
+    /// The theme picker `theme` / `/theme` turns the composer into. Owned
+    /// here so closing the composer by any route reverts its live preview
+    /// (`isOpen`'s `didSet`).
+    let themePicker: ComposerThemePickerModel
+
+    /// The live picker: previews through `Ghostty.App`'s reload and stores
+    /// picks where Settings > Appearance does.
+    private static func liveThemePicker() -> ComposerThemePickerModel {
+        ComposerThemePickerModel(defaults: GhosttiesThemePicks.appDefaults) { picks in
+            MainActor.assumeIsolated { ComposerThemeReload.live(picks) }
+        }
+    }
+
     private init() {
         #if DEBUG
         self.defaults = CaptureFixture.defaults(fixtureActive: CaptureFixture.isActive)
         #else
         self.defaults = .standard
         #endif
+        self.themePicker = Self.liveThemePicker()
     }
 
     #if DEBUG
     /// Same resolution `shared` uses, with fixture mode injectable.
     init(captureFixtureActive: Bool) {
         self.defaults = CaptureFixture.defaults(fixtureActive: captureFixtureActive)
+        self.themePicker = Self.liveThemePicker()
     }
 
     /// The domain this store persists through.
@@ -69,6 +84,7 @@ final class SessionComposerStore: ObservableObject {
     /// side-effects, and no risk of a test polluting real recents.
     init(isolatedForTesting: Void) {
         self.defaults = UserDefaults(suiteName: "ghostties.sessionComposerStore.test.\(UUID().uuidString)") ?? .standard
+        self.themePicker = ComposerThemePickerModel(defaults: defaults, reload: { _ in })
     }
 
     /// Same isolation as `init(isolatedForTesting:)`, but pinned to a
@@ -80,6 +96,7 @@ final class SessionComposerStore: ObservableObject {
     /// (`SessionComposerPinningTests`).
     init(isolatedForTesting suiteName: String) {
         self.defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        self.themePicker = ComposerThemePickerModel(defaults: defaults, reload: { _ in })
     }
 
     /// Test-only override for `precommit`'s session-dispatch call — see the
@@ -89,7 +106,13 @@ final class SessionComposerStore: ObservableObject {
 
     // MARK: - Visibility
 
-    @Published private(set) var isOpen: Bool = false
+    @Published private(set) var isOpen: Bool = false {
+        didSet {
+            // Every close (Esc, click outside, a commit, a teardown) drops a
+            // theme preview that wasn't committed.
+            if !isOpen { themePicker.reset() }
+        }
+    }
 
     /// The window that most recently opened the CENTERED composer overlay
     /// (Phase 3 review round 3, Blocker 3). This store is one process-wide

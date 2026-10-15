@@ -61,6 +61,9 @@ struct SessionComposerPalette: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
     @ObservedObject private var composerStore: SessionComposerStore
+    /// `theme` / `/theme` (`ComposerThemePickerModel`): the field's text
+    /// picks a theme instead of a session.
+    @ObservedObject private var themePicker: ComposerThemePickerModel
 
     /// `composerStore` defaults to the real process-wide singleton for
     /// every production call site (`SessionComposerOverlay`,
@@ -99,6 +102,7 @@ struct SessionComposerPalette: View {
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
+        self._themePicker = ObservedObject(wrappedValue: composerStore.themePicker)
         self.tuningDefaultsForTesting = tuningDefaultsForTesting
         self.resumeRelaunchForTesting = resumeRelaunchForTesting
         self.nowForTesting = nowForTesting
@@ -1172,7 +1176,8 @@ struct SessionComposerPalette: View {
             // branch, not a project name) fires either — this is the only
             // trigger that subsumes every case, since `searchText` changes
             // on every keystroke `query` does plus every one it drops.
-            .onChange(of: composerStore.searchText) { _ in
+            .onChange(of: composerStore.searchText) { text in
+                themePicker.sync(text: text, projectNames: store.projects.map(\.name))
                 reselectBestMatch()
                 resumeState.collapseSections()
             }
@@ -1291,7 +1296,7 @@ struct SessionComposerPalette: View {
     /// always open and centres as a whole.
     @ViewBuilder
     private var anchoredComposerCard: some View {
-        if resumeLayout == .list {
+        if resumeLayout == .list || themePicker.isActive {
             singleLineComposerCard
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(height: newStyleFieldLineHeight + 2 * singleLineVerticalPadding, alignment: .top)
@@ -1482,7 +1487,7 @@ struct SessionComposerPalette: View {
     /// The card's width: the width dial, widened by a quarter for A4's two
     /// columns so a resume row's title and meta both fit.
     private var composerCardWidth: CGFloat {
-        resumeLayout == .columns ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
+        resumeLayout == .columns && !themePicker.isActive ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
     }
 
     private var newStyleField: some View {
@@ -1508,16 +1513,23 @@ struct SessionComposerPalette: View {
                 rowHeight: newStyleFieldLineHeight,
                 focusTrigger: $composerStore.focusSearchFieldTrigger,
                 hasSelection: fieldHasSelection,
-                ghostFullPath: query.isEmpty ? "" : ghostFullPathForField,
-                horizontalArrowClaim: resumeLayout == .columns
-                    ? (resumeState.isResumeColumnFocused ? .left : .rightAtEnd)
-                    : .none
+                ghostFullPath: themePicker.ghostFullPath(typed: composerStore.searchText)
+                    ?? (query.isEmpty ? "" : ghostFullPathForField),
+                horizontalArrowClaim: fieldHorizontalArrowClaim
             ) { event in
                 handle(event)
             }
             .accessibilityLabel(ComposerGhostTextField.accessibilityFieldLabel)
         }
         .frame(width: newStyleFieldRenderWidth, height: newStyleFieldLineHeight)
+    }
+
+    /// ← / → move the theme grid's selection; otherwise the A4 column
+    /// switch, else the caret.
+    private var fieldHorizontalArrowClaim: ComposerGhostTextField.HorizontalArrowClaim {
+        if themePicker.isGridShown { return .both }
+        guard resumeLayout == .columns, !themePicker.isActive else { return .none }
+        return resumeState.isResumeColumnFocused ? .left : .rightAtEnd
     }
 
     /// The classic "no worktree found" message says "Use the create-branch
@@ -1605,13 +1617,30 @@ struct SessionComposerPalette: View {
             VStack(alignment: .leading, spacing: 8) {
                 newStyleField
                     .overlay(alignment: .trailing) { resumeHint }
-                newStyleStatusStrip
+                if themePicker.isChipsShown {
+                    ComposerThemeChips(model: themePicker, titleSize: rowTitleSize, onCommit: dismissComposer)
+                } else if !themePicker.isActive {
+                    newStyleStatusStrip
+                }
             }
             .padding(.vertical, singleLineVerticalPadding)
             .padding(.horizontal, singleLineHorizontalPadding)
-            resumeSurface
+            if themePicker.isGridShown {
+                ComposerThemeGrid(
+                    model: themePicker, width: composerCardWidth, titleSize: rowTitleSize, onCommit: dismissComposer
+                )
+                .transition(.composerRevealDown)
+            } else if !themePicker.isActive {
+                resumeSurface
+            }
         }
         .frame(width: composerCardWidth)
+        // C2's expand (the grid grows down from the field); none under
+        // Reduce Motion.
+        .animation(
+            reduceMotionEnabled ? nil : .timingCurve(0.2, 0.8, 0.2, 1, duration: 0.22),
+            value: themePicker.isGridShown
+        )
 
         let materialBackground = content
             .background(
@@ -1895,6 +1924,9 @@ struct SessionComposerPalette: View {
     /// that contradicted the plan's own legend (`↵ start · ⌥↵ start +
     /// reveal · esc cancel`) — deleted, not kept as a fallback.
     private func handle(_ event: ComposerGhostTextField.KeyboardEvent) {
+        // The theme picker owns the keys while the text is `theme …`.
+        if themePicker.isActive, handleTheme(event) { return }
+
         // Resume keys first (↓ reveals the list, Return on a resume row
         // resumes it); anything the resume state passes through falls to
         // the start handling below, unchanged.
@@ -1933,6 +1965,28 @@ struct SessionComposerPalette: View {
         case .acceptedGhost:
             witnessBeat = witnessBeat.next(.tabAccept)
         }
+    }
+
+    /// Theme mode: arrows move (and preview), Return stores the pick and
+    /// closes, Esc reverts and leaves theme mode with the composer open.
+    /// False for keys it leaves to `handle(_:)` (Tab's ghost-accept beat).
+    private func handleTheme(_ event: ComposerGhostTextField.KeyboardEvent) -> Bool {
+        switch event {
+        case .exit:
+            themePicker.reset()
+            composerStore.searchText = ""
+        case .submit, .submitNoMatch:
+            if themePicker.commit() {
+                dismissComposer()
+            } else {
+                triggerNoMatchFeedback()
+            }
+        case .move(let direction):
+            _ = themePicker.move(direction, columns: ComposerThemeGrid.columns(cardWidth: composerCardWidth))
+        case .acceptedGhost:
+            return false
+        }
+        return true
     }
 
     // MARK: - Resume
@@ -2019,6 +2073,7 @@ struct SessionComposerPalette: View {
 
     /// Return is live whenever whichever list owns the keyboard has a row.
     private var fieldHasSelection: Bool {
+        if themePicker.isActive { return themePicker.hasSelection }
         if resumeState.ownsKeyboard {
             return resumeState.selection(in: resumeKeyboardRowIDs) != nil
         }

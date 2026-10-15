@@ -1176,13 +1176,36 @@ class WorkspaceViewContainer: NSView {
     }
 
     #if DEBUG
+    /// `GHOSTTIES_CAPTURE_COMPOSER_TEXT` / `_THEME_SELECT` / `_THEME_BENCH`:
+    /// fills the just-opened composer and drives its theme picker through
+    /// the same calls typing and the arrow keys make.
+    private static func applyCaptureComposerText() {
+        guard let text = CaptureFixture.composerText else { return }
+        let composer = SessionComposerStore.shared
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            composer.searchText = text
+            guard let index = CaptureFixture.themeSelection else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                composer.themePicker.select(index)
+                guard let bench = CaptureFixture.themeBench else { return }
+                for step in 0..<bench.steps {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + bench.interval * Double(step + 1)) {
+                        _ = composer.themePicker.move(.right, columns: 3)
+                    }
+                }
+            }
+        }
+    }
+
     /// Capture-rig launch hooks that live on the container because it exists
     /// in every sidebar mode (the sidebar itself is unmounted when closed).
     /// Each calls the action its click or shortcut calls.
     private func triggerCaptureLaunchHooksIfNeeded() {
         if let hook = CaptureFixture.composerHook, CaptureFixture.claimHook("composer") {
+            CaptureFixture.applyThemePresentation()
             DispatchQueue.main.asyncAfter(deadline: .now() + hook.delay) { [weak self] in
                 guard let self else { return }
+                defer { Self.applyCaptureComposerText() }
                 switch hook.target {
                 case .open:
                     // The tray "+" (`SidebarTrayItems.sidebarTrayItems`).
