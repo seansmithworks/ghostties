@@ -1527,7 +1527,7 @@ struct SessionComposerPalette: View {
     /// ← / → move the theme grid's selection; otherwise the A4 column
     /// switch, else the caret.
     private var fieldHorizontalArrowClaim: ComposerGhostTextField.HorizontalArrowClaim {
-        if themePicker.isGridShown { return .both }
+        if themePicker.claimsHorizontalArrows { return .both }
         guard resumeLayout == .columns, !themePicker.isActive else { return .none }
         return resumeState.isResumeColumnFocused ? .left : .rightAtEnd
     }

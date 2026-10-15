@@ -3518,6 +3518,11 @@ class WorkspaceViewContainer: NSView {
     private func dismissComposerOverlayIfPresented() {
         guard composerOverlayHostingView.superview != nil else { return }
 
+        // Close the store (and revert a theme preview) here, not via the
+        // palette's `.onDisappear`, which only runs once the fade below
+        // finishes and the hosting view leaves the hierarchy.
+        SessionComposerStore.shared.closeForOverlayTeardown()
+
         // Blocker 3 (Phase 3 review round 3): clear ownership if this
         // window was the owner, so the next `presentComposerOverlay` call
         // (from any window) doesn't think a dismissed overlay is still live

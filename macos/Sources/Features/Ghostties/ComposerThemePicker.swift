@@ -28,8 +28,9 @@ enum ComposerThemeCommand: Equatable {
 
     /// An optional single leading `/`, then `theme` as the FIRST token (any
     /// case), then end of input or whitespace and a query. A bare word that
-    /// names a project (or, for a partial, starts one) is that project's,
-    /// never the picker's; a leading `/` is always the picker.
+    /// starts a project's name (`theme` for `themes-app`, `the` for
+    /// `thesis`) is that project's, never the picker's; a leading `/` is
+    /// always the picker.
     static func parse(_ text: String, projectNames: [String] = []) -> ComposerThemeCommand {
         var rest = Substring(text).drop(while: \.isWhitespace)
         let slashed = rest.first == "/"
@@ -39,14 +40,13 @@ enum ComposerThemeCommand: Equatable {
         let typed = token.lowercased()
         guard !typed.isEmpty else { return .none }
         let projects = projectNames.map { $0.lowercased() }
+        if !slashed, projects.contains(where: { $0.hasPrefix(typed) }) { return .none }
 
         if typed == word {
-            if !slashed, projects.contains(typed) { return .none }
             return .theme(query: tail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
         }
 
         guard tail.isEmpty, word.hasPrefix(typed), typed.count >= (slashed ? 1 : 3) else { return .none }
-        if !slashed, projects.contains(where: { $0.hasPrefix(typed) }) { return .none }
         return .partial(completion: String(word.dropFirst(typed.count)) + " ")
     }
 }

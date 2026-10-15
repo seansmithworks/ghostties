@@ -77,10 +77,22 @@ final class ComposerThemePickerModel: ObservableObject {
         isLockedByConfig ? [] : ComposerThemeMatcher.grid(query: query, families: families)
     }
 
+    /// C1's chips: one per family, in the matcher's ranking, each carrying
+    /// the theme that ranked it (its subtitle). A chip previews and commits
+    /// the family's pair, so what shows is what Return stores.
     var chipResults: [ThemeChoice] {
-        isLockedByConfig ? [] : ComposerThemeMatcher.chips(
-            query: query, families: families, applied: applied, appearance: appearance
+        guard !isLockedByConfig else { return [] }
+        let ranked = ComposerThemeMatcher.chips(
+            query: query, families: families, applied: applied, appearance: appearance, limit: .max
         )
+        var seen: Set<String> = []
+        return Array(ranked.filter { seen.insert($0.family).inserted }.prefix(Self.chipLimit))
+    }
+
+    static let chipLimit = 6
+
+    func family(named name: String) -> ThemeFamily? {
+        families.first { $0.name == name }
     }
 
     private var resultCount: Int {
@@ -91,6 +103,8 @@ final class ComposerThemePickerModel: ObservableObject {
     var hasSelection: Bool { isActive && resultCount > 0 }
 
     var isGridShown: Bool { isActive && presentation == .grid }
+    /// ← / → belong to the grid only while it has something to move between.
+    var claimsHorizontalArrows: Bool { isGridShown && hasSelection }
     var isChipsShown: Bool { isActive && presentation == .chips }
 
     /// The field's ghost path: what is typed plus the completion, or nil
@@ -107,7 +121,7 @@ final class ComposerThemePickerModel: ObservableObject {
             case .grid:
                 top = gridResults[safe: selection].map { [$0.themeName(for: appearance), $0.name] } ?? []
             case .chips:
-                top = chipResults[safe: selection].map { [$0.name] } ?? []
+                top = chipResults[safe: selection].map { [$0.name, $0.family] } ?? []
             }
             return typed + ComposerThemeMatcher.ghostSuffix(typed: typed, query: query, topNames: top)
         }
@@ -185,9 +199,16 @@ final class ComposerThemePickerModel: ObservableObject {
         showSelection()
     }
 
-    /// The pointer is over one theme (a thumbnail half, or a chip): preview
-    /// exactly that theme on either appearance. Nil hands back to the
-    /// selection.
+    /// The pointer is over a chip: preview its family's pair, the pick a
+    /// click stores.
+    func peekChip(_ choice: ThemeChoice) {
+        guard isActive, let picks = family(named: choice.family)?.picks else { return }
+        peekName = choice.name
+        preview.preview(light: picks.light, dark: picks.dark)
+    }
+
+    /// The pointer is over one thumbnail half: preview exactly that theme on
+    /// either appearance. Nil hands back to the selection.
     func peek(_ name: String?) {
         guard isActive else { return }
         peekName = name
@@ -217,7 +238,7 @@ final class ComposerThemePickerModel: ObservableObject {
             picks = family.picks
         case .chips:
             guard let choice = chipResults[safe: selection],
-                  let family = families.first(where: { $0.name == choice.family }) else { return false }
+                  let family = family(named: choice.family) else { return false }
             picks = family.picks
         }
         preview.commit(light: picks.light, dark: picks.dark)
@@ -248,9 +269,15 @@ final class ComposerThemePickerModel: ObservableObject {
             let picks = family.picks
             preview.preview(light: picks.light, dark: picks.dark)
         case .chips:
-            guard let choice = chipResults[safe: selection] else { return preview.revert() }
-            preview.preview(light: choice.name, dark: choice.name)
+            guard let choice = chipResults[safe: selection],
+                  let picks = family(named: choice.family)?.picks else { return preview.revert() }
+            preview.preview(light: picks.light, dark: picks.dark)
         }
+    }
+
+    /// The Settings banner's "Open Config File": `Ghostty.App.openConfig`.
+    func openConfig() {
+        (NSApp.delegate as? AppDelegate)?.ghostty.openConfig()
     }
 
     private static func familyName(for state: GhosttiesAppearanceState, in families: [ThemeFamily]) -> String? {
@@ -300,7 +327,30 @@ private struct ComposerThemeEmptyText: View {
 
 enum ComposerThemeCopy {
     static let noMatches = "No theme matches"
-    static let locked = "Your config sets colours directly, so a theme can't change them."
+    static let locked = "Your config sets colors directly, so a theme can't change them."
+    static let openConfig = "Open Config File"
+}
+
+/// The empty/locked line under the results: the message, plus the Settings
+/// banner's "Open Config File" when the user's config locks the theme.
+private struct ComposerThemeStatusLine: View {
+    @ObservedObject var model: ComposerThemePickerModel
+    let size: CGFloat
+    @ChromeScheme private var colorScheme
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            ComposerThemeEmptyText(
+                text: model.isLockedByConfig ? ComposerThemeCopy.locked : ComposerThemeCopy.noMatches,
+                size: size
+            )
+            if model.isLockedByConfig {
+                Button(ComposerThemeCopy.openConfig) { model.openConfig() }
+                    .buttonStyle(.link)
+                    .font(.system(size: size, weight: .medium))
+            }
+        }
+    }
 }
 
 // MARK: - C2: thumbnail grid
@@ -346,10 +396,7 @@ struct ComposerThemeGrid: View {
                 size: titleSize * 0.62
             )
             if results.isEmpty {
-                ComposerThemeEmptyText(
-                    text: model.isLockedByConfig ? ComposerThemeCopy.locked : ComposerThemeCopy.noMatches,
-                    size: labelSize
-                )
+                ComposerThemeStatusLine(model: model, size: labelSize)
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
                 .padding(.bottom, 16)
@@ -528,22 +575,22 @@ struct ComposerThemeChips: View {
         let chips = model.chipResults
         Group {
             if chips.isEmpty {
-                ComposerThemeEmptyText(
-                    text: model.isLockedByConfig ? ComposerThemeCopy.locked : ComposerThemeCopy.noMatches,
-                    size: labelSize
-                )
+                ComposerThemeStatusLine(model: model, size: labelSize)
             } else {
                 ComposerChipFlow(spacing: 8) {
                     ForEach(Array(chips.enumerated()), id: \.element.name) { index, choice in
                         ComposerThemeChip(
-                            preview: model.thumbnail(choice.name),
-                            name: choice.name,
+                            preview: model.thumbnail(
+                                model.family(named: choice.family)?.themeName(for: model.appearance) ?? choice.name
+                            ),
+                            family: choice.family,
+                            matched: choice.name,
                             isSelected: index == model.selection,
                             labelSize: labelSize
                         )
                         .onHover { inside in
                             if inside {
-                                model.peek(choice.name)
+                                model.peekChip(choice)
                             } else if model.peekName == choice.name {
                                 model.endHover()
                             }
@@ -561,9 +608,13 @@ struct ComposerThemeChips: View {
     }
 }
 
+/// One family as a chip: the swatch and name of the side that shows on
+/// this appearance, then the theme the query matched, in secondary ink
+/// (omitted when it is just the family's name).
 private struct ComposerThemeChip: View {
     let preview: ThemePreview
-    let name: String
+    let family: String
+    let matched: String
     let isSelected: Bool
     let labelSize: CGFloat
     @ChromeScheme private var colorScheme
@@ -575,10 +626,16 @@ private struct ComposerThemeChip: View {
                 .overlay(Circle().fill(preview.accents[3]).padding(3))
                 .overlay(Circle().strokeBorder(ComposerThemeInk.hairline, lineWidth: 1))
                 .frame(width: 12, height: 12)
-            Text(name)
+            Text(family)
                 .font(.system(size: labelSize))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+            if matched != family {
+                Text(matched)
+                    .font(.system(size: labelSize * 0.85))
+                    .foregroundStyle(ComposerThemeInk.secondary(colorScheme))
+                    .lineLimit(1)
+            }
         }
         .padding(.leading, 4)
         .padding(.trailing, 8)
@@ -594,7 +651,7 @@ private struct ComposerThemeChip: View {
         )
         .contentShape(Capsule(style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(name)
+        .accessibilityLabel(matched == family ? family : "\(family), \(matched)")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
     }
 }

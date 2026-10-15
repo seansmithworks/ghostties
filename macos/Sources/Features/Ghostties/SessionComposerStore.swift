@@ -94,9 +94,9 @@ final class SessionComposerStore: ObservableObject {
     /// UserDefaults suite the first one wrote to, which is what proves pin
     /// persistence is actually durable state and not an in-memory cache
     /// (`SessionComposerPinningTests`).
-    init(isolatedForTesting suiteName: String) {
+    init(isolatedForTesting suiteName: String, themePicker: ComposerThemePickerModel? = nil) {
         self.defaults = UserDefaults(suiteName: suiteName) ?? .standard
-        self.themePicker = ComposerThemePickerModel(defaults: defaults, reload: { _ in })
+        self.themePicker = themePicker ?? ComposerThemePickerModel(defaults: defaults, reload: { _ in })
     }
 
     /// Test-only override for `precommit`'s session-dispatch call — see the
@@ -655,6 +655,16 @@ final class SessionComposerStore: ObservableObject {
            let project = workspaceStore.projects.first(where: { $0.id == projectId }) {
             _Concurrency.Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
         }
+    }
+
+    /// The overlay is being torn down by its host (the app resigned active,
+    /// another window took the composer, the window went away): close the
+    /// composer and drop any theme preview, without waiting on SwiftUI's
+    /// `.onDisappear`. `cancel()` only when still open, so the host's own
+    /// `isOpen` sink (which calls back into the teardown) doesn't loop.
+    func closeForOverlayTeardown() {
+        if isOpen { cancel() }
+        themePicker.reset()
     }
 
     /// Close the composer without writing anything (Esc / cancel / popover
