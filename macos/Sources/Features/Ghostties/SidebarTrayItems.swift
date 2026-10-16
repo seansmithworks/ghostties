@@ -360,19 +360,18 @@ enum TrayGlassStyle {
             : SidebarDialTuning.trayCornerRadius(for: mode)
     }
 
-    static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
+    static func glassTint(_ look: Look, for colorScheme: ColorScheme, theme: ChromeTheme? = nil) -> Color? {
+        let theme = theme ?? .active(colorScheme)
         if colorScheme == .dark {
-            return Color(ChromeTheme.active(.dark).chrome).opacity(look.tintOpacity)
+            return Color(theme.trayFill).opacity(look.tintOpacity)
         }
-        return look.tintOpacity > 0 ? Color.white.opacity(look.tintOpacity) : nil
+        return look.tintOpacity > 0 ? Color(theme.trayFill).opacity(look.tintOpacity) : nil
     }
 
     /// The layer over the glass, and the whole fill on the opaque fallback
     /// (pre-26 / Reduce Transparency / tests).
-    static func surfaceFill(_ look: Look, for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(ChromeTheme.active(.dark).chrome).opacity(look.surfaceOpacity)
-            : Color.white.opacity(look.surfaceOpacity)
+    static func surfaceFill(_ look: Look, for colorScheme: ColorScheme, theme: ChromeTheme? = nil) -> Color {
+        Color((theme ?? .active(colorScheme)).trayFill).opacity(look.surfaceOpacity)
     }
 
     /// The glass rim: white in light, the chrome lifted one `border` step
