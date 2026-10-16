@@ -291,6 +291,8 @@ struct ThemePreview {
 /// gray track, drawn in SwiftUI so no window state (key, accent) can tint it.
 /// Track is `quaternaryLabelColor` (black ~10% in light, white ~10% in dark);
 /// the pill is `controlColor` (white in light, a lighter gray in dark).
+/// Segments share the widest label's width, as system segmented controls do.
+/// The whole control is one focus stop; left/right arrows move the selection.
 private struct NeutralSegmentedControl<Value: Hashable>: View {
     let options: [(title: String, value: Value)]
     @Binding var selection: Value
@@ -312,32 +314,49 @@ private struct NeutralSegmentedControl<Value: Hashable>: View {
         )
         .opacity(isEnabled ? 1 : 0.5)
         .accessibilityElement(children: .contain)
+        .focusable(isEnabled)
+        .onMoveCommand { direction in
+            guard let current = options.firstIndex(where: { $0.value == selection }) else { return }
+            switch direction {
+            case .left: select(options[max(current - 1, 0)].value)
+            case .right: select(options[min(current + 1, options.count - 1)].value)
+            default: break
+            }
+        }
+    }
+
+    private func select(_ value: Value) {
+        guard isEnabled, value != selection else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.9)) {
+            selection = value
+        }
     }
 
     private func segment(_ option: (title: String, value: Value)) -> some View {
         let selected = option.value == selection
-        return Button {
-            withAnimation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.9)) {
-                selection = option.value
-            }
-        } label: {
+        return ZStack {
+            // Every label, hidden, sizes each segment to the widest one.
+            ForEach(options.indices, id: \.self) { Text(options[$0].title).hidden() }
             Text(option.title)
-                .font(.system(size: 13))
-                .foregroundStyle(.primary)
-                .padding(.vertical, 3)
-                .padding(.horizontal, 12)
-                .background {
-                    if selected {
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color(nsColor: .controlColor))
-                            .shadow(color: Color(nsColor: .shadowColor).opacity(0.15), radius: 1, y: 1)
-                            .matchedGeometryEffect(id: "pill", in: pill)
-                    }
-                }
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .font(.system(size: 13))
+        .foregroundStyle(.primary)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 12)
+        .background {
+            if selected {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(nsColor: .controlColor))
+                    .shadow(color: Color(nsColor: .shadowColor).opacity(0.15), radius: 1, y: 1)
+                    .matchedGeometryEffect(id: "pill", in: pill)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { select(option.value) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { select(option.value) }
     }
 }
 
