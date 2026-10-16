@@ -97,16 +97,18 @@ struct ChromeTheme {
         trayFill: .white
     )
 
+    private static let ghosttiesDarkChrome = NSColor(white: 0.14, alpha: 1)
+
     private static let ghosttiesDark = ChromeTheme(
         polarity: .dark,
         canvas: ThemeFile.background(named: "Ghostties Dark"),
-        chrome: NSColor(white: 0.14, alpha: 1),
+        chrome: ghosttiesDarkChrome,
         ink: .white,
         inkSecondary: NSColor(srgbRed: 0xA6 / 255.0, green: 0xA6 / 255.0, blue: 0xA6 / 255.0, alpha: 1),
         shadow: NSColor(red: 1, green: 1, blue: 1, alpha: 1),
         tileInk: NSColor(srgbRed: 0xF0 / 255.0, green: 0xEF / 255.0, blue: 0xED / 255.0, alpha: 1),
         tileFillBase: .white,
-        trayFill: NSColor(white: 0.14, alpha: 1)
+        trayFill: ghosttiesDarkChrome
     )
 
     // MARK: Derived
