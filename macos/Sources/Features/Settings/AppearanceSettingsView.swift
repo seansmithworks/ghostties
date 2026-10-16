@@ -287,42 +287,57 @@ struct ThemePreview {
 
 // MARK: - Views
 
-/// A segmented control whose selected segment is the neutral raised pill
-/// (the Finder toolbar look) instead of SwiftUI's accent-filled one.
-/// The selection bezel is pinned to `NSColor.controlColor` (white in light,
-/// a lighter gray in dark) so a key window cannot turn it accent blue.
-private struct NeutralSegmentedControl<Value: Hashable>: NSViewRepresentable {
+/// A segmented control whose selected segment is a neutral raised pill on a
+/// gray track, drawn in SwiftUI so no window state (key, accent) can tint it.
+/// Track is `quaternaryLabelColor` (black ~10% in light, white ~10% in dark);
+/// the pill is `controlColor` (white in light, a lighter gray in dark).
+private struct NeutralSegmentedControl<Value: Hashable>: View {
     let options: [(title: String, value: Value)]
     @Binding var selection: Value
 
-    func makeNSView(context: Context) -> NSSegmentedControl {
-        let control = NSSegmentedControl(
-            labels: options.map(\.title),
-            trackingMode: .selectOne,
-            target: context.coordinator,
-            action: #selector(Coordinator.changed(_:))
-        )
-        control.segmentStyle = .texturedRounded
-        control.selectedSegmentBezelColor = .controlColor
-        return control
-    }
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var pill
 
-    func updateNSView(_ control: NSSegmentedControl, context: Context) {
-        context.coordinator.parent = self
-        control.isEnabled = context.environment.isEnabled
-        control.selectedSegment = options.firstIndex { $0.value == selection } ?? -1
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    final class Coordinator: NSObject {
-        var parent: NeutralSegmentedControl
-        init(_ parent: NeutralSegmentedControl) { self.parent = parent }
-
-        @objc func changed(_ sender: NSSegmentedControl) {
-            guard parent.options.indices.contains(sender.selectedSegment) else { return }
-            parent.selection = parent.options[sender.selectedSegment].value
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options.indices, id: \.self) { index in
+                segment(options[index])
+            }
         }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color(nsColor: .quaternaryLabelColor))
+        )
+        .opacity(isEnabled ? 1 : 0.5)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func segment(_ option: (title: String, value: Value)) -> some View {
+        let selected = option.value == selection
+        return Button {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.9)) {
+                selection = option.value
+            }
+        } label: {
+            Text(option.title)
+                .font(.system(size: 13))
+                .foregroundStyle(.primary)
+                .padding(.vertical, 3)
+                .padding(.horizontal, 12)
+                .background {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color(nsColor: .controlColor))
+                            .shadow(color: Color(nsColor: .shadowColor).opacity(0.15), radius: 1, y: 1)
+                            .matchedGeometryEffect(id: "pill", in: pill)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
