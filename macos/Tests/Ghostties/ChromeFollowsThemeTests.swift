@@ -181,7 +181,7 @@ struct ChromeFollowsThemeTests {
         let (theme, _) = try resolved("theme = Dracula")
         let fields = Set(Mirror(reflecting: theme).children.compactMap(\.label))
         #expect(fields == [
-            "polarity", "canvas", "chrome", "ink", "inkSecondary", "shadow", "tileInk", "tileFillBase",
+            "polarity", "canvas", "chrome", "ink", "inkSecondary", "shadow", "tileInk", "tileFillBase", "trayFill",
         ])
     }
 }
