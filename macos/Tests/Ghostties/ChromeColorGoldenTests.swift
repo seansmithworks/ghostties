@@ -101,7 +101,7 @@ struct ChromeColorGoldenTests {
         // Tiles, chips, rows, cards.
         add("tile.fill") { rgba(SidebarColors.tileFill($0, defaults: d), $0) }
         add("tile.fillEmpty") { rgba(SidebarColors.tileFill($0, isEmpty: true, defaults: d), $0) }
-        add("tile.ink") { rgba(SidebarColors.tileInk($0, defaults: d), $0) }
+        add("tile.ink") { rgba(RailProjectTile.ink($0), $0) }
         add("tile.selectedRowTint") { rgba(SidebarColors.selectedRowTint($0, defaults: d), $0) }
         add("tile.tintInk") { rgba(RailProjectColumn.tintInk($0), $0) }
         add("tile.badgeText") { rgba(RailProjectTile.badgeText($0), $0) }
@@ -304,8 +304,6 @@ struct ChromeColorGoldenTests {
         "dialkit.sidebar.selectedRowTint|light": [0.0, 0.0, 0.0, 0.1],
         "dialkit.sidebar.tileFill|dark": [1.0, 1.0, 1.0, 0.07],
         "dialkit.sidebar.tileFill|light": [0.157, 0.133, 0.118, 0.1],
-        "dialkit.sidebar.tileInk|dark": [0.941, 0.937, 0.929, 1.0],
-        "dialkit.sidebar.tileInk|light": [0.137, 0.129, 0.125, 1.0],
         "row.active|dark": [1.0, 1.0, 1.0, 0.06],
         "row.active|light": [0.0, 0.0, 0.0, 0.04],
         "row.composerSelected|dark": [1.0, 1.0, 1.0, 0.1],
@@ -368,8 +366,8 @@ struct ChromeColorGoldenTests {
         "tile.fillEmpty|light": [0.157, 0.133, 0.118, 0.085],
         "tile.fill|dark": [1.0, 1.0, 1.0, 0.07],
         "tile.fill|light": [0.157, 0.133, 0.118, 0.1],
-        "tile.ink|dark": [0.941, 0.937, 0.929, 1.0],
-        "tile.ink|light": [0.137, 0.129, 0.125, 1.0],
+        "tile.ink|dark": [1.0, 1.0, 1.0, 1.0],
+        "tile.ink|light": [0.0, 0.0, 0.0, 1.0],
         "tile.selectedRowTint|dark": [1.0, 1.0, 1.0, 0.1],
         "tile.selectedRowTint|light": [0.0, 0.0, 0.0, 0.1],
         "tile.tintInk|dark": [1.0, 1.0, 1.0, 1.0],

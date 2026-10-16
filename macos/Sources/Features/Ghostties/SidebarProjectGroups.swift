@@ -642,7 +642,7 @@ enum RailCountBadge {
     static func style(selected _: Bool, colorScheme: ColorScheme) -> Style {
         let theme = ChromeTheme.active(colorScheme)
         let dark = colorScheme == .dark
-        // Tile ink at 12% (dark) / 14% (light) over the base, every theme.
+        // Ink at 12% (dark) / 14% (light) over the base, every theme.
         let alpha = dark ? 0.12 : 0.14
         let base: UInt32
         if ChromeTheme.activeIsGhostties(colorScheme) {
@@ -654,7 +654,7 @@ enum RailCountBadge {
             func byte(_ v: CGFloat, _ shift: UInt32) -> UInt32 { UInt32((v * 255).rounded()) << shift }
             base = byte(chrome.redComponent, 16) | byte(chrome.greenComponent, 8) | byte(chrome.blueComponent, 0)
         }
-        return Style(fill: blend(ink: theme.tileInk, over: base, alpha: alpha), text: theme.inkSecondaryColor)
+        return Style(fill: blend(ink: theme.ink, over: base, alpha: alpha), text: theme.inkSecondaryColor)
     }
 
     /// `ink` at `alpha` over `base`, flattened to one opaque colour.
@@ -709,7 +709,7 @@ enum RailProjectTile {
     static let emptyTintOpacity: Double = 0.085
 
     static func ink(_ colorScheme: ColorScheme) -> Color {
-        SidebarColors.tileInk(colorScheme)
+        Color(ChromeTheme.active(colorScheme).ink)
     }
     static func badgeText(_ colorScheme: ColorScheme) -> Color {
         Color(nsColor: SidebarColors.background(colorScheme))

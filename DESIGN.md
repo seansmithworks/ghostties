@@ -127,7 +127,7 @@ Named steps on those five:
 - `Step.row` ink at 4% (light) / 6% (dark): the active and hovered session row. `Step.composerRow` 6% / 10%: the highlighted row in the Cmd+T composer. `Step.tile` 7%: a project tile's plain fill in dark.
 - `Lift.container` and `Lift.border`: the chrome lifted toward white. `container` is the expanded project group's surface (white in light, `0.16` grey in dark); `border` is the tray glass's rim (`#2A2A2A` in dark).
 
-Two values sit outside the five because no step of them reproduces the shipped colour: `tileInk` (`#232120` / `#F0EFED`, a project tile's monogram and the selected project's fill) and `tileFillBase` (`#28221E`, the light tile fill's base). Each is a candidate to merge into `ink` when a design pass allows a visible shift.
+One value sits outside the five because no step of them reproduces the shipped colour: `tileFillBase` (`#28221E`, the light tile fill's base), a candidate to merge into `ink` when a design pass allows a visible shift. A project tile's monogram and the selected project's fill are plain `ink` (`#000000` / `#FFFFFF`); the separate `tileInk` (`#232120` / `#F0EFED`) was merged into it.
 
 ### Chrome follows the terminal theme
 
@@ -140,7 +140,7 @@ The whole window follows the active terminal theme: canvas, chrome, sidebar text
   - `chrome`: the background moved in OKLab lightness by the Ghostties pair's own chrome-from-canvas step (darker in light, lighter in dark)
   - `ink`: the foreground, pushed toward black or white until it clears 7:1 on canvas, chrome and the group card
   - `inkSecondary`: ink mixed toward the chrome as far as it can go while it clears 4.6:1 on the chrome, the group card, and the row and tile washes
-  - `shadow`: the Ghostties pair's, by polarity; `tileInk` and `tileFillBase` are `ink`
+  - `shadow`: the Ghostties pair's, by polarity; `tileFillBase` is `ink`
 - A derived theme's primary text is its `ink`; the Ghostties pair keeps the system label colour.
 - A mid-tone background (4 of the bundled themes, e.g. Grass, Hot Dog Stand) cannot reach the floors even with pure white or black text; the derivation then uses pure white or black.
 
