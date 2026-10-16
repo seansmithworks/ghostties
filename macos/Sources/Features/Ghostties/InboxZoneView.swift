@@ -49,7 +49,7 @@ struct InboxZoneView: View {
     @AppStorage("ghostties.defaultTaskTemplate") private var defaultTaskTemplate: String = ""
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// SEA-215: Read the pre-sorted array from the store instead of sorting
     /// inline. `TaskStore.recomputeLanes()` performs the O(n log n) sort once
@@ -237,7 +237,7 @@ struct InboxZoneView: View {
 
             Text("Click anywhere here to start a new task.")
                 .font(.system(size: 10.5))
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                 .multilineTextAlignment(.center)
 
             // SG-03: first-run hint — shown only when every lane is empty.
@@ -276,11 +276,11 @@ struct InboxZoneView: View {
             Text("Inbox".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Text("· \(rows.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
         }

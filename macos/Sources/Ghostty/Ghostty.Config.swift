@@ -479,6 +479,24 @@ extension Ghostty {
             )
         }
 
+        // MARK: - Ghostties fork fence (chrome follows the terminal theme)
+        /// The resolved `foreground`, read like `backgroundColor`; the chrome
+        /// derives its ink from it (`ChromeThemeStore`).
+        var foregroundColor: Color {
+            var color: ghostty_config_color_s = .init()
+            let fg_key = "foreground"
+            if !ghostty_config_get(config, &color, fg_key, UInt(fg_key.lengthOfBytes(using: .utf8))) {
+                return Color(NSColor.textColor)
+            }
+
+            return .init(
+                red: Double(color.r) / 255,
+                green: Double(color.g) / 255,
+                blue: Double(color.b) / 255
+            )
+        }
+        // MARK: - End Ghostties fork fence (chrome follows the terminal theme)
+
         var backgroundOpacity: Double {
             guard let config = self.config else { return 1 }
             var v: Double = 1

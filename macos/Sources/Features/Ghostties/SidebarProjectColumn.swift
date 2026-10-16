@@ -86,7 +86,7 @@ enum RailProjectColumn {
     /// canvas's alpha. (`Color.primary` is 85% black in light, which drew
     /// option D's 10% chip at 8.5%.)
     static func tintInk(_ colorScheme: ColorScheme) -> Color {
-        Color(ChromeTheme.ghostties(colorScheme).ink)
+        Color(ChromeTheme.active(colorScheme).ink)
     }
 
     /// The group the column marks: the one holding the selected session,
@@ -225,7 +225,7 @@ private struct ProjectGroupCardShape: View, Animatable {
     /// metrics measure from.
     let originX: CGFloat
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var animatableData: CGFloat {
         get { progress }
@@ -270,7 +270,7 @@ struct SidebarRowChipBackground: View {
     var redlineID: String? = nil
 
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @Environment(\.sidebarSelectionChipNamespace) private var selectionNamespace
 
     var body: some View {

@@ -775,36 +775,43 @@ class WorkspaceViewContainer: NSView {
         return effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
     }
 
-    /// `sidebarHostingView`'s appearance: pinned to the overlay fill's
-    /// luminance in overlay mode, and nil (follow the window) in every other
-    /// mode. (The DEBUG appearance preview sets the whole app's appearance,
-    /// so the window carries it here.)
+    /// `sidebarHostingView`'s appearance: pinned to `chromeScheme` (the
+    /// theme's polarity, the same rule as the container's own appearance) in
+    /// overlay mode, and nil (follow the container) in every other mode.
+    /// (The DEBUG appearance preview sets the whole app's appearance, so the
+    /// window carries it here.)
     private var sidebarAppearanceOverride: NSAppearance? {
         return sidebarMode == .overlay
-            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
+            ? NSAppearance(named: chromeScheme == .dark ? .darkAqua : .aqua)
             : nil
     }
 
-    /// Canvas palette color for the current OS appearance. The canvas layer
-    /// covers the terminal card background (internal header strip + card rim
-    /// around the GPU-rendered terminal area). Owned by the Ghostties design
-    /// system — intentionally independent of terminal theme.
+    /// The side the chrome draws on: the active theme's polarity, read from
+    /// the store rather than `effectiveAppearance` so a repaint in the same
+    /// pass as a theme change never reads the previous appearance. The
+    /// window's appearance before a config has loaded (and in unit tests).
+    private var chromeScheme: ColorScheme {
+        ChromeThemeStore.shared.current?.polarity.colorScheme ?? (isLightAppearance ? .light : .dark)
+    }
+
+    /// Canvas colour of the active theme (`ChromeTheme.canvas`: the
+    /// terminal's own background). The canvas layer covers the terminal card
+    /// background (internal header strip + card rim around the GPU-rendered
+    /// terminal area).
     private var canvasPaletteNSColor: NSColor {
-        CanvasStyle.background(isLightAppearance ? .light : .dark)
+        CanvasStyle.background(chromeScheme)
     }
 
-    /// Chrome palette color for the current OS appearance. The chrome layer
-    /// covers the left sidebar column and the gutter padding around the
-    /// terminal card. Owned by the Ghostties design system — intentionally
-    /// independent of terminal theme.
+    /// Chrome colour of the active theme (`ChromeTheme.chrome`). The chrome
+    /// layer covers the left sidebar column and the gutter padding around
+    /// the terminal card.
     private var chromePaletteNSColor: NSColor {
-        SidebarColors.background(isLightAppearance ? .light : .dark)
+        SidebarColors.background(chromeScheme)
     }
 
-    /// Terminal card background — the canvas layer. Always the Ghostties
-    /// canvas palette; terminal theme is intentionally NOT bound here. The
-    /// terminal content area inside the card is still painted by GhosttyKit
-    /// (its theme system owns that rectangle).
+    /// Terminal card background — the canvas layer, the terminal theme's
+    /// background. The terminal content area inside the card is painted by
+    /// GhosttyKit (its theme system owns that rectangle).
     private var cardBackgroundCGColor: CGColor {
         canvasPaletteNSColor.cgColor
     }
@@ -816,30 +823,16 @@ class WorkspaceViewContainer: NSView {
     }
 
     /// Outer workspace canvas behind the sidebar and the gutter around the
-    /// terminal card — the chrome layer. Always the Ghostties chrome palette;
-    /// terminal theme is intentionally NOT bound here.
+    /// terminal card — the chrome layer, the active theme's chrome.
     private var canvasBackgroundCGColor: CGColor {
         chromePaletteNSColor.cgColor
     }
 
     /// Overlay panel fill (beta.26, Sean): the pinned sidebar's chrome
-    /// (`ChromeTheme.chrome`), resolved for the current OS
-    /// appearance. Was the focused terminal's own background. Re-read on
-    /// every appearance change (`viewDidChangeEffectiveAppearance`).
+    /// (`ChromeTheme.chrome`) of the active theme. Re-read on every theme
+    /// and appearance change (`applyChromeColor`).
     private var overlayBackgroundNSColor: NSColor {
-        ChromeTheme.ghostties(isLightAppearance ? .light : .dark).chrome
-    }
-
-    /// Whether `overlayBackgroundNSColor` reads as dark, so the overlay's
-    /// SwiftUI content (`sidebarHostingView`) should render its dark-token
-    /// (light-on-dark) text/icon set instead of the light-token one — kept
-    /// legible against a dark terminal theme even when the OS is in light
-    /// mode. Threshold is the standard WCAG-adjacent 0.5 midpoint on
-    /// perceptual (ITU-R BT.601) luminance.
-    private var overlayBackgroundIsDark: Bool {
-        guard let rgb = overlayBackgroundNSColor.usingColorSpace(.deviceRGB) else { return !isLightAppearance }
-        let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
-        return luminance < 0.5
+        ChromeTheme.active(chromeScheme).chrome
     }
 
     init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil, store: WorkspaceStore = .shared) {
@@ -912,6 +905,37 @@ class WorkspaceViewContainer: NSView {
             name: SidebarDialTuning.didChangeNotification,
             object: nil
         )
+
+        // The chrome follows the terminal theme: repaint when it changes.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(chromeThemeDidChange),
+            name: ChromeThemeStore.didChange,
+            object: ChromeThemeStore.shared
+        )
+        applyChromeTheme()
+    }
+
+    @objc private func chromeThemeDidChange() {
+        applyChromeTheme()
+    }
+
+    /// The one repaint for a theme change. The window's content takes the
+    /// theme's polarity as its appearance, so every SwiftUI and AppKit token
+    /// below resolves on the theme's side whatever the Mac's appearance is.
+    /// Then the layers repaint and the card shadows re-cast: AppKit zeroes a
+    /// card's `shadowOpacity` when its appearance changes (#240), and a theme
+    /// change can be one.
+    ///
+    /// Ordering: `ChromeThemeStore` updates synchronously inside the config
+    /// change that a light/dark flip triggers, before the run loop draws, and
+    /// this container's colours read the store, not its appearance, so no
+    /// frame shows the old theme's chrome.
+    private func applyChromeTheme() {
+        appearance = ChromeThemeStore.shared.current?.polarity.appearance
+        applyChromeColor()
+        terminalShadowHost.applyShadow()
+        browserShadowHost.applyShadow()
     }
 
     @objc private func sidebarDialsChanged() {
@@ -1262,20 +1286,11 @@ class WorkspaceViewContainer: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        // The hover bar's chrome fill is a resolved `cgColor`: repaint it
-        // in every mode, overlay included, or it keeps the old appearance.
-        sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
-        sidebarHostingView.appearance = sidebarAppearanceOverride
-        guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
-        // Canvas still follows OS light/dark — it's Ghostties chrome, not
-        // terminal content.
-        layer?.backgroundColor = canvasBackgroundCGColor
-        // Terminal card follows the focused surface's theme when available;
-        // the resolver handles the light/dark fallback itself.
-        terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
-        // Browser card has no theme concept — always the light/dark fallback.
-        browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-        railRevealBacking.layer?.backgroundColor = canvasBackgroundCGColor
+        // The layer colours are resolved `cgColor`s: repaint them, the hover
+        // bar's included, or they keep the old appearance. Same repaint as a
+        // theme change; with a theme loaded this only runs when the theme's
+        // polarity moves the forced appearance (or on attaching to a window).
+        applyChromeColor()
     }
 
     /// Zero out safe area insets so Auto Layout constraints measure from
@@ -2348,8 +2363,8 @@ class WorkspaceViewContainer: NSView {
 
         // Re-derive the overlay's text/icon legibility override — only
         // overlay mode needs `sidebarHostingView`'s appearance pinned to
-        // `overlayBackgroundNSColor`'s luminance; every other mode must
-        // clear it and fall back to the OS appearance.
+        // the theme's polarity; every other mode must clear it and follow
+        // the container (the same polarity).
         applyChromeColor()
 
         let inset = SidebarDialTuning.windowMargin()
@@ -4055,24 +4070,23 @@ class WorkspaceViewContainer: NSView {
     }
 
     /// Repaint the chrome/canvas layers and the reveal overlay panel. The
-    /// terminal/browser cards and the outer layer use the static Ghostties
-    /// design-system palette (canvas/chrome tone) — terminal theme is
-    /// intentionally NOT bound there. The focused-surface Combine
-    /// subscription still drives this on session swaps and config changes —
-    /// for those three layers it's effectively a no-op repaint with static
-    /// tokens, but left in place to preserve the session-swap invalidation
-    /// path with minimal churn.
+    /// terminal/browser cards and the outer layer use the active theme's
+    /// canvas and chrome (`ChromeThemeStore`); `applyChromeTheme` drives this
+    /// on a theme change. The focused-surface Combine subscription still
+    /// drives it on session swaps and config changes — for those layers it's
+    /// effectively a no-op repaint, left in place to preserve the
+    /// session-swap invalidation path with minimal churn.
     ///
     /// The reveal overlay panel (`sidebarOverlayBackground`) always
     /// repaints here, in every mode, with `overlayBackgroundNSColor` — the
     /// pinned sidebar's chrome (beta.26) — so it's already correct the next
     /// time overlay mode shows it. `sidebarHostingView`'s
-    /// appearance is overridden to match that same fill's luminance while
+    /// appearance is pinned to the theme's polarity (`chromeScheme`) while
     /// overlay mode is active, so its SwiftUI text/icon tokens
     /// (`ChromeTheme.inkSecondary` and friends, which read
-    /// `@Environment(\.colorScheme)`) stay legible against it; outside
-    /// overlay mode the override is cleared so the sidebar follows the OS
-    /// appearance as usual.
+    /// `@ChromeScheme`) resolve on the same side as that fill; outside
+    /// overlay mode the override is cleared and the sidebar follows the
+    /// container, whose appearance is the same theme polarity.
     ///
     /// The rest of this function no-ops in overlay mode, which intentionally
     /// clears the card/canvas layers to let the vibrancy material show
@@ -4136,7 +4150,8 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
 /// from `NSView.shadow` — nil here — which zeroes `layer.shadowOpacity`. That
 /// reset runs on this view after any ancestor's appearance callback, so only
 /// the view itself can re-apply in time; it does so in
-/// `viewDidChangeEffectiveAppearance`.
+/// `viewDidChangeEffectiveAppearance`. The container also re-applies on
+/// every theme change (`applyChromeTheme`).
 private final class CardShadowHostView: NSView {
     /// Whether the card casts its shadow. Mode transitions and the browser
     /// toggle set this.
@@ -4158,10 +4173,13 @@ private final class CardShadowHostView: NSView {
         applyShadow()
     }
 
-    /// Also called on a live "Canvas" dial change (DEBUG).
+    /// Also called on a theme change and a live "Canvas" dial change (DEBUG).
+    /// The side is the active theme's polarity (the store, not
+    /// `effectiveAppearance`, which can lag the forced appearance by a pass).
     func applyShadow() {
         guard let layer else { return }
-        let scheme: ColorScheme = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+        let scheme: ColorScheme = ChromeThemeStore.shared.current?.polarity.colorScheme
+            ?? (effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light)
         layer.shadowColor = CanvasStyle.shadowColor(scheme)
         layer.shadowRadius = CanvasStyle.shadowRadius(scheme)
         layer.shadowOffset = CanvasStyle.shadowOffset(scheme)

@@ -205,7 +205,7 @@ struct SidebarListRowTitle: View {
     let isActive: Bool
 
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         Text(text)
@@ -245,7 +245,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     /// The status glyph at a given side (the morph's size for this frame).
     @ViewBuilder let glyph: (CGFloat) -> Glyph
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials

@@ -314,8 +314,8 @@ enum WorkspaceLayout {
     /// is primary ink, an empty one's is this secondary grey.
     static let emptyProjectForeground = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? ChromeTheme.ghostties(.dark).inkSecondary
-            : ChromeTheme.ghostties(.light).inkSecondary
+            ? ChromeTheme.active(.dark).inkSecondary
+            : ChromeTheme.active(.light).inkSecondary
     })
 
     // MARK: - Sidebar Icon Column

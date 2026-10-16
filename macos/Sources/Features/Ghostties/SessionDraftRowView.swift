@@ -15,7 +15,7 @@ import SwiftUI
 struct SessionDraftRowView: View {
     let draft: SessionDraft
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @EnvironmentObject private var sessionDraftStore: SessionDraftStore
     @EnvironmentObject private var coordinator: SessionCoordinator
     @EnvironmentObject private var workspaceStore: WorkspaceStore
@@ -44,7 +44,7 @@ struct SessionDraftRowView: View {
 
                 Text(metaLine)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                    .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -55,7 +55,7 @@ struct SessionDraftRowView: View {
                 // Replaces the + Name affordance while we're editing.
                 Text("↵")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                    .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                     .padding(.top, 2)
             } else if isHovered {
                 promoteButton
@@ -64,7 +64,7 @@ struct SessionDraftRowView: View {
                 // shift when the hover button appears.
                 Text(trailingTime)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                    .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
                     .lineLimit(1)
                     .padding(.top, 2)
             }
@@ -200,7 +200,7 @@ struct SessionDraftRowView: View {
 
     private var hoverFill: Color {
         guard isHovered else { return .clear }
-        return ChromeTheme.ghostties(colorScheme).ink(.row)
+        return ChromeTheme.active(colorScheme).ink(.row)
     }
 
     private func relativeTime(from date: Date) -> String {

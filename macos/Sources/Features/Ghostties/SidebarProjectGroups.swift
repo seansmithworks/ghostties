@@ -348,7 +348,7 @@ struct ProjectAccordionHeader: View {
     static let chevronWidth: CGFloat = 18
     static let countMinWidth: CGFloat = 18
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
@@ -525,7 +525,7 @@ struct ProjectMonogramTileFace: View {
 
     /// Re-renders on every dial write; the fill reads "Selected tile fill".
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// Ink laid over the tile tint: 0 unselected, the dial when selected.
     private var inkFill: Double { isSelectedProject ? RailProjectColumn.selectedTileFill : 0 }
@@ -568,7 +568,7 @@ struct MorphTileFace: View, Animatable {
     /// The folded project's session count; nil while it is unfolded.
     let badgeCount: Int?
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var animatableData: CGFloat {
         get { progress }
@@ -630,12 +630,21 @@ enum RailCountBadge {
     }
 
     static func style(selected _: Bool, colorScheme: ColorScheme) -> Style {
-        let theme = ChromeTheme.ghostties(colorScheme)
-        return colorScheme == .dark
-            // Tile ink 12% over #3D3C3C.
-            ? Style(fill: blend(ink: theme.tileInk, over: 0x3D3C3C, alpha: 0.12), text: theme.inkSecondaryColor)
-            // Tile ink 14% over #D3CDCA.
-            : Style(fill: blend(ink: theme.tileInk, over: 0xD3CDCA, alpha: 0.14), text: theme.inkSecondaryColor)
+        let theme = ChromeTheme.active(colorScheme)
+        let dark = colorScheme == .dark
+        // Tile ink at 12% (dark) / 14% (light) over the base, every theme.
+        let alpha = dark ? 0.12 : 0.14
+        let base: UInt32
+        if ChromeTheme.activeIsGhostties(colorScheme) {
+            // The Ghostties pair's greys: #3D3C3C dark, #D3CDCA light.
+            base = dark ? 0x3D3C3C : 0xD3CDCA
+        } else {
+            // A theme the chrome derived: the same wash over its own chrome.
+            let chrome = theme.chrome.usingColorSpace(.sRGB) ?? theme.chrome
+            func byte(_ v: CGFloat, _ shift: UInt32) -> UInt32 { UInt32((v * 255).rounded()) << shift }
+            base = byte(chrome.redComponent, 16) | byte(chrome.greenComponent, 8) | byte(chrome.blueComponent, 0)
+        }
+        return Style(fill: blend(ink: theme.tileInk, over: base, alpha: alpha), text: theme.inkSecondaryColor)
     }
 
     /// `ink` at `alpha` over `base`, flattened to one opaque colour.

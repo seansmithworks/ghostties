@@ -18,36 +18,36 @@ enum CanvasStyle {
     /// The terminal and browser cards' fill (DESIGN.md `canvasBackground`).
     static func background(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> NSColor {
         #if DEBUG
-        if let tuned = CanvasTuning.hex(.background, scheme, defaults: defaults) { return tuned.nsColor }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = CanvasTuning.hex(.background, scheme, defaults: defaults) { return tuned.nsColor }
         #endif
-        return ChromeTheme.ghostties(scheme).canvas
+        return ChromeTheme.active(scheme).canvas
     }
 
     static func shadowColor(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> CGColor {
         #if DEBUG
-        if let tuned = CanvasTuning.hex(.shadowColor, scheme, defaults: defaults) { return tuned.nsColor.cgColor }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = CanvasTuning.hex(.shadowColor, scheme, defaults: defaults) { return tuned.nsColor.cgColor }
         #endif
-        return ChromeTheme.ghostties(scheme).shadow.cgColor
+        return ChromeTheme.active(scheme).shadow.cgColor
     }
 
     /// The opacity a card casts while it casts at all.
     static func shadowOpacity(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Double {
         #if DEBUG
-        if let tuned = CanvasTuning.number(.shadowOpacity, scheme, defaults: defaults) { return tuned }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = CanvasTuning.number(.shadowOpacity, scheme, defaults: defaults) { return tuned }
         #endif
         return WorkspaceLayout.canvasShadowOpacity
     }
 
     static func shadowRadius(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         #if DEBUG
-        if let tuned = CanvasTuning.number(.shadowRadius, scheme, defaults: defaults) { return CGFloat(tuned) }
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = CanvasTuning.number(.shadowRadius, scheme, defaults: defaults) { return CGFloat(tuned) }
         #endif
         return WorkspaceLayout.canvasShadowRadius
     }
 
     static func shadowOffset(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> CGSize {
         #if DEBUG
-        if let tuned = CanvasTuning.number(.shadowOffsetY, scheme, defaults: defaults) {
+        if ChromeTheme.activeIsGhostties(scheme), let tuned = CanvasTuning.number(.shadowOffsetY, scheme, defaults: defaults) {
             return CGSize(width: WorkspaceLayout.canvasShadowOffset.width, height: CGFloat(tuned))
         }
         #endif

@@ -362,7 +362,7 @@ enum TrayGlassStyle {
 
     static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
         if colorScheme == .dark {
-            return Color(ChromeTheme.ghostties(.dark).chrome).opacity(look.tintOpacity)
+            return Color(ChromeTheme.active(.dark).chrome).opacity(look.tintOpacity)
         }
         return look.tintOpacity > 0 ? Color.white.opacity(look.tintOpacity) : nil
     }
@@ -371,7 +371,7 @@ enum TrayGlassStyle {
     /// (pre-26 / Reduce Transparency / tests).
     static func surfaceFill(_ look: Look, for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
-            ? Color(ChromeTheme.ghostties(.dark).chrome).opacity(look.surfaceOpacity)
+            ? Color(ChromeTheme.active(.dark).chrome).opacity(look.surfaceOpacity)
             : Color.white.opacity(look.surfaceOpacity)
     }
 
@@ -380,7 +380,7 @@ enum TrayGlassStyle {
     /// dark-mode stroke, not a bright outline. The rim opacity and width
     /// dials scale it in both.
     static func rimColor(_ look: Look, for colorScheme: ColorScheme) -> Color {
-        Color(ChromeTheme.ghostties(colorScheme).lifted(.border)).opacity(look.rimOpacity)
+        Color(ChromeTheme.active(colorScheme).lifted(.border)).opacity(look.rimOpacity)
     }
 
     /// The opaque fallback's dark edge (Reduce Transparency / pre-26). That
@@ -401,7 +401,7 @@ enum TrayGlassStyle {
 
     /// Canvas icon fill: `ChromeTheme.inkSecondary`.
     static func iconColor(for colorScheme: ColorScheme) -> Color {
-        ChromeTheme.ghostties(colorScheme).inkSecondaryColor
+        ChromeTheme.active(colorScheme).inkSecondaryColor
     }
 
     /// The rim's gradient stops, swept round the pill from
@@ -411,7 +411,7 @@ enum TrayGlassStyle {
     /// look's `plusLighter` blend and only the accent stops show.
     static func chromaticColors(_ palette: ChromaticPalette, for colorScheme: ColorScheme = .light) -> [Color] {
         let dark = colorScheme == .dark
-        let theme = ChromeTheme.ghostties(colorScheme)
+        let theme = ChromeTheme.active(colorScheme)
         let chrome = Color(theme.chrome)
         let canvas = Color(theme.canvas)
         let graphite = theme.inkSecondaryColor
@@ -656,7 +656,7 @@ struct TrayPillShape: InsettableShape {
 struct TrayChromaticRim: View {
     let look: TrayGlassStyle.Look
     let shape: TrayPillShape
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         if look.chromaticIntensity > 0 {
@@ -688,7 +688,7 @@ struct TrayGlassSurface: ViewModifier {
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// Which state's light shadow to draw (`SidebarHostRoot` injects the
     /// sidebar's mode; the target mode as soon as a transition starts, so a
@@ -1093,7 +1093,7 @@ struct TrayIconButton: View {
     @State private var isHovered = false
     @State private var tapEffectTrigger = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @Environment(\.sidebarMode) private var sidebarMode
 
     var body: some View {

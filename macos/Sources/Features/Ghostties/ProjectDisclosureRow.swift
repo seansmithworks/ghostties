@@ -47,7 +47,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
 
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     @State private var editingSessionId: UUID?
     @State private var editingName: String = ""
@@ -391,7 +391,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     private var expandedContainerBackground: some View {
         if isExpanded {
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(ChromeTheme.ghostties(colorScheme).lifted(.container)))
+                .fill(Color(ChromeTheme.active(colorScheme).lifted(.container)))
         }
     }
 
@@ -537,7 +537,7 @@ private struct SessionGroupHeader: View {
     /// and render as a plain label with no chevron/tap target.
     @Binding var isExpanded: Bool
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     private var isCollapsible: Bool { bucket == .archive }
 
@@ -566,7 +566,7 @@ private struct SessionGroupHeader: View {
                 Text("\(label.uppercased()) \(count)")
                     .font(.system(size: 9, weight: .semibold))
                     .tracking(0.5)
-                    .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                    .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
                 Spacer(minLength: 0)
             }

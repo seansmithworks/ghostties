@@ -23,7 +23,7 @@ struct ActiveZoneView: View {
     /// body call (which previously fired on every user interaction across the sidebar).
     @State private var cachedMergedRows: [ActiveRow] = []
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         let rows = cachedMergedRows
@@ -134,17 +134,17 @@ struct ActiveZoneView: View {
             Text("Active".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Text("· \(rowCount) of ~\(taskStore.machineCap)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
 
             Text("machine ok")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)
         .padding(.vertical, 6)

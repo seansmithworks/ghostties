@@ -19,7 +19,7 @@ struct BacklogZoneView: View {
         taskStore.backlog
     }
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -54,11 +54,11 @@ struct BacklogZoneView: View {
             Text("Backlog".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Text("· \(rows.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
         }

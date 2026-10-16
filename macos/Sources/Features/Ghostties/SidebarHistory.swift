@@ -164,7 +164,7 @@ extension HistoryEntry {
 struct HistoryGlyph: View {
     var size: CGFloat = WorkspaceLayout.sessionGhostSize
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         Image(systemName: "clock.arrow.circlepath")
@@ -244,7 +244,7 @@ struct HistoryActions {
 struct HistoryCanvasHost: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         let sections = SidebarSessionSections.make(
@@ -259,6 +259,6 @@ struct HistoryCanvasHost: View {
             onClose: actions.close
         )
         // The canvas card's own fill, opaque over the terminal underneath.
-        .background(Color(nsColor: ChromeTheme.ghostties(colorScheme).canvas))
+        .background(Color(nsColor: ChromeTheme.active(colorScheme).canvas))
     }
 }

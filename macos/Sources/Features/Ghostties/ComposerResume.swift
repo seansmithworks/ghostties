@@ -306,11 +306,11 @@ struct ComposerResumeState: Equatable {
 /// Colours shared by the composer's resume surfaces.
 private enum ComposerResumeInk {
     static func secondary(_ scheme: ColorScheme) -> Color {
-        ChromeTheme.ghostties(scheme).inkSecondaryColor
+        ChromeTheme.active(scheme).inkSecondaryColor
     }
 
     static func selectedFill(_ scheme: ColorScheme) -> Color {
-        ChromeTheme.ghostties(scheme).ink(.composerRow)
+        ChromeTheme.active(scheme).ink(.composerRow)
     }
 
     static func hairline(_ scheme: ColorScheme) -> Color {
@@ -323,7 +323,7 @@ struct ComposerResumeSectionHeader: View {
     let systemImage: String
     let title: String
     let size: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -354,7 +354,7 @@ struct ComposerListRow: View {
     let showsReturnGlyph: Bool
     let titleSize: CGFloat
     let action: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         HStack(spacing: 12) {
@@ -405,7 +405,7 @@ struct ComposerResumeListView: View {
     let titleSize: CGFloat
     let now: Date
     let onResume: (UUID) -> Void
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -440,7 +440,7 @@ struct ComposerDownListView: View {
     let now: Date
     let onResume: (UUID) -> Void
     let onShowMore: (ComposerDownList.Section) -> Void
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @State private var contentHeight: CGFloat = 0
 
     /// The list's VoiceOver name: it holds TEMPLATES too whenever any show.
@@ -543,7 +543,7 @@ struct ComposerShowMoreRow: View {
     let isSelected: Bool
     let titleSize: CGFloat
     let action: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         HStack(spacing: 12) {
@@ -600,7 +600,7 @@ private struct ComposerResumeEntryRow: View {
 private struct ComposerResumeEmptyText: View {
     let hasHistory: Bool
     let titleSize: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         Text(hasHistory ? "No matches" : "No past sessions")
@@ -617,7 +617,7 @@ struct ComposerResumeHint: View {
     let entry: HistoryEntry
     let size: CGFloat
     let now: Date
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -648,7 +648,7 @@ struct ComposerResumeHint: View {
 struct ComposerKeyLegend: View {
     let items: [(key: String, label: String)]
     let size: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         HStack(spacing: 16) {
@@ -674,7 +674,7 @@ struct ComposerKeyLegend: View {
 /// A full-bleed 1pt separator inside the composer card.
 struct ComposerCardHairline: View {
     var vertical = false
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         Rectangle()

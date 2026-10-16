@@ -399,7 +399,7 @@ private struct PinMigrationNoticeBanner: View {
 private struct SidebarSectionHeader: View {
     let section: SidebarSection
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         // Matches the column structure of `ProjectDisclosureRow` header so
@@ -414,7 +414,7 @@ private struct SidebarSectionHeader: View {
             Text(label.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
-                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
         }

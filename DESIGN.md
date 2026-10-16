@@ -85,7 +85,7 @@ Ghostties is a workspace tool, not a content surface. The sidebar UI is dense, i
 
 ### Two-layer background model (settled Session 17)
 
-Ghostties has exactly two design-system background layers. Neither is bound to the user's terminal theme. Terminal content is GPU-painted by GhosttyKit using the user's terminal config — intentionally outside Swift's scope.
+Ghostties has exactly two design-system background layers, and both follow the terminal theme: the whole window is one theme (decided 2026-10-14). Canvas is the theme's `background`; chrome is derived from it. Terminal content is GPU-painted by GhosttyKit using the user's terminal config. The values below are the Ghostties pair, the default theme.
 
 | Layer      | Coverage                                     | Light     | Dark                   | Token name         |
 | ---------- | -------------------------------------------- | --------- | ---------------------- | ------------------ |
@@ -112,7 +112,7 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 
 ### Implementation
 
-Every chrome colour that changes with appearance lives in one value type, `ChromeTheme` (`macos/Sources/Features/Ghostties/ChromeTheme.swift`), resolved per appearance as `ChromeTheme.ghostties(colorScheme)`. It holds five base colours; everything else the chrome draws is one of them at a named step. A new colour is a reuse of one of these, never a new token. `ColorLiteralLintTests` fails on any colour literal outside `ChromeTheme.swift` that is not already on its frozen allowlist, and `TokenSyncTests` fails when this file's frontmatter, the Swift tokens and the `Ghostties Light` / `Ghostties Dark` theme files disagree.
+Every chrome colour that changes with the theme lives in one value type, `ChromeTheme` (`macos/Sources/Features/Ghostties/ChromeTheme.swift`). Readers ask `ChromeTheme.active(colorScheme)`; `ChromeThemeStore` holds the active theme, resolved from the terminal's background and foreground on every app config change. It holds five base colours; everything else the chrome draws is one of them at a named step. A new colour is a reuse of one of these, never a new token. `ColorLiteralLintTests` fails on any colour literal outside `ChromeTheme.swift` that is not already on its frozen allowlist, and `TokenSyncTests` fails when this file's frontmatter, the Swift tokens and the `Ghostties Light` / `Ghostties Dark` theme files disagree.
 
 | Token          | Light                          | Dark                       | Replaces                                              |
 | -------------- | ------------------------------ | -------------------------- | ----------------------------------------------------- |
@@ -129,11 +129,26 @@ Named steps on those five:
 
 Two values sit outside the five because no step of them reproduces the shipped colour: `tileInk` (`#232120` / `#F0EFED`, a project tile's monogram and the selected project's fill) and `tileFillBase` (`#28221E`, the light tile fill's base). Each is a candidate to merge into `ink` when a design pass allows a visible shift.
 
+### Chrome follows the terminal theme
+
+The whole window follows the active terminal theme: canvas, chrome, sidebar text, card shadow and tray. The chrome's light or dark side is the **theme's polarity, not the Mac's appearance**: the workspace window takes the polarity as its appearance, so a dark theme on a light Mac gets dark chrome.
+
+- **The Ghostties pair** (terminal background and foreground equal to `Ghostties Light` or `Ghostties Dark`) uses the hand-tuned values above, unchanged. DialKit colour overrides apply only to this pair.
+- **Any other theme** derives the five tokens (`ChromeTheme.derived`), with no new colours:
+  - polarity: light if the background contrasts more with black than with white
+  - `canvas`: the background
+  - `chrome`: the background moved in OKLab lightness by the Ghostties pair's own chrome-from-canvas step (darker in light, lighter in dark)
+  - `ink`: the foreground, pushed toward black or white until it clears 7:1 on canvas, chrome and the group card
+  - `inkSecondary`: ink mixed toward the chrome as far as it can go while it clears 4.6:1 on the chrome, the group card, and the row and tile washes
+  - `shadow`: the Ghostties pair's, by polarity; `tileInk` and `tileFillBase` are `ink`
+- A derived theme's primary text is its `ink`; the Ghostties pair keeps the system label colour.
+- A mid-tone background (4 of the bundled themes, e.g. Grass, Hot Dog Stand) cannot reach the floors even with pure white or black text; the derivation then uses pure white or black.
+
 `WorkspaceLayout.swift` keeps geometry and the theme-invariant brand and status colours (`waitingTerracotta`, the status dots, `composerSelectionAccent`, the source dots). Never hardcode hex or pt values in view files: pull colours from `ChromeTheme` and the brand block in `WorkspaceLayout`.
 
 ### Terminal theme
 
-Out of the box the terminal runs the **Ghostties Light / Ghostties Dark** pair, set by `GhosttiesConfigDefaults` as `theme = light:Ghostties Light,dark:Ghostties Dark`. The defaults load before the user's config, so a user `theme =` (or `background =`, `palette =`) line still wins. The direction is one-way: the theme matches the canvas, the canvas never reads the theme.
+Out of the box the terminal runs the **Ghostties Light / Ghostties Dark** pair, set by `GhosttiesConfigDefaults` as `theme = light:Ghostties Light,dark:Ghostties Dark`. The defaults load before the user's config, so a user `theme =` (or `background =`, `palette =`) line still wins, and the chrome follows it (see "Chrome follows the terminal theme").
 
 | Value                   | Ghostties Light | Ghostties Dark |
 | ----------------------- | --------------- | -------------- |
@@ -299,7 +314,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 ### Do
 
 - Define all chrome color tokens in `ChromeTheme.swift` (brand and status colours in `WorkspaceLayout.swift`) — view files pull from there
-- Use chrome/canvas tokens for background layers — never bind to terminal theme
+- Use chrome/canvas tokens for background layers, read through `ChromeTheme.active` so they follow the terminal theme
 - Set `shadowPath` explicitly in `layout()` before the card renders
 - Keep sidebar UI at 11pt SF Pro Text — resist upsizing for "readability"
 - Reserve terracotta for the `waiting` indicator state only
@@ -309,7 +324,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 
 ### Don't
 
-- Bind chrome or canvas background to the user's terminal theme (`surface.derivedConfig.backgroundColor`)
+- Read a surface's own colours for chrome or canvas (`surface.derivedConfig.backgroundColor`): the theme reaches the chrome only through `ChromeThemeStore`, from the app-level config
 - Hardcode hex or pt values in view files — use `ChromeTheme` and `WorkspaceLayout` tokens
 - Use terracotta for hover, selection, or states other than `waiting`
 - Mix corner radii — 12pt continuous everywhere on the terminal card
@@ -343,7 +358,7 @@ When generating SwiftUI or AppKit views for this project:
 
 - Read this file first — do not guess tokens
 - All colors from `ChromeTheme.swift` (chrome) or `WorkspaceLayout.swift` (brand, status) — never `Color(red:green:blue:)` in view files
-- Chrome and canvas are the only two background layers — never bind to the user's terminal theme
+- Chrome and canvas are the only two background layers; both follow the terminal theme through `ChromeTheme.active`, never a surface's own config
 - Terracotta (`#C97350`) is reserved for the `waiting` indicator state only
 - Corner radius is 12pt `.continuous` on the terminal card — nowhere else unless explicitly specified
 - `shadowPath` must be set in `layout()` — not left to CoreAnimation
