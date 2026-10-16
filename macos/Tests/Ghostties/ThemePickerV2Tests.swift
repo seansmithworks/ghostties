@@ -50,10 +50,11 @@ import Testing
 ///         /// Index of the selected cell: the custom cell (0) or the matching
 ///         /// family. Never the All themes cell.
 ///         static func selectedIndex(current: GhosttiesThemePicks) -> Int
-///         /// The composer header count: derived from the cells handed in
-///         /// (cells.count), never a constant.
-///         static func headerCount(cells: [ThemeGridCell]) -> Int
 ///     }
+///
+///     // Composer header: the builder must render it WITHOUT a count - the
+///     // palette icon and "THEMES" only (per the mockup). Not testable at model
+///     // level; there is intentionally no count API.
 ///
 ///     // --- 3. All themes browse model ---------------------------------------
 ///     enum ThemeBrowseFilter: CaseIterable { case pairs, light, dark }  // chip order
@@ -306,19 +307,7 @@ struct ThemePickerV2Tests {
         #expect(result == GhosttiesThemePicks(light: "Gruvbox Light", dark: "Ghostties Dark"))
     }
 
-    // MARK: - 4. Header count
-
-    @Test func headerCountIsTheNumberOfCellsRendered() {
-        let nine = ThemeGridModel.cells(current: .none)
-        #expect(ThemeGridModel.headerCount(cells: nine) == nine.count)
-        // Derived, not a constant: it follows whatever cells it is given.
-        #expect(ThemeGridModel.headerCount(cells: Array(nine.prefix(6))) == 6)
-        #expect(ThemeGridModel.headerCount(cells: []) == 0)
-        let custom = ThemeGridModel.cells(current: GhosttiesThemePicks(light: "X", dark: "Y"))
-        #expect(ThemeGridModel.headerCount(cells: custom) == custom.count)
-    }
-
-    // MARK: - 5. Settings
+    // MARK: - 4. Settings
 
     private func model(_ defaults: UserDefaults) -> AppearanceSettingsModel {
         AppearanceSettingsModel(defaults: defaults, windowTheme: { nil })
