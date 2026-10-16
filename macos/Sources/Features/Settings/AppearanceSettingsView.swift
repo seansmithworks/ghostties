@@ -6,7 +6,9 @@ import SwiftUI
 /// A pick is stored in the app's defaults and applied live through
 /// `reloadConfig()`; the user's config file is never written.
 struct AppearanceSettingsView: View {
-    @StateObject private var model = AppearanceSettingsModel()
+    @StateObject private var model = AppearanceSettingsModel(applyMode: {
+        (NSApp.delegate as? AppDelegate)?.applyAppearanceMode()
+    })
     @AppStorage(ComposerThemePresentation.key, store: GhosttiesThemePicks.appDefaults)
     private var composerThemePresentation: ComposerThemePresentation = .grid
 
@@ -20,7 +22,19 @@ struct AppearanceSettingsView: View {
 
             Section {
                 LabeledContent("Mode") {
-                    Text(model.modeLabel).foregroundStyle(.secondary)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Picker("Mode", selection: $model.mode) {
+                            Text("System").tag(GhosttiesAppearanceMode.system)
+                            Text("Light").tag(GhosttiesAppearanceMode.light)
+                            Text("Dark").tag(GhosttiesAppearanceMode.dark)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .disabled(model.modeLockedByConfig)
+                        if let note = model.modeLockedNote {
+                            Text(note).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
 
@@ -88,14 +102,28 @@ final class AppearanceSettingsModel: ObservableObject {
     @Published private(set) var state: GhosttiesAppearanceState = .ghostties
     @Published private(set) var probe = GhosttiesThemeProbe.Result(kind: .none, themeName: nil)
     @Published private(set) var picks = GhosttiesThemePicks.none
-    @Published private(set) var modeLabel = "System"
+    @Published private(set) var configWindowTheme: String?
+    @Published private var storedMode: GhosttiesAppearanceMode
 
     let themeNames: [String]
     private let defaults: UserDefaults
     private var previews: [String: ThemePreview] = [:]
 
-    init(defaults: UserDefaults = GhosttiesThemePicks.appDefaults) {
+    private let windowTheme: () -> String?
+    private let applyMode: () -> Void
+
+    /// `windowTheme` reads the running app's config `window-theme`;
+    /// `applyMode` re-applies the app appearance after the mode changes
+    /// (a no-op unless the caller wires it, so tests never touch `NSApp`).
+    init(
+        defaults: UserDefaults = GhosttiesThemePicks.appDefaults,
+        windowTheme: @escaping () -> String? = { (NSApp.delegate as? AppDelegate)?.ghostty.config.windowTheme },
+        applyMode: @escaping () -> Void = {}
+    ) {
         self.defaults = defaults
+        self.windowTheme = windowTheme
+        self.applyMode = applyMode
+        self.storedMode = GhosttiesAppearanceMode.stored(in: defaults)
         self.themeNames = GhosttiesThemeCatalog.bundledThemeNames()
         refresh()
     }
@@ -108,11 +136,30 @@ final class AppearanceSettingsModel: ObservableObject {
         probe = GhosttiesThemeProbe.probe(configPath: path)
         picks = GhosttiesThemePicks.stored(in: defaults)
         state = GhosttiesAppearanceState.resolve(configPath: path, picks: picks)
-        switch ghostty?.config.windowTheme {
-        case "light": modeLabel = "Light, set by window-theme in your config"
-        case "dark": modeLabel = "Dark, set by window-theme in your config"
-        case "ghostty": modeLabel = "Follows the terminal theme (window-theme in your config)"
-        default: modeLabel = "System"
+        configWindowTheme = windowTheme()
+        storedMode = GhosttiesAppearanceMode.stored(in: defaults)
+    }
+
+    /// System / Light / Dark. Setting it stores the choice and applies it live.
+    var mode: GhosttiesAppearanceMode {
+        get { storedMode }
+        set {
+            guard newValue != storedMode else { return }
+            newValue.store(in: defaults)
+            storedMode = newValue
+            applyMode()
+        }
+    }
+
+    /// `window-theme` in the user's config fixes the appearance.
+    var modeLockedByConfig: Bool { GhosttiesAppearanceMode.isLocked(byConfigWindowTheme: configWindowTheme) }
+
+    var modeLockedNote: String? {
+        switch configWindowTheme {
+        case "light": return "Light, set by window-theme in your config"
+        case "dark": return "Dark, set by window-theme in your config"
+        case "ghostty": return "Follows the terminal theme (window-theme in your config)"
+        default: return nil
         }
     }
 
