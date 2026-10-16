@@ -23,13 +23,15 @@ struct AppearanceSettingsView: View {
             Section {
                 LabeledContent("Mode") {
                     VStack(alignment: .trailing, spacing: 4) {
-                        Picker("Mode", selection: $model.mode) {
-                            Text("System").tag(GhosttiesAppearanceMode.system)
-                            Text("Light").tag(GhosttiesAppearanceMode.light)
-                            Text("Dark").tag(GhosttiesAppearanceMode.dark)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        NeutralSegmentedControl(
+                            label: "Mode",
+                            options: [
+                                ("System", GhosttiesAppearanceMode.system),
+                                ("Light", .light),
+                                ("Dark", .dark),
+                            ],
+                            selection: $model.mode
+                        )
                         .disabled(model.modeLockedByConfig)
                         if let note = model.modeLockedNote {
                             Text(note).font(.caption).foregroundStyle(.secondary)
@@ -285,6 +287,46 @@ struct ThemePreview {
 }
 
 // MARK: - Views
+
+/// A segmented control whose selected segment is the neutral raised pill
+/// (the Finder toolbar look) instead of SwiftUI's accent-filled one.
+/// `.texturedRounded` is the AppKit style that draws selection in gray, and
+/// `selectedSegmentBezelColor` stays nil so the system picks the light and
+/// dark variants itself.
+private struct NeutralSegmentedControl<Value: Hashable>: NSViewRepresentable {
+    let label: String
+    let options: [(title: String, value: Value)]
+    @Binding var selection: Value
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: options.map(\.title),
+            trackingMode: .selectOne,
+            target: context.coordinator,
+            action: #selector(Coordinator.changed(_:))
+        )
+        control.segmentStyle = .texturedRounded
+        control.setAccessibilityLabel(label)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.parent = self
+        control.selectedSegment = options.firstIndex { $0.value == selection } ?? -1
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject {
+        var parent: NeutralSegmentedControl
+        init(_ parent: NeutralSegmentedControl) { self.parent = parent }
+
+        @objc func changed(_ sender: NSSegmentedControl) {
+            guard parent.options.indices.contains(sender.selectedSegment) else { return }
+            parent.selection = parent.options[sender.selectedSegment].value
+        }
+    }
+}
 
 private struct ThemePairCard: View {
     let card: AppearanceSettingsModel.Card
