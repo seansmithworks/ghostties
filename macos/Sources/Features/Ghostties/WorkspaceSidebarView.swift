@@ -414,7 +414,7 @@ private struct SidebarSectionHeader: View {
             Text(label.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
-                .foregroundStyle(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
         }

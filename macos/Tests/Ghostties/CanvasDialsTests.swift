@@ -25,9 +25,9 @@ final class CanvasDialsTests: XCTestCase {
         let d = suite("empty")
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertEqual(CanvasStyle.background(scheme, defaults: d),
-                           scheme == .dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight)
+                           scheme == .dark ? ChromeTheme.ghostties(.dark).canvas : ChromeTheme.ghostties(.light).canvas)
             XCTAssertEqual(CanvasStyle.shadowColor(scheme, defaults: d),
-                           scheme == .dark ? WorkspaceLayout.canvasShadowColorDark : WorkspaceLayout.canvasShadowColorLight)
+                           scheme == .dark ? ChromeTheme.ghostties(.dark).shadow.cgColor : ChromeTheme.ghostties(.light).shadow.cgColor)
             XCTAssertEqual(CanvasStyle.shadowOpacity(scheme, defaults: d), WorkspaceLayout.canvasShadowOpacity)
             XCTAssertEqual(CanvasStyle.shadowRadius(scheme, defaults: d), WorkspaceLayout.canvasShadowRadius)
             XCTAssertEqual(CanvasStyle.shadowOffset(scheme, defaults: d), WorkspaceLayout.canvasShadowOffset)

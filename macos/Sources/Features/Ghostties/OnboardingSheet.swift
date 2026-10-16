@@ -77,7 +77,7 @@ struct OnboardingSheet: View {
 
                     Text("Version \(buildVersion) (build \(buildNumber)) · Updated \(buildDate)")
                         .font(.system(size: 10))
-                        .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                        .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                 }
                 .padding(20)
             }

@@ -237,7 +237,7 @@ struct InboxZoneView: View {
 
             Text("Click anywhere here to start a new task.")
                 .font(.system(size: 10.5))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                 .multilineTextAlignment(.center)
 
             // SG-03: first-run hint — shown only when every lane is empty.
@@ -276,11 +276,11 @@ struct InboxZoneView: View {
             Text("Inbox".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Text("· \(rows.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
         }

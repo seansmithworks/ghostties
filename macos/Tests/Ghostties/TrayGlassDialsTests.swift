@@ -94,8 +94,8 @@ struct TrayGlassDialsTests {
         let light = TrayGlassStyle.chromaticColors(palette, for: .light)
         let dark = TrayGlassStyle.chromaticColors(palette, for: .dark)
         #expect(!light.isEmpty && !dark.isEmpty)
-        #expect(!dark.contains(Color(WorkspaceLayout.chromeBackgroundLight)))
-        #expect(!dark.contains(Color(WorkspaceLayout.canvasBackgroundLight)))
+        #expect(!dark.contains(Color(ChromeTheme.ghostties(.light).chrome)))
+        #expect(!dark.contains(Color(ChromeTheme.ghostties(.light).canvas)))
     }
 }
 #endif

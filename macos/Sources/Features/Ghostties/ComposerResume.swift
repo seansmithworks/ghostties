@@ -306,11 +306,11 @@ struct ComposerResumeState: Equatable {
 /// Colours shared by the composer's resume surfaces.
 private enum ComposerResumeInk {
     static func secondary(_ scheme: ColorScheme) -> Color {
-        WorkspaceLayout.sectionHeaderForeground(for: scheme)
+        ChromeTheme.ghostties(scheme).inkSecondaryColor
     }
 
     static func selectedFill(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? WorkspaceLayout.composerRowSelectedDark : WorkspaceLayout.composerRowSelectedLight
+        ChromeTheme.ghostties(scheme).ink(.composerRow)
     }
 
     static func hairline(_ scheme: ColorScheme) -> Color {

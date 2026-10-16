@@ -45,7 +45,7 @@ struct SidebarBeta26FeedbackGateTests {
     }
 
     private func chrome(_ scheme: ColorScheme) -> NSColor {
-        scheme == .dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight
+        scheme == .dark ? ChromeTheme.ghostties(.dark).chrome : ChromeTheme.ghostties(.light).chrome
     }
 
     // MARK: A. Hover bar
@@ -57,7 +57,7 @@ struct SidebarBeta26FeedbackGateTests {
     // used by `sidebarOverlayBackground` in both mode and `applyChromeColor`.
     @Test(arguments: [ColorScheme.light, .dark])
     func hoverBarFillIsTheSidebarChrome(_ scheme: ColorScheme) throws {
-        let fill = try rgba(WorkspaceLayout.hoverBarFill(isDark: scheme == .dark))
+        let fill = try rgba(ChromeTheme.ghostties(scheme).chrome)
         let want = try rgba(chrome(scheme))
         #expect(fill.alpha == 1, "hover bar fill must be opaque, \(scheme)")
         #expect(abs(fill.rgb.r - want.rgb.r) < 0.002 && abs(fill.rgb.g - want.rgb.g) < 0.002 && abs(fill.rgb.b - want.rgb.b) < 0.002,

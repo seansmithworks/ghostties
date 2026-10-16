@@ -155,12 +155,12 @@ enum TrayGlassStyle {
         /// Native `Glass` base variant.
         var variant: Variant
         /// Tint on the native glass: white in light, the warm chrome
-        /// (`WorkspaceLayout.chromeBackgroundDark`) in dark — never the
+        /// (`ChromeTheme.chrome`) in dark — never the
         /// terracotta accent. The `.identity` variant draws no material, so
         /// it ignores the tint; it only shows on `.regular`/`.clear`.
         var tintOpacity: Double
         /// The layer laid over the glass: white in light, the chrome
-        /// (`WorkspaceLayout.chromeBackgroundDark`) in dark, so dark glass
+        /// (`ChromeTheme.chrome`) in dark, so dark glass
         /// is never lighter than the chrome it floats on.
         var surfaceOpacity: Double
         /// Rim standing in for the shader's fresnel edge: white in light,
@@ -237,9 +237,9 @@ enum TrayGlassStyle {
     )
 
     /// Dark: Sean's DialKit export (2026-10-11, second export), drawn as dark
-    /// glass: the layer is the chrome (`chromeBackgroundDark`, never the
+    /// glass: the layer is the chrome (`ChromeTheme.chrome`, never the
     /// lighter canvas grey) over the regular backdrop blur, and the rim is
-    /// a dark stroke (`WorkspaceLayout.borderDark`, `rimColor`), not white:
+    /// a dark stroke (`ChromeTheme.Lift.border`, `rimColor`), not white:
     /// a white rim drew a bright outline on the dark toolbar. The specular
     /// stays faint (0.10): any white gradient lifts the fill above the
     /// chrome, and a 0.6 one from below turned the pill's lower half pale
@@ -362,7 +362,7 @@ enum TrayGlassStyle {
 
     static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
         if colorScheme == .dark {
-            return Color(WorkspaceLayout.chromeBackgroundDark).opacity(look.tintOpacity)
+            return Color(ChromeTheme.ghostties(.dark).chrome).opacity(look.tintOpacity)
         }
         return look.tintOpacity > 0 ? Color.white.opacity(look.tintOpacity) : nil
     }
@@ -371,18 +371,16 @@ enum TrayGlassStyle {
     /// (pre-26 / Reduce Transparency / tests).
     static func surfaceFill(_ look: Look, for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
-            ? Color(WorkspaceLayout.chromeBackgroundDark).opacity(look.surfaceOpacity)
+            ? Color(ChromeTheme.ghostties(.dark).chrome).opacity(look.surfaceOpacity)
             : Color.white.opacity(look.surfaceOpacity)
     }
 
-    /// The glass rim: white in light, the dark border token
-    /// (`WorkspaceLayout.borderDark`) in dark, so the dark pill's edge is a
+    /// The glass rim: white in light, the chrome lifted one `border` step
+    /// in dark (`ChromeTheme.Lift.border`), so the dark pill's edge is a
     /// dark-mode stroke, not a bright outline. The rim opacity and width
     /// dials scale it in both.
     static func rimColor(_ look: Look, for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(WorkspaceLayout.borderDark).opacity(look.rimOpacity)
-            : Color.white.opacity(look.rimOpacity)
+        Color(ChromeTheme.ghostties(colorScheme).lifted(.border)).opacity(look.rimOpacity)
     }
 
     /// The opaque fallback's dark edge (Reduce Transparency / pre-26). That
@@ -390,9 +388,9 @@ enum TrayGlassStyle {
     /// fill sits on the chrome, so without this hairline only a shadow,
     /// invisible on dark chrome, separated the pill. A dark-mode stroke like
     /// the glass rim, at the beta.26 canvas grey #2D2D2D (pinned here when
-    /// `canvasBackgroundDark` moved to #141413, below the chrome, in beta.27):
+    /// the canvas moved to #141413, below the chrome, in beta.27):
     /// the strongest dark token step off the #242424 chrome (1.13:1, the
-    /// same step that sets the terminal card off the chrome; `borderDark`
+    /// same step that sets the terminal card off the chrome; the border lift
     /// is 1.08:1). 3:1 needs about #717171, a light grey, which is the
     /// bright outline this replaces. The icons, which identify the buttons,
     /// keep 5.45:1. An edge, not a fill: the pill stays at the chrome's
@@ -401,9 +399,9 @@ enum TrayGlassStyle {
     static let opaqueDarkEdgeWidth: CGFloat = 1
 
 
-    /// Canvas icon fill: `textSecondaryLight`.
+    /// Canvas icon fill: `ChromeTheme.inkSecondary`.
     static func iconColor(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+        ChromeTheme.ghostties(colorScheme).inkSecondaryColor
     }
 
     /// The rim's gradient stops, swept round the pill from
@@ -413,23 +411,24 @@ enum TrayGlassStyle {
     /// look's `plusLighter` blend and only the accent stops show.
     static func chromaticColors(_ palette: ChromaticPalette, for colorScheme: ColorScheme = .light) -> [Color] {
         let dark = colorScheme == .dark
-        let chrome = Color(dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight)
-        let canvas = Color(dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight)
-        let graphite = dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+        let theme = ChromeTheme.ghostties(colorScheme)
+        let chrome = Color(theme.chrome)
+        let canvas = Color(theme.canvas)
+        let graphite = theme.inkSecondaryColor
         switch palette {
         case .ember:
-            // waitingTerracotta → chromeBackground → canvasBackground → chromeBackground → waitingTerracotta
+            // waitingTerracotta → chrome → canvas → chrome → waitingTerracotta
             let accent = WorkspaceLayout.waitingTerracotta
             return [accent, chrome, canvas, chrome, accent]
         case .chrome:
-            // textSecondary → chromeBackground → canvasBackground → chromeBackground → textSecondary
+            // inkSecondary → chrome → canvas → chrome → inkSecondary
             return [graphite, chrome, canvas, chrome, graphite]
         case .mono:
-            // textSecondary, one tone.
+            // inkSecondary, one tone.
             return [graphite, graphite]
         case .signal:
             // statusYourTurnBlue → statusNeedsDecisionGold → statusLongRunningOrange → statusYourTurnBlue.
-            // Dark puts chromeBackgroundDark between them, so the bright
+            // Dark puts the chrome between them, so the bright
             // gold and orange are short arcs instead of the whole rim.
             let blue = WorkspaceLayout.statusYourTurnBlue
             let gold = WorkspaceLayout.statusNeedsDecisionGold

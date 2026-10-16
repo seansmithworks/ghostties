@@ -358,7 +358,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     private func renderTrayUnderCurrentDials(vertical: Bool, size: CGSize, gutter: CGFloat) throws -> (NSBitmapImageRep, CGFloat) {
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let hosting = NSHostingView(rootView: SidebarTray(
             isVertical: vertical,
             toggleLabel: vertical ? "Expand Sidebar" : "Collapse Sidebar",
@@ -387,7 +387,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// at about -0.43); the shadow only darkens slightly, so it never counts.
     /// Gaps of up to 3px (anti-aliased icon edges) are bridged.
     private func capsuleSpans(_ rep: NSBitmapImageRep, scale: CGFloat, alongX: Bool, at fixed: CGFloat) throws -> [ClosedRange<CGFloat>] {
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let chromeSum = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         let count = alongX ? rep.pixelsWide : rep.pixelsHigh
         let fixedPx = Int(fixed * scale)
@@ -591,7 +591,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// shadow ever is) anywhere in the columns `xs`, in points, bridging
     /// anti-aliasing gaps of up to 3px.
     private func inkRows(_ rep: NSBitmapImageRep, scale: CGFloat, xs: ClosedRange<CGFloat>, ys: ClosedRange<CGFloat>) throws -> [ClosedRange<CGFloat>] {
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let chromeSum = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         var runs: [(Int, Int)] = []
         for y in Int(ys.lowerBound * scale)..<Int(ys.upperBound * scale) {

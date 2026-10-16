@@ -226,7 +226,7 @@ struct TaskSidebarView: View {
         HStack(spacing: 0) {
             Text("tasks · \(taskStore.tasks.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
 
@@ -246,9 +246,7 @@ struct TaskSidebarView: View {
     // MARK: - Background
 
     private var backgroundColor: Color {
-        Color(nsColor: colorScheme == .dark
-              ? WorkspaceLayout.chromeBackgroundDark
-              : WorkspaceLayout.chromeBackgroundLight)
+        Color(nsColor: ChromeTheme.ghostties(colorScheme).chrome)
     }
 }
 

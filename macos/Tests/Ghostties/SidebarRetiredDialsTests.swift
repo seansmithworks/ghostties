@@ -120,7 +120,7 @@ final class SidebarRetiredDialsTests: XCTestCase {
                     // Runs to the bottom and insets itself for the tray.
                     RecentsListView()
                 })
-            let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+            let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
             let root = column
                 .frame(width: width, height: height)
                 .overlay(alignment: .bottom) {
@@ -170,7 +170,7 @@ final class SidebarRetiredDialsTests: XCTestCase {
     /// `1 - c`); the floor sits midway between the lift's drop (negative)
     /// and the chip's, so only the chip counts.
     private func longestTintRun(_ rep: NSBitmapImageRep, width: CGFloat, rail: Bool) -> CGFloat {
-        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB) else { return 0 }
+        guard let chrome = ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB) else { return 0 }
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         let scale = CGFloat(rep.pixelsWide) / width
         let chipCentre = rail ? width / 2

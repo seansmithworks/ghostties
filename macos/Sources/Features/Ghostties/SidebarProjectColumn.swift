@@ -82,11 +82,11 @@ enum RailProjectColumn {
     }
 
     /// The ink the chip tints are laid in: solid black in
-    /// light, white in dark, so an opacity here is the canvas's alpha.
-    /// (`Color.primary` is 85% black in light, which drew option D's 10%
-    /// chip at 8.5%.)
+    /// light, white in dark (`ChromeTheme.ink`), so an opacity here is the
+    /// canvas's alpha. (`Color.primary` is 85% black in light, which drew
+    /// option D's 10% chip at 8.5%.)
     static func tintInk(_ colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? .white : .black
+        Color(ChromeTheme.ghostties(colorScheme).ink)
     }
 
     /// The group the column marks: the one holding the selected session,

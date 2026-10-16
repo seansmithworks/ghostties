@@ -127,7 +127,7 @@ struct NewTaskComposerView: View {
             Text("in")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.5)
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                 .textCase(.uppercase)
                 .frame(width: 20, alignment: .leading)
 
@@ -195,7 +195,7 @@ struct NewTaskComposerView: View {
             Text("via")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.5)
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                 .textCase(.uppercase)
                 .frame(width: 20, alignment: .leading)
 
@@ -219,7 +219,7 @@ struct NewTaskComposerView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(
                             store.selectedTemplateName == nil
-                                ? (colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                                ? (ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
                                 : Color.primary.opacity(0.85)
                         )
                     Image(systemName: "chevron.down")
@@ -305,9 +305,7 @@ struct NewTaskComposerView: View {
     // MARK: - Background
 
     private var cardBackground: Color {
-        Color(nsColor: colorScheme == .dark
-              ? WorkspaceLayout.chromeBackgroundDark
-              : WorkspaceLayout.chromeBackgroundLight)
+        Color(nsColor: ChromeTheme.ghostties(colorScheme).chrome)
         .opacity(0.0)   // transparent — inherits from sidebar chrome
     }
 

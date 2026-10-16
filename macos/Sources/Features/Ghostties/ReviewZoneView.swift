@@ -54,11 +54,11 @@ struct ReviewZoneView: View {
             Text("Review".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Text("· \(rows.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
         }

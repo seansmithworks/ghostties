@@ -134,17 +134,17 @@ struct ActiveZoneView: View {
             Text("Active".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Text("· \(rowCount) of ~\(taskStore.machineCap)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
 
             Text("machine ok")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.ghostties(colorScheme).inkSecondaryColor)
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)
         .padding(.vertical, 6)

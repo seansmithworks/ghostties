@@ -32,17 +32,15 @@ final class SidebarColorDialsTests: XCTestCase {
         for scheme in Self.schemes {
             let dark = scheme == .dark
             XCTAssertEqual(SidebarColors.background(scheme, defaults: d),
-                           dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight)
+                           ChromeTheme.ghostties(scheme).chrome)
             XCTAssertEqual(SidebarColors.primaryText(scheme, defaults: d), Color.primary)
             XCTAssertEqual(SidebarColors.secondaryText(scheme, defaults: d),
-                           dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                           ChromeTheme.ghostties(scheme).inkSecondaryColor)
+            let theme = ChromeTheme.ghostties(scheme)
             XCTAssertEqual(SidebarColors.tileFill(scheme, defaults: d),
-                           dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(0.10))
-            XCTAssertEqual(SidebarColors.tileInk(scheme, defaults: d),
-                           dark ? Color(red: 0xF0 / 255, green: 0xEF / 255, blue: 0xED / 255)
-                                : Color(red: 0x23 / 255, green: 0x21 / 255, blue: 0x20 / 255))
-            XCTAssertEqual(SidebarColors.selectedRowTint(scheme, defaults: d),
-                           (dark ? Color.white : Color.black).opacity(0.10))
+                           dark ? theme.ink(.tile) : Color(theme.tileFillBase).opacity(0.10))
+            XCTAssertEqual(SidebarColors.tileInk(scheme, defaults: d), Color(theme.tileInk))
+            XCTAssertEqual(SidebarColors.selectedRowTint(scheme, defaults: d), Color(theme.ink).opacity(0.10))
             XCTAssertEqual(SidebarColors.dimmedProject(scheme, defaults: d), WorkspaceLayout.emptyProjectForeground)
             for role in SidebarColors.Role.allCases {
                 XCTAssertNil(SidebarColorTuning.override(role, scheme, defaults: d), "\(role) \(scheme)")
@@ -90,7 +88,7 @@ final class SidebarColorDialsTests: XCTestCase {
         let written = SidebarColorTuning.allKeys.filter { d.object(forKey: $0) != nil }
         XCTAssertEqual(written, [SidebarColorTuning.hexKey(.secondaryText, .dark)])
         XCTAssertEqual(SidebarColors.secondaryText(.dark, defaults: d), Color(.sRGB, red: 0xB0 / 255, green: 0xB0 / 255, blue: 0xB0 / 255, opacity: 1))
-        XCTAssertEqual(SidebarColors.secondaryText(.light, defaults: d), WorkspaceLayout.textSecondaryLight, "the other appearance is untouched")
+        XCTAssertEqual(SidebarColors.secondaryText(.light, defaults: d), ChromeTheme.ghostties(.light).inkSecondaryColor, "the other appearance is untouched")
     }
 
     /// An opacity alone keeps the shipped hue.

@@ -44,7 +44,7 @@ enum SidebarColors {
         #if DEBUG
         if let tuned = SidebarColorTuning.override(.background, scheme, defaults: defaults) { return tuned.nsColor }
         #endif
-        return scheme == .dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight
+        return ChromeTheme.ghostties(scheme).chrome
     }
 
     static func primaryText(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
@@ -58,7 +58,7 @@ enum SidebarColors {
         #if DEBUG
         if let tuned = SidebarColorTuning.override(.secondaryText, scheme, defaults: defaults) { return tuned.color }
         #endif
-        return scheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+        return ChromeTheme.ghostties(scheme).inkSecondaryColor
     }
 
     /// Option D (`hRCBC`: `#28221E1A`) in light; 7% white in dark. An
@@ -68,18 +68,17 @@ enum SidebarColors {
         #if DEBUG
         if let tuned = SidebarColorTuning.override(.tileFill, scheme, defaults: defaults) { return tuned.color }
         #endif
+        let theme = ChromeTheme.ghostties(scheme)
         return scheme == .dark
-            ? Color.white.opacity(0.07)
-            : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(isEmpty ? RailProjectTile.emptyTintOpacity : RailProjectTile.tintOpacity)
+            ? theme.ink(.tile)
+            : Color(theme.tileFillBase).opacity(isEmpty ? RailProjectTile.emptyTintOpacity : RailProjectTile.tintOpacity)
     }
 
     static func tileInk(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
         #if DEBUG
         if let tuned = SidebarColorTuning.override(.tileInk, scheme, defaults: defaults) { return tuned.color }
         #endif
-        return scheme == .dark
-            ? Color(red: 0xF0 / 255, green: 0xEF / 255, blue: 0xED / 255)
-            : Color(red: 0x23 / 255, green: 0x21 / 255, blue: 0x20 / 255)
+        return Color(ChromeTheme.ghostties(scheme).tileInk)
     }
 
     /// The canvas's alpha on solid ink (`RailProjectColumn.tintInk`).
@@ -116,6 +115,7 @@ enum SidebarColorTuning {
         var color: Color { Color(.sRGB, red: r, green: g, blue: b, opacity: a) }
         var nsColor: NSColor { NSColor(srgbRed: r, green: g, blue: b, alpha: a) }
         var opaque: RGBA { RGBA(r: r, g: g, b: b, a: 1) }
+        func withAlpha(_ a: Double) -> RGBA { RGBA(r: r, g: g, b: b, a: a) }
 
         /// `#RRGGBB`, alpha dropped (opacity is its own dial).
         var hex: String {
@@ -179,19 +179,21 @@ enum SidebarColorTuning {
         let dark = scheme == .dark
         switch role {
         case .background:
-            return RGBA(dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight, scheme)
+            return RGBA(ChromeTheme.ghostties(scheme).chrome, scheme)
         case .primaryText:
             // `Color.primary` is the label colour: 85% black / white.
             return RGBA(.labelColor, scheme)
         case .secondaryText:
-            return RGBA(NSColor(dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight), scheme)
+            return RGBA(ChromeTheme.ghostties(scheme).inkSecondary, scheme)
         case .tileFill:
-            return dark ? RGBA(r: 1, g: 1, b: 1, a: 0.07) : RGBA(r: 40 / 255, g: 34 / 255, b: 30 / 255, a: RailProjectTile.tintOpacity)
+            let theme = ChromeTheme.ghostties(scheme)
+            return dark
+                ? RGBA(theme.ink, scheme).withAlpha(ChromeTheme.Step.tile.opacity(.dark))
+                : RGBA(theme.tileFillBase, scheme).withAlpha(RailProjectTile.tintOpacity)
         case .tileInk:
-            return dark ? RGBA(r: 0xF0 / 255, g: 0xEF / 255, b: 0xED / 255) : RGBA(r: 0x23 / 255, g: 0x21 / 255, b: 0x20 / 255)
+            return RGBA(ChromeTheme.ghostties(scheme).tileInk, scheme)
         case .selectedRowTint:
-            let ink: Double = dark ? 1 : 0
-            return RGBA(r: ink, g: ink, b: ink, a: RailProjectColumn.selectedChipTintOpacity)
+            return RGBA(ChromeTheme.ghostties(scheme).ink, scheme).withAlpha(RailProjectColumn.selectedChipTintOpacity)
         }
     }
 

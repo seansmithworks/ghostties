@@ -265,7 +265,7 @@ final class SelectionChipTravelTests: XCTestCase {
             coordinator.setActiveSessionIdForTesting(sessions[0].id)
 
             let width: CGFloat = 260
-            let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+            let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
             let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
             let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
             defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
