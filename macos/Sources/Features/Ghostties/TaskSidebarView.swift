@@ -26,7 +26,7 @@ struct TaskSidebarView: View {
     /// its project/session cycling) — task cycling itself never touches the
     /// terminal or session state.
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// Cursor for task cycling. Tracks the last task moved to; independent of
     /// native SwiftUI row focus (see `selectAdjacentTask(offset:proxy:)` for
@@ -226,7 +226,7 @@ struct TaskSidebarView: View {
         HStack(spacing: 0) {
             Text("tasks · \(taskStore.tasks.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
 
@@ -246,9 +246,7 @@ struct TaskSidebarView: View {
     // MARK: - Background
 
     private var backgroundColor: Color {
-        Color(nsColor: colorScheme == .dark
-              ? WorkspaceLayout.chromeBackgroundDark
-              : WorkspaceLayout.chromeBackgroundLight)
+        Color(nsColor: ChromeTheme.active(colorScheme).chrome)
     }
 }
 

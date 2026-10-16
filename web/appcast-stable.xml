@@ -2,6 +2,23 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Ghostties Stable Releases</title>
-    <description>No stable release available yet. Updated automatically on each release.</description>
+    <description>Stable releases of Ghostties</description>
+  <item>
+    <title>Ghostties v0.5.0-beta.26</title>
+    <pubDate>Mon, 12 Oct 2026 20:51:37 +0000</pubDate>
+    <sparkle:version>19431</sparkle:version>
+    <sparkle:shortVersionString>0.5.0-beta.26</sparkle:shortVersionString>
+    <sparkle:minimumSystemVersion>13.0.0</sparkle:minimumSystemVersion>
+    <description><![CDATA[
+      <h1>Ghostties v0.5.0-beta.26</h1>
+      <p>Built from commit <a href="https://github.com/seansmithworks/ghostties/commits/829cca0133c72ed29c5ad7276782916d54c12d5b">829cca013</a>.</p>
+      <p>See <a href="https://github.com/seansmithworks/ghostties/releases/tag/v0.5.0-beta.26">release notes</a> on GitHub.</p>
+    ]]></description>
+    <enclosure
+      url="https://github.com/seansmithworks/ghostties/releases/download/v0.5.0-beta.26/Ghostties.dmg"
+      type="application/octet-stream"
+      sparkle:edSignature="x/dVzkBBDQKRtRqjcG1JS5+XQrqKqoxhJNAcGSzCKOeUtrIBuRpF5KHybx46V75sXC3jduitRIokmh+387V1BQ=="
+      length="154164128" />
+  </item>
   </channel>
 </rss>

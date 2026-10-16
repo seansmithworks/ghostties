@@ -174,12 +174,15 @@ final class SidebarProjectsLayoutTests: XCTestCase {
     // MARK: - Rail column dials
 
     /// Unset, every "Rail column" dial reads option D's value (pen.dev
-    /// `p6osQ7`/`ZiGlb`: tint 6%, inset 4, chip radius 8 = the tile's, full
-    /// ink), with the rail's tile and chip at 40 (Sean, 2026-10-10; the
-    /// sidebar's stay 30).
+    /// `p6osQ7`/`ZiGlb`: inset 4, chip radius 8 = the tile's, full ink),
+    /// with the rail's tile and chip at 40 (Sean, 2026-10-10; the sidebar's
+    /// stay 30). The column tint is beta.26's sidebar contrast fill: 4% in
+    /// dark, a 45% white lift in light (was option D's 6%).
     func testRailColumnDialDefaultsAreOptionD() {
         withDials {
-            XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.06)
+            XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.04)
+            XCTAssertEqual(RailProjectColumn.columnFillOpacity(.dark), 0.04)
+            XCTAssertEqual(RailProjectColumn.columnFillOpacity(.light), 0.45)
             XCTAssertEqual(RailProjectColumn.columnInset, 4)
             XCTAssertEqual(RailProjectColumn.chipCornerRadius, 8)
             XCTAssertEqual(RailProjectColumn.chipCornerRadius, RailProjectTile.cornerRadius)

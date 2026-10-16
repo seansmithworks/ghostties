@@ -100,7 +100,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
                 RecentsListView()
             })
         }
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         // The list and rail read the sidebar tab from store-less
         // `@AppStorage` (`.standard`, the Dev app's domain); pin it to the
         // Projects tab in a private suite so the saved tab can't swap in the
@@ -138,7 +138,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// Off the chrome either way: the selected tint darkens it, the opaque
     /// tray lifts it.
     private func isMarked(_ r: Render, px x: Int, _ y: Int) -> Bool {
-        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+        guard let chrome = ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB),
               let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
         let delta = (c.redComponent + c.greenComponent + c.blueComponent)
             - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
@@ -147,7 +147,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
 
     /// Lighter than the chrome: the opaque tray's white fill.
     private func isLifted(_ r: Render, px x: Int, _ y: Int) -> Bool {
-        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+        guard let chrome = ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB),
               let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
         return (c.redComponent + c.greenComponent + c.blueComponent)
             - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent) > 0.06
@@ -265,19 +265,21 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// The selected chip: the run, down a line 4pt inside the chip's
     /// leading edge (clear of the glyph), whose summed-RGB drop below the
     /// chrome is the chip over the group card or column, not the card or
-    /// column alone. Both are black tints, so a tint of alpha `a` drops the
-    /// sum by `a * chromeSum`: the card/column (6%, ~0.165) sits below the
-    /// window and the chip over it (1 - 0.94 * 0.90 = 15.4%, ~0.424) inside
-    /// it, with the lower bound midway between them; ink is far darker. The
-    /// run must also be chip-sized (not the card's extent). The chip's
-    /// corner trims the run's ends equally, so its centre is the chip's.
+    /// column alone. In light the card/column is a white lift (alpha `a`
+    /// raises the sum to `chromeSum * (1 - a) + 3a`, a negative drop) and
+    /// the chip a black tint over it (alpha `c` scales the card's sum by
+    /// `1 - c`), with the lower bound midway between the two drops; ink is
+    /// far darker. The run must also be chip-sized (not the card's extent).
+    /// The chip's corner trims the run's ends equally, so its centre is the
+    /// chip's.
     private func selectedChip(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
-        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
-        let cardAlpha = RailProjectColumn.columnTintOpacity
+        let cardAlpha = RailProjectColumn.columnFillOpacity(.light)
         let chipAlpha = RailProjectColumn.selectedChipTintOpacity
-        let cardDrop = base * cardAlpha
-        let chipOverCardDrop = base * (1 - (1 - cardAlpha) * (1 - chipAlpha))
+        let cardSum = base * (1 - cardAlpha) + 3 * cardAlpha
+        let cardDrop = base - cardSum
+        let chipOverCardDrop = base - cardSum * (1 - chipAlpha)
         let lowerBound = (cardDrop + chipOverCardDrop) / 2
         let upperBound = chipOverCardDrop + (chipOverCardDrop - lowerBound)
         let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4) * r.scale)

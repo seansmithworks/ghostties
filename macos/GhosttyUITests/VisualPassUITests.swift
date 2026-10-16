@@ -78,7 +78,7 @@ final class VisualPassUITests: XCTestCase {
         // preference (not stubbed by `CaptureFixture`), so a launch can land
         // on either tab depending on this Dev profile's prior state. On the
         // Sessions tab, "switchboard" is only ever a substring inside a
-        // compound row label ("Claude Code 4, in switchboard, ..."), never
+        // compound row label ("reconnect race, in switchboard, ..."), never
         // its own `StaticText` — so the fixture assertion below can only find
         // it reliably on the Projects tab. Force Projects (⌘⇧1) before
         // asserting; individual tests switch tabs again afterward as needed.
@@ -191,9 +191,9 @@ final class VisualPassUITests: XCTestCase {
         let app = try launchFixtureApp(state: "session-context-menu")
         app.typeKey("2", modifierFlags: [.command, .shift])
         Thread.sleep(forTimeInterval: 0.5)
-        let sessionRow = element(labelContains: "Claude Code 4", in: app)
+        let sessionRow = element(labelContains: "reconnect race", in: app)
         guard sessionRow.waitForExistence(timeout: 5) else {
-            unreachable("session-context-menu", "'Claude Code 4' row not found on Sessions tab")
+            unreachable("session-context-menu", "'reconnect race' row not found on Sessions tab")
             app.terminate()
             return
         }

@@ -42,6 +42,18 @@ enum SidebarBodyKind: Equatable {
     }
 }
 
+/// The one-view list's project order, which the rail shares: pinned
+/// projects first, then the rest, each in `WorkspaceStore.projects` order
+/// (the manual drag order). A stable partition, so unpinning a project puts
+/// it back at its own place in that order. Everything that orders one-view
+/// projects (`SidebarProjectGroup.make`, project drag and keyboard moves)
+/// reads this; `WorkspaceStore.moveProject` keeps a move inside its group.
+enum ProjectListOrder {
+    static func pinnedFirst(_ projects: [Project]) -> [Project] {
+        projects.filter(\.isPinned) + projects.filter { !$0.isPinned }
+    }
+}
+
 /// One project's live, unpinned sessions in the one-view list.
 struct SidebarProjectGroup: Equatable, Identifiable {
     /// Nil only for sessions whose project no longer exists.
@@ -55,8 +67,8 @@ struct SidebarProjectGroup: Equatable, Identifiable {
     /// of 0 and no rows. It never folds; a click selects it instead.
     var isEmpty: Bool { sessions.isEmpty }
 
-    /// Groups `active` (already in render order) by project, in `projects`
-    /// order. Every project gets a group, empty ones included (Sean,
+    /// Groups `active` (already in render order) by project, in
+    /// `ProjectListOrder` (pinned first). Every project gets a group, empty ones included (Sean,
     /// 2026-10-08: show empty projects dimmed with count 0, rather than
     /// mock B5's hidden). Sessions whose project is gone trail in one
     /// "Unknown" group, the name rows already use for them, so no live
@@ -66,7 +78,7 @@ struct SidebarProjectGroup: Equatable, Identifiable {
         for session in active {
             byProject[session.projectId, default: []].append(session)
         }
-        var groups: [SidebarProjectGroup] = projects.map { project in
+        var groups: [SidebarProjectGroup] = ProjectListOrder.pinnedFirst(projects).map { project in
             SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [])
         }
         let orphans = active.filter { byProject[$0.projectId] != nil }
@@ -346,7 +358,7 @@ struct ProjectAccordionHeader: View {
     static let chevronWidth: CGFloat = 18
     static let countMinWidth: CGFloat = 18
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
@@ -357,7 +369,7 @@ struct ProjectAccordionHeader: View {
     @State private var clusterEdges: [ClusterPart: CGFloat] = [:]
 
     var body: some View {
-        let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
+        let ink = isEmpty ? SidebarColors.dimmedProject(colorScheme) : SidebarColors.secondaryText(colorScheme)
         let progress = morphOverride ?? widthModel.morph
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
@@ -446,7 +458,7 @@ struct ProjectAccordionHeader: View {
                 // Full-strength header ink even on an empty (dimmed) project,
                 // so the mark clears 3:1 on the light and dark sidebar alike.
                 Rectangle()
-                    .fill(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
+                    .fill(SidebarColors.secondaryText(colorScheme))
                     .frame(width: 2)
                     .allowsHitTesting(false)
             }
@@ -523,7 +535,7 @@ struct ProjectMonogramTileFace: View {
 
     /// Re-renders on every dial write; the fill reads "Selected tile fill".
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     /// Ink laid over the tile tint: 0 unselected, the dial when selected.
     private var inkFill: Double { isSelectedProject ? RailProjectColumn.selectedTileFill : 0 }
@@ -532,9 +544,7 @@ struct ProjectMonogramTileFace: View {
     private var isFilled: Bool { inkFill > 0.5 }
 
     // Option D (`hRCBC`: `#28221E1A`), per appearance.
-    private var tint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.tintOpacity)
-    }
+    private var tint: Color { SidebarColors.tileFill(colorScheme, isEmpty: isEmpty) }
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
         // Tint fades out as ink fades in, so each end draws exactly one
@@ -547,7 +557,7 @@ struct ProjectMonogramTileFace: View {
             .overlay {
                 Text(monogram)
                     .font(.system(size: textSize, weight: .bold))
-                    .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
+                    .foregroundStyle(isEmpty ? SidebarColors.dimmedProject(colorScheme) : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
             }
             .frame(width: size, height: size)
     }
@@ -568,7 +578,7 @@ struct MorphTileFace: View, Animatable {
     /// The folded project's session count; nil while it is unfolded.
     let badgeCount: Int?
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var animatableData: CGFloat {
         get { progress }
@@ -630,20 +640,32 @@ enum RailCountBadge {
     }
 
     static func style(selected _: Bool, colorScheme: ColorScheme) -> Style {
-        colorScheme == .dark
-            // Ink 12% over #3D3C3C.
-            ? Style(fill: blend(ink: 0xF0EFED, over: 0x3D3C3C, alpha: 0.12), text: WorkspaceLayout.textSecondaryDark)
-            // Ink 14% over #D3CDCA.
-            : Style(fill: blend(ink: 0x232120, over: 0xD3CDCA, alpha: 0.14), text: WorkspaceLayout.textSecondaryLight)
+        let theme = ChromeTheme.active(colorScheme)
+        let dark = colorScheme == .dark
+        // Tile ink at 12% (dark) / 14% (light) over the base, every theme.
+        let alpha = dark ? 0.12 : 0.14
+        let base: UInt32
+        if ChromeTheme.activeIsGhostties(colorScheme) {
+            // The Ghostties pair's greys: #3D3C3C dark, #D3CDCA light.
+            base = dark ? 0x3D3C3C : 0xD3CDCA
+        } else {
+            // A theme the chrome derived: the same wash over its own chrome.
+            let chrome = theme.chrome.usingColorSpace(.sRGB) ?? theme.chrome
+            func byte(_ v: CGFloat, _ shift: UInt32) -> UInt32 { UInt32((v * 255).rounded()) << shift }
+            base = byte(chrome.redComponent, 16) | byte(chrome.greenComponent, 8) | byte(chrome.blueComponent, 0)
+        }
+        return Style(fill: blend(ink: theme.tileInk, over: base, alpha: alpha), text: theme.inkSecondaryColor)
     }
 
     /// `ink` at `alpha` over `base`, flattened to one opaque colour.
-    private static func blend(ink: UInt32, over base: UInt32, alpha: Double) -> Color {
-        func channel(_ shift: UInt32) -> Double {
-            let i = Double((ink >> shift) & 0xFF), b = Double((base >> shift) & 0xFF)
-            return (i * alpha + b * (1 - alpha)) / 255
+    private static func blend(ink: NSColor, over base: UInt32, alpha: Double) -> Color {
+        let inkRGB = ink.usingColorSpace(.sRGB) ?? ink
+        func channel(_ ink: CGFloat, _ shift: UInt32) -> Double {
+            let b = Double((base >> shift) & 0xFF)
+            return (Double(ink) * 255 * alpha + b * (1 - alpha)) / 255
         }
-        return Color(.sRGB, red: channel(16), green: channel(8), blue: channel(0), opacity: 1)
+        return Color(.sRGB, red: channel(inkRGB.redComponent, 16), green: channel(inkRGB.greenComponent, 8),
+                     blue: channel(inkRGB.blueComponent, 0), opacity: 1)
     }
 }
 
@@ -682,14 +704,15 @@ enum RailProjectTile {
     static let cornerRadius: CGFloat = 8
     /// The tile's tint in light (option D `#28221E1A`; was 7.5%).
     static let tintOpacity: Double = 0.10
+    /// An empty project's tile tint in light (beta.26): lighter than a live
+    /// tile's, so its `textSecondary` letter clears 4.5:1 (4.61 on chrome).
+    static let emptyTintOpacity: Double = 0.085
 
     static func ink(_ colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(red: 0xF0 / 255, green: 0xEF / 255, blue: 0xED / 255)
-            : Color(red: 0x23 / 255, green: 0x21 / 255, blue: 0x20 / 255)
+        SidebarColors.tileInk(colorScheme)
     }
     static func badgeText(_ colorScheme: ColorScheme) -> Color {
-        Color(nsColor: colorScheme == .dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight)
+        Color(nsColor: SidebarColors.background(colorScheme))
     }
 }
 

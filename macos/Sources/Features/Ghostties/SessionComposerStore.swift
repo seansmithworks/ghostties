@@ -48,18 +48,33 @@ final class SessionComposerStore: ObservableObject {
     /// silently writing real app state (`.standard`) — see that initializer.
     private let defaults: UserDefaults
 
+    /// The theme picker `theme` / `/theme` turns the composer into. Owned
+    /// here so closing the composer by any route reverts its live preview
+    /// (`isOpen`'s `didSet`).
+    private(set) var themePicker: ComposerThemePickerModel
+
+    /// The live picker: previews through `Ghostty.App`'s reload and stores
+    /// picks where Settings > Appearance does.
+    private static func liveThemePicker() -> ComposerThemePickerModel {
+        ComposerThemePickerModel(defaults: GhosttiesThemePicks.appDefaults) { picks in
+            MainActor.assumeIsolated { ComposerThemeReload.live(picks) }
+        }
+    }
+
     private init() {
         #if DEBUG
         self.defaults = CaptureFixture.defaults(fixtureActive: CaptureFixture.isActive)
         #else
         self.defaults = .standard
         #endif
+        self.themePicker = Self.liveThemePicker()
     }
 
     #if DEBUG
     /// Same resolution `shared` uses, with fixture mode injectable.
     init(captureFixtureActive: Bool) {
         self.defaults = CaptureFixture.defaults(fixtureActive: captureFixtureActive)
+        self.themePicker = Self.liveThemePicker()
     }
 
     /// The domain this store persists through.
@@ -69,6 +84,7 @@ final class SessionComposerStore: ObservableObject {
     /// side-effects, and no risk of a test polluting real recents.
     init(isolatedForTesting: Void) {
         self.defaults = UserDefaults(suiteName: "ghostties.sessionComposerStore.test.\(UUID().uuidString)") ?? .standard
+        self.themePicker = ComposerThemePickerModel(defaults: defaults, reload: { _ in })
     }
 
     /// Same isolation as `init(isolatedForTesting:)`, but pinned to a
@@ -78,8 +94,19 @@ final class SessionComposerStore: ObservableObject {
     /// UserDefaults suite the first one wrote to, which is what proves pin
     /// persistence is actually durable state and not an in-memory cache
     /// (`SessionComposerPinningTests`).
-    init(isolatedForTesting suiteName: String) {
+    init(isolatedForTesting suiteName: String, themePicker: ComposerThemePickerModel? = nil) {
         self.defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        self.themePicker = themePicker ?? ComposerThemePickerModel(defaults: defaults, reload: { _ in })
+    }
+
+    /// Swaps in a picker with a recording reload hook so a test can drive
+    /// the shared store's teardown without reloading the host app's config.
+    /// Returns the previous picker to restore.
+    @discardableResult
+    func swapThemePickerForTesting(_ picker: ComposerThemePickerModel) -> ComposerThemePickerModel {
+        let previous = themePicker
+        themePicker = picker
+        return previous
     }
 
     /// Test-only override for `precommit`'s session-dispatch call — see the
@@ -89,7 +116,13 @@ final class SessionComposerStore: ObservableObject {
 
     // MARK: - Visibility
 
-    @Published private(set) var isOpen: Bool = false
+    @Published private(set) var isOpen: Bool = false {
+        didSet {
+            // Every close (Esc, click outside, a commit, a teardown) drops a
+            // theme preview that wasn't committed.
+            if !isOpen { themePicker.reset() }
+        }
+    }
 
     /// The window that most recently opened the CENTERED composer overlay
     /// (Phase 3 review round 3, Blocker 3). This store is one process-wide
@@ -634,6 +667,16 @@ final class SessionComposerStore: ObservableObject {
         }
     }
 
+    /// The overlay is being torn down by its host (the app resigned active,
+    /// another window took the composer, the window went away): close the
+    /// composer and drop any theme preview, without waiting on SwiftUI's
+    /// `.onDisappear`. `cancel()` only when still open, so the host's own
+    /// `isOpen` sink (which calls back into the teardown) doesn't loop.
+    func closeForOverlayTeardown() {
+        if isOpen { cancel() }
+        themePicker.reset()
+    }
+
     /// Close the composer without writing anything (Esc / cancel / popover
     /// teardown). Idempotent — safe to call from `.onDisappear` even if
     /// `cancel()` already ran via `onChange(of: isPresented)`.
@@ -692,8 +735,14 @@ final class SessionComposerStore: ObservableObject {
     func precommit(
         template: AgentTemplate,
         coordinator: SessionCoordinator,
-        workspaceStore: WorkspaceStore
+        workspaceStore: WorkspaceStore,
+        atRootOf rootProject: Project? = nil
     ) -> Bool {
+        // `rootProject` (Return on a PROJECTS row): launch in that project at
+        // its root, ignoring `selectedProjectId` and the branch pick, without
+        // writing either — a commit that fails below leaves the composer's
+        // selection untouched. `.locked` still wins.
+        //
         // R3 (Phase 3 review round 2): the keyboard path's double-Return
         // guard (`SessionComposerPalette.commit(template:)` nil-ing
         // `selectedIndex` synchronously) doesn't cover the mouse path —
@@ -729,7 +778,7 @@ final class SessionComposerStore: ObservableObject {
         if case .locked(let lockedProject) = currentProjectBinding {
             resolvedProjectId = lockedProject.id
         } else {
-            resolvedProjectId = selectedProjectId
+            resolvedProjectId = rootProject?.id ?? selectedProjectId
         }
 
         guard let projectId = resolvedProjectId,
@@ -754,7 +803,10 @@ final class SessionComposerStore: ObservableObject {
         // for, and its mutant-proof (delete the `workingDirectory` write
         // below and watch that test go red).
         let launchTemplate: AgentTemplate
-        switch Self.resolveLaunchTemplate(template: template, selectedWorktreePath: selectedWorktreePath) {
+        switch Self.resolveLaunchTemplate(
+            template: template,
+            selectedWorktreePath: rootProject == nil ? selectedWorktreePath : nil
+        ) {
         case .success(let resolved):
             launchTemplate = resolved
         case .failure(let error):

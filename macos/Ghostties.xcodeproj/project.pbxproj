@@ -35,7 +35,6 @@
 		B0A55AC12F72F4C100018CBF /* architect.md in Resources */ = {isa = PBXBuildFile; fileRef = B0A55AB72F72F4C100018CBF /* architect.md */; };
 		B0A55AC22F72F4C100018CBF /* pair-programmer.md in Resources */ = {isa = PBXBuildFile; fileRef = B0A55ABB2F72F4C100018CBF /* pair-programmer.md */; };
 		B0A55AC32F72F4C100018CBF /* orchestrator.md in Resources */ = {isa = PBXBuildFile; fileRef = B0A55ABA2F72F4C100018CBF /* orchestrator.md */; };
-		B0E55A022F80000000000002 /* presets in Resources */ = {isa = PBXBuildFile; fileRef = B0E55A012F80000000000001 /* presets */; };
 		B0E55A042F80000000000004 /* hooks in Resources */ = {isa = PBXBuildFile; fileRef = B0E55A032F80000000000003 /* hooks */; };
 		FC5218FA2D10FFCE004C93E0 /* zsh in Resources */ = {isa = PBXBuildFile; fileRef = FC5218F92D10FFC7004C93E0 /* zsh */; };
 		FC9ABA9C2D0F53F80020D4C8 /* bash-completion in Resources */ = {isa = PBXBuildFile; fileRef = FC9ABA9B2D0F538D0020D4C8 /* bash-completion */; };
@@ -110,7 +109,6 @@
 		B0A55ABB2F72F4C100018CBF /* pair-programmer.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "pair-programmer.md"; sourceTree = "<group>"; };
 		B0A55ABC2F72F4C100018CBF /* test-writer.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "test-writer.md"; sourceTree = "<group>"; };
 		B0A55ADB2F7313F500018CBF /* Chromium Embedded Framework.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "Chromium Embedded Framework.framework"; path = "../vendor/cef/Release/Chromium Embedded Framework.framework"; sourceTree = SOURCE_ROOT; };
-		B0E55A012F80000000000001 /* presets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = presets; path = Resources/presets; sourceTree = "<group>"; };
 		B0E55A032F80000000000003 /* hooks */ = {isa = PBXFileReference; lastKnownFileType = folder; name = hooks; path = Resources/hooks; sourceTree = "<group>"; };
 		FC5218F92D10FFC7004C93E0 /* zsh */ = {isa = PBXFileReference; lastKnownFileType = folder; name = zsh; path = "../zig-out/share/zsh"; sourceTree = "<group>"; };
 		FC9ABA9B2D0F538D0020D4C8 /* bash-completion */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "bash-completion"; path = "../zig-out/share/bash-completion"; sourceTree = "<group>"; };
@@ -194,7 +192,6 @@
 			children = (
 				B0E55A902F80000000000090 /* THIRD-PARTY-NOTICES.md */,
 				B0A55ABD2F72F4C100018CBF /* Presets */,
-				B0E55A012F80000000000001 /* presets */,
 				B0E55A032F80000000000003 /* hooks */,
 				FC9ABA9B2D0F538D0020D4C8 /* bash-completion */,
 				29C15B1C2CDC3B2000520DD4 /* bat */,
@@ -467,7 +464,6 @@
 				552964E62B34A9B400030505 /* vim in Resources */,
 				FC5218FA2D10FFCE004C93E0 /* zsh in Resources */,
 				A5B30539299BEAAB0047F10C /* Assets.xcassets in Resources */,
-				B0E55A022F80000000000002 /* presets in Resources */,
 				B0E55A042F80000000000004 /* hooks in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -732,7 +728,7 @@
 				);
 				"LIBRARY_SEARCH_PATHS[arch=*]" = "$(PROJECT_DIR)/../vendor/cef-build";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-lstdc++",
 					"-lcef_dll_wrapper",
@@ -756,7 +752,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.GhosttiesUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -779,7 +775,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.GhosttiesUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -802,7 +798,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.GhosttiesUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -832,7 +828,7 @@
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.seansmithdesign.ghostties.dock-tile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -862,7 +858,7 @@
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.seansmithdesign.ghostties.dock-tile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -892,7 +888,7 @@
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.seansmithdesign.ghostties.dock-tile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -917,7 +913,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = GhosttiesTestIsolation;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.GhosttiesTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -941,7 +937,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.GhosttiesTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -964,7 +960,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.GhosttiesTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -1145,7 +1141,7 @@
 				);
 				"LIBRARY_SEARCH_PATHS[arch=*]" = "$(PROJECT_DIR)/../vendor/cef-build";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-lstdc++",
 					"-lcef_dll_wrapper",
@@ -1207,7 +1203,7 @@
 				);
 				"LIBRARY_SEARCH_PATHS[arch=*]" = "$(PROJECT_DIR)/../vendor/cef-build";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.0;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-lstdc++",
 					"-lcef_dll_wrapper",

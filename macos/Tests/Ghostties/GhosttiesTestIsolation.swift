@@ -141,17 +141,24 @@ struct SidebarLockedDefaultsTests {
         #expect(ComposerSingleLineShadowDials.yOffset(defaults: d) == 43)
         #expect(ComposerSingleLineShadowDials.opacity(defaults: d) == 0.34)
 
-        // Sean's second DialKit export (2026-10-11), baked as the light defaults.
+        // Sean's second DialKit export (2026-10-11), baked as the light
+        // defaults; the shadow re-tuned to 12%, radius 8, y 4 (beta.27).
         let light = SidebarDialTuning.trayGlass(for: .light, defaults: d)
         #expect(light == TrayGlassStyle.Look(
             variant: .identity, tintOpacity: 0.35, surfaceOpacity: 0.6,
             rimWidth: 1, rimOpacity: 0.6,
-            shadowOpacity: 0.15, shadowRadius: 8, shadowYOffset: 3,
+            shadowOpacity: 0.12, shadowRadius: 8, shadowYOffset: 4,
             chromaticIntensity: 0.15, chromaticWidth: 1.5, chromaticRotation: 80, chromaticBlur: 2.5,
             chromaticPalette: .signal, chromaticBlend: .normal,
             specularStrength: 0.75, specularAngle: 270,
             backdropMaterial: .regular, backdropOpacity: 0.75, surfaceBlur: 6
         ))
+
+        // Every state's "Tray shadow" default is that light shadow.
+        for state in SidebarDialTuning.TrayShadowState.allCases {
+            let look = SidebarDialTuning.trayGlass(for: .light, state: state, defaults: d)
+            #expect(look.shadowOpacity == 0.12 && look.shadowRadius == 8 && look.shadowYOffset == 4, "\(state)")
+        }
 
         // The same export's dark set; its rim now draws in `borderDark`, not white.
         let dark = SidebarDialTuning.trayGlass(for: .dark, defaults: d)

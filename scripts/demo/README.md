@@ -95,7 +95,7 @@ demo app missing it is treated as stale, even if its version matches.
 ./scripts/demo/refresh-demo.sh
 
 # Pin to a specific tag
-./scripts/demo/refresh-demo.sh --from-release v0.1.0-beta.24
+./scripts/demo/refresh-demo.sh --from-release v0.5.0-beta.26
 
 # Build the local checkout instead (Debug, arm64)
 ./scripts/demo/refresh-demo.sh --from-source

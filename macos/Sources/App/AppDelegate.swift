@@ -224,14 +224,10 @@ class AppDelegate: NSObject,
             return
         }
 
-        // Ensures Ghostty finds vendored themes even when terminfo sentinel is missing from the bundle.
-        if getenv("GHOSTTY_RESOURCES_DIR") == nil,
-           let resourcePath = Bundle.main.resourcePath {
-            let ghosttyResources = resourcePath + "/ghostty"
-            setenv("GHOSTTY_RESOURCES_DIR", ghosttyResources, 1)
-        }
-
         #if DEBUG
+        // Before anything (window restoration included) loads the config,
+        // so a capture's pick is in the first one.
+        CaptureFixture.applyThemePicks()
         if
             let suite = UserDefaults.ghosttySuite,
             let clear = ProcessInfo.processInfo.environment["GHOSTTY_CLEAR_USER_DEFAULTS"],
@@ -278,6 +274,11 @@ class AppDelegate: NSObject,
 
         #if DEBUG
         CaptureFixture.applySidebarTabOverride()
+        if CaptureFixture.opensSettings {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                GhosttiesSettingsWindowController.shared.show(tab: .appearance)
+            }
+        }
         // A background capture never activates, so the first window can't
         // wait for `applicationDidBecomeActive` (`CaptureFixture.staysInBackground`).
         if CaptureFixture.staysInBackground {
@@ -1466,6 +1467,16 @@ class AppDelegate: NSObject,
     }
 
     private func ghosttyConfigDidChange(config: Ghostty.Config) {
+        // MARK: - Ghostties fork fence (chrome follows the terminal theme)
+        // The one entry point for the chrome's theme: launch, every reload,
+        // and every light/dark flip (which re-resolves the config here
+        // synchronously, inside `applyAppearanceToAllSurfaces`). First, so
+        // nothing below that changes the app appearance can paint the
+        // chrome with the previous theme. Always reached on the main thread
+        // (config sync hops to main first), as `syncAppearance` assumes too.
+        MainActor.assumeIsolated { ChromeThemeStore.shared.update(config: config) }
+        // MARK: - End Ghostties fork fence (chrome follows the terminal theme)
+
         // Update the config we need to store
         self.derivedConfig = DerivedConfig(config)
 
@@ -1663,8 +1674,9 @@ class AppDelegate: NSObject,
 
     // MARK: - IB Actions
 
-    @IBAction func openConfig(_ sender: Any?) {
-        ghostty.openConfig()
+    /// App menu "Settings…" (Cmd+,): the Settings window.
+    @IBAction func openSettings(_ sender: Any?) {
+        GhosttiesSettingsWindowController.shared.show()
     }
 
     @IBAction func showMCPSources(_ sender: Any?) {

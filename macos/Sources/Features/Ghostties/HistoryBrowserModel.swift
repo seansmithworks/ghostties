@@ -35,14 +35,13 @@ struct HistoryBrowserModel {
 
     /// The keys the browser responds to.
     enum Key: Equatable {
-        case up, down, resume, togglePin, close
+        case up, down, resume, close
     }
 
     /// The browser's outward callbacks, in one place so `handle(_:actions:)`
     /// is the single key → callback mapping the view and the tests share.
     struct Actions {
         let onResume: (UUID) -> Void
-        let onTogglePin: (UUID) -> Void
         let onClose: () -> Void
     }
 
@@ -94,14 +93,13 @@ struct HistoryBrowserModel {
         selectedID = id
     }
 
-    /// Applies one key. Resume and pin act on the selected entry and do
-    /// nothing when nothing is selected; close always fires.
+    /// Applies one key. Resume acts on the selected entry and does nothing
+    /// when nothing is selected; close always fires.
     mutating func handle(_ key: Key, actions: Actions) {
         switch key {
         case .up: moveSelection(by: -1)
         case .down: moveSelection(by: 1)
         case .resume: if let selectedID { actions.onResume(selectedID) }
-        case .togglePin: if let selectedID { actions.onTogglePin(selectedID) }
         case .close: actions.onClose()
         }
     }

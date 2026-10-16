@@ -5,7 +5,7 @@ import GhosttiesCore
 
 /// Tests for the Sessions-tab pinning + drag-reorder store mutations
 /// (BACKLOG "2026-09-12 — Sidebar section vocabulary", items B and C):
-/// `setSessionPinned`, `toggleSessionPin`, and `moveSessionInSessionsView`.
+/// `setSessionPinned` and `moveSessionInSessionsView`.
 @MainActor
 struct WorkspaceStoreSessionPinningTests {
     private func makeSession(name: String, projectId: UUID = UUID(), isPinned: Bool = false, sessionViewOrder: Int? = nil) -> AgentSession {
@@ -18,7 +18,7 @@ struct WorkspaceStoreSessionPinningTests {
         )
     }
 
-    // MARK: - setSessionPinned / toggleSessionPin
+    // MARK: - setSessionPinned
 
     @Test func setSessionPinnedTruePinsAnUnpinnedSession() {
         let s = makeSession(name: "a")
@@ -47,17 +47,6 @@ struct WorkspaceStoreSessionPinningTests {
 
         store.setSessionPinned(id: s.id, false)
 
-        #expect(store.sessions.first(where: { $0.id == s.id })?.isPinned == false)
-    }
-
-    @Test func toggleSessionPinFlipsCurrentState() {
-        let s = makeSession(name: "a")
-        let store = WorkspaceStore(testingSessions: [s])
-
-        store.toggleSessionPin(id: s.id)
-        #expect(store.sessions.first(where: { $0.id == s.id })?.isPinned == true)
-
-        store.toggleSessionPin(id: s.id)
         #expect(store.sessions.first(where: { $0.id == s.id })?.isPinned == false)
     }
 

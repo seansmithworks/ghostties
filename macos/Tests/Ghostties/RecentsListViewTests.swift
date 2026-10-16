@@ -803,7 +803,6 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertTrue(sections.pinned.isEmpty, "no Pinned section while pinning is unavailable")
         XCTAssertEqual(sections.active.map(\.name), ["pinnedLive"], "a pinned running session shows in Active")
         XCTAssertEqual(sections.archived.map(\.name), ["pinnedClosed"], "a pinned closed session shows in its History bucket")
-        XCTAssertFalse(HistoryEntry.entries(from: sections, projects: [project]).contains { $0.isPinned }, "History shows no pin glyph")
         XCTAssertFalse(pinnedLive.isPinnedForDisplay())
         XCTAssertTrue(pinnedLive.isPinned, "the persisted pin is untouched")
 

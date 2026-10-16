@@ -1,7 +1,7 @@
 /*
  * ghostties.org — hero snake game (v2, pass 2)
  *
- * Ported from docs/design/web-redesign/Snake.dc.html. Not classic Snake:
+ * Not classic Snake:
  * the head wraps on every edge (no lose state), loose ghosts drift the
  * field, walking into one joins your tail, and the tail's last ghost
  * periodically strays off and has to be re-collected. Idle mode runs an

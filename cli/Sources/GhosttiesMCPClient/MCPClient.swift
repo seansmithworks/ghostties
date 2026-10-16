@@ -59,7 +59,7 @@ public actor MCPClient {
     public func connect(
         timeout: Duration = .seconds(10),
         clientName: String = "ghostties",
-        clientVersion: String = "0.1.0",
+        clientVersion: String = "0.5.0",
         protocolVersion: String = "2024-11-05"
     ) async throws {
         startReceiveLoop()

@@ -786,19 +786,33 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Reposition a project so it sits immediately BEFORE `beforeId` — or
-    /// last, if `beforeId` is nil or not found. `projects` order is the
-    /// one-view list's group order and the rail's tile order
-    /// (`SidebarProjectGroup.make`), and it is persisted as-is, so this is
-    /// the whole reorder. `beforeId` is resolved after the moved project is
-    /// removed, the same rule as `moveSessionInSessionsView`. The tabs
-    /// layout's Projects list sorts alphabetically within its sections and
-    /// is unaffected.
+    /// last, if `beforeId` is nil or not found — within its own pin group.
+    /// `projects` order, pinned first (`ProjectListOrder`), is the one-view
+    /// list's group order and the rail's tile order, and it is persisted
+    /// as-is, so this is the whole reorder. A move never crosses the
+    /// pinned/unpinned boundary: a target in the other group lands the
+    /// project at its own group's near edge (a pinned project at the end of
+    /// Pinned, an unpinned one at the top of the rest). Only the moved
+    /// group's slots in `projects` are rewritten, so the other group keeps
+    /// its places and an unpin still returns a project to its own spot.
+    /// `beforeId` is resolved after the moved project is removed, the same
+    /// rule as `moveSessionInSessionsView`. The tabs layout's Projects list
+    /// sorts alphabetically within its sections and is unaffected.
     func moveProject(id: UUID, before beforeId: UUID?) {
-        guard id != beforeId, let from = projects.firstIndex(where: { $0.id == id }) else { return }
+        guard id != beforeId, let moved = projects.first(where: { $0.id == id }) else { return }
+        let slots = projects.indices.filter { projects[$0].isPinned == moved.isPinned }
+        var group = slots.map { projects[$0] }.filter { $0.id != id }
+        let to: Int
+        if let target = beforeId, let index = group.firstIndex(where: { $0.id == target }) {
+            to = index
+        } else if !moved.isPinned, let target = beforeId, projects.contains(where: { $0.id == target && $0.isPinned }) {
+            to = 0
+        } else {
+            to = group.count
+        }
+        group.insert(moved, at: to)
         var reordered = projects
-        let moved = reordered.remove(at: from)
-        let to = beforeId.flatMap { target in reordered.firstIndex(where: { $0.id == target }) } ?? reordered.count
-        reordered.insert(moved, at: to)
+        for (slot, project) in zip(slots, group) { reordered[slot] = project }
         guard reordered.map(\.id) != projects.map(\.id) else { return }
         projects = reordered
         persist()
@@ -954,22 +968,16 @@ final class WorkspaceStore: ObservableObject {
             .path
     }
 
-    /// Set a session's Sessions-tab pinned state explicitly (idempotent —
-    /// unlike `toggleSessionPin`, safe to call from drop handling where the
-    /// desired end state, not a toggle, is known). No-ops (no write, no
-    /// `objectWillChange` fire) when already at the requested value.
+    /// Set a session's Sessions-tab pinned state explicitly (idempotent,
+    /// for drop handling where the desired end state is known). No-ops (no
+    /// write, no `objectWillChange` fire) when already at the requested
+    /// value. Only a drop onto the Pinned section calls it, and that section
+    /// never renders while `SessionPinning.isAvailable` is false.
     func setSessionPinned(id: UUID, _ pinned: Bool) {
         guard let index = sessions.firstIndex(where: { $0.id == id }),
               sessions[index].isPinned != pinned else { return }
         sessions[index].isPinned = pinned
         persist()
-    }
-
-    /// Toggle a session's Sessions-tab pinned state — reachable from the
-    /// Sessions-tab context menu's "Pin"/"Unpin" item.
-    func toggleSessionPin(id: UUID) {
-        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        setSessionPinned(id: id, !sessions[index].isPinned)
     }
 
     /// Reposition a session so it renders immediately BEFORE `beforeId`

@@ -759,6 +759,11 @@ final class SessionCoordinator: ObservableObject {
             }) {
                 return match
             }
+            // A retired built-in's name (a task saved with
+            // `template: Orchestrator`) starts its replacement.
+            if let replacement = AgentTemplate.replacement(forRetiredName: requested) {
+                return store.templates.first(where: { $0.id == replacement.id }) ?? replacement
+            }
             FileHandle.standardError.write(Data(
                 "⚠️ Ghostties: template '\(requested)' not found; falling back to default\n".utf8
             ))
@@ -1191,9 +1196,10 @@ final class SessionCoordinator: ObservableObject {
     // MARK: - Marketing Capture Fixture
 
     /// The command every fixture-mode session runs instead of a real shell —
-    /// see `CaptureFixture.writeTranscriptScript(id:)`.
+    /// see `CaptureFixture.transcriptScript(forSessionId:)`.
     nonisolated private static func captureFixtureCommand(for sessionId: UUID) -> String {
-        CaptureFixture.writeTranscriptScript(id: sessionId.uuidString)
+        CaptureFixture.writeTranscriptScript(
+            id: sessionId.uuidString, script: CaptureFixture.transcriptScript(forSessionId: sessionId))
     }
 
     // MARK: - Launcher Script Lifecycle
@@ -1886,12 +1892,11 @@ final class SessionCoordinator: ObservableObject {
     /// Capture-rig-only seam (round 6 follow-up): marks a session focused
     /// for `GHOSTTIES_CAPTURE_FIXTURE` screenshots so the sidebar's
     /// selected-row styling actually renders (`RecentsRowView`/
-    /// the rail key off `activeSessionId`). Sets `activeSessionId`
-    /// directly instead of routing through `focusSession(id:)` — the real
-    /// path snapshots/swaps the terminal's `SplitTree`, which the fixture's
-    /// canned sessions don't have (their terminal content comes from the
-    /// default-window transcript, not a per-session surface — see
-    /// `CaptureFixture`'s doc comment on `TerminalController.init`).
+    /// the rail key off `activeSessionId`). Sets `activeSessionId` at once
+    /// so the first frame already shows the selection, then (once per
+    /// process) gives each live fixture session a real surface through
+    /// `relaunch` and selects the focused one through `focusSession(id:)`,
+    /// the row-click path — see `spawnCaptureFixtureSessions()`.
     ///
     /// Called from BOTH `WorkspaceSidebarView.onAppear` and
     /// `SidebarRailColumn.onAppear` — a capture can cold-launch straight into
@@ -1909,6 +1914,11 @@ final class SessionCoordinator: ObservableObject {
             activeSessionId = id
         }
         sessionPopover.openForCaptureFixtureIfNeeded()
+        if CaptureFixture.claimHook("spawnFixtureSessions") {
+            _Concurrency.Task { @MainActor [weak self] in
+                await self?.spawnCaptureFixtureSessions()
+            }
+        }
         #endif
     }
 
@@ -1925,6 +1935,25 @@ final class SessionCoordinator: ObservableObject {
         activeSessionId = target.id
         sidebarItemActivated.send()
         return target
+    }
+
+    /// Each live fixture session runs its own transcript in a real surface
+    /// (the Relaunch path), and the focused one is selected the way a row
+    /// click selects it, so picking any row switches the terminal.
+    private func spawnCaptureFixtureSessions() async {
+        let store = WorkspaceStore.shared
+        for id in CaptureFixture.spawnedSessionIds {
+            guard let session = store.sessions.first(where: { $0.id == id }) else { continue }
+            await relaunch(session: session, mode: .fresh)
+        }
+        if let id = CaptureFixture.focusedSessionId {
+            focusSession(id: id)
+        }
+        // Printing the transcripts reset each session's output clock and
+        // relaunch cleared its seeded state; restore the fixture's states
+        // once that output has landed.
+        try? await _Concurrency.Task.sleep(for: .seconds(1))
+        CaptureFixture.seedCoordinator(self, store: store)
     }
     #endif
 

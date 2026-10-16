@@ -201,7 +201,7 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         // with `.accessibilityElement(children: .combine)` and no `Button`
         // — unlike `ProjectDisclosureRow`'s header, which this file matches
         // via `app.buttons` above. `MarketingCaptureUITests` finds its
-        // fixture session ("Claude Code 4") via `app.staticTexts[...]`
+        // fixture session ("reconnect race") via `app.staticTexts[...]`
         // against that same `SessionRow` view (`CaptureFixture` seeds the
         // real `WorkspaceStore`/`SessionCoordinator`, not a separate view),
         // but there is no test in this repo that proves `.staticTexts` is
