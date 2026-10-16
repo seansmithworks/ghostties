@@ -28,7 +28,7 @@ extension Ghostty {
         @Published private(set) var config: Config
 
         /// Preferred config file than the default ones
-        private var configPath: String?
+        private(set) var configPath: String?
         /// The ghostty app instance. We only have one of these for the entire app, although I guess
         /// in theory you can have multiple... I don't know why you would...
         @Published var app: ghostty_app_t? {
@@ -47,7 +47,7 @@ extension Ghostty {
         init(configPath: String? = nil) {
             self.configPath = configPath
             // Initialize the global configuration.
-            self.config = Config(at: configPath)
+            self.config = Config(at: configPath, picks: .stored(in: GhosttiesThemePicks.appDefaults))
             if self.config.config == nil {
                 readiness = .error
                 return
@@ -151,7 +151,7 @@ extension Ghostty {
             }
 
             // Hard or full updates have to reload the full configuration
-            let newConfig = Config(at: configPath)
+            let newConfig = Config(at: configPath, picks: .stored(in: GhosttiesThemePicks.appDefaults))
             guard newConfig.loaded else {
                 Ghostty.logger.warning("failed to reload configuration")
                 return
@@ -171,7 +171,7 @@ extension Ghostty {
             // Hard or full updates have to reload the full configuration.
             // NOTE: We never set this on self.config because this is a surface-only
             // config. We free it after the call.
-            let newConfig = Config(at: configPath)
+            let newConfig = Config(at: configPath, picks: .stored(in: GhosttiesThemePicks.appDefaults))
             guard newConfig.loaded else {
                 Ghostty.logger.warning("failed to reload configuration")
                 return

@@ -35,4 +35,34 @@ enum GhosttiesConfigDefaults {
             return nil
         }
     }
+
+    /// The Settings > Appearance pick, as one config line, or nil when
+    /// nothing is picked. Loaded AFTER the user's config (see
+    /// `Ghostty.Config.loadConfig`), so it beats their `theme =` line; their
+    /// explicit `background`/`foreground`/`palette` lines still win, because
+    /// Ghostty replays explicit keys over any theme. An unpicked side keeps
+    /// the Ghostties theme for that side.
+    static func overrideContents(picks: GhosttiesThemePicks) -> String? {
+        guard !picks.isEmpty else { return nil }
+        let light = picks.light ?? GhosttiesThemeCatalog.ghostties.light
+        let dark = picks.dark ?? GhosttiesThemeCatalog.ghostties.dark
+        return "theme = light:\(light),dark:\(dark)"
+    }
+
+    /// Writes the override file and returns its path; nil when nothing is
+    /// picked or the write failed. Never the user's config file.
+    static func overrideFileURL(picks: GhosttiesThemePicks) -> URL? {
+        guard let contents = overrideContents(picks: picks) else { return nil }
+        // One file per call: configs load concurrently (hosted tests, a
+        // reload racing a surface reload), so a shared path could be read
+        // mid-rewrite by another load with different picks.
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ghostties-config-override-\(UUID().uuidString)")
+        do {
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            return nil
+        }
+    }
 }
