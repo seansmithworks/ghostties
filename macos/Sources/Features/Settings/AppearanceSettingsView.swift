@@ -24,7 +24,6 @@ struct AppearanceSettingsView: View {
                 LabeledContent("Mode") {
                     VStack(alignment: .trailing, spacing: 4) {
                         NeutralSegmentedControl(
-                            label: "Mode",
                             options: [
                                 ("System", GhosttiesAppearanceMode.system),
                                 ("Light", .light),
@@ -290,11 +289,9 @@ struct ThemePreview {
 
 /// A segmented control whose selected segment is the neutral raised pill
 /// (the Finder toolbar look) instead of SwiftUI's accent-filled one.
-/// `.texturedRounded` is the AppKit style that draws selection in gray, and
-/// `selectedSegmentBezelColor` stays nil so the system picks the light and
-/// dark variants itself.
+/// The selection bezel is pinned to `NSColor.controlColor` (white in light,
+/// a lighter gray in dark) so a key window cannot turn it accent blue.
 private struct NeutralSegmentedControl<Value: Hashable>: NSViewRepresentable {
-    let label: String
     let options: [(title: String, value: Value)]
     @Binding var selection: Value
 
@@ -306,12 +303,13 @@ private struct NeutralSegmentedControl<Value: Hashable>: NSViewRepresentable {
             action: #selector(Coordinator.changed(_:))
         )
         control.segmentStyle = .texturedRounded
-        control.setAccessibilityLabel(label)
+        control.selectedSegmentBezelColor = .controlColor
         return control
     }
 
     func updateNSView(_ control: NSSegmentedControl, context: Context) {
         context.coordinator.parent = self
+        control.isEnabled = context.environment.isEnabled
         control.selectedSegment = options.firstIndex { $0.value == selection } ?? -1
     }
 
