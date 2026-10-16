@@ -41,6 +41,11 @@ rsync -a --delete \
   macos/Resources/ghostty/shell-integration/
 ```
 
+`themes/` also holds Ghostties' own themes (`Ghostties Light`,
+`Ghostties Dark`), which are the default `theme` set in
+`GhosttiesConfigDefaults.swift`. `rsync --delete` removes them — re-add
+them after a refresh, or `GhosttiesDefaultThemeTests` goes red.
+
 ## When zig build is fixed
 
 Once `zig build` works on macOS 26 again, this directory can be deleted

@@ -12,9 +12,15 @@ enum GhosttiesConfigDefaults {
     /// sides). This is the text inset within the terminal surface —
     /// separate from `terminalInset`, the 8pt outer card margin (unchanged
     /// by this round; see `WorkspaceLayout.terminalInset`).
+    ///
+    /// Terminal theme: the Ghostties pair bundled in
+    /// `macos/Resources/ghostty/themes/` (Apple System Colors with the
+    /// background set to the card's canvas fill — DESIGN.md "Terminal
+    /// theme"). A user `theme =` line loads later and wins.
     static let contents = """
     window-padding-x = 20
     window-padding-y = 20
+    theme = light:Ghostties Light,dark:Ghostties Dark
     """
 
     /// Writes the defaults file and returns its path, or nil if the write

@@ -116,6 +116,20 @@ All tokens live in `macos/Sources/Features/Ghostties/WorkspaceLayout.swift`. Nev
 
 **Legacy tokens** still in `WorkspaceLayout.swift` (`cardBackgroundLight/Dark`, `expandedContainerLight/Dark`, `activeRowLight/Dark`) are kept for row/hover state — do not confuse with the bg-layer tokens above.
 
+### Terminal theme
+
+Out of the box the terminal runs the **Ghostties Light / Ghostties Dark** pair, set by `GhosttiesConfigDefaults` as `theme = light:Ghostties Light,dark:Ghostties Dark`. The defaults load before the user's config, so a user `theme =` (or `background =`, `palette =`) line still wins. The direction is one-way: the theme matches the canvas, the canvas never reads the theme.
+
+| Value                   | Ghostties Light | Ghostties Dark |
+| ----------------------- | --------------- | -------------- |
+| `background`            | `#FAF7F3` (canvas, light) | `#141413` (canvas, dark) |
+| `foreground`            | `#000000`       | `#FFFFFF`      |
+| Palette 0–15, cursor, selection | Apple System Colors Light | Apple System Colors |
+
+Only `background` differs from the Apple System Colors originals, so the terminal fills its card with no seam. Contrast against the new backgrounds: foreground 19.66:1 light / 18.43:1 dark. Light mode loses about 6% contrast on every palette entry versus Apple's `#FEFFFF`; dark gains about 10% versus Apple's `#1E1E1E`.
+
+Theme files live in `macos/Resources/ghostty/themes/` beside upstream's. A new pair goes there as `Ghostties <Name> Light` / `Ghostties <Name> Dark`, with its own test arguments in `GhosttiesDefaultThemeTests`.
+
 ## 3. Typography Rules
 
 Ghostties uses exactly two font families and a strict size/weight discipline.
