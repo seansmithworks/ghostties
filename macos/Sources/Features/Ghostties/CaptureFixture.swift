@@ -587,6 +587,31 @@ enum CaptureFixture {
     }
 
     static var composerHook: ComposerHook? { parseComposerHook(env("GHOSTTIES_CAPTURE_COMPOSER")) }
+    /// `GHOSTTIES_CAPTURE_COMPOSER_TEXT=<text>`: written into the composer's
+    /// field once the `GHOSTTIES_CAPTURE_COMPOSER` hook has opened it, as
+    /// if typed (e.g. `theme gru`).
+    static var composerText: String? { env("GHOSTTIES_CAPTURE_COMPOSER_TEXT") }
+    /// `GHOSTTIES_CAPTURE_THEME_SELECT=<index>`: the composer theme result
+    /// selected (and previewed) after the text, as an arrow key would.
+    static var themeSelection: Int? { env("GHOSTTIES_CAPTURE_THEME_SELECT").flatMap { Int($0) } }
+    /// `GHOSTTIES_CAPTURE_THEME_BENCH=<steps>[:<ms>]`: after the selection,
+    /// steps it right `steps` times, `ms` apart (default 500; 30 is a held
+    /// key), through the arrow key's own path, so the preview latency log
+    /// has samples without synthetic input.
+    static var themeBench: (steps: Int, interval: TimeInterval)? {
+        guard let parts = env("GHOSTTIES_CAPTURE_THEME_BENCH")?.split(separator: ":"),
+              let steps = parts.first.flatMap({ Int($0) }) else { return nil }
+        let ms = parts.count > 1 ? Double(parts[1]) ?? 500 : 500
+        return (steps, ms / 1000)
+    }
+    /// `GHOSTTIES_CAPTURE_THEME_PRESENTATION=chips|grid`: the composer theme
+    /// picker's presentation for this launch, written to the fixture's
+    /// throwaway defaults suite, never the Dev app's domain.
+    static func applyThemePresentation() {
+        guard let raw = env("GHOSTTIES_CAPTURE_THEME_PRESENTATION"),
+              let presentation = ComposerThemePresentation(rawValue: raw) else { return }
+        presentation.save(to: defaults(fixtureActive: true))
+    }
     static var projectSettingsHook: ProjectSettingsHook? {
         parseProjectSettingsHook(env("GHOSTTIES_CAPTURE_PROJECT_SETTINGS"))
     }

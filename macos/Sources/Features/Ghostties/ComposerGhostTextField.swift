@@ -129,6 +129,8 @@ struct ComposerGhostTextField: NSViewRepresentable {
         case rightAtEnd
         /// ← anywhere.
         case left
+        /// ← and → anywhere (the composer theme grid's 2D selection).
+        case both
     }
 
     var horizontalArrowClaim: HorizontalArrowClaim = .none
@@ -866,6 +868,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
                 return true
 
             case #selector(NSResponder.moveRight(_:)):
+                if parent.horizontalArrowClaim == .both {
+                    parent.onEvent?(.move(.right))
+                    return true
+                }
                 let selected = textView.selectedRange()
                 guard parent.horizontalArrowClaim == .rightAtEnd,
                       selected.length == 0,
@@ -874,7 +880,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
                 return true
 
             case #selector(NSResponder.moveLeft(_:)):
-                guard parent.horizontalArrowClaim == .left else { return false }
+                guard parent.horizontalArrowClaim == .left || parent.horizontalArrowClaim == .both else { return false }
                 parent.onEvent?(.move(.left))
                 return true
 

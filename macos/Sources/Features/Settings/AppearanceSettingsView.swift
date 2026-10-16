@@ -7,6 +7,8 @@ import SwiftUI
 /// `reloadConfig()`; the user's config file is never written.
 struct AppearanceSettingsView: View {
     @StateObject private var model = AppearanceSettingsModel()
+    @AppStorage(ComposerThemePresentation.key, store: GhosttiesThemePicks.appDefaults)
+    private var composerThemePresentation: ComposerThemePresentation = .grid
 
     var body: some View {
         Form {
@@ -46,6 +48,13 @@ struct AppearanceSettingsView: View {
                     if let reset = model.resetLabel {
                         Button(reset) { model.clearPicks() }
                     }
+                }
+            }
+
+            Section {
+                Picker("Composer theme results", selection: $composerThemePresentation) {
+                    Text("Grid").tag(ComposerThemePresentation.grid)
+                    Text("Chips").tag(ComposerThemePresentation.chips)
                 }
             }
         }
