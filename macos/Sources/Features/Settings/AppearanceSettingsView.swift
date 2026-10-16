@@ -8,11 +8,21 @@ import SwiftUI
 /// defaults and applied live through `reloadConfig()`; the user's config
 /// file is never written.
 struct AppearanceSettingsView: View {
-    @StateObject private var model = AppearanceSettingsModel(applyMode: {
-        (NSApp.delegate as? AppDelegate)?.applyAppearanceMode()
-    })
+    @StateObject private var model: AppearanceSettingsModel
     @AppStorage(ComposerThemePresentation.key, store: GhosttiesThemePicks.appDefaults)
     private var composerThemePresentation: ComposerThemePresentation = .grid
+
+    /// `model` is injectable so the pane can be rendered offscreen in a
+    /// given state.
+    init(model: @autoclosure @escaping () -> AppearanceSettingsModel) {
+        _model = StateObject(wrappedValue: model())
+    }
+
+    init() {
+        self.init(model: AppearanceSettingsModel(applyMode: {
+            (NSApp.delegate as? AppDelegate)?.applyAppearanceMode()
+        }))
+    }
 
     var body: some View {
         Form {
@@ -412,7 +422,7 @@ private struct ThemeBrowsePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("Single themes set")
+                Text("Apply single themes to")
                     .foregroundStyle(.secondary)
                 NeutralSegmentedControl(
                     options: [("Light", ChromeTheme.Polarity.light), ("Dark", .dark)],
@@ -422,8 +432,9 @@ private struct ThemeBrowsePanel: View {
                 Button("Done", action: model.closeBrowse)
             }
             HStack(spacing: 8) {
-                TextField("Search \(model.themeNames.count) themes", text: $model.browseQuery)
+                TextField("Search", text: $model.browseQuery, prompt: Text("Search \(model.themeNames.count) themes"))
                     .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
                 ThemeBrowseChips(selection: model.browseFilter, size: 12) { model.browseFilter = $0 }
             }
             let entries = model.browseEntries
