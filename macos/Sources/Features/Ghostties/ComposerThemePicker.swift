@@ -53,8 +53,8 @@ enum ComposerThemeCommand: Equatable {
 
 // MARK: - Catalog
 
-/// A light/dark theme pair as the picker offers it. A family may have one
-/// side only (Dracula is dark, Solarized here is light).
+/// A light/dark theme pair as the picker offers it. The curated set is
+/// complete pairs; a one-sided family is still valid (C1's matcher).
 struct ThemeFamily: Equatable {
     let name: String
     let light: String?
@@ -97,23 +97,209 @@ struct ThemeChoice: Equatable {
 }
 
 extension GhosttiesThemeCatalog {
-    /// The curated set the composer picker offers, Ghostties first. Every
-    /// name is a bundled theme file (`shippedCatalogIsCuratedAndBundled`).
+    /// The curated set the picker grid offers, Ghostties first: eight
+    /// complete light/dark pairs. Every name is a bundled theme file
+    /// (`v2CatalogIsTheEightCompletePairs`).
     static let families: [ThemeFamily] = [
         ThemeFamily(name: ghostties.name, light: ghostties.light, dark: ghostties.dark),
         ThemeFamily(name: "Catppuccin", light: "Catppuccin Latte", dark: "Catppuccin Mocha"),
+        ThemeFamily(name: "Rosé Pine", light: "Rose Pine Dawn", dark: "Rose Pine"),
+        ThemeFamily(name: "Tokyo Night", light: "TokyoNight Day", dark: "TokyoNight Night"),
+        ThemeFamily(name: "GitHub", light: "GitHub Light Default", dark: "GitHub Dark Default"),
         ThemeFamily(name: "Gruvbox", light: "Gruvbox Light", dark: "Gruvbox Dark"),
-        ThemeFamily(name: "Rose Pine", light: "Rose Pine Dawn", dark: "Rose Pine"),
-        ThemeFamily(name: "Solarized", light: "iTerm2 Solarized Light", dark: nil),
-        ThemeFamily(name: "Dracula", light: nil, dark: "Dracula"),
-        ThemeFamily(name: "TokyoNight", light: nil, dark: "TokyoNight"),
-        ThemeFamily(name: "Nord", light: nil, dark: "Nord"),
+        ThemeFamily(name: "Everforest", light: "Everforest Light Med", dark: "Everforest Dark Hard"),
+        ThemeFamily(name: "Nord", light: "Nord Light", dark: "Nord"),
     ]
+
+    /// The pairs "All themes" lists first: the curated set, then every
+    /// bundled `<Name> Light` + `<Name> Dark` (or `Day` + `Night`) pair the
+    /// curated set doesn't already hold, in `themes` order.
+    static func browseFamilies(themes: [String]) -> [ThemeFamily] {
+        let available = Set(themes)
+        var taken = Set(families.flatMap { [$0.light, $0.dark].compactMap { $0 } })
+        var out = families
+        for name in themes where !taken.contains(name) {
+            for (lightSuffix, darkSuffix) in [(" Light", " Dark"), (" Day", " Night")] where name.hasSuffix(lightSuffix) {
+                let base = String(name.dropLast(lightSuffix.count))
+                let dark = base + darkSuffix
+                guard available.contains(dark), !taken.contains(dark) else { continue }
+                out.append(ThemeFamily(name: base, light: name, dark: dark))
+                taken.formUnion([name, dark])
+            }
+        }
+        return out
+    }
 
     /// `picks` with an unpicked side filled by the Ghostties theme for that
     /// side: what actually shows.
     static func resolved(_ picks: GhosttiesThemePicks) -> GhosttiesThemePicks {
         GhosttiesThemePicks(light: picks.light ?? ghostties.light, dark: picks.dark ?? ghostties.dark)
+    }
+}
+
+// MARK: - Grid
+
+/// One cell of the 3x3 theme grid the composer and Settings share.
+enum ThemeGridCell: Equatable {
+    case family(ThemeFamily)
+    /// What shows is outside the curated set: the user's own theme, or a
+    /// mixed pair.
+    case custom(light: String, dark: String)
+    /// Opens "All themes"; not a theme itself.
+    case allThemes
+
+    var picks: GhosttiesThemePicks? {
+        switch self {
+        case .family(let family): return family.picks
+        case .custom(let light, let dark): return GhosttiesThemePicks(light: light, dark: dark)
+        case .allThemes: return nil
+        }
+    }
+}
+
+enum ThemeGridModel {
+    static let columns = 3
+    static let cellCount = 9
+
+    /// The curated families then All themes. When what shows (`current`, a
+    /// nil side read as Ghostties) is no family, a Custom cell takes the
+    /// first slot and the last family drops off, so it is always 9 cells.
+    static func cells(current: GhosttiesThemePicks) -> [ThemeGridCell] {
+        let families = GhosttiesThemeCatalog.families
+        let shown = GhosttiesThemeCatalog.resolved(current)
+        let familySlots = cellCount - 1
+        if families.contains(where: { $0.picks == shown }) {
+            return families.prefix(familySlots).map(ThemeGridCell.family) + [.allThemes]
+        }
+        let custom = ThemeGridCell.custom(
+            light: shown.light ?? GhosttiesThemeCatalog.ghostties.light,
+            dark: shown.dark ?? GhosttiesThemeCatalog.ghostties.dark
+        )
+        return [custom] + families.prefix(familySlots - 1).map(ThemeGridCell.family) + [.allThemes]
+    }
+
+    /// The cell that shows now: the matching family, else Custom (0).
+    static func selectedIndex(current: GhosttiesThemePicks) -> Int {
+        let shown = GhosttiesThemeCatalog.resolved(current)
+        return cells(current: current).firstIndex {
+            if case .family(let family) = $0 { return family.picks == shown }
+            return false
+        } ?? 0
+    }
+}
+
+// MARK: - All themes
+
+/// The chips over "All themes", in order.
+enum ThemeBrowseFilter: CaseIterable {
+    case pairs, light, dark
+
+    var title: String {
+        switch self {
+        case .pairs: return "Pairs"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+}
+
+/// One card in "All themes": a pair, or one theme tagged light or dark.
+enum ThemeBrowseEntry: Equatable {
+    case family(ThemeFamily)
+    case single(name: String, polarity: ChromeTheme.Polarity)
+
+    var title: String {
+        switch self {
+        case .family(let family): return family.name
+        case .single(let name, _): return name
+        }
+    }
+}
+
+enum ThemeBrowseModel {
+    /// Light or dark by the theme file's background, with `ChromeTheme`'s
+    /// rule. Cached: "All themes" asks for every bundled theme.
+    static func polarity(ofTheme name: String) -> ChromeTheme.Polarity {
+        if let cached = polarityCache.value(name) { return cached }
+        let background = ThemeFile.background(named: name)
+        let polarity = ChromeTheme.polarity(
+            background: background,
+            foreground: ThemeFile.foreground(named: name) ?? background
+        )
+        polarityCache.store(polarity, for: name)
+        return polarity
+    }
+
+    /// `.pairs`: matching families, then the other themes. `.light` /
+    /// `.dark`: every theme of that polarity, family members included.
+    /// `query` (trimmed, case-insensitive substring) filters all three; a
+    /// family matches on its name or either member's.
+    static func entries(
+        filter: ThemeBrowseFilter, query: String, themes: [String],
+        families: [ThemeFamily] = GhosttiesThemeCatalog.families,
+        polarity: (String) -> ChromeTheme.Polarity = ThemeBrowseModel.polarity(ofTheme:)
+    ) -> [ThemeBrowseEntry] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        func matches(_ name: String?) -> Bool {
+            guard let name else { return false }
+            return q.isEmpty || name.lowercased().contains(q)
+        }
+        switch filter {
+        case .pairs:
+            let members = Set(families.flatMap { [$0.light, $0.dark].compactMap { $0 } })
+            let pairs = families
+                .filter { matches($0.name) || matches($0.light) || matches($0.dark) }
+                .map(ThemeBrowseEntry.family)
+            let singles = themes
+                .filter { !members.contains($0) && matches($0) }
+                .map { ThemeBrowseEntry.single(name: $0, polarity: polarity($0)) }
+            return pairs + singles
+        case .light, .dark:
+            let wanted: ChromeTheme.Polarity = filter == .light ? .light : .dark
+            return themes.compactMap { name in
+                guard matches(name) else { return nil }
+                let side = polarity(name)
+                return side == wanted ? ThemeBrowseEntry.single(name: name, polarity: side) : nil
+            }
+        }
+    }
+
+    /// The picks after choosing `entry` from `current` (a nil side reads as
+    /// Ghostties). A pair sets both sides; a single theme sets one side
+    /// only, `side` if given, else its own polarity.
+    static func picks(
+        choosing entry: ThemeBrowseEntry, side: ChromeTheme.Polarity?,
+        current: GhosttiesThemePicks
+    ) -> GhosttiesThemePicks {
+        let shown = GhosttiesThemeCatalog.resolved(current)
+        switch entry {
+        case .family(let family):
+            return family.picks
+        case .single(let name, let polarity):
+            switch side ?? polarity {
+            case .light: return GhosttiesThemePicks(light: name, dark: shown.dark)
+            case .dark: return GhosttiesThemePicks(light: shown.light, dark: name)
+            }
+        }
+    }
+
+    private static let polarityCache = PolarityCache()
+
+    private final class PolarityCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [String: ChromeTheme.Polarity] = [:]
+
+        func value(_ name: String) -> ChromeTheme.Polarity? {
+            lock.lock()
+            defer { lock.unlock() }
+            return values[name]
+        }
+
+        func store(_ polarity: ChromeTheme.Polarity, for name: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            values[name] = polarity
+        }
     }
 }
 

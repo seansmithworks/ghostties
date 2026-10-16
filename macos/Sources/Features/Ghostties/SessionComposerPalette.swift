@@ -1485,9 +1485,11 @@ struct SessionComposerPalette: View {
     }
 
     /// The card's width: the width dial, widened by a quarter for A4's two
-    /// columns so a resume row's title and meta both fit.
+    /// columns so a resume row's title and meta both fit, and to the theme
+    /// grid's width while it shows (three full rows of cards).
     private var composerCardWidth: CGFloat {
-        resumeLayout == .columns && !themePicker.isActive ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
+        if themePicker.isGridShown { return ComposerThemeGrid.cardWidth }
+        return resumeLayout == .columns && !themePicker.isActive ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
     }
 
     private var newStyleField: some View {
@@ -1968,18 +1970,26 @@ struct SessionComposerPalette: View {
     }
 
     /// Theme mode: arrows move (and preview), Return stores the pick and
-    /// closes, Esc reverts and leaves theme mode with the composer open.
-    /// False for keys it leaves to `handle(_:)` (Tab's ghost-accept beat).
+    /// closes (on the All themes tile it opens All themes in place), Esc
+    /// reverts: from All themes back to the grid, from the grid out of
+    /// theme mode with the composer open. False for keys it leaves to
+    /// `handle(_:)` (Tab's ghost-accept beat).
     private func handleTheme(_ event: ComposerGhostTextField.KeyboardEvent) -> Bool {
         switch event {
         case .exit:
-            themePicker.reset()
-            composerStore.searchText = ""
-        case .submit, .submitNoMatch:
-            if themePicker.commit() {
-                dismissComposer()
+            if themePicker.isBrowsing {
+                let hadQuery = !themePicker.query.isEmpty
+                themePicker.closeBrowse()
+                if hadQuery { composerStore.searchText = ComposerThemeCommand.word + " " }
             } else {
-                triggerNoMatchFeedback()
+                themePicker.reset()
+                composerStore.searchText = ""
+            }
+        case .submit, .submitNoMatch:
+            switch themePicker.activate() {
+            case .committed: dismissComposer()
+            case .openedBrowse: break
+            case .none: triggerNoMatchFeedback()
             }
         case .move(let direction):
             _ = themePicker.move(direction, columns: ComposerThemeGrid.columns(cardWidth: composerCardWidth))

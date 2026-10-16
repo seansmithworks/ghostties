@@ -3,17 +3,33 @@ import SwiftUI
 
 // MARK: - Model
 
+/// What Return (or a click) did in the theme picker.
+enum ComposerThemeActivation: Equatable {
+    /// A theme was stored; the composer closes.
+    case committed
+    /// The All themes tile opened the browse view in place.
+    case openedBrowse
+    /// Nothing to act on.
+    case none
+}
+
 /// The composer theme picker's state: the parsed command, the selected
 /// result, the hovered thumbnail half, and the live preview. Owned by
 /// `SessionComposerStore`, so every way the composer closes reverts the
 /// preview (`reset`).
+///
+/// C2 shows the shared 3x3 grid (`ThemeGridModel`: eight pairs and an All
+/// themes tile). The tile, or `theme <query>`, switches it to the All
+/// themes browse view (`ThemeBrowseModel`) in place.
 @MainActor
 final class ComposerThemePickerModel: ObservableObject {
     let preview: ThemePreviewController
+    /// C1's chip families.
     let families: [ThemeFamily]
     private let defaults: UserDefaults
     private let appearanceProvider: @MainActor () -> ChromeTheme.Polarity
     private let appearanceState: @MainActor (GhosttiesThemePicks) -> GhosttiesAppearanceState
+    private let themesProvider: () -> [String]
 
     @Published private(set) var command: ComposerThemeCommand = .none
     /// Read from Settings each time the picker opens.
@@ -22,31 +38,41 @@ final class ComposerThemePickerModel: ObservableObject {
     /// The thumbnail half (C2) or chip (C1) under the pointer, previewing
     /// instead of the selection.
     @Published private(set) var peekName: String?
-    /// The family that shows right now, for the grid's checkmark. Nil for a
-    /// Custom theme.
-    @Published private(set) var appliedFamily: String?
     /// Explicit colour keys in the user's config beat any theme, so the
     /// picker offers nothing (Settings locks the same way).
     @Published private(set) var isLockedByConfig = false
+    /// What each side shows right now, read when the picker opens.
+    @Published private(set) var current = GhosttiesThemePicks.none
+    /// The grid's nine cells, read when the picker opens.
+    @Published private(set) var gridCells: [ThemeGridCell] = []
+    /// The All themes tile opened the browse view (a typed query opens it
+    /// too, without this).
+    @Published private(set) var isBrowseOpened = false
+    @Published private(set) var browseFilter: ThemeBrowseFilter = .pairs
+    @Published private(set) var browseEntries: [ThemeBrowseEntry] = []
 
     /// Whether the selection is shown on the window: true once the user
     /// moves, hovers or types a query. An empty `theme ` shows what is
     /// applied, so typing the word alone never changes the window.
     private var selectionIsPreviewed = false
     private var thumbnails: [String: ThemePreview] = [:]
+    private lazy var themes: [String] = themesProvider()
+    private lazy var browseFamilies: [ThemeFamily] = GhosttiesThemeCatalog.browseFamilies(themes: themes)
 
     init(
         defaults: UserDefaults,
         families: [ThemeFamily] = GhosttiesThemeCatalog.families,
         reload: @escaping (GhosttiesThemePicks?) -> Void,
         appearance: @escaping @MainActor () -> ChromeTheme.Polarity = ComposerThemePickerModel.systemAppearance,
-        appearanceState: @escaping @MainActor (GhosttiesThemePicks) -> GhosttiesAppearanceState = ComposerThemePickerModel.liveAppearanceState
+        appearanceState: @escaping @MainActor (GhosttiesThemePicks) -> GhosttiesAppearanceState = ComposerThemePickerModel.liveAppearanceState,
+        themes: @escaping () -> [String] = { GhosttiesThemeCatalog.bundledThemeNames() }
     ) {
         self.defaults = defaults
         self.families = families
         self.preview = ThemePreviewController(defaults: defaults, reload: reload)
         self.appearanceProvider = appearance
         self.appearanceState = appearanceState
+        self.themesProvider = themes
     }
 
     /// The Mac's appearance: the side a `light:X,dark:Y` pick shows.
@@ -56,6 +82,19 @@ final class ComposerThemePickerModel: ObservableObject {
 
     static func liveAppearanceState(_ picks: GhosttiesThemePicks) -> GhosttiesAppearanceState {
         GhosttiesAppearanceState.resolve(configPath: (NSApp.delegate as? AppDelegate)?.ghostty.configPath, picks: picks)
+    }
+
+    /// What each side shows for `state`, an unset side filled by Ghostties.
+    static func shownPicks(for state: GhosttiesAppearanceState) -> GhosttiesThemePicks {
+        switch state {
+        case .ghostties, .setByConfig:
+            return GhosttiesThemeCatalog.resolved(.none)
+        case .custom(let themeName):
+            let sides = GhosttiesThemeProbe.sides(of: themeName)
+            return GhosttiesThemeCatalog.resolved(GhosttiesThemePicks(light: sides.light, dark: sides.dark))
+        case .picked(let light, let dark):
+            return GhosttiesThemePicks(light: light, dark: dark)
+        }
     }
 
     // MARK: Derived
@@ -73,8 +112,12 @@ final class ComposerThemePickerModel: ObservableObject {
     var appearance: ChromeTheme.Polarity { appearanceProvider() }
     private var applied: GhosttiesThemePicks { .stored(in: defaults) }
 
-    var gridResults: [ThemeFamily] {
-        isLockedByConfig ? [] : ComposerThemeMatcher.grid(query: query, families: families)
+    /// Every bundled theme: the All themes tile's count.
+    var themeCount: Int { themes.count }
+
+    /// The grid cell that shows now (checkmarked), or nil when locked.
+    var appliedIndex: Int? {
+        isLockedByConfig ? nil : ThemeGridModel.selectedIndex(current: current)
     }
 
     /// C1's chips: one per family, in the matcher's ranking, each carrying
@@ -96,16 +139,31 @@ final class ComposerThemePickerModel: ObservableObject {
     }
 
     private var resultCount: Int {
-        presentation == .grid ? gridResults.count : chipResults.count
+        switch presentation {
+        case .grid: return isBrowsing ? browseEntries.count : gridCells.count
+        case .chips: return chipResults.count
+        }
     }
 
     /// Return commits (vs. shakes).
     var hasSelection: Bool { isActive && resultCount > 0 }
 
+    /// C2's expanded card: the grid or the browse view.
     var isGridShown: Bool { isActive && presentation == .grid }
+    /// The browse view shows in place of the grid.
+    var isBrowsing: Bool { isGridShown && (isBrowseOpened || !query.isEmpty) }
     /// ← / → belong to the grid only while it has something to move between.
     var claimsHorizontalArrows: Bool { isGridShown && hasSelection }
     var isChipsShown: Bool { isActive && presentation == .chips }
+
+    /// Whether the browse entry shows now (checkmarked).
+    func isApplied(_ entry: ThemeBrowseEntry) -> Bool {
+        guard !isLockedByConfig else { return false }
+        switch entry {
+        case .family(let family): return family.picks == current
+        case .single(let name, let polarity): return (polarity == .light ? current.light : current.dark) == name
+        }
+    }
 
     /// The field's ghost path: what is typed plus the completion, or nil
     /// when the text isn't the theme command.
@@ -119,7 +177,17 @@ final class ComposerThemePickerModel: ObservableObject {
             let top: [String]
             switch presentation {
             case .grid:
-                top = gridResults[safe: selection].map { [$0.themeName(for: appearance), $0.name] } ?? []
+                if isBrowsing {
+                    switch browseEntries[safe: selection] {
+                    case .family(let family): top = [family.themeName(for: appearance), family.name]
+                    case .single(let name, _): top = [name]
+                    case nil: top = []
+                    }
+                } else if case .family(let family) = gridCells[safe: selection] {
+                    top = [family.themeName(for: appearance), family.name]
+                } else {
+                    top = []
+                }
             case .chips:
                 top = chipResults[safe: selection].map { [$0.name, $0.family] } ?? []
             }
@@ -143,6 +211,7 @@ final class ComposerThemePickerModel: ObservableObject {
         peekName = nil
         guard case .theme(let query) = command else {
             selectionIsPreviewed = false
+            isBrowseOpened = false
             preview.revert()
             return
         }
@@ -150,11 +219,19 @@ final class ComposerThemePickerModel: ObservableObject {
             presentation = .stored(in: defaults)
             let state = appearanceState(applied)
             isLockedByConfig = state == .setByConfig
-            appliedFamily = Self.familyName(for: state, in: families)
+            current = Self.shownPicks(for: state)
+            gridCells = isLockedByConfig ? [] : ThemeGridModel.cells(current: current)
+            isBrowseOpened = false
+            browseFilter = .pairs
         }
         switch presentation {
         case .grid:
-            selection = ComposerThemeMatcher.initialGridIndex(query: query, results: gridResults, applied: applied)
+            if isBrowsing {
+                refreshBrowseEntries()
+                selection = 0
+            } else {
+                selection = appliedIndex ?? 0
+            }
         case .chips:
             selection = 0
         }
@@ -226,22 +303,68 @@ final class ComposerThemePickerModel: ObservableObject {
         showSelection()
     }
 
-    /// Return or a click: stores the selected family. False when there is
-    /// nothing to commit.
+    /// A chip over All themes: Pairs, Light or Dark.
+    func setBrowseFilter(_ filter: ThemeBrowseFilter) {
+        guard isBrowsing, filter != browseFilter else { return }
+        browseFilter = filter
+        refreshBrowseEntries()
+        selection = 0
+        peekName = nil
+        selectionIsPreviewed = !query.isEmpty
+        showSelection()
+    }
+
+    /// The All themes tile: the browse view, in place, nothing previewed.
+    func openBrowse() {
+        guard isGridShown, !isLockedByConfig else { return }
+        isBrowseOpened = true
+        browseFilter = .pairs
+        refreshBrowseEntries()
+        selection = 0
+        peekName = nil
+        selectionIsPreviewed = false
+        preview.revert()
+    }
+
+    /// Esc in the browse view: back to the grid on the All themes tile,
+    /// preview reverted. The caller clears a typed query.
+    func closeBrowse() {
+        guard isBrowsing else { return }
+        isBrowseOpened = false
+        peekName = nil
+        selectionIsPreviewed = false
+        preview.revert()
+        selection = max(gridCells.count - 1, 0)
+    }
+
+    /// Return: stores the selected theme, or opens All themes from its tile.
+    func activate() -> ComposerThemeActivation {
+        guard isActive else { return .none }
+        if presentation == .grid, !isBrowsing, gridCells[safe: selection] == ThemeGridCell.allThemes {
+            openBrowse()
+            return .openedBrowse
+        }
+        return commit() ? .committed : .none
+    }
+
+    /// A click on result `index`.
+    func activate(at index: Int) -> ComposerThemeActivation {
+        guard isActive, resultCount > index else { return .none }
+        selection = index
+        return activate()
+    }
+
+    /// Stores the selected result. False when there is nothing to commit
+    /// (no result, or the All themes tile).
     @discardableResult
     func commit() -> Bool {
-        guard isActive else { return false }
-        let picks: GhosttiesThemePicks
-        switch presentation {
-        case .grid:
-            guard let family = gridResults[safe: selection] else { return false }
-            picks = family.picks
-        case .chips:
-            guard let choice = chipResults[safe: selection],
-                  let family = family(named: choice.family) else { return false }
-            picks = family.picks
+        guard isActive, let picks = selectedPicks else { return false }
+        if case .custom = gridCells[safe: selection], presentation == .grid, !isBrowsing, applied.isEmpty {
+            // Custom with no pick is the user's own theme: keep it as is.
+            preview.revert()
+        } else {
+            preview.commit(light: picks.light, dark: picks.dark)
         }
-        preview.commit(light: picks.light, dark: picks.dark)
         selectionIsPreviewed = false
         return true
     }
@@ -258,38 +381,44 @@ final class ComposerThemePickerModel: ObservableObject {
         command = .none
         peekName = nil
         selectionIsPreviewed = false
+        isBrowseOpened = false
         preview.revert()
     }
 
-    private func showSelection() {
-        guard selectionIsPreviewed else { return preview.revert() }
+    /// What the selection stores (and previews), nil for none or the All
+    /// themes tile.
+    private var selectedPicks: GhosttiesThemePicks? {
         switch presentation {
         case .grid:
-            guard let family = gridResults[safe: selection] else { return preview.revert() }
-            let picks = family.picks
-            preview.preview(light: picks.light, dark: picks.dark)
+            if isBrowsing {
+                guard let entry = browseEntries[safe: selection] else { return nil }
+                return ThemeBrowseModel.picks(choosing: entry, side: nil, current: current)
+            }
+            return gridCells[safe: selection]?.picks
         case .chips:
-            guard let choice = chipResults[safe: selection],
-                  let picks = family(named: choice.family)?.picks else { return preview.revert() }
-            preview.preview(light: picks.light, dark: picks.dark)
+            guard let choice = chipResults[safe: selection] else { return nil }
+            return family(named: choice.family)?.picks
         }
+    }
+
+    private func showSelection() {
+        guard selectionIsPreviewed, let picks = selectedPicks else { return preview.revert() }
+        if case .custom = gridCells[safe: selection], !isBrowsing, presentation == .grid, applied.isEmpty {
+            // The user's own theme is what already shows.
+            return preview.revert()
+        }
+        preview.preview(light: picks.light, dark: picks.dark)
+    }
+
+    private func refreshBrowseEntries() {
+        browseEntries = isLockedByConfig ? [] : ThemeBrowseModel.entries(
+            filter: browseFilter, query: query, themes: themes, families: browseFamilies
+        )
     }
 
     /// The Settings banner's "Open Config File": `Ghostty.App.openConfig`.
     func openConfig() {
         (NSApp.delegate as? AppDelegate)?.ghostty.openConfig()
-    }
-
-    private static func familyName(for state: GhosttiesAppearanceState, in families: [ThemeFamily]) -> String? {
-        switch state {
-        case .ghostties:
-            return GhosttiesThemeCatalog.ghostties.name
-        case .picked(let light, let dark):
-            let picks = GhosttiesThemePicks(light: light, dark: dark)
-            return families.first { $0.picks == picks }?.name
-        case .custom, .setByConfig:
-            return nil
-        }
     }
 }
 
@@ -298,7 +427,7 @@ final class ComposerThemePickerModel: ObservableObject {
 /// Colours the picker draws, all existing tokens: the composer's selection
 /// accent, the chrome's secondary ink and composer-row wash, and the
 /// system separator.
-private enum ComposerThemeInk {
+enum ComposerThemeInk {
     static let selection = WorkspaceLayout.composerSelectionAccent
 
     static func secondary(_ scheme: ColorScheme) -> Color {
@@ -355,7 +484,8 @@ private struct ComposerThemeStatusLine: View {
 
 // MARK: - C2: thumbnail grid
 
-/// C2: the card grows downward into a grid of light|dark thumbnails.
+/// C2: the card grows downward into the shared 3x3 grid (eight pairs and
+/// the All themes tile), or the All themes browse view in its place.
 /// Arrow keys move in 2D; hovering a thumbnail half previews that side.
 struct ComposerThemeGrid: View {
     @ObservedObject var model: ComposerThemePickerModel
@@ -364,162 +494,454 @@ struct ComposerThemeGrid: View {
     let titleSize: CGFloat
     let onCommit: () -> Void
 
+    /// The composer's width while the grid shows: three full rows of cards
+    /// without scrolling.
+    static let cardWidth: CGFloat = 860
     static let inset: CGFloat = 8
     static let spacing: CGFloat = 8
-    static let thumbnailHeight: CGFloat = 48
-    static let maxVisibleRows = 2
+    static let thumbnailHeight: CGFloat = 64
+    static let visibleRows = 3
 
-    /// Three columns on the default card, two on a narrow one.
+    /// Three columns on the theme card, two on a narrow one.
     static func columns(cardWidth: CGFloat) -> Int {
-        cardWidth >= 480 ? 3 : 2
+        cardWidth >= 480 ? ThemeGridModel.columns : 2
     }
 
     private var columns: Int { Self.columns(cardWidth: width) }
     private var labelSize: CGFloat { (titleSize * 0.72).rounded() }
-    private var labelHeight: CGFloat { (labelSize * 1.3).rounded(.up) }
-    private var cardHeight: CGFloat { Self.inset + Self.thumbnailHeight + Self.spacing + labelHeight + Self.inset }
+    private var headerSize: CGFloat { titleSize * 0.62 }
+    private var metrics: ThemeCardMetrics {
+        ThemeCardMetrics(thumbnailHeight: Self.thumbnailHeight, labelSize: labelSize)
+    }
 
-    private func gridHeight(count: Int) -> CGFloat {
-        let rows = min(Self.maxVisibleRows, Int((Double(count) / Double(columns)).rounded(.up)))
-        guard rows > 0 else { return 0 }
-        return CGFloat(rows) * cardHeight + CGFloat(rows - 1) * Self.spacing + 2 * Self.inset
+    /// Three rows of cards: the grid's height, and the browse view's, so
+    /// the card doesn't jump between them.
+    private var rowsHeight: CGFloat {
+        let rows = CGFloat(Self.visibleRows)
+        return rows * metrics.cardHeight + (rows - 1) * Self.spacing + 2 * Self.inset
+    }
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: Self.spacing), count: columns)
     }
 
     var body: some View {
-        let results = model.gridResults
         VStack(alignment: .leading, spacing: 0) {
             ComposerCardHairline()
                 .padding(.horizontal, Self.inset + 4)
-            ComposerResumeSectionHeader(
-                systemImage: "paintpalette",
-                title: results.count == 1 ? "1 theme" : "\(results.count) themes",
-                size: titleSize * 0.62
-            )
-            if results.isEmpty {
+            header
+            if model.isLockedByConfig || (model.isBrowsing ? model.browseEntries.isEmpty : model.gridCells.isEmpty) {
                 ComposerThemeStatusLine(model: model, size: labelSize)
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
-                .padding(.bottom, 16)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 4)
+                    .padding(.bottom, 16)
+                    .frame(height: model.isBrowsing ? rowsHeight : nil, alignment: .top)
+            } else if model.isBrowsing {
+                browseGrid
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical, showsIndicators: results.count > columns * Self.maxVisibleRows) {
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.flexible(), spacing: Self.spacing), count: columns),
-                            spacing: Self.spacing
-                        ) {
-                            ForEach(Array(results.enumerated()), id: \.element.name) { index, family in
-                                ComposerThemeCard(
-                                    model: model,
-                                    family: family,
-                                    index: index,
-                                    isSelected: index == model.selection,
-                                    isApplied: family.name == model.appliedFamily,
-                                    labelSize: labelSize,
-                                    labelHeight: labelHeight,
-                                    onCommit: onCommit
-                                )
-                                .id(family.name)
-                            }
-                        }
-                        .padding(Self.inset)
-                    }
-                    .frame(height: gridHeight(count: results.count))
-                    .onChange(of: model.selection) { index in
-                        guard let family = results[safe: index] else { return }
-                        proxy.scrollTo(family.name)
-                    }
-                }
-                .onHover { inside in
-                    if !inside { model.endHover() }
-                }
+                cellGrid
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Themes")
+        .accessibilityLabel(model.isBrowsing ? "All themes" : "Themes")
+    }
+
+    /// The palette icon and THEMES (no count: the grid is always nine), or
+    /// ALL THEMES with its count and the chips.
+    private var header: some View {
+        ComposerResumeSectionHeader(
+            systemImage: "paintpalette",
+            title: model.isBrowsing ? "All themes · \(model.themeCount)" : "Themes",
+            size: headerSize
+        )
+        .overlay(alignment: .trailing) {
+            Group {
+                if model.isBrowsing {
+                    ThemeBrowseChips(selection: model.browseFilter, size: headerSize * 1.1) { model.setBrowseFilter($0) }
+                } else {
+                    ComposerThemeHint(size: headerSize)
+                }
+            }
+            .padding(.trailing, 12)
+            .padding(.top, 4)
+        }
+    }
+
+    private var cellGrid: some View {
+        LazyVGrid(columns: gridColumns, spacing: Self.spacing) {
+            ForEach(Array(model.gridCells.enumerated()), id: \.offset) { index, cell in
+                ComposerThemeCellCard(
+                    model: model,
+                    index: index,
+                    isSelected: index == model.selection,
+                    metrics: metrics,
+                    onCommit: onCommit
+                ) {
+                    ThemeGridCellCard(
+                        cell: cell,
+                        isSelected: index == model.selection,
+                        isApplied: index == model.appliedIndex,
+                        themeCount: model.themeCount,
+                        metrics: metrics,
+                        thumbnail: model.thumbnail,
+                        peekName: model.peekName,
+                        onPeek: { name in peek(name, index: index) }
+                    )
+                }
+            }
+        }
+        .padding(Self.inset)
+        .onHover { inside in
+            if !inside { model.endHover() }
+        }
+    }
+
+    private var browseGrid: some View {
+        let entries = model.browseEntries
+        return ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: entries.count > columns * Self.visibleRows) {
+                LazyVGrid(columns: gridColumns, spacing: Self.spacing) {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                        ComposerThemeCellCard(
+                            model: model,
+                            index: index,
+                            isSelected: index == model.selection,
+                            metrics: metrics,
+                            onCommit: onCommit
+                        ) {
+                            ThemeBrowseCard(
+                                entry: entry,
+                                isSelected: index == model.selection,
+                                isApplied: model.isApplied(entry),
+                                metrics: metrics,
+                                thumbnail: model.thumbnail,
+                                peekName: model.peekName,
+                                onPeek: { name in peek(name, index: index) }
+                            )
+                        }
+                        .id(entry.id)
+                    }
+                }
+                .padding(Self.inset)
+            }
+            .frame(height: rowsHeight)
+            .onChange(of: model.selection) { index in
+                guard let entry = entries[safe: index] else { return }
+                proxy.scrollTo(entry.id)
+            }
+        }
+        .onHover { inside in
+            if !inside { model.endHover() }
+        }
+    }
+
+    private func peek(_ name: String?, index: Int) {
+        if let name {
+            if model.selection != index { model.select(index) }
+            model.peek(name)
+        } else if model.peekName != nil {
+            model.peek(nil)
+        }
     }
 }
 
-/// One family: its light and dark thumbnails side by side, then its name.
-private struct ComposerThemeCard: View {
-    @ObservedObject var model: ComposerThemePickerModel
-    let family: ThemeFamily
-    let index: Int
-    let isSelected: Bool
-    let isApplied: Bool
-    let labelSize: CGFloat
-    let labelHeight: CGFloat
-    let onCommit: () -> Void
+/// "↵ keep · esc revert", the grid header's trailing hint.
+private struct ComposerThemeHint: View {
+    let size: CGFloat
     @ChromeScheme private var colorScheme
 
-    private var sides: [String] { [family.light, family.dark].compactMap { $0 } }
-    private var isPair: Bool { family.light != nil && family.dark != nil }
+    var body: some View {
+        Text("↵ keep · esc revert")
+            .font(.system(size: size, weight: .medium))
+            .foregroundStyle(ComposerThemeInk.secondary(colorScheme))
+            .accessibilityHidden(true)
+    }
+}
+
+/// The composer's wiring around one card: hover selects (and previews),
+/// a click acts, VoiceOver reads it as a button.
+private struct ComposerThemeCellCard<Card: View>: View {
+    @ObservedObject var model: ComposerThemePickerModel
+    let index: Int
+    let isSelected: Bool
+    let metrics: ThemeCardMetrics
+    let onCommit: () -> Void
+    @ViewBuilder let card: () -> Card
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ComposerThemeGrid.spacing) {
+        card()
+            .contentShape(RoundedRectangle(cornerRadius: ThemeCardMetrics.cornerRadius, style: .continuous))
+            .onHover { inside in
+                if inside, model.selection != index || model.peekName != nil { model.select(index) }
+            }
+            .onTapGesture { activate() }
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
+            .accessibilityAction(.default) { activate() }
+    }
+
+    private func activate() {
+        if model.activate(at: index) == .committed { onCommit() }
+    }
+}
+
+// MARK: - Shared cards (composer + Settings)
+
+/// The sizes one theme card draws at; the composer and Settings differ
+/// only in these.
+struct ThemeCardMetrics {
+    let thumbnailHeight: CGFloat
+    let labelSize: CGFloat
+
+    static let inset: CGFloat = 8
+    static let spacing: CGFloat = 8
+    static let cornerRadius: CGFloat = 10
+    static let thumbnailRadius: CGFloat = 6
+
+    var labelHeight: CGFloat { (labelSize * 1.3).rounded(.up) }
+    var cardHeight: CGFloat { Self.inset + thumbnailHeight + Self.spacing + labelHeight + Self.inset }
+}
+
+/// One grid cell as a card: a family, Custom, or the All themes tile.
+struct ThemeGridCellCard: View {
+    let cell: ThemeGridCell
+    let isSelected: Bool
+    let isApplied: Bool
+    let themeCount: Int
+    let metrics: ThemeCardMetrics
+    let thumbnail: (String) -> ThemePreview
+    var peekName: String?
+    var onPeek: ((String?) -> Void)?
+
+    var body: some View {
+        switch cell {
+        case .family(let family):
+            ThemeCard(
+                title: family.name, sides: [family.light, family.dark].compactMap { $0 }, tag: nil,
+                isSelected: isSelected, isApplied: isApplied, metrics: metrics,
+                thumbnail: thumbnail, peekName: peekName, onPeek: onPeek
+            )
+        case .custom(let light, let dark):
+            ThemeCard(
+                title: "Custom", sides: [light, dark], tag: light == dark ? light : "\(light) · \(dark)",
+                isSelected: isSelected, isApplied: isApplied, metrics: metrics,
+                thumbnail: thumbnail, peekName: peekName, onPeek: onPeek
+            )
+        case .allThemes:
+            ThemeAllThemesCard(count: themeCount, isSelected: isSelected, metrics: metrics)
+        }
+    }
+}
+
+/// One All themes entry as a card: a pair, or one theme tagged light or
+/// dark.
+struct ThemeBrowseCard: View {
+    let entry: ThemeBrowseEntry
+    let isSelected: Bool
+    let isApplied: Bool
+    let metrics: ThemeCardMetrics
+    let thumbnail: (String) -> ThemePreview
+    var peekName: String?
+    var onPeek: ((String?) -> Void)?
+
+    var body: some View {
+        switch entry {
+        case .family(let family):
+            ThemeCard(
+                title: family.name, sides: [family.light, family.dark].compactMap { $0 }, tag: nil,
+                isSelected: isSelected, isApplied: isApplied, metrics: metrics,
+                thumbnail: thumbnail, peekName: peekName, onPeek: onPeek
+            )
+        case .single(let name, let polarity):
+            ThemeCard(
+                title: name, sides: [name], tag: polarity == .light ? "light" : "dark",
+                isSelected: isSelected, isApplied: isApplied, metrics: metrics,
+                thumbnail: thumbnail, peekName: nil, onPeek: nil
+            )
+        }
+    }
+}
+
+extension ThemeBrowseEntry {
+    /// Stable across filters: a pair and a single theme never share one.
+    var id: String {
+        switch self {
+        case .family(let family): return "pair:\(family.name)"
+        case .single(let name, _): return "theme:\(name)"
+        }
+    }
+}
+
+/// A theme as a card: its light and dark thumbnails side by side (one for
+/// a single theme), then its name, a checkmark when it shows now, and a
+/// trailing tag.
+struct ThemeCard: View {
+    let title: String
+    let sides: [String]
+    let tag: String?
+    let isSelected: Bool
+    let isApplied: Bool
+    let metrics: ThemeCardMetrics
+    let thumbnail: (String) -> ThemePreview
+    var peekName: String?
+    /// Hovering one half of a pair previews that side; nil turns it off.
+    var onPeek: ((String?) -> Void)?
+    @ChromeScheme private var colorScheme
+
+    private var isPair: Bool { sides.count == 2 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeCardMetrics.spacing) {
             HStack(spacing: 0) {
-                ForEach(sides, id: \.self) { name in
-                    ComposerThemeHalf(preview: model.thumbnail(name), isPeeked: isPair && model.peekName == name)
+                ForEach(Array(sides.enumerated()), id: \.offset) { _, name in
+                    ComposerThemeHalf(preview: thumbnail(name), isPeeked: isPair && peekName == name)
                         .onHover { inside in
-                            guard isPair else { return }
+                            guard isPair, let onPeek else { return }
                             if inside {
-                                if model.selection != index { model.select(index) }
-                                model.peek(name)
-                            } else if model.peekName == name {
-                                model.peek(nil)
+                                onPeek(name)
+                            } else if peekName == name {
+                                onPeek(nil)
                             }
                         }
                 }
             }
-            .frame(height: ComposerThemeGrid.thumbnailHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(height: metrics.thumbnailHeight)
+            .clipShape(RoundedRectangle(cornerRadius: ThemeCardMetrics.thumbnailRadius, style: .continuous))
 
-            HStack(spacing: 4) {
-                Text(family.name)
-                    .font(.system(size: labelSize, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                if isApplied {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: labelSize * 0.8, weight: .semibold))
-                        .foregroundStyle(ComposerThemeInk.secondary(colorScheme))
-                }
-                Spacer(minLength: 4)
-                if !isPair {
-                    Text(family.light != nil ? "light" : "dark")
-                        .font(.system(size: labelSize * 0.9))
-                        .foregroundStyle(ComposerThemeInk.secondary(colorScheme))
-                }
-            }
-            .frame(height: labelHeight)
-            .padding(.horizontal, 4)
+            ThemeCardLabel(title: title, tag: tag, isApplied: isApplied, metrics: metrics)
         }
-        .padding(ComposerThemeGrid.inset)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isSelected ? ComposerThemeInk.selection.opacity(0.10) : .clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(isSelected ? ComposerThemeInk.selection : ComposerThemeInk.hairline, lineWidth: isSelected ? 2 : 1)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onHover { inside in
-            if inside, model.selection != index || model.peekName != nil { model.select(index) }
-        }
-        .onTapGesture {
-            if model.commit(at: index) { onCommit() }
-        }
+        .modifier(ThemeCardChrome(isSelected: isSelected))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
-        .accessibilityAction(.default) { if model.commit(at: index) { onCommit() } }
     }
 
     private var accessibilityLabel: String {
-        var label = family.name
-        if !isPair { label += family.light != nil ? ", light only" : ", dark only" }
+        var label = title
+        if let tag { label += ", \(tag)" }
         if isApplied { label += ", applied" }
         return label
+    }
+}
+
+/// The ninth cell: the bundled theme count where the thumbnails go, then
+/// "All themes →".
+struct ThemeAllThemesCard: View {
+    let count: Int
+    let isSelected: Bool
+    let metrics: ThemeCardMetrics
+    @ChromeScheme private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeCardMetrics.spacing) {
+            VStack(spacing: 0) {
+                Text("\(count)")
+                    .font(.system(size: (metrics.labelSize * 1.7).rounded(), weight: .bold))
+                    .foregroundStyle(.primary)
+                Text("themes")
+                    .font(.system(size: metrics.labelSize * 0.9))
+                    .foregroundStyle(ComposerThemeInk.secondary(colorScheme))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: metrics.thumbnailHeight)
+            .background(
+                RoundedRectangle(cornerRadius: ThemeCardMetrics.thumbnailRadius, style: .continuous)
+                    .fill(ComposerThemeInk.wash(colorScheme))
+            )
+
+            ThemeCardLabel(title: "All themes", tag: nil, isApplied: false, metrics: metrics, trailingArrow: true)
+        }
+        .modifier(ThemeCardChrome(isSelected: isSelected))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("All themes, \(count) themes")
+    }
+}
+
+/// A card's name row.
+private struct ThemeCardLabel: View {
+    let title: String
+    let tag: String?
+    let isApplied: Bool
+    let metrics: ThemeCardMetrics
+    var trailingArrow = false
+    @ChromeScheme private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.system(size: metrics.labelSize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+            if trailingArrow {
+                Image(systemName: "arrow.right")
+                    .font(.system(size: metrics.labelSize * 0.8, weight: .semibold))
+                    .foregroundStyle(.primary)
+            }
+            if isApplied {
+                Image(systemName: "checkmark")
+                    .font(.system(size: metrics.labelSize * 0.8, weight: .semibold))
+                    .foregroundStyle(ComposerThemeInk.secondary(colorScheme))
+            }
+            Spacer(minLength: 4)
+            if let tag {
+                Text(tag)
+                    .font(.system(size: metrics.labelSize * 0.9))
+                    .foregroundStyle(ComposerThemeInk.secondary(colorScheme))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(height: metrics.labelHeight)
+        .padding(.horizontal, 4)
+    }
+}
+
+/// The card's padding, selection wash and border.
+private struct ThemeCardChrome: ViewModifier {
+    let isSelected: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: ThemeCardMetrics.cornerRadius, style: .continuous)
+        content
+            .padding(ThemeCardMetrics.inset)
+            .background(shape.fill(isSelected ? ComposerThemeInk.selection.opacity(0.10) : .clear))
+            .overlay(
+                shape.strokeBorder(
+                    isSelected ? ComposerThemeInk.selection : ComposerThemeInk.hairline,
+                    lineWidth: isSelected ? 2 : 1
+                )
+            )
+    }
+}
+
+/// Pairs / Light / Dark over All themes.
+struct ThemeBrowseChips: View {
+    let selection: ThemeBrowseFilter
+    let size: CGFloat
+    let onSelect: (ThemeBrowseFilter) -> Void
+    @ChromeScheme private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(ThemeBrowseFilter.allCases, id: \.self) { filter in
+                let selected = filter == selection
+                Text(filter.title)
+                    .font(.system(size: size, weight: .medium))
+                    .foregroundStyle(selected ? Color.primary : ComposerThemeInk.secondary(colorScheme))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(selected ? ComposerThemeInk.wash(colorScheme) : .clear)
+                    )
+                    .contentShape(Capsule(style: .continuous))
+                    .onTapGesture { onSelect(filter) }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(filter.title)
+                    .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityAction { onSelect(filter) }
+            }
+        }
     }
 }
 

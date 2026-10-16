@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// Settings > Appearance: the theme pair cards, independent light and dark
-/// pickers, and the user's own `theme =` line adopted as a Custom card.
-/// A pick is stored in the app's defaults and applied live through
-/// `reloadConfig()`; the user's config file is never written.
+/// Settings > Appearance: the Mode switch, the same 3x3 theme grid as the
+/// composer (`ThemeGridModel`; the user's own `theme =` line, or a mixed
+/// pair, is the Custom card), and the All themes browse view with a
+/// Light/Dark side switch for mixing. A pick is stored in the app's
+/// defaults and applied live through `reloadConfig()`; the user's config
+/// file is never written.
 struct AppearanceSettingsView: View {
     @StateObject private var model = AppearanceSettingsModel(applyMode: {
         (NSApp.delegate as? AppDelegate)?.applyAppearanceMode()
@@ -39,30 +41,30 @@ struct AppearanceSettingsView: View {
                 }
             }
 
-            Section("Theme") {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
-                    ForEach(model.cards) { card in
-                        ThemePairCard(card: card, preview: model.preview) { model.select(card) }
+            Section {
+                Group {
+                    if model.isBrowsing {
+                        ThemeBrowsePanel(model: model)
+                    } else {
+                        ThemeGridPanel(model: model)
                     }
                 }
                 .padding(.vertical, 8)
                 .disabled(model.locked)
                 .opacity(model.locked ? 0.4 : 1)
-            }
-
-            Section {
-                Group {
-                    ThemeSidePicker(title: "Light theme", selection: model.lightBinding, names: model.themeNames)
-                    ThemeSidePicker(title: "Dark theme", selection: model.darkBinding, names: model.themeNames)
-                }
-                .disabled(model.locked)
+            } header: {
+                Text("Theme")
             } footer: {
                 HStack {
-                    Button("Open Config File", action: model.openConfig)
+                    if !model.isBrowsing {
+                        Button(AppearanceSettingsModel.mixTitle, action: model.openMix)
+                            .disabled(model.locked)
+                    }
                     Spacer()
                     if let reset = model.resetLabel {
                         Button(reset) { model.clearPicks() }
                     }
+                    Button("Open Config File", action: model.openConfig)
                 }
             }
 
@@ -89,24 +91,22 @@ struct AppearanceSettingsView: View {
 
 @MainActor
 final class AppearanceSettingsModel: ObservableObject {
-    struct Card: Identifiable, Equatable {
-        enum Kind: Equatable { case pair(GhosttiesThemeCatalog.Pair), custom }
-        let kind: Kind
-        let title: String
-        let subtitle: String?
-        let light: String
-        let dark: String
-        let selected: Bool
-        var id: String { title }
-    }
+    static let mixTitle = "Mix light & dark…"
 
     @Published private(set) var state: GhosttiesAppearanceState = .ghostties
     @Published private(set) var probe = GhosttiesThemeProbe.Result(kind: .none, themeName: nil)
     @Published private(set) var picks = GhosttiesThemePicks.none
     @Published private(set) var configWindowTheme: String?
     @Published private var storedMode: GhosttiesAppearanceMode
+    /// All themes shows in place of the grid.
+    @Published private(set) var isBrowsing = false
+    /// The side a single theme chosen in All themes sets.
+    @Published var browseSide: ChromeTheme.Polarity = .light
+    @Published var browseFilter: ThemeBrowseFilter = .pairs
+    @Published var browseQuery = ""
 
     let themeNames: [String]
+    private lazy var browseFamilies = GhosttiesThemeCatalog.browseFamilies(themes: themeNames)
     private let defaults: UserDefaults
     private var previews: [String: ThemePreview] = [:]
 
@@ -181,39 +181,29 @@ final class AppearanceSettingsModel: ObservableObject {
         return baseline
     }
 
-    var cards: [Card] {
+    /// What each side shows, as picks.
+    var shownPicks: GhosttiesThemePicks {
         let current = shown
-        var cards = GhosttiesThemeCatalog.pairs.map { pair in
-            Card(
-                kind: .pair(pair), title: pair.name, subtitle: nil,
-                light: pair.light, dark: pair.dark,
-                selected: state != .setByConfig && current == (pair.light, pair.dark)
-                    && !isCustomSelected
-            )
+        return GhosttiesThemePicks(light: current.light, dark: current.dark)
+    }
+
+    /// The composer's grid, for what shows here.
+    var gridCells: [ThemeGridCell] { ThemeGridModel.cells(current: shownPicks) }
+
+    /// The cell that shows now, or nil when the config locks the theme.
+    var selectedCellIndex: Int? { locked ? nil : ThemeGridModel.selectedIndex(current: shownPicks) }
+
+    var browseEntries: [ThemeBrowseEntry] {
+        ThemeBrowseModel.entries(filter: browseFilter, query: browseQuery, themes: themeNames, families: browseFamilies)
+    }
+
+    /// Whether `entry` is what shows now.
+    func isApplied(_ entry: ThemeBrowseEntry) -> Bool {
+        guard !locked else { return false }
+        switch entry {
+        case .family(let family): return family.picks == shownPicks
+        case .single(let name, let polarity): return (polarity == .light ? shown.light : shown.dark) == name
         }
-        // Shown whenever the config names a theme, so the card row and the
-        // pickers (which show that theme) agree, locked state included.
-        if probe.kind != .none, let name = probe.themeName {
-            let base = baseline
-            cards.append(Card(
-                kind: .custom, title: "Custom", subtitle: name,
-                light: base.light, dark: base.dark, selected: isCustomSelected
-            ))
-        }
-        return cards
-    }
-
-    private var isCustomSelected: Bool {
-        if case .custom = state { return true }
-        return false
-    }
-
-    var lightBinding: Binding<String> {
-        Binding(get: { self.shown.light }, set: { self.apply(light: $0, dark: self.shown.dark) })
-    }
-
-    var darkBinding: Binding<String> {
-        Binding(get: { self.shown.dark }, set: { self.apply(light: self.shown.light, dark: $0) })
     }
 
     /// The reset button's label, or nil when there is no pick to clear.
@@ -222,11 +212,30 @@ final class AppearanceSettingsModel: ObservableObject {
         return probe.kind == .themeOnly ? "Use Theme from Config" : "Reset to Ghostties"
     }
 
-    func select(_ card: Card) {
-        switch card.kind {
-        case .custom: clearPicks()
-        case let .pair(pair): apply(light: pair.light, dark: pair.dark)
-        }
+    /// A grid cell: a family or Custom stores its pair (Custom with no
+    /// pick is the user's own theme, so that clears instead); All themes
+    /// opens the browse view and stores nothing.
+    func select(_ cell: ThemeGridCell) {
+        guard let picks = cell.picks else { return openMix() }
+        let shown = GhosttiesThemeCatalog.resolved(picks)
+        apply(light: shown.light ?? GhosttiesThemeCatalog.ghostties.light, dark: shown.dark ?? GhosttiesThemeCatalog.ghostties.dark)
+    }
+
+    /// An All themes card: a pair sets both sides, a single theme only the
+    /// `browseSide` side.
+    func choose(_ entry: ThemeBrowseEntry) {
+        let picks = ThemeBrowseModel.picks(choosing: entry, side: browseSide, current: shownPicks)
+        let shown = GhosttiesThemeCatalog.resolved(picks)
+        apply(light: shown.light ?? GhosttiesThemeCatalog.ghostties.light, dark: shown.dark ?? GhosttiesThemeCatalog.ghostties.dark)
+    }
+
+    /// "Mix light & dark…" (and the All themes cell): the browse view.
+    func openMix() {
+        isBrowsing = true
+    }
+
+    func closeBrowse() {
+        isBrowsing = false
     }
 
     /// Stores both sides, so changing one side away from a Custom theme
@@ -360,116 +369,113 @@ private struct NeutralSegmentedControl<Value: Hashable>: View {
     }
 }
 
-private struct ThemePairCard: View {
-    let card: AppearanceSettingsModel.Card
-    let preview: (String) -> ThemePreview
+/// The sizes Settings draws the shared theme cards at.
+private enum SettingsThemeCards {
+    static let metrics = ThemeCardMetrics(thumbnailHeight: 48, labelSize: 13)
+    static let spacing: CGFloat = 8
+    static let columns = Array(repeating: GridItem(.flexible(), spacing: spacing), count: ThemeGridModel.columns)
+    /// All themes scrolls inside three rows of cards.
+    static let browseHeight: CGFloat = {
+        let rows = CGFloat(3)
+        return rows * metrics.cardHeight + (rows - 1) * spacing
+    }()
+}
+
+/// The composer's 3x3 grid, in the same order.
+private struct ThemeGridPanel: View {
+    @ObservedObject var model: AppearanceSettingsModel
+
+    var body: some View {
+        let selected = model.selectedCellIndex
+        LazyVGrid(columns: SettingsThemeCards.columns, spacing: SettingsThemeCards.spacing) {
+            ForEach(Array(model.gridCells.enumerated()), id: \.offset) { index, cell in
+                SettingsThemeCardButton(isSelected: index == selected, action: { model.select(cell) }) {
+                    ThemeGridCellCard(
+                        cell: cell,
+                        isSelected: index == selected,
+                        isApplied: index == selected,
+                        themeCount: model.themeNames.count,
+                        metrics: SettingsThemeCards.metrics,
+                        thumbnail: model.preview
+                    )
+                }
+            }
+        }
+    }
+}
+
+/// All themes: the side a single theme sets, search, the chips, and the
+/// scrolling cards. A click applies, as the grid's cards do.
+private struct ThemeBrowsePanel: View {
+    @ObservedObject var model: AppearanceSettingsModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Single themes set")
+                    .foregroundStyle(.secondary)
+                NeutralSegmentedControl(
+                    options: [("Light", ChromeTheme.Polarity.light), ("Dark", .dark)],
+                    selection: $model.browseSide
+                )
+                Spacer(minLength: 8)
+                Button("Done", action: model.closeBrowse)
+            }
+            HStack(spacing: 8) {
+                TextField("Search \(model.themeNames.count) themes", text: $model.browseQuery)
+                    .textFieldStyle(.roundedBorder)
+                ThemeBrowseChips(selection: model.browseFilter, size: 12) { model.browseFilter = $0 }
+            }
+            let entries = model.browseEntries
+            ScrollView(.vertical) {
+                LazyVGrid(columns: SettingsThemeCards.columns, spacing: SettingsThemeCards.spacing) {
+                    ForEach(entries, id: \.id) { entry in
+                        let applied = model.isApplied(entry)
+                        SettingsThemeCardButton(isSelected: applied, action: { model.choose(entry) }) {
+                            ThemeBrowseCard(
+                                entry: entry,
+                                isSelected: applied,
+                                isApplied: applied,
+                                metrics: SettingsThemeCards.metrics,
+                                thumbnail: model.preview
+                            )
+                        }
+                    }
+                }
+                .padding(4)
+            }
+            .frame(height: SettingsThemeCards.browseHeight + 8)
+            .overlay {
+                if entries.isEmpty {
+                    Text(ComposerThemeCopy.noMatches).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// A shared theme card as a Settings button, with the system focus ring
+/// (the plain style draws none).
+private struct SettingsThemeCardButton<Card: View>: View {
+    let isSelected: Bool
     let action: () -> Void
+    @ViewBuilder let card: () -> Card
     @FocusState private var focused: Bool
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 0) {
-                    MiniWindow(preview: preview(card.light))
-                    MiniWindow(preview: preview(card.dark))
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                HStack(spacing: 8) {
-                    Text(card.title).font(.callout.weight(.semibold))
-                    Spacer(minLength: 0)
-                    if let subtitle = card.subtitle {
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-                .padding(.horizontal, 4)
-            }
-            .padding(8)
-            .background(RoundedRectangle(cornerRadius: 12).fill(.background))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(card.selected ? Color.accentColor : Color(nsColor: .separatorColor),
-                                  lineWidth: card.selected ? 2 : 1)
-            )
-            .overlay(
-                // The plain style draws no focus ring; this is the system's.
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
-                    .padding(-4)
-                    .opacity(focused ? 1 : 0)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 12))
+            card()
+                .overlay(
+                    RoundedRectangle(cornerRadius: ThemeCardMetrics.cornerRadius + 4, style: .continuous)
+                        .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
+                        .padding(-4)
+                        .opacity(focused ? 1 : 0)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: ThemeCardMetrics.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .focused($focused)
-        .accessibilityLabel(card.subtitle.map { "\(card.title), \($0)" } ?? card.title)
-        .accessibilityAddTraits(card.selected ? .isSelected : [])
-    }
-}
-
-/// A window in miniature: the sidebar strip in the theme's chrome, then
-/// a few lines of terminal text in its palette on its canvas.
-private struct MiniWindow: View {
-    let preview: ThemePreview
-
-    private static let lines: [[(width: CGFloat, accent: Int?)]] = [
-        [(16, 0), (24, nil)],
-        [(8, 1), (32, nil)],
-        [(24, 2), (16, nil)],
-        [(32, nil)],
-        [(8, 3), (24, nil)],
-    ]
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(0..<3, id: \.self) { i in
-                    Capsule().fill(preview.inkSecondary).frame(width: i == 2 ? 8 : 12, height: 3)
-                }
-            }
-            .padding(.top, 8)
-            .padding(.leading, 4)
-            .frame(width: 20, alignment: .topLeading)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .background(preview.chrome)
-
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Self.lines.indices, id: \.self) { row in
-                    HStack(spacing: 4) {
-                        ForEach(Self.lines[row].indices, id: \.self) { i in
-                            let segment = Self.lines[row][i]
-                            Capsule()
-                                .fill(segment.accent.map { preview.accents[$0] } ?? preview.text)
-                                .frame(width: segment.width, height: 3)
-                        }
-                    }
-                }
-            }
-            .padding(8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(preview.canvas)
-        }
-        .frame(height: 64)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct ThemeSidePicker: View {
-    let title: String
-    @Binding var selection: String
-    let names: [String]
-
-    var body: some View {
-        Picker(title, selection: $selection) {
-            // A Custom side may name a theme that isn't bundled (a path).
-            if !names.contains(selection) {
-                Text(selection).tag(selection)
-            }
-            ForEach(names, id: \.self) { Text($0).tag($0) }
-        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
