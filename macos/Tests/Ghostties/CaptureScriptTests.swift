@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import GhosttiesCore
 import Testing
 @testable import Ghostty
 
@@ -129,6 +130,81 @@ struct CaptureScriptTests {
         #expect(UserDefaults.standard.object(forKey: key) as? Bool == standardBefore)
     }
 
+    // MARK: - Sidebar ops
+
+    @Test func parsesSidebarOps() throws {
+        let steps = try parse("""
+        {"steps": [
+          {"op": "foldAll"}, {"op": "unpin", "project": "trove"}, {"op": "unfold", "project": "switchboard"},
+          {"op": "fold", "project": "wren"}, {"op": "select", "session": "rate limiter"}, {"op": "pin", "project": "atlas-api"}
+        ]}
+        """)
+        #expect(steps == [
+            .foldAll, .unpin(project: "trove"), .unfold(project: "switchboard"),
+            .fold(project: "wren"), .select(session: "rate limiter"), .pin(project: "atlas-api"),
+        ])
+    }
+
+    @Test func sidebarOpsRejectBadFields() {
+        #expect(failure(#"{"steps":[{"op":"fold"}]}"#) == "step 0: fold needs a project string")
+        #expect(failure(#"{"steps":[{"op":"unfold","project":""}]}"#) == "step 0: unfold needs a project string")
+        #expect(failure(#"{"steps":[{"op":"select"}]}"#) == "step 0: select needs a session string")
+        #expect(failure(#"{"steps":[{"op":"select","project":"x"}]}"#) == "step 0: unknown field 'project' for op 'select'")
+        #expect(failure(#"{"steps":[{"op":"foldAll","project":"x"}]}"#) == "step 0: unknown field 'project' for op 'foldAll'")
+        #expect(failure(#"{"steps":[{"op":"pin","session":"x"}]}"#) == "step 0: unknown field 'session' for op 'pin'")
+    }
+
+    @Test func runnerDispatchesSidebarOpsInOrder() async {
+        let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let host = FakeHost()
+        await CaptureScript.Runner(host: host, stateDir: dir).run([
+            .foldAll, .unpin(project: "trove"), .unfold(project: "switchboard"), .select(session: "flaky ci"),
+            .fold(project: "switchboard"), .pin(project: "trove"),
+        ])
+        #expect(host.calls == ["foldAll", "unpin:trove", "unfold:switchboard", "select:flaky ci", "fold:switchboard", "pin:trove"])
+        #expect(exists(dir, "script.done"))
+    }
+
+    @Test func unknownNamesStopTheScriptWithAnError() async throws {
+        for (step, message) in [
+            (CaptureScript.Step.fold(project: "ghost"), "step 1: fold: no project named 'ghost'"),
+            (.select(session: "ghost"), "step 1: select: no session named 'ghost'"),
+            (.pin(project: "ghost"), "step 1: pin: no project named 'ghost'"),
+        ] {
+            let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+            let host = FakeHost()
+            await CaptureScript.Runner(host: host, stateDir: dir).run([.foldAll, step, .foldAll])
+            #expect(host.calls == ["foldAll"])
+            #expect(try String(contentsOf: dir.appendingPathComponent("script.error"), encoding: .utf8) == message + "\n")
+            #expect(!exists(dir, "script.done"))
+        }
+    }
+
+    @Test func nameResolutionIsCaseInsensitiveAndExact() throws {
+        let a = Project(name: "switchboard", rootPath: "/tmp/a")
+        let b = Project(name: "atlas-api", rootPath: "/tmp/b")
+        #expect(try CaptureScript.resolveProject("SWITCHBOARD", in: [a, b], op: "fold").id == a.id)
+        #expect(throws: CaptureScript.Failure.self) { try CaptureScript.resolveProject("switch", in: [a, b], op: "fold") }
+        let dup = Project(name: "Switchboard", rootPath: "/tmp/c")
+        #expect(throws: CaptureScript.Failure.self) { try CaptureScript.resolveProject("switchboard", in: [a, dup], op: "fold") }
+
+        let t = UUID()
+        let s1 = AgentSession(name: "rate limiter", templateId: t, projectId: a.id)
+        let s2 = AgentSession(name: "auth migration", templateId: t, projectId: b.id)
+        #expect(try CaptureScript.resolveSession("Auth Migration", in: [s1, s2]).id == s2.id)
+        #expect(throws: CaptureScript.Failure.self) { try CaptureScript.resolveSession("auth", in: [s1, s2]) }
+        let s3 = AgentSession(name: "rate limiter", templateId: t, projectId: b.id)
+        #expect(throws: CaptureScript.Failure.self) { try CaptureScript.resolveSession("rate limiter", in: [s1, s3]) }
+    }
+
+    @Test func setFoldedEditsTheStoredSet() {
+        let a = UUID(), b = UUID()
+        let both = ProjectAccordionState.setFolded("", ids: [a, b], folded: true)
+        #expect(ProjectAccordionState.decode(both) == [a, b])
+        #expect(ProjectAccordionState.decode(ProjectAccordionState.setFolded(both, ids: [a], folded: false)) == [b])
+        #expect(ProjectAccordionState.setFolded(both, ids: [a], folded: true) == both)
+    }
+
     // MARK: - Runner
 
     private final class FakeHost: CaptureScript.Host {
@@ -147,6 +223,20 @@ struct CaptureScriptTests {
         func type(_ text: String) { calls.append("type:\(text)") }
         func key(_ spec: CaptureScript.KeySpec) { calls.append("key:\(spec.key)") }
         func setPref(_ value: Bool?) { calls.append("pref:\(String(describing: value))") }
+        func foldAll() { calls.append("foldAll") }
+        func setFolded(project: String, folded: Bool) throws {
+            try known(project, op: folded ? "fold" : "unfold"); calls.append("\(folded ? "fold" : "unfold"):\(project)")
+        }
+        func select(session: String) throws {
+            if session == "ghost" { throw CaptureScript.Failure("select: no session named 'ghost'") }
+            calls.append("select:\(session)")
+        }
+        func setPinned(project: String, pinned: Bool) throws {
+            try known(project, op: pinned ? "pin" : "unpin"); calls.append("\(pinned ? "pin" : "unpin"):\(project)")
+        }
+        private func known(_ project: String, op: String) throws {
+            if project == "ghost" { throw CaptureScript.Failure("\(op): no project named 'ghost'") }
+        }
     }
 
     private func tempDir() -> URL {
@@ -196,8 +286,8 @@ struct CaptureScriptTests {
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let host = FakeHost()
         let runner = CaptureScript.Runner(host: host, stateDir: dir, markTimeout: 5, pollInterval: 0.01)
-        let task = Task { await runner.run([.mark("m1"), .newSession]) }
-        try await Task.sleep(for: .milliseconds(200))
+        let task = _Concurrency.Task { await runner.run([.mark("m1"), .newSession]) }
+        try await _Concurrency.Task.sleep(for: .milliseconds(200))
         #expect(host.calls.isEmpty) // still blocked on the handshake
         let log = try String(contentsOf: dir.appendingPathComponent("marks.jsonl"), encoding: .utf8)
         #expect(log.contains("\"name\":\"m1\""))

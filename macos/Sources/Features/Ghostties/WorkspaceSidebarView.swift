@@ -38,6 +38,10 @@ struct WorkspaceSidebarView: View {
 
     @AppStorage("ghostties.hasSeenOnboarding") private var hasSeenOnboarding = false
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE` in One view: the fold the accordion reads.
+    @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var captureCollapsedRaw = ""
+    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -126,6 +130,7 @@ struct WorkspaceSidebarView: View {
             #if DEBUG
             coordinator.applyCaptureFixtureFocusIfNeeded()
             applyCaptureExpandProjectIfNeeded()
+            applyCaptureFoldToggleIfNeeded()
             #endif
         }
         .onChange(of: selectedProjectId) { newId in
@@ -166,6 +171,21 @@ struct WorkspaceSidebarView: View {
             expandedProjectIds.insert(projectId)
         }
         .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .captureProjectFold)) { notification in
+            // The capture script's fold ops, tabs layout: `expandedProjectIds`
+            // with the header click's spring and selection. One view is
+            // handled by `ProjectAccordionAutoExpand`.
+            guard SidebarDialTuning.projectsLayout() == .tabs,
+                  notification.object as? NSWindow === coordinator.containerView?.window,
+                  let ids = notification.userInfo?["projectIds"] as? [UUID],
+                  let fold = notification.userInfo?["fold"] as? Bool else { return }
+            withAnimation(SidebarUISpring.fold.animation(entering: !fold)) {
+                if fold { expandedProjectIds.subtract(ids) } else { expandedProjectIds.formUnion(ids) }
+            }
+            if notification.userInfo?["selectProject"] as? Bool == true, let id = ids.first { selectedProjectId = id }
+        }
+        #endif
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
             set: { _ in }
@@ -236,6 +256,38 @@ struct WorkspaceSidebarView: View {
               CaptureFixture.claimHook("expand") else { return }
         expandedBinding(for: project.id).wrappedValue = true
         selectedProjectId = project.id
+    }
+
+    /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE`: the project header's click action,
+    /// repeated on a timer. Projects tab only. One view (the shipped layout)
+    /// folds through `ProjectAccordionState` as `headerClicked` does; the tabs
+    /// layout toggles `expandedProjectIds`. The project is selected once, up
+    /// front: selecting it again per tick would not fold it, but it moves the
+    /// selection under the clip.
+    private func applyCaptureFoldToggleIfNeeded() {
+        guard sidebarTab == .projects,
+              let hook = CaptureFixture.foldToggle,
+              let project = store.projects.first(where: { $0.name == hook.projectName }),
+              CaptureFixture.claimHook("foldToggle") else { return }
+        let binding = expandedBinding(for: project.id)
+        let collapsedRaw = $captureCollapsedRaw
+        let projectId = project.id
+        selectedProjectId = projectId
+        _Concurrency.Task { @MainActor in
+            for _ in 0..<CaptureFixture.foldToggleCycles {
+                try? await _Concurrency.Task.sleep(nanoseconds: UInt64(hook.interval * 1_000_000_000))
+                if SidebarDialTuning.projectsLayout() == .oneView {
+                    let unfolding = ProjectAccordionState.decode(collapsedRaw.wrappedValue).contains(projectId)
+                    withAnimation(ProjectAccordionState.toggleAnimation(unfolding: unfolding)) {
+                        collapsedRaw.wrappedValue = ProjectAccordionState.toggled(collapsedRaw.wrappedValue, projectId)
+                    }
+                } else {
+                    withAnimation(SidebarUISpring.fold.animation(entering: !binding.wrappedValue)) {
+                        binding.wrappedValue.toggle()
+                    }
+                }
+            }
+        }
     }
     #endif
 

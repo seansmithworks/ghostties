@@ -79,4 +79,71 @@ struct CaptureLaunchHooksTests {
             #expect(CaptureFixture.parseSidebarToggleAfter(raw) == nil, "\(raw ?? "nil")")
         }
     }
+
+    // MARK: - Motion hooks (reveal style, collapse, select sequence, fold toggle)
+
+    @Test func revealStyleParses() {
+        #expect(CaptureFixture.parseRevealStyle("push") == .push)
+        #expect(CaptureFixture.parseRevealStyle("overlay") == .overlay)
+        for raw in [nil, "", "Push", "slide"] {
+            #expect(CaptureFixture.parseRevealStyle(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    @Test func selectSequenceParses() {
+        #expect(CaptureFixture.parseSelectSequence("2:1") == .init(interval: 2, steps: 1))
+        #expect(CaptureFixture.parseSelectSequence("1.5:-2") == .init(interval: 1.5, steps: -2))
+        for raw in [nil, "", "2", "2:", ":1", "0:1", "2:0", "x:1", "2:x", "2:1:1"] {
+            #expect(CaptureFixture.parseSelectSequence(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    @Test func foldToggleParses() {
+        #expect(CaptureFixture.parseFoldToggle("atlas-api:2") == .init(projectName: "atlas-api", interval: 2))
+        #expect(CaptureFixture.parseFoldToggle("wren:0.5") == .init(projectName: "wren", interval: 0.5))
+        for raw in [nil, "", "wren", "wren:", ":2", "wren:0", "wren:x"] {
+            #expect(CaptureFixture.parseFoldToggle(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    /// Mutant check: deleting `guard active` in `CaptureFixture.gatedEnv`
+    /// (the only gate `env(_:)` goes through) makes the inactive assertions
+    /// below return non-nil, failing this test.
+    @Test func motionHooksAreInertWithoutFixtureGate() {
+        let environment = [
+            "GHOSTTIES_CAPTURE_REVEAL_STYLE": "overlay",
+            "GHOSTTIES_CAPTURE_RAIL_REVEAL_COLLAPSE_AFTER": "2",
+            "GHOSTTIES_CAPTURE_SELECT_SEQUENCE": "2:1",
+            "GHOSTTIES_CAPTURE_FOLD_TOGGLE": "wren:2",
+        ]
+        for (key, value) in environment {
+            #expect(CaptureFixture.gatedEnv(key, active: false, in: environment) == nil, "\(key)")
+            #expect(CaptureFixture.gatedEnv(key, active: true, in: environment) == value, "\(key)")
+        }
+        #expect(CaptureFixture.parseRevealStyle(CaptureFixture.gatedEnv("GHOSTTIES_CAPTURE_REVEAL_STYLE", active: true, in: environment)) == .overlay)
+        #expect(CaptureFixture.parseSelectSequence(CaptureFixture.gatedEnv("GHOSTTIES_CAPTURE_SELECT_SEQUENCE", active: false, in: environment)) == nil)
+    }
+
+    @Test func railRevealCollapseAfterParsesSeconds() {
+        #expect(CaptureFixture.parseRailRevealCollapseAfter("3") == 3)
+        #expect(CaptureFixture.parseRailRevealCollapseAfter("1.5") == 1.5)
+        for raw in [nil, "", "0", "-1", "x", "inf"] {
+            #expect(CaptureFixture.parseRailRevealCollapseAfter(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    @Test func revealStyleSeedsOnlyTheGivenSuite() {
+        let name = "ghostties.test.revealSeed.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+        let key = SidebarDialTuning.hoverRevealStyleKey
+        let standardBefore = UserDefaults.standard.object(forKey: key) as? String
+
+        CaptureFixture.seedRevealStyle(nil, into: suite)
+        #expect(suite.object(forKey: key) == nil)
+        CaptureFixture.seedRevealStyle(.overlay, into: suite)
+        #expect(suite.string(forKey: key) == "overlay")
+        #expect(SidebarDialTuning.hoverRevealStyle(defaults: suite) == .overlay)
+        #expect(UserDefaults.standard.object(forKey: key) as? String == standardBefore)
+    }
 }

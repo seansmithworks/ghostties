@@ -1263,7 +1263,30 @@ class WorkspaceViewContainer: NSView {
             DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
                 guard let self, self.sidebarMode == .collapsed else { return }
                 self.railHover.revealNow()
+                guard let collapse = CaptureFixture.railRevealCollapseAfter else { return }
+                // The pointer leaving: the exit grace, then the same collapse.
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapse) { [weak self] in
+                    self?.railHover.pointerExited()
+                }
             }
+        }
+        if let sequence = CaptureFixture.selectSequence, CaptureFixture.claimHook("selectSequence") {
+            // Cmd+Shift+] / [ order over the rows the mounted sidebar lists
+            // (`railSessions`), repeating, so it works pinned and on the rail.
+            // Fixture sessions have no terminal, so the shortcut's own path
+            // (`focusAdjacentLiveSession`, live surfaces only) finds nothing:
+            // select through `activeSessionId`, which every row's chip reads.
+            func tick(_ remaining: Int) {
+                guard remaining > 0 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
+                    guard let self else { return }
+                    let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab))
+                    self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
+                    tick(remaining - 1)
+                }
+            }
+            tick(CaptureFixture.selectSequenceTicks)
         }
         if let steps = CaptureFixture.morphSteps, CaptureFixture.claimHook("morphSteps") {
             // After the window has taken its capture size (0.5s, above).
@@ -4462,5 +4485,39 @@ extension WorkspaceViewContainer: CaptureScript.Host {
     }
 
     func setPref(_ value: Bool?) { CaptureScript.applyPref(value) }
+
+    // MARK: Sidebar ops
+
+    private func postCaptureFold(_ ids: [UUID], fold: Bool, selectProject: Bool) {
+        NotificationCenter.default.post(
+            name: .captureProjectFold, object: window,
+            userInfo: ["projectIds": ids, "fold": fold, "selectProject": selectProject])
+    }
+
+    func foldAll() { postCaptureFold(store.projects.map(\.id), fold: true, selectProject: false) }
+
+    func setFolded(project name: String, folded: Bool) throws {
+        let project = try CaptureScript.resolveProject(name, in: store.projects, op: folded ? "fold" : "unfold")
+        postCaptureFold([project.id], fold: folded, selectProject: true)
+    }
+
+    func select(session name: String) throws {
+        let session = try CaptureScript.resolveSession(name, in: store.sessions)
+        // A row click on a visible row; unfold first, without moving the
+        // project selection, in case the row's project is folded.
+        postCaptureFold([session.projectId], fold: false, selectProject: false)
+        coordinator.focusSession(id: session.id)
+    }
+
+    func setPinned(project name: String, pinned: Bool) throws {
+        let op = pinned ? "pin" : "unpin"
+        let project = try CaptureScript.resolveProject(name, in: store.projects, op: op)
+        // A no-op here would be a shot with nothing moving.
+        guard project.isPinned != pinned else {
+            throw CaptureScript.Failure("\(op): '\(project.name)' is already \(pinned ? "pinned" : "unpinned")")
+        }
+        // The project context menu's Pin / Unpin.
+        store.togglePin(id: project.id)
+    }
 }
 #endif
