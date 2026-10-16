@@ -630,6 +630,9 @@ final class SessionComposerStore: ObservableObject {
         // check and overwrite B's freshly-reset empty state).
         worktreeRefreshToken += 1
         cachedWorkspaceStore = workspaceStore
+        // All themes classifies every bundled theme; start that off the
+        // main thread now, before `theme` can open it (once per process).
+        themePicker.warmThemes()
 
         // G-F14: pins are never pruned or reconciled anywhere else — this is
         // the one call site, per `prunePins(validIds:)`'s doc comment.

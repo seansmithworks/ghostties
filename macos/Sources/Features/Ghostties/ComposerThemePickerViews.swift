@@ -55,6 +55,10 @@ final class ComposerThemePickerModel: ObservableObject {
     /// moves, hovers or types a query. An empty `theme ` shows what is
     /// applied, so typing the word alone never changes the window.
     private var selectionIsPreviewed = false
+    /// Esc left All themes with a query typed: the caller is clearing it,
+    /// and that text change must land on the All themes tile, not the
+    /// applied cell.
+    private var landOnAllThemesAfterClose = false
     private var thumbnails: [String: ThemePreview] = [:]
     private lazy var themes: [String] = themesProvider()
     private lazy var browseFamilies: [ThemeFamily] = GhosttiesThemeCatalog.browseFamilies(themes: themes)
@@ -195,6 +199,12 @@ final class ComposerThemePickerModel: ObservableObject {
         }
     }
 
+    /// The composer opened: classify every bundled theme off the main
+    /// thread before All themes can ask (`ThemeBrowseModel.warmPolarityCache`).
+    func warmThemes() {
+        ThemeBrowseModel.warmPolarityCache(themes: themes)
+    }
+
     func thumbnail(_ name: String) -> ThemePreview {
         if let cached = thumbnails[name] { return cached }
         let made = ThemePreview(name: name)
@@ -209,6 +219,8 @@ final class ComposerThemePickerModel: ObservableObject {
         let wasActive = isActive
         command = ComposerThemeCommand.parse(text, projectNames: projectNames)
         peekName = nil
+        let landOnAllThemes = landOnAllThemesAfterClose
+        landOnAllThemesAfterClose = false
         guard case .theme(let query) = command else {
             selectionIsPreviewed = false
             isBrowseOpened = false
@@ -229,6 +241,8 @@ final class ComposerThemePickerModel: ObservableObject {
             if isBrowsing {
                 refreshBrowseEntries()
                 selection = 0
+            } else if landOnAllThemes {
+                selection = max(gridCells.count - 1, 0)
             } else {
                 selection = appliedIndex ?? 0
             }
@@ -330,6 +344,7 @@ final class ComposerThemePickerModel: ObservableObject {
     /// preview reverted. The caller clears a typed query.
     func closeBrowse() {
         guard isBrowsing else { return }
+        landOnAllThemesAfterClose = !query.isEmpty
         isBrowseOpened = false
         peekName = nil
         selectionIsPreviewed = false
@@ -494,17 +509,32 @@ struct ComposerThemeGrid: View {
     let titleSize: CGFloat
     let onCommit: () -> Void
 
-    /// The composer's width while the grid shows: three full rows of cards
-    /// without scrolling.
+    /// The composer's width while the grid shows, room permitting: three
+    /// full rows of cards without scrolling.
     static let cardWidth: CGFloat = 860
+    /// Kept clear beside the card: the palette's 8pt shake inset and 16pt
+    /// of window on each side.
+    static let windowMargin: CGFloat = 48
+    /// Never narrower than this, however small the window.
+    static let minimumCardWidth: CGFloat = 320
+    /// The narrowest card that fits three columns (a card needs ~180pt for
+    /// its two thumbnails and a name).
+    static let threeColumnWidth: CGFloat = 600
     static let inset: CGFloat = 8
     static let spacing: CGFloat = 8
     static let thumbnailHeight: CGFloat = 64
     static let visibleRows = 3
 
-    /// Three columns on the theme card, two on a narrow one.
+    /// `min(cardWidth, available - windowMargin)`; `cardWidth` when the
+    /// window's width isn't known.
+    static func cardWidth(available: CGFloat?) -> CGFloat {
+        guard let available else { return cardWidth }
+        return max(min(cardWidth, available - windowMargin), minimumCardWidth)
+    }
+
+    /// Three columns when they fit, else two.
     static func columns(cardWidth: CGFloat) -> Int {
-        cardWidth >= 480 ? ThemeGridModel.columns : 2
+        cardWidth >= threeColumnWidth ? ThemeGridModel.columns : 2
     }
 
     private var columns: Int { Self.columns(cardWidth: width) }
@@ -567,7 +597,22 @@ struct ComposerThemeGrid: View {
         }
     }
 
+    /// The nine cells. Three columns fit without scrolling; two (a narrow
+    /// window) scroll inside the same three-row height.
+    @ViewBuilder
     private var cellGrid: some View {
+        if columns >= ThemeGridModel.columns {
+            cells
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) { cells }
+                    .frame(height: rowsHeight)
+                    .onChange(of: model.selection) { proxy.scrollTo($0) }
+            }
+        }
+    }
+
+    private var cells: some View {
         LazyVGrid(columns: gridColumns, spacing: Self.spacing) {
             ForEach(Array(model.gridCells.enumerated()), id: \.offset) { index, cell in
                 ComposerThemeCellCard(
@@ -588,6 +633,7 @@ struct ComposerThemeGrid: View {
                         onPeek: { name in peek(name, index: index) }
                     )
                 }
+                .id(index)
             }
         }
         .padding(Self.inset)
@@ -642,6 +688,19 @@ struct ComposerThemeGrid: View {
         } else if model.peekName != nil {
             model.peek(nil)
         }
+    }
+}
+
+private struct ComposerAvailableWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    /// The width the composer overlay has to lay out in (the window's), or
+    /// nil outside it. The theme grid clamps the card to it.
+    var composerAvailableWidth: CGFloat? {
+        get { self[ComposerAvailableWidthKey.self] }
+        set { self[ComposerAvailableWidthKey.self] = newValue }
     }
 }
 

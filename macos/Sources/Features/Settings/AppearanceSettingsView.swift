@@ -136,6 +136,7 @@ final class AppearanceSettingsModel: ObservableObject {
         self.applyMode = applyMode
         self.storedMode = GhosttiesAppearanceMode.stored(in: defaults)
         self.themeNames = GhosttiesThemeCatalog.bundledThemeNames()
+        ThemeBrowseModel.warmPolarityCache(themes: themeNames)
         refresh()
     }
 

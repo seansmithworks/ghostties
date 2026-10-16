@@ -138,6 +138,13 @@ enum ThemeFile {
         color("foreground", named: name)
     }
 
+    /// `name`'s `background` and `foreground` from one read of its file;
+    /// nil for a key the file lacks (or a broken bundle).
+    static func backgroundAndForeground(named name: String) -> (background: NSColor?, foreground: NSColor?) {
+        guard let text = text(named: name) else { return (nil, nil) }
+        return (color("background", in: text), color("foreground", in: text))
+    }
+
     static func background(in text: String) -> NSColor? {
         color("background", in: text)
     }

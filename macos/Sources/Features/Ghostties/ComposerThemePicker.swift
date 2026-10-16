@@ -218,16 +218,29 @@ enum ThemeBrowseEntry: Equatable {
 
 enum ThemeBrowseModel {
     /// Light or dark by the theme file's background, with `ChromeTheme`'s
-    /// rule. Cached: "All themes" asks for every bundled theme.
+    /// rule, from one read of the file. Cached: "All themes" asks for every
+    /// bundled theme. Safe on any thread.
     static func polarity(ofTheme name: String) -> ChromeTheme.Polarity {
         if let cached = polarityCache.value(name) { return cached }
-        let background = ThemeFile.background(named: name)
-        let polarity = ChromeTheme.polarity(
-            background: background,
-            foreground: ThemeFile.foreground(named: name) ?? background
-        )
+        let colors = ThemeFile.backgroundAndForeground(named: name)
+        // The same fallbacks as `ThemeFile.background(named:)` and
+        // `ThemePreview`: the window colour, then the background.
+        let background = colors.background ?? .windowBackgroundColor
+        let polarity = ChromeTheme.polarity(background: background, foreground: colors.foreground ?? background)
         polarityCache.store(polarity, for: name)
         return polarity
+    }
+
+    /// Classifies `themes` on a background queue, so opening All themes
+    /// finds them cached instead of reading every file on the main thread.
+    /// Runs once per process; later calls return at once. A lookup that
+    /// arrives first computes (and caches) that one theme itself, with the
+    /// same result.
+    static func warmPolarityCache(themes: [String]) {
+        guard polarityCache.claimWarmUp() else { return }
+        DispatchQueue.global(qos: .utility).async {
+            for name in themes { _ = polarity(ofTheme: name) }
+        }
     }
 
     /// `.pairs`: matching families, then the other themes. `.light` /
@@ -285,9 +298,21 @@ enum ThemeBrowseModel {
 
     private static let polarityCache = PolarityCache()
 
+    /// Every read and write of its state holds `lock`, so the warm-up
+    /// queue and the main thread can share it.
     private final class PolarityCache: @unchecked Sendable {
         private let lock = NSLock()
         private var values: [String: ChromeTheme.Polarity] = [:]
+        private var warmUpClaimed = false
+
+        /// True for the first caller only.
+        func claimWarmUp() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !warmUpClaimed else { return false }
+            warmUpClaimed = true
+            return true
+        }
 
         func value(_ name: String) -> ChromeTheme.Polarity? {
             lock.lock()
@@ -335,25 +360,6 @@ enum ComposerThemeMatcher {
             )
         }
         return pool.sorted { key($0) < key($1) }.prefix(max(limit, 0)).map(\.choice)
-    }
-
-    /// C2: whole families in catalog order, matched on the family or either
-    /// member's name.
-    static func grid(query: String, families: [ThemeFamily]) -> [ThemeFamily] {
-        let q = normalized(query)
-        guard !q.isEmpty else { return families }
-        return families.filter { family in
-            [family.name, family.light, family.dark].contains { $0?.lowercased().contains(q) == true }
-        }
-    }
-
-    /// C2: where the selection starts. An empty query starts on the applied
-    /// family (no pick = Ghostties); a typed query, or a pick no family
-    /// matches, starts on the first result.
-    static func initialGridIndex(query: String, results: [ThemeFamily], applied: GhosttiesThemePicks) -> Int {
-        guard normalized(query).isEmpty else { return 0 }
-        let current = GhosttiesThemeCatalog.resolved(applied)
-        return results.firstIndex { $0.picks == current } ?? 0
     }
 
     /// The ghost text after what is typed: the rest of the first top name

@@ -64,6 +64,9 @@ struct SessionComposerPalette: View {
     /// `theme` / `/theme` (`ComposerThemePickerModel`): the field's text
     /// picks a theme instead of a session.
     @ObservedObject private var themePicker: ComposerThemePickerModel
+    /// The window's width (`SessionComposerOverlay`): the theme grid's
+    /// card clamps to it.
+    @Environment(\.composerAvailableWidth) private var composerAvailableWidth
 
     /// `composerStore` defaults to the real process-wide singleton for
     /// every production call site (`SessionComposerOverlay`,
@@ -1488,7 +1491,7 @@ struct SessionComposerPalette: View {
     /// columns so a resume row's title and meta both fit, and to the theme
     /// grid's width while it shows (three full rows of cards).
     private var composerCardWidth: CGFloat {
-        if themePicker.isGridShown { return ComposerThemeGrid.cardWidth }
+        if themePicker.isGridShown { return ComposerThemeGrid.cardWidth(available: composerAvailableWidth) }
         return resumeLayout == .columns && !themePicker.isActive ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
     }
 
