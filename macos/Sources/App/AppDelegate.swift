@@ -1568,17 +1568,29 @@ class AppDelegate: NSObject,
 
     /// Sync the appearance of our app with the theme specified in the config.
     private func syncAppearance(config: Ghostty.Config) {
-        // MARK: - Ghostties fork fence (DEBUG appearance preview)
+        // MARK: - Ghostties fork fence (appearance mode, DEBUG appearance preview)
+        // The config's light/dark window-theme wins, then Settings > Appearance
+        // > Mode; otherwise Ghostty's own handling (`ghostty`, `auto`) stands.
+        let mode = GhosttiesAppearanceMode.stored(in: GhosttiesThemePicks.appDefaults)
+        let configured = GhosttiesAppearanceMode.resolvedAppearanceName(
+            configWindowTheme: config.windowTheme, mode: mode
+        ).flatMap { NSAppearance(named: $0) } ?? NSAppearance(ghosttyConfig: config)
         #if DEBUG
-        // The inspector's forced light/dark outranks the config's window-theme;
-        // the preview records the config's value to hand back on `auto`.
+        // The inspector's forced light/dark outranks the above; the preview
+        // records it to hand back on `auto`.
         // Always reached on the main thread (config sync hops to main first).
-        let configured = NSAppearance(ghosttyConfig: config)
         MainActor.assumeIsolated { SidebarAppearancePreview.applyAppAppearance(configured: configured) }
         #else
-        NSApplication.shared.appearance = .init(ghosttyConfig: config)
+        NSApplication.shared.appearance = configured
         #endif
-        // MARK: - End Ghostties fork fence (DEBUG appearance preview)
+        // MARK: - End Ghostties fork fence (appearance mode, DEBUG appearance preview)
+    }
+
+    /// Re-applies the appearance after Settings changed the mode. Setting
+    /// `NSApp.appearance` fires the `effectiveAppearance` observer, which
+    /// pushes the new scheme to libghostty and every surface.
+    func applyAppearanceMode() {
+        syncAppearance(config: ghostty.config)
     }
 
     private func updateAppIcon(from config: Ghostty.Config) {

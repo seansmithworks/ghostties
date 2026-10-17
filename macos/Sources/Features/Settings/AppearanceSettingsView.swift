@@ -6,7 +6,9 @@ import SwiftUI
 /// A pick is stored in the app's defaults and applied live through
 /// `reloadConfig()`; the user's config file is never written.
 struct AppearanceSettingsView: View {
-    @StateObject private var model = AppearanceSettingsModel()
+    @StateObject private var model = AppearanceSettingsModel(applyMode: {
+        (NSApp.delegate as? AppDelegate)?.applyAppearanceMode()
+    })
     @AppStorage(ComposerThemePresentation.key, store: GhosttiesThemePicks.appDefaults)
     private var composerThemePresentation: ComposerThemePresentation = .grid
 
@@ -20,7 +22,20 @@ struct AppearanceSettingsView: View {
 
             Section {
                 LabeledContent("Mode") {
-                    Text(model.modeLabel).foregroundStyle(.secondary)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        NeutralSegmentedControl(
+                            options: [
+                                ("System", GhosttiesAppearanceMode.system),
+                                ("Light", .light),
+                                ("Dark", .dark),
+                            ],
+                            selection: $model.mode
+                        )
+                        .disabled(model.modeLockedByConfig)
+                        if let note = model.modeLockedNote {
+                            Text(note).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
 
@@ -88,14 +103,28 @@ final class AppearanceSettingsModel: ObservableObject {
     @Published private(set) var state: GhosttiesAppearanceState = .ghostties
     @Published private(set) var probe = GhosttiesThemeProbe.Result(kind: .none, themeName: nil)
     @Published private(set) var picks = GhosttiesThemePicks.none
-    @Published private(set) var modeLabel = "System"
+    @Published private(set) var configWindowTheme: String?
+    @Published private var storedMode: GhosttiesAppearanceMode
 
     let themeNames: [String]
     private let defaults: UserDefaults
     private var previews: [String: ThemePreview] = [:]
 
-    init(defaults: UserDefaults = GhosttiesThemePicks.appDefaults) {
+    private let windowTheme: () -> String?
+    private let applyMode: () -> Void
+
+    /// `windowTheme` reads the running app's config `window-theme`;
+    /// `applyMode` re-applies the app appearance after the mode changes
+    /// (a no-op unless the caller wires it, so tests never touch `NSApp`).
+    init(
+        defaults: UserDefaults = GhosttiesThemePicks.appDefaults,
+        windowTheme: @escaping () -> String? = { (NSApp.delegate as? AppDelegate)?.ghostty.config.windowTheme },
+        applyMode: @escaping () -> Void = {}
+    ) {
         self.defaults = defaults
+        self.windowTheme = windowTheme
+        self.applyMode = applyMode
+        self.storedMode = GhosttiesAppearanceMode.stored(in: defaults)
         self.themeNames = GhosttiesThemeCatalog.bundledThemeNames()
         refresh()
     }
@@ -108,11 +137,30 @@ final class AppearanceSettingsModel: ObservableObject {
         probe = GhosttiesThemeProbe.probe(configPath: path)
         picks = GhosttiesThemePicks.stored(in: defaults)
         state = GhosttiesAppearanceState.resolve(configPath: path, picks: picks)
-        switch ghostty?.config.windowTheme {
-        case "light": modeLabel = "Light, set by window-theme in your config"
-        case "dark": modeLabel = "Dark, set by window-theme in your config"
-        case "ghostty": modeLabel = "Follows the terminal theme (window-theme in your config)"
-        default: modeLabel = "System"
+        configWindowTheme = windowTheme()
+        storedMode = GhosttiesAppearanceMode.stored(in: defaults)
+    }
+
+    /// System / Light / Dark. Setting it stores the choice and applies it live.
+    var mode: GhosttiesAppearanceMode {
+        get { storedMode }
+        set {
+            guard newValue != storedMode else { return }
+            newValue.store(in: defaults)
+            storedMode = newValue
+            applyMode()
+        }
+    }
+
+    /// `window-theme` in the user's config fixes the appearance.
+    var modeLockedByConfig: Bool { GhosttiesAppearanceMode.isLocked(byConfigWindowTheme: configWindowTheme) }
+
+    var modeLockedNote: String? {
+        switch configWindowTheme {
+        case "light": return "Light, set by window-theme in your config"
+        case "dark": return "Dark, set by window-theme in your config"
+        case "ghostty": return "Follows the terminal theme (window-theme in your config)"
+        default: return nil
         }
     }
 
@@ -238,6 +286,79 @@ struct ThemePreview {
 }
 
 // MARK: - Views
+
+/// A segmented control whose selected segment is a neutral raised pill on a
+/// gray track, drawn in SwiftUI so no window state (key, accent) can tint it.
+/// Track is `quaternaryLabelColor` (black ~10% in light, white ~10% in dark);
+/// the pill is `controlColor` (white in light, a lighter gray in dark).
+/// Segments share the widest label's width, as system segmented controls do.
+/// The whole control is one focus stop; left/right arrows move the selection.
+private struct NeutralSegmentedControl<Value: Hashable>: View {
+    let options: [(title: String, value: Value)]
+    @Binding var selection: Value
+
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var pill
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options.indices, id: \.self) { index in
+                segment(options[index])
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color(nsColor: .quaternaryLabelColor))
+        )
+        .opacity(isEnabled ? 1 : 0.5)
+        .accessibilityElement(children: .contain)
+        .focusable(isEnabled)
+        .onMoveCommand { direction in
+            guard let current = options.firstIndex(where: { $0.value == selection }) else { return }
+            switch direction {
+            case .left: select(options[max(current - 1, 0)].value)
+            case .right: select(options[min(current + 1, options.count - 1)].value)
+            default: break
+            }
+        }
+    }
+
+    private func select(_ value: Value) {
+        guard isEnabled, value != selection else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.9)) {
+            selection = value
+        }
+    }
+
+    private func segment(_ option: (title: String, value: Value)) -> some View {
+        let selected = option.value == selection
+        return ZStack {
+            // Every label, hidden, sizes each segment to the widest one.
+            ForEach(options.indices, id: \.self) { Text(options[$0].title).hidden() }
+            Text(option.title)
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(.primary)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 12)
+        .background {
+            if selected {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(nsColor: .controlColor))
+                    .shadow(color: Color(nsColor: .shadowColor).opacity(0.15), radius: 1, y: 1)
+                    .matchedGeometryEffect(id: "pill", in: pill)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { select(option.value) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { select(option.value) }
+    }
+}
 
 private struct ThemePairCard: View {
     let card: AppearanceSettingsModel.Card
