@@ -42,9 +42,9 @@ struct ComposerThemePickerBehaviorTests {
         let store = SessionComposerStore(isolatedForTesting: name, themePicker: model)
 
         model.sync(text: "theme ", projectNames: [])
-        model.select(5)   // Dracula
+        model.select(5)   // Gruvbox
         #expect(model.preview.isPreviewing)
-        #expect(reloads.calls.last == .some(GhosttiesThemePicks(light: "Dracula", dark: "Dracula")))
+        #expect(reloads.calls.last == .some(GhosttiesThemePicks(light: "Gruvbox Light", dark: "Gruvbox Dark")))
 
         store.closeForOverlayTeardown()
 

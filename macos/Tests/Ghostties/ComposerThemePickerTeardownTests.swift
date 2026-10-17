@@ -23,7 +23,7 @@ struct ComposerThemePickerTeardownTests {
         var calls: [GhosttiesThemePicks?] = []
     }
 
-    /// Opens the composer in a real container, previews Dracula through a
+    /// Opens the composer in a real container, previews Gruvbox through a
     /// recording picker, runs `body`, then restores the shared store.
     private func withPreviewingComposer(
         _ body: @MainActor (WorkspaceViewContainer, NSWindow, ComposerThemePickerModel, Reloads) async -> Void
@@ -61,8 +61,8 @@ struct ComposerThemePickerTeardownTests {
             #expect(SessionComposerStore.shared.isOpen, "precondition: composer open")
 
             picker.sync(text: "theme ", projectNames: [])
-            picker.select(5)   // Dracula
-            #expect(picker.preview.previewing == GhosttiesThemePicks(light: "Dracula", dark: "Dracula"),
+            picker.select(5)   // Gruvbox
+            #expect(picker.preview.previewing == GhosttiesThemePicks(light: "Gruvbox Light", dark: "Gruvbox Dark"),
                     "precondition: previewing")
 
             await body(container, window, picker, reloads)

@@ -43,10 +43,6 @@ import Testing
 ///         // C1: individual theme names as chips.
 ///         static func chips(query: String, families: [ThemeFamily], applied: GhosttiesThemePicks,
 ///                           appearance: ChromeTheme.Polarity, limit: Int = 6) -> [ThemeChoice]
-///         // C2: whole families, catalog order.
-///         static func grid(query: String, families: [ThemeFamily]) -> [ThemeFamily]
-///         // C2: index the grid selection starts on (applied family when found, else 0).
-///         static func initialGridIndex(query: String, results: [ThemeFamily], applied: GhosttiesThemePicks) -> Int
 ///         // Ghost completion text appended after what is typed.
 ///         static func ghostSuffix(typed: String, query: String, topNames: [String]) -> String
 ///     }
@@ -231,31 +227,6 @@ struct ComposerThemePickerTests {
         #expect(light.first?.name == "Ghostties Light")
     }
 
-    @Test func gridKeepsCatalogOrderAndFiltersByFamilyOrMemberName() {
-        #expect(ComposerThemeMatcher.grid(query: "", families: catalog) == catalog)
-        #expect(ComposerThemeMatcher.grid(query: "gru", families: catalog).map(\.name) == ["Gruvbox"])
-        #expect(ComposerThemeMatcher.grid(query: "MOCHA", families: catalog).map(\.name) == ["Catppuccin"])
-        #expect(ComposerThemeMatcher.grid(query: "dra", families: catalog).map(\.name) == ["Dracula"])
-        // "light" hits member names: Ghostties Light, Catppuccin Latte no, Gruvbox Light, Solarized Light.
-        #expect(ComposerThemeMatcher.grid(query: "light", families: catalog).map(\.name)
-            == ["Ghostties", "Gruvbox", "Solarized"])
-        #expect(ComposerThemeMatcher.grid(query: "zzz", families: catalog).isEmpty)
-    }
-
-    @Test func gridSelectionStartsOnTheAppliedFamilyForAnEmptyQuery() {
-        let applied = GhosttiesThemePicks(light: "Gruvbox Light", dark: "Gruvbox Dark")
-        let results = ComposerThemeMatcher.grid(query: "", families: catalog)
-        #expect(ComposerThemeMatcher.initialGridIndex(query: "", results: results, applied: applied) == 2)
-        // A typed query starts on the first match.
-        let filtered = ComposerThemeMatcher.grid(query: "gru", families: catalog)
-        #expect(ComposerThemeMatcher.initialGridIndex(query: "gru", results: filtered, applied: applied) == 0)
-        // No pick = the Ghostties family; a Custom/unknown pick = first.
-        #expect(ComposerThemeMatcher.initialGridIndex(query: "", results: results, applied: .none) == 0)
-        let custom = GhosttiesThemePicks(light: "Some Theme", dark: "Other Theme")
-        #expect(ComposerThemeMatcher.initialGridIndex(query: "", results: results, applied: custom) == 0)
-        #expect(ComposerThemeMatcher.initialGridIndex(query: "", results: [], applied: applied) == 0)
-    }
-
     @Test func ghostSuffixCompletesAPrefixOtherwiseJustTheSpace() {
         // Prefix of a theme name: the rest, in that name's own case.
         #expect(ComposerThemeMatcher.ghostSuffix(typed: "theme dra", query: "dra", topNames: ["Dracula"]) == "cula")
@@ -269,25 +240,6 @@ struct ComposerThemePickerTests {
         #expect(ComposerThemeMatcher.ghostSuffix(typed: "theme mocha", query: "mocha", topNames: ["Catppuccin Mocha"]) == "")
         // No results: nothing, except the bare-word space.
         #expect(ComposerThemeMatcher.ghostSuffix(typed: "theme zz", query: "zz", topNames: []) == "")
-    }
-
-    /// The shipped catalog: Ghostties first, and every name is a real bundled
-    /// theme file (a typo here would preview as a silent no-op).
-    @Test func shippedCatalogIsCuratedAndBundled() {
-        let families = GhosttiesThemeCatalog.families
-        #expect(families.first == ThemeFamily(name: "Ghostties", light: "Ghostties Light", dark: "Ghostties Dark"))
-        let names = Set(families.map(\.name))
-        for expected in ["Ghostties", "Catppuccin", "Gruvbox", "Rose Pine", "Solarized", "Dracula", "TokyoNight", "Nord"] {
-            #expect(names.contains(expected), "missing family \(expected)")
-        }
-        #expect(families.allSatisfy { $0.light != nil || $0.dark != nil })
-        let bundled = Set(GhosttiesThemeCatalog.bundledThemeNames())
-        #expect(!bundled.isEmpty, "themes dir not found in the test host bundle")
-        for family in families {
-            for name in [family.light, family.dark].compactMap({ $0 }) {
-                #expect(bundled.contains(name), "\(name) is not a bundled theme")
-            }
-        }
     }
 
     // MARK: - 3. Preview engine

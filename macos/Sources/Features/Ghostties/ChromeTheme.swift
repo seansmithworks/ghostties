@@ -142,6 +142,13 @@ enum ThemeFile {
         color("foreground", named: name)
     }
 
+    /// `name`'s `background` and `foreground` from one read of its file;
+    /// nil for a key the file lacks (or a broken bundle).
+    static func backgroundAndForeground(named name: String) -> (background: NSColor?, foreground: NSColor?) {
+        guard let text = text(named: name) else { return (nil, nil) }
+        return (color("background", in: text), color("foreground", in: text))
+    }
+
     static func background(in text: String) -> NSColor? {
         color("background", in: text)
     }
@@ -221,6 +228,20 @@ extension ChromeTheme {
         return derived(background: background, foreground: foreground)
     }
 
+    /// The polarity `resolve` gives this pair, without deriving the rest:
+    /// the catalog's scheme, else the derivation's luminance rule.
+    static func polarity(background: NSColor, foreground: NSColor) -> Polarity {
+        if let scheme = catalogScheme(background: background, foreground: foreground) {
+            return Polarity(scheme)
+        }
+        return isLightCanvas(Oklab.srgb(background)) ? .light : .dark
+    }
+
+    /// Light if the background contrasts more with black.
+    private static func isLightCanvas(_ canvas: Oklab.RGB) -> Bool {
+        Oklab.contrast(canvas, Oklab.black) > Oklab.contrast(canvas, Oklab.white)
+    }
+
     /// Text floors the derivation holds every derived theme to.
     static let inkFloor = 7.0
     static let inkSecondaryFloor = 4.6
@@ -243,7 +264,7 @@ extension ChromeTheme {
     static func derived(background: NSColor, foreground: NSColor) -> ChromeTheme {
         let canvas = Oklab.srgb(background)
         let fg = Oklab.srgb(foreground)
-        let isLight = Oklab.contrast(canvas, Oklab.black) > Oklab.contrast(canvas, Oklab.white)
+        let isLight = isLightCanvas(canvas)
         let scheme: ColorScheme = isLight ? .light : .dark
         let polarity: Polarity = isLight ? .light : .dark
         let pair = ghostties(scheme)

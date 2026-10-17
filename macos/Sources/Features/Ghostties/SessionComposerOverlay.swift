@@ -65,9 +65,20 @@ struct SessionComposerOverlay: View {
         )
     }
 
+    /// The window's width, for cards that size to it (the theme grid).
+    @State private var availableWidth: CGFloat?
+
     var body: some View {
         composerZStack
+            .environment(\.composerAvailableWidth, availableWidth)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { availableWidth = geo.size.width }
+                        .onChange(of: geo.size.width) { availableWidth = $0 }
+                }
+            )
         #if DEBUG
         // DEBUG-only live tuning control (session-7 brief, 2026-09-11).
         // Compiled out of Release entirely; every symbol it touches lives
