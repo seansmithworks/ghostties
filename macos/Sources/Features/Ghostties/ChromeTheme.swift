@@ -72,6 +72,10 @@ struct ChromeTheme {
     // of the five reproduces. Slice 4's design pass decides its fate.
     /// The light tile fill's base (laid at `RailProjectTile.tintOpacity`).
     let tileFillBase: NSColor
+    /// The floating toolbar pills' base fill (`TrayGlassStyle`), laid at the
+    /// look's opacities. Ghostties Light: white. Otherwise a token already in
+    /// the theme: the dark chrome, or the light theme's canvas.
+    let trayFill: NSColor
 
     // MARK: Lookup
 
@@ -86,17 +90,21 @@ struct ChromeTheme {
         ink: .black,
         inkSecondary: NSColor(srgbRed: 0x5E / 255.0, green: 0x5E / 255.0, blue: 0x5E / 255.0, alpha: 1),
         shadow: NSColor(red: 0x0F / 255.0, green: 0x0F / 255.0, blue: 0x0F / 255.0, alpha: 1),
-        tileFillBase: NSColor(srgbRed: 40 / 255.0, green: 34 / 255.0, blue: 30 / 255.0, alpha: 1)
+        tileFillBase: NSColor(srgbRed: 40 / 255.0, green: 34 / 255.0, blue: 30 / 255.0, alpha: 1),
+        trayFill: .white
     )
+
+    private static let ghosttiesDarkChrome = NSColor(white: 0.14, alpha: 1)
 
     private static let ghosttiesDark = ChromeTheme(
         polarity: .dark,
         canvas: ThemeFile.background(named: "Ghostties Dark"),
-        chrome: NSColor(white: 0.14, alpha: 1),
+        chrome: ghosttiesDarkChrome,
         ink: .white,
         inkSecondary: NSColor(srgbRed: 0xA6 / 255.0, green: 0xA6 / 255.0, blue: 0xA6 / 255.0, alpha: 1),
         shadow: NSColor(red: 1, green: 1, blue: 1, alpha: 1),
-        tileFillBase: .white
+        tileFillBase: .white,
+        trayFill: ghosttiesDarkChrome
     )
 
     // MARK: Derived
@@ -272,7 +280,8 @@ extension ChromeTheme {
             ink: inkColor,
             inkSecondary: Oklab.color(inkSecondary),
             shadow: pair.shadow,
-            tileFillBase: inkColor
+            tileFillBase: inkColor,
+            trayFill: isLight ? Oklab.color(canvas) : Oklab.color(chrome)
         )
     }
 
