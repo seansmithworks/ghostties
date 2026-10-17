@@ -39,7 +39,7 @@ final class SidebarColorDialsTests: XCTestCase {
             let theme = ChromeTheme.ghostties(scheme)
             XCTAssertEqual(SidebarColors.tileFill(scheme, defaults: d),
                            dark ? theme.ink(.tile) : Color(theme.tileFillBase).opacity(0.10))
-            XCTAssertEqual(SidebarColors.tileInk(scheme, defaults: d), Color(theme.tileInk))
+            XCTAssertEqual(RailProjectTile.ink(scheme), Color(theme.ink))
             XCTAssertEqual(SidebarColors.selectedRowTint(scheme, defaults: d), Color(theme.ink).opacity(0.10))
             XCTAssertEqual(SidebarColors.dimmedProject(scheme, defaults: d), WorkspaceLayout.emptyProjectForeground)
             for role in SidebarColors.Role.allCases {
@@ -64,8 +64,6 @@ final class SidebarColorDialsTests: XCTestCase {
         XCTAssertEqual(model.light.tileFillOpacity, 0.10, accuracy: 1e-9)
         XCTAssertEqual(model.dark.tileFill, "#FFFFFF")
         XCTAssertEqual(model.dark.tileFillOpacity, 0.07, accuracy: 1e-9)
-        XCTAssertEqual(model.light.tileInk, "#232120")
-        XCTAssertEqual(model.dark.tileInk, "#F0EFED")
         XCTAssertEqual(model.light.selectedRowTint, "#000000")
         XCTAssertEqual(model.dark.selectedRowTint, "#FFFFFF")
         XCTAssertEqual(model.light.selectedRowTintOpacity, 0.10, accuracy: 1e-9)
@@ -192,7 +190,7 @@ final class SidebarColorDialsTests: XCTestCase {
                 primary: q(SidebarColorTuning.base(.primaryText, scheme)),
                 secondary: q(SidebarColorTuning.base(.secondaryText, scheme)),
                 tileFill: q(SidebarColorTuning.base(.tileFill, scheme)),
-                tileInk: q(SidebarColorTuning.base(.tileInk, scheme)),
+                ink: q(SidebarColorTuning.RGBA(ChromeTheme.ghostties(scheme).ink, scheme)),
                 dimmed: q(SidebarColorTuning.baseDimmed(scheme)),
                 cardTint: SidebarColorTuning.RGBA(r: 1, g: 1, b: 1, a: card)
             )
@@ -226,7 +224,6 @@ final class SidebarColorDialsTests: XCTestCase {
             (SidebarColorTuning.hexKey(.secondaryText, .light), "#0000FF"),
             (SidebarColorTuning.hexKey(.tileFill, .light), "#FF0000"),
             (SidebarColorTuning.opacityKey(.tileFill, .light), 1.0),
-            (SidebarColorTuning.hexKey(.tileInk, .light), "#00FFFF"),
             (SidebarColorTuning.hexKey(.selectedRowTint, .light), "#FFFF00"),
             (SidebarColorTuning.opacityKey(.selectedRowTint, .light), 1.0),
             // The empty project's ink ships opaque (the secondary token).

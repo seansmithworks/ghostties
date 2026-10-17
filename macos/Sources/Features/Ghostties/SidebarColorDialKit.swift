@@ -27,15 +27,13 @@ enum SidebarColors {
         case secondaryText
         /// A project tile's plain fill.
         case tileFill
-        /// A project tile's monogram, and the selected project's solid fill.
-        case tileInk
         /// The selected row's chip.
         case selectedRowTint
 
         var hasOpacity: Bool {
             switch self {
             case .primaryText, .tileFill, .selectedRowTint: return true
-            case .background, .secondaryText, .tileInk: return false
+            case .background, .secondaryText: return false
             }
         }
     }
@@ -74,13 +72,6 @@ enum SidebarColors {
         return scheme == .dark
             ? theme.ink(.tile)
             : Color(theme.tileFillBase).opacity(isEmpty ? RailProjectTile.emptyTintOpacity : RailProjectTile.tintOpacity)
-    }
-
-    static func tileInk(_ scheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> Color {
-        #if DEBUG
-        if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.tileInk, scheme, defaults: defaults) { return tuned.color }
-        #endif
-        return Color(ChromeTheme.active(scheme).tileInk)
     }
 
     /// The canvas's alpha on solid ink (`RailProjectColumn.tintInk`).
@@ -192,8 +183,6 @@ enum SidebarColorTuning {
             return dark
                 ? RGBA(theme.ink, scheme).withAlpha(ChromeTheme.Step.tile.opacity(.dark))
                 : RGBA(theme.tileFillBase, scheme).withAlpha(RailProjectTile.tintOpacity)
-        case .tileInk:
-            return RGBA(ChromeTheme.ghostties(scheme).tileInk, scheme)
         case .selectedRowTint:
             return RGBA(ChromeTheme.ghostties(scheme).ink, scheme).withAlpha(RailProjectColumn.selectedChipTintOpacity)
         }
@@ -277,7 +266,7 @@ enum SidebarColorTuning {
     /// reveal) paints the terminal's own background instead, which these
     /// ratios don't model.
     static func contrastPairs(
-        background: RGBA, primary: RGBA, secondary: RGBA, tileFill: RGBA, tileInk: RGBA,
+        background: RGBA, primary: RGBA, secondary: RGBA, tileFill: RGBA, ink: RGBA,
         dimmed: RGBA, cardTint: RGBA
     ) -> ContrastPairs {
         let bg = background.opaque
@@ -285,12 +274,12 @@ enum SidebarColorTuning {
         let tile = composite(tileFill, over: bg)
         // The selected tile: solid ink (at "Selected tile fill" 1), monogram
         // in the background colour.
-        let selectedTile = composite(tileInk, over: bg)
+        let selectedTile = composite(ink, over: bg)
         return ContrastPairs(
             primary: contrastRatio(primary, on: bg),
             secondary: contrastRatio(secondary, on: bg),
             secondaryOnCard: contrastRatio(secondary, on: card),
-            tile: contrastRatio(tileInk, on: tile),
+            tile: contrastRatio(ink, on: tile),
             selectedTile: contrastRatio(bg, on: selectedTile),
             dimmed: contrastRatio(dimmed, on: bg)
         )
@@ -316,7 +305,6 @@ struct SidebarColorsDialKitTuningModel: Codable, Equatable {
         var secondaryText: String
         var tileFill: String
         var tileFillOpacity: Double
-        var tileInk: String
         var selectedRowTint: String
         var selectedRowTintOpacity: Double
         var dimmedProjectOpacity: Double
@@ -350,7 +338,6 @@ enum SidebarColorsDialPanel: FocusedDialPanel {
         (.primaryText, \.primaryText, \.primaryTextOpacity),
         (.secondaryText, \.secondaryText, nil),
         (.tileFill, \.tileFill, \.tileFillOpacity),
-        (.tileInk, \.tileInk, nil),
         (.selectedRowTint, \.selectedRowTint, \.selectedRowTintOpacity),
     ]
 
@@ -370,7 +357,6 @@ enum SidebarColorsDialPanel: FocusedDialPanel {
                 secondaryText: c(.secondaryText).hex,
                 tileFill: c(.tileFill).hex,
                 tileFillOpacity: opacity(c(.tileFill).a),
-                tileInk: c(.tileInk).hex,
                 selectedRowTint: c(.selectedRowTint).hex,
                 selectedRowTintOpacity: opacity(c(.selectedRowTint).a),
                 dimmedProjectOpacity: opacity(SidebarColorTuning.resolvedDimmedOpacity(scheme, defaults: defaults))
@@ -417,7 +403,7 @@ enum SidebarColorsDialPanel: FocusedDialPanel {
                 primary: rgba(a.primaryText, a.primaryTextOpacity, fallback: .primaryText),
                 secondary: rgba(a.secondaryText, fallback: .secondaryText),
                 tileFill: rgba(a.tileFill, a.tileFillOpacity, fallback: .tileFill),
-                tileInk: rgba(a.tileInk, fallback: .tileInk),
+                ink: SidebarColorTuning.RGBA(ChromeTheme.ghostties(scheme).ink, scheme),
                 dimmed: dimmed,
                 cardTint: SidebarColorTuning.RGBA(r: 1, g: 1, b: 1, a: cardOpacity(scheme))
             )
@@ -442,7 +428,6 @@ enum SidebarColorsDialPanel: FocusedDialPanel {
             .color("\(prefix)SecondaryText", keyPath: set.appending(path: \.secondaryText), label: "Secondary text (headers, counts, subtitles, glyphs)"),
             .color("\(prefix)TileFill", keyPath: set.appending(path: \.tileFill), label: "Tile fill"),
             .slider("\(prefix)TileFillOpacity", keyPath: set.appending(path: \.tileFillOpacity), label: "Tile fill opacity", range: 0...1, step: 0.01),
-            .color("\(prefix)TileInk", keyPath: set.appending(path: \.tileInk), label: "Tile monogram / selected tile fill"),
             .color("\(prefix)SelectedRowTint", keyPath: set.appending(path: \.selectedRowTint), label: "Selected row tint"),
             .slider("\(prefix)SelectedRowTintOpacity", keyPath: set.appending(path: \.selectedRowTintOpacity), label: "Selected row tint opacity", range: 0...0.5, step: 0.01),
             .slider("\(prefix)DimmedProjectOpacity", keyPath: set.appending(path: \.dimmedProjectOpacity), label: "Empty project opacity", range: 0...1, step: 0.01),

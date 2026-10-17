@@ -19,8 +19,8 @@ import Testing
 ///   for that polarity unchanged; otherwise return `derived`.
 /// - `derived`: plan "Derivation for Custom and third-party themes".
 ///   canvas = background; polarity by contrast against black vs white;
-///   chrome, ink, inkSecondary and shadow derived; tileInk / tileFillBase
-///   follow ink. No new `ChromeTheme` fields.
+///   chrome, ink, inkSecondary and shadow derived; tileFillBase
+///   follows ink. No new `ChromeTheme` fields.
 ///
 /// Floors: `inkSecondary` >= 4.6:1 on chrome, the group card
 /// (`lifted(.container)`) and chrome under ink at `.row` / `.tile`; `ink`
@@ -118,7 +118,7 @@ struct ChromeFollowsThemeTests {
         for (name, got, expected) in [
             ("canvas", theme.canvas, want.canvas), ("chrome", theme.chrome, want.chrome),
             ("ink", theme.ink, want.ink), ("inkSecondary", theme.inkSecondary, want.inkSecondary),
-            ("shadow", theme.shadow, want.shadow), ("tileInk", theme.tileInk, want.tileInk),
+            ("shadow", theme.shadow, want.shadow),
             ("tileFillBase", theme.tileFillBase, want.tileFillBase),
         ] {
             #expect(sameColor(got, expected, tolerance: 0.0005), "\(name)")
@@ -181,7 +181,7 @@ struct ChromeFollowsThemeTests {
         let (theme, _) = try resolved("theme = Dracula")
         let fields = Set(Mirror(reflecting: theme).children.compactMap(\.label))
         #expect(fields == [
-            "polarity", "canvas", "chrome", "ink", "inkSecondary", "shadow", "tileInk", "tileFillBase",
+            "polarity", "canvas", "chrome", "ink", "inkSecondary", "shadow", "tileFillBase",
         ])
     }
 }

@@ -68,10 +68,8 @@ struct ChromeTheme {
     let inkSecondary: NSColor
     let shadow: NSColor
 
-    // Exceptions, not base colours: values the goldens freeze that no step
-    // of the five reproduces. Slice 4's design pass decides their fate.
-    /// A project tile's monogram, and the selected project's solid fill.
-    let tileInk: NSColor
+    // Exception, not a base colour: a value the goldens freeze that no step
+    // of the five reproduces. Slice 4's design pass decides its fate.
     /// The light tile fill's base (laid at `RailProjectTile.tintOpacity`).
     let tileFillBase: NSColor
 
@@ -88,7 +86,6 @@ struct ChromeTheme {
         ink: .black,
         inkSecondary: NSColor(srgbRed: 0x5E / 255.0, green: 0x5E / 255.0, blue: 0x5E / 255.0, alpha: 1),
         shadow: NSColor(red: 0x0F / 255.0, green: 0x0F / 255.0, blue: 0x0F / 255.0, alpha: 1),
-        tileInk: NSColor(srgbRed: 0x23 / 255.0, green: 0x21 / 255.0, blue: 0x20 / 255.0, alpha: 1),
         tileFillBase: NSColor(srgbRed: 40 / 255.0, green: 34 / 255.0, blue: 30 / 255.0, alpha: 1)
     )
 
@@ -99,7 +96,6 @@ struct ChromeTheme {
         ink: .white,
         inkSecondary: NSColor(srgbRed: 0xA6 / 255.0, green: 0xA6 / 255.0, blue: 0xA6 / 255.0, alpha: 1),
         shadow: NSColor(red: 1, green: 1, blue: 1, alpha: 1),
-        tileInk: NSColor(srgbRed: 0xF0 / 255.0, green: 0xEF / 255.0, blue: 0xED / 255.0, alpha: 1),
         tileFillBase: .white
     )
 
@@ -235,7 +231,7 @@ extension ChromeTheme {
     /// - inkSecondary: ink mixed toward the chrome as far as it can go and
     ///   still clear `inkSecondaryFloor` on every sidebar text backdrop.
     /// - shadow: the Ghostties pair's, by polarity.
-    /// - tileInk, tileFillBase: ink.
+    /// - tileFillBase: ink.
     static func derived(background: NSColor, foreground: NSColor) -> ChromeTheme {
         let canvas = Oklab.srgb(background)
         let fg = Oklab.srgb(foreground)
@@ -276,7 +272,6 @@ extension ChromeTheme {
             ink: inkColor,
             inkSecondary: Oklab.color(inkSecondary),
             shadow: pair.shadow,
-            tileInk: inkColor,
             tileFillBase: inkColor
         )
     }
