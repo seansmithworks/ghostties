@@ -122,6 +122,7 @@ struct RecentsRowView: View, Equatable {
         }
         .onTapGesture {
             guard !isEditing else { return }
+            SelectedRowOutline.recordClick(RedlineID.row(session.id))
             onTap()
         }
         .accessibilityElement(children: .combine)
@@ -261,16 +262,17 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Selection and hover are a tile-sized chip behind the glyph in
-            // every list (option D): one rule; the group card is drawn only
-            // around a project group.
+            // Hover is a tile-sized chip behind the glyph in every list
+            // (option D); the group card is drawn only around a project
+            // group.
             MorphGlyphSlot(
                 progress: progress,
                 slotWidth: dials.sidebarTileSize,
                 glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
                 chipSizes: (dials.sidebarChipSize, dials.railChipSize),
-                isActive: isActive,
-                isHovered: isHovered,
+                // The chip is hover only; selection is the row's outline.
+                isActive: false,
+                isHovered: isHovered && !isActive,
                 chipID: redlineID + ".chip",
                 glyph: glyph
             )
@@ -297,6 +299,18 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch.
         .frame(height: SidebarDialTuning.rowHeight())
         .redlineFrame(redlineID)
+        // Selection (r7 card 06, "Drawn outline"): the row-wide tint and
+        // its outline, drawn round the chip on the rail.
+        .background {
+            SelectedRowOutlineSurface(
+                isActive: isActive,
+                key: redlineID,
+                progress: progress,
+                chipCenterX: dials.rowLeadingPadding + dials.sidebarTileSize / 2,
+                chipTravel: metrics.tileTravel,
+                chipSizes: (dials.sidebarChipSize, dials.railChipSize)
+            )
+        }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .help(progress >= 0.5 ? (railHelp ?? "") : "")

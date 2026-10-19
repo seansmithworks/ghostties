@@ -206,7 +206,10 @@ struct HistoryRowView: View {
             // In its chip like every row: "Thread tile icon".
             HistoryGlyph(size: size)
         }
-        .onTapGesture(perform: onTap)
+        .onTapGesture {
+            SelectedRowOutline.recordClick(Self.redlineID)
+            onTap()
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("History, \(subtitle)")
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : [.isButton])

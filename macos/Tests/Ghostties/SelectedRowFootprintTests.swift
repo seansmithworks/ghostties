@@ -137,9 +137,8 @@ final class SelectedRowFootprintTests: XCTestCase {
         }
     }
 
-    /// Expanded list (option D, one rule): the selected row is the
-    /// tile-sized chip behind the leading glyph slot, the hover's own
-    /// footprint (`SidebarRowChipBackground` draws both), not a row card.
+    /// Expanded list (r7 card 06, "Drawn outline"): the selected row is the
+    /// row-wide tint inside its outline, not the chip behind the glyph slot.
     func testExpandedSelectedRowIsTheChipBehindTheGlyphSlot() throws {
         let width: CGFloat = 220
         let inset: CGFloat = 10
@@ -148,20 +147,15 @@ final class SelectedRowFootprintTests: XCTestCase {
             .environmentObject(SidebarWidthModel(width: width))
             .environmentObject(SessionCoordinator())
         let (rep, scale) = try render(row, width: width)
-        let chip = RailProjectColumn.chipSize(.sidebar)
-        let slotMidX = inset + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
-        let rowMidY = SidebarDialTuning.rowHeight() / 2
-        // Down a line 8pt inside the chip (past its corner curve; the
-        // stopped glyph draws nothing), and across the row's centre line
-        // from there: contiguous runs, so the title ink can't join in.
-        let down = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: false, through: CGPoint(x: slotMidX - chip / 2 + 8, y: rowMidY)), "expanded: no chip down the slot")
-        XCTAssertEqual(down.upperBound - down.lowerBound, chip, accuracy: 1.0, "expanded: selected surface is chip-tall, not row-tall")
-        XCTAssertEqual((down.lowerBound + down.upperBound) / 2, rowMidY, accuracy: 1.0, "expanded: chip centred in the row")
-        let across = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: true, through: CGPoint(x: slotMidX - chip / 2 + 8, y: rowMidY)), "expanded: no chip across the slot")
-        XCTAssertEqual(across.lowerBound, slotMidX - chip / 2, accuracy: 1.0, "expanded: chip leading edge")
-        XCTAssertEqual(across.upperBound, slotMidX + chip / 2, accuracy: 1.0, "expanded: chip trailing edge")
-        // Nothing at the row card's corner: no wide card is drawn.
-        XCTAssertFalse(try isSurface(rep, scale: scale, x: inset + 3, y: 3), "expanded: no row card")
+        let rowHeight = SidebarDialTuning.rowHeight()
+        // Down a line 12pt in from the row's leading edge (past its corner
+        // and the glyph's chip), and across the row 4pt below its top (inside
+        // the outline, above the title): the surface is the whole row.
+        let down = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: false, through: CGPoint(x: inset + 12, y: rowHeight / 2)), "expanded: no surface down the row")
+        XCTAssertEqual(down.upperBound - down.lowerBound, rowHeight, accuracy: 1.0, "expanded: selected surface is row-tall")
+        let across = try XCTUnwrap(try surfaceRun(rep, scale: scale, alongX: true, through: CGPoint(x: inset + 12, y: 4)), "expanded: no surface across the row")
+        XCTAssertEqual(across.lowerBound, inset, accuracy: 1.0, "expanded: row leading edge")
+        XCTAssertEqual(across.upperBound, width - inset, accuracy: 1.0, "expanded: row trailing edge")
     }
 
     /// The contiguous run of surface pixels along one line through `point`.

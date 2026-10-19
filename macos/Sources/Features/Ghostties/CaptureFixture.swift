@@ -684,6 +684,10 @@ enum CaptureFixture {
     }
 
     static var selectSequence: SelectSequence? { parseSelectSequence(env("GHOSTTIES_CAPTURE_SELECT_SEQUENCE")) }
+    /// `GHOSTTIES_CAPTURE_SELECT_AS=click`: each select-sequence step takes
+    /// a row click's path (`SelectedRowOutline.recordClick`), so the
+    /// selected-row outline traces; unset, the steps snap like the shortcut.
+    static var selectSequenceAsClick: Bool { env("GHOSTTIES_CAPTURE_SELECT_AS") == "click" }
 
     /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE=<project>:<seconds>`: every `interval`
     /// seconds (`foldToggleCycles` times), toggle that project's accordion

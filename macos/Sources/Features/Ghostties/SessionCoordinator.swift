@@ -1931,6 +1931,7 @@ final class SessionCoordinator: ObservableObject {
         guard CaptureFixture.isActive, !sessions.isEmpty else { return nil }
         let current = sessions.firstIndex(where: { $0.id == activeSessionId }) ?? (offset > 0 ? -1 : 0)
         let target = sessions[((current + offset) % sessions.count + sessions.count) % sessions.count]
+        if CaptureFixture.selectSequenceAsClick { SelectedRowOutline.recordClick(RedlineID.row(target.id)) }
         isHistoryPresented = false
         activeSessionId = target.id
         sidebarItemActivated.send()
