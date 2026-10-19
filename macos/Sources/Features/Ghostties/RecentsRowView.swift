@@ -271,7 +271,6 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
                 chipSizes: (dials.sidebarChipSize, dials.railChipSize),
                 // The chip is hover only; selection is the row's outline.
-                isActive: false,
                 isHovered: isHovered && !isActive,
                 chipID: redlineID + ".chip",
                 glyph: glyph

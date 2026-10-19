@@ -37,9 +37,6 @@ struct RecentsListView: View {
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
-    /// One selection chip across every row and History: a new selection's
-    /// chip travels from the old row (`SidebarRowChipBackground`).
-    @Namespace private var selectionChipNamespace
 
     #if DEBUG
     /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).
@@ -180,7 +177,6 @@ struct RecentsListView: View {
             }
         }
         .background(.clear)
-        .environment(\.sidebarSelectionChipNamespace, selectionChipNamespace)
         .onChange(of: dragState.isDragging || projectDragState.isDragging) { isDragging in
             if isDragging {
                 installDragEndMonitors()

@@ -361,7 +361,6 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
     let slotWidth: CGFloat
     let glyphSizes: (from: CGFloat, to: CGFloat)
     let chipSizes: (from: CGFloat, to: CGFloat)
-    let isActive: Bool
     let isHovered: Bool
     let chipID: String
     @ViewBuilder let glyph: (CGFloat) -> Glyph
@@ -380,7 +379,9 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
                 SidebarRowChipBackground(
                     size: chipSizes.to,
                     scale: MorphTileScale.scale(from: chipSizes.from, to: chipSizes.to, progress: progress),
-                    isActive: isActive, isHovered: isHovered, redlineID: chipID
+                    // Hover only: selection is the row's outline
+                    // (`SelectedRowOutlineSurface`).
+                    isActive: false, isHovered: isHovered, redlineID: chipID
                 )
                 .morphIdentityProbe(chipID)
             }
