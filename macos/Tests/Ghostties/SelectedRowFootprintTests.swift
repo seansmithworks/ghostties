@@ -3,12 +3,12 @@ import SwiftUI
 import GhosttiesCore
 @testable import Ghostty
 
-/// The selected row is the option D chip, in the rail and the expanded list
-/// alike (one piece in both modes): a tile-sized, flat 10% ink chip behind
-/// the glyph, the hover's own footprint (`SidebarRowChipBackground` draws
-/// both), never a row-wide card. Asserted on pixels: the selected surface is
-/// chip-tall and chip-wide, centred on the glyph slot (the rail's centre in
-/// the rail), and nothing marks the row card's corner.
+/// The rail's selected row is the option D chip, a tile-sized, flat 10% ink
+/// chip centred on the rail; the expanded list's is the row-wide tint inside
+/// its drawn outline (r7 card 06), not the chip behind the glyph slot.
+/// Asserted on pixels: the rail surface is chip-tall and chip-wide and
+/// nothing marks the row card's corner; the expanded surface is row-tall and
+/// row-wide.
 @MainActor
 final class SelectedRowFootprintTests: XCTestCase {
     private let height: CGFloat = 100
@@ -139,7 +139,7 @@ final class SelectedRowFootprintTests: XCTestCase {
 
     /// Expanded list (r7 card 06, "Drawn outline"): the selected row is the
     /// row-wide tint inside its outline, not the chip behind the glyph slot.
-    func testExpandedSelectedRowIsTheChipBehindTheGlyphSlot() throws {
+    func testExpandedSelectedRowIsTheRowWideSurface() throws {
         let width: CGFloat = 220
         let inset: CGFloat = 10
         let row = ExpandedHarness()

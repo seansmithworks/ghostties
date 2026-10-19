@@ -92,8 +92,15 @@ struct SelectedRowOutlinePixelTests {
     }
 
     private func pixel(_ r: Render, x: CGFloat, y: CGFloat) throws -> RGB {
-        let c = try #require(r.rep.colorAt(x: Int(x * r.scale), y: Int(y * r.scale)), "no pixel at \(x), \(y)")
-        return try rgb(c)
+        // Raw bytes, not `colorAt`: `cacheDisplay` tags the bitmap with the display
+        // profile, and converting back to sRGB shifts every value (bare chrome reads
+        // 0.9504 against the token's 0.9412). The bytes are the sRGB values the row drew.
+        let px = Int(x * r.scale), py = Int(y * r.scale)
+        let rep = r.rep
+        try #require(px >= 0 && px < rep.pixelsWide && py >= 0 && py < rep.pixelsHigh, "no pixel at \(x), \(y)")
+        let data = try #require(rep.bitmapData)
+        let o = py * rep.bytesPerRow + px * (rep.bitsPerPixel / 8)
+        return (Double(data[o]) / 255, Double(data[o + 1]) / 255, Double(data[o + 2]) / 255)
     }
 
     private func lum(_ c: RGB) -> Double { (c.r + c.g + c.b) / 3 }
