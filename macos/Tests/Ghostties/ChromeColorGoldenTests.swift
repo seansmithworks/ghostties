@@ -108,7 +108,7 @@ struct ChromeColorGoldenTests {
         add("tile.countBadge.fill") { rgba(RailCountBadge.style(selected: false, colorScheme: $0).fill, $0) }
         add("tile.countBadge.text") { rgba(RailCountBadge.style(selected: false, colorScheme: $0).text, $0) }
         add("column.lightLift") { rgba(Color.white.opacity(RailProjectColumn.lightColumnLiftOpacity), $0) }
-        add("column.selectedChip") { rgba(RailProjectColumn.tintInk($0).opacity(RailProjectColumn.selectedChipTintOpacity), $0) }
+        add("column.selectedChip") { rgba(RailProjectColumn.selectedChipTint($0), $0) }
         add("column.hoverChip") { rgba(RailProjectColumn.tintInk($0).opacity(RailProjectColumn.hoverChipTintOpacity), $0) }
         add("row.expandedContainer") { rgba(ChromeTheme.ghostties($0).lifted(.container), $0) }
         add("row.active") { rgba(ChromeTheme.ghostties($0).ink(.row), $0) }
@@ -278,7 +278,7 @@ struct ChromeColorGoldenTests {
         "column.hoverChip|light": [0.0, 0.0, 0.0, 0.04],
         "column.lightLift|dark": [1.0, 1.0, 1.0, 0.45],
         "column.lightLift|light": [1.0, 1.0, 1.0, 0.45],
-        "column.selectedChip|dark": [1.0, 1.0, 1.0, 0.1],
+        "column.selectedChip|dark": [0.0, 0.0, 0.0, 0.1],
         "column.selectedChip|light": [0.0, 0.0, 0.0, 0.1],
         "composer.chipActive|dark": [1.0, 1.0, 1.0, 0.137],
         "composer.chipActive|light": [0.0, 0.0, 0.0, 0.125],

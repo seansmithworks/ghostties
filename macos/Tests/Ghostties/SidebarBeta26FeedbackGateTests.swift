@@ -109,15 +109,14 @@ struct SidebarBeta26FeedbackGateTests {
     // MARK: B. Empty projects
 
     /// Header name, count and chevron ink (`emptyProjectForeground`) over the
-    /// chrome and over the group card on it.
+    /// chrome.
     @Test(arguments: [ColorScheme.light, .dark])
     func emptyProjectHeaderTextClearsAA(_ scheme: ColorScheme) throws {
         try withDials {
             let ink = try resolved(NSColor(WorkspaceLayout.emptyProjectForeground), scheme)
             let chromeRGB = try rgba(chrome(scheme)).rgb
-            // The glass card at its top stop (`ProjectGroupCardGlass.representative`), opaque.
-            let card = try rgba(ProjectGroupCardGlass.representative(scheme)).rgb
-            for (name, base) in [("chrome", chromeRGB), ("group card", card)] {
+            // No on-card case: an empty project never holds the active-group card.
+            for (name, base) in [("chrome", chromeRGB)] {
                 // Text alpha is composited over its surface before measuring.
                 let text = over(ink, base)
                 let ratio = contrast(text, base)

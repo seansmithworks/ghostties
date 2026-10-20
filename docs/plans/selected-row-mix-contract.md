@@ -152,15 +152,16 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
 - **`SidebarProjectsLayoutTests.testRailColumnDialDefaultsAreOptionD`**, lines asserting `columnTintOpacity == 0.04`, `columnFillOpacity(.dark) == 0.04`, `columnFillOpacity(.light) == 0.45`: the flat fill the glass replaces.
 - **`ChromeColorGoldenTests`** goldens `column.fill|dark/light` and `column.fillDarkAtDefaultTint`: same flat fill.
 - **`SidebarContrastTests.secondaryTextClearsAAOnCardAndChrome`:** its approved dark card floor (5.6:1) caps the dark card at about 4.5% white, which is the card Sean reported as invisible; even the glass's weakest stop (6%) gives 5.35:1. It conflicts with the glass; see the decision below. AA (4.5) stays.
-- **`SidebarBeta26FeedbackGateTests` empty-project AA tests and `SidebarRetiredDialsTests`/`SidebarHistoryPlacementTests` reads of `columnFillOpacity(.light)`:** they treat `columnFill` as the card's fill; repoint them at the new card's representative colour (its top stop, the worst case for text).
+- **`SidebarBeta26FeedbackGateTests` empty-project AA tests and `SidebarRetiredDialsTests`/`SidebarHistoryPlacementTests` reads of `columnFillOpacity(.light)`:** they treat `columnFill` as the card's fill; repoint them at the new card's representative colour (its top stop, the worst case for text). Exception: the header test's "group card" case is dropped, not repointed (see the next bullet and Amendment 3).
 - **`SidebarBeta26FeedbackGateTests.emptyProjectTileGlyphClearsAA`, the "group card" case** (amended 2026-10-19, removed by the amender, not the builder): an empty project never holds the active-group card, so the tile glyph is never drawn on it. The chrome case stays.
+- **`SidebarBeta26FeedbackGateTests.emptyProjectHeaderTextClearsAA`, the same "group card" case** (amended 2026-10-19): dropped for the same reason, an empty project never holds the active-group card. This supersedes the repoint instruction above.
 - **Still valid, keep:** `SelectedRowOutlinePixelTests` (resting outline + tint, light), `SelectedRowFootprintTests` (rail chip footprint, row-wide expanded surface).
 
 ## Amendments (2026-10-19, Sean)
 
 1. **Dark selected-row subtitle must clear AA.** Measured 3.3:1: `inkSecondary` on the 10% selected tint over the glass card. Fix (Sean, 2026-10-19): in dark, the selected row and the rail chip use a 10% **black** tint, not white. White over the dark glass card cannot clear AA (4.54:1 untinted, 3.35:1 at 10%), and lowering a white tint can't clear AA either; 10% black measures 4.976:1 for `inkSecondary` on the card's top stop. The subtitle colour is unchanged. Light is unchanged (10% `ink`, which is black). The resting-tint pixel gate renders the dark row over the card's representative colour (the selected row always sits on the active-group card), not the bare chrome.
 2. **Dark group-card text floor 5.6 to 4.5 (commit `cd006b697`) is confirmed.** "Decision 2" below is resolved.
-3. **Empty-project tile glyph, "on card" case dropped** from `emptyProjectTileGlyphClearsAA`; see "Tests to retire". Off-card cases stay.
+3. **Empty-project tile glyph, "on card" case dropped** from `emptyProjectTileGlyphClearsAA`; see "Tests to retire". Off-card cases stay. The same impossible "group card" case is also dropped from `emptyProjectHeaderTextClearsAA`, for the same reason.
 
 ## Decisions
 
