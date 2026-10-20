@@ -6,8 +6,8 @@ import Testing
 /// Sidebar secondary text clears WCAG AA (4.5:1) on the surfaces it sits on,
 /// in light and dark (beta.26, sidebar contrast option 2). Every colour comes
 /// from the shipped tokens: `textSecondary`, the chrome, and the project
-/// group card's fill (`RailProjectColumn.columnFill`) composited over the
-/// chrome at its own alpha.
+/// group card (the glass, `ProjectGroupCardGlass`) at its top stop over the
+/// chrome, the worst case for the muted text under its header.
 @MainActor
 struct SidebarContrastTests {
     private typealias RGB = (r: Double, g: Double, b: Double)
@@ -35,14 +35,17 @@ struct SidebarContrastTests {
     }
 
     /// The approved option's ratios (light / dark), rounded down: secondary
-    /// on the card 5.88 / 5.66, on the chrome 5.40 / 6.38, the status glyph
+    /// on the card 5.88 / AA, on the chrome 5.40 / 6.38, the status glyph
     /// on the selected chip 4.71 / 4.13 (4.69 / 4.16 composited unrounded,
     /// as here). AA (4.5) is the hard floor; these hold the margin Sean
     /// picked, so a token drifting back toward the pre-beta.26 values fails
-    /// here even while it still clears AA.
+    /// here even while it still clears AA. The dark card's floor is AA, not
+    /// beta.26's 5.6: the glass card (selected-row mix contract) must read
+    /// as a card in dark, and 5.6 capped it at about 4.5% white, the card
+    /// Sean reported invisible. Pending Sean's confirmation.
     private func floors(_ scheme: ColorScheme) -> (card: Double, chrome: Double, chip: Double) {
         // Light chip floor 4.65, not 4.7: unrounded float compositing gives 4.69 (4.71 only after 8-bit hex rounding).
-        scheme == .dark ? (5.6, 6.3, 4.1) : (5.8, 5.35, 4.65)
+        scheme == .dark ? (4.5, 6.3, 4.1) : (5.8, 5.35, 4.65)
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
@@ -51,8 +54,8 @@ struct SidebarContrastTests {
             let chrome = scheme == .dark ? ChromeTheme.ghostties(.dark).chrome : ChromeTheme.ghostties(.light).chrome
             let secondary = scheme == .dark ? ChromeTheme.ghostties(.dark).inkSecondaryColor : ChromeTheme.ghostties(.light).inkSecondaryColor
             let text = try rgba(NSColor(secondary)).rgb
-            let card = try composite(RailProjectColumn.columnFill(scheme), over: chrome)
-            let cardColor = NSColor(srgbRed: card.r, green: card.g, blue: card.b, alpha: 1)
+            let cardColor = ProjectGroupCardGlass.representative(scheme)
+            let card = try rgba(cardColor).rgb
             let chipInk = RailProjectColumn.tintInk(scheme).opacity(RailProjectColumn.selectedChipTintOpacity)
             let chip = try composite(chipInk, over: cardColor)
             let onCard = contrast(text, card)
