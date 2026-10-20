@@ -300,22 +300,42 @@ struct ProjectGroupCardGlass: View {
             .fill(LinearGradient(colors: [stops.top, stops.bottom], startPoint: .top, endPoint: .bottom))
             // Inner top highlight: the shape less itself 1pt lower.
             .overlay {
-                ZStack {
-                    shape.fill(stops.highlight)
-                    shape.offset(y: 1).fill(Color.black).blendMode(.destinationOut)
-                }
-                .compositingGroup()
-                .clipShape(shape)
+                GlassRimShape(cornerRadius: cornerRadius, kind: .topHighlight)
+                    .fill(stops.highlight, style: FillStyle(eoFill: true))
+                    .clipShape(shape)
             }
             .overlay { shape.strokeBorder(stops.hairline, lineWidth: 0.5) }
-            // An outer shadow only, as CSS draws it: the glow less the shape.
+            // An outer shadow only, as CSS draws it: the glow, masked to
+            // outside the shape (the fill is translucent, so a shadow of it
+            // would be too).
             .background {
-                ZStack {
-                    shape.fill(Color.black).shadow(color: stops.shadow, radius: 6, x: 0, y: 2)
-                    shape.fill(Color.black).blendMode(.destinationOut)
-                }
-                .compositingGroup()
+                shape.fill(Color.black)
+                    .shadow(color: stops.shadow, radius: 6, x: 0, y: 2)
+                    .mask {
+                        GlassRimShape(cornerRadius: cornerRadius, kind: .outside)
+                            .fill(style: FillStyle(eoFill: true))
+                    }
             }
+    }
+}
+
+/// Even-odd regions for the glass's rim, so nothing needs a blend mode
+/// (offscreen renders draw `.destinationOut` as solid black).
+private struct GlassRimShape: Shape {
+    enum Kind { case topHighlight, outside }
+    let cornerRadius: CGFloat
+    let kind: Kind
+
+    func path(in rect: CGRect) -> Path {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        var path = shape.path(in: rect)
+        switch kind {
+        case .topHighlight:
+            path.addPath(shape.path(in: rect.offsetBy(dx: 0, dy: 1)))
+        case .outside:
+            path.addRect(rect.insetBy(dx: -24, dy: -24))
+        }
+        return path
     }
 }
 
