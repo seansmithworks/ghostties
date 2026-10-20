@@ -46,7 +46,7 @@ function bezier(p1x, p1y, p2x, p2y) {
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 
-const OVERSHOOT_Y2 = 1.1;
+const OVERSHOOT_Y2 = 1.2;
 const ease = bezier(0.77, 0, 0.175, 1); // opacity channels, and every Reduce Motion fade
 const easeOvershoot = bezier(0.77, 0, 0.175, OVERSHOOT_Y2); // size channels
 

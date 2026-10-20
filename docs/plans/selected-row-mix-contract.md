@@ -19,7 +19,7 @@ trace): nothing is traced any more; the outline cross-fades.
   current value, never from 0, never queued. **Reduce Motion:** opacity fades only,
   120ms in / 100ms out, nothing changes size or position.
 - **Curves:** opacity `bezier(0.77, 0, 0.175, 1)`; size `bezier(0.77, 0, 0.175, overshootY2)`,
-  `overshootY2 = 1.1` (one constant, tunable). Only N4 moves geometry (the new row's
+  `overshootY2 = 1.2` (one constant, tunable; Sean picked 1.2 over 1.1 for a visible overshoot). Only N4 moves geometry (the new row's
   height, so the outline grows with it, and a folded target's unfold), so that is the
   only place the overshoot shows. 04 and P1 are opacity-only.
 - **Surfaces:** sidebar list, rail (expanded project = tile + session-chip column;
@@ -38,7 +38,7 @@ enum SelectedRowMix {
     static let reduceMotionInMs: Double  // 120
     static let reduceMotionOutMs: Double // 100
     static let restOutlineOpacity: Double // 0.4
-    static let overshootY2: Double       // 1.1
+    static let overshootY2: Double       // 1.2
     static func ease(_ x: Double) -> Double          // bezier(0.77, 0, 0.175, 1), clamped 0...1 in x
     static func easeOvershoot(_ x: Double) -> Double // bezier(0.77, 0, 0.175, overshootY2)
 
@@ -111,7 +111,7 @@ which is how the board's Mix ("total" mode) plays them.
 
 - **Active-project new tab:** the card never moves; only the slot, outline and content play.
 - **Outline grows with the row:** the outline and tint are drawn on the row's current (height-scaled) frame, so in N4 they grow, and overshoot, with it.
-- **Height overshoot** at `overshootY2 = 1.1` peaks at +0.64% at 90% of the segment (about 0.3pt on a 48pt row) and lands exactly at 100%.
+- **Height overshoot** at `overshootY2 = 1.2` passes the target at about 70% of the segment, peaks at +2.25% at about 83% (about 1.1pt on a 48pt row) and lands exactly at 100%.
 - **Engine check:** the r9 engine's own probe at k = 1 (headless, `?ev=P1&rowmo=04&probe=120&evt=switch`) gives cards 0.404/0.596 and new-row tint 0.171; `?ev=N4&probe=130&evt=new-closed` gives open and height 0.596. The reference reproduces both at the same k.
 
 ## Rules
@@ -154,10 +154,10 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
 - **`SidebarBeta26FeedbackGateTests` empty-project AA tests and `SidebarRetiredDialsTests`/`SidebarHistoryPlacementTests` reads of `columnFillOpacity(.light)`:** they treat `columnFill` as the card's fill; repoint them at the new card's representative colour (its top stop, the worst case for text).
 - **Still valid, keep:** `SelectedRowOutlinePixelTests` (resting outline + tint, light), `SelectedRowFootprintTests` (rail chip footprint, row-wide expanded surface).
 
-## Decisions for Sean
+## Decisions
 
-1. **Overshoot size.** `overshootY2 = 1.1` peaks at +0.64%, about 0.3pt on a 48pt row: present but not visible. Recommend 1.2 (+2.25%, about 1pt), the largest value under the 3% cap. The gate pins 1.1 as briefed; changing it is a one-constant edit to the contract, reference and the two curve tests.
-2. **Dark card contrast floor.** The glass needs the dark card brighter than the 5.6:1 floor allows. Recommend AA 4.5:1 as the floor for text on the card, with the dark top stop capped at 11% `ink`.
+1. **Overshoot size: decided, 1.2** (2026-10-19). 1.1 peaked at +0.64% (about 0.3pt on a 48pt row), present but invisible; 1.2 peaks at +2.25%, under the 3% cap.
+2. **Dark card contrast floor: Sean to confirm.** The gate requires AA 4.5:1 for `inkSecondary` on the card's top band, which caps the dark top stop at about 11% `ink`. `SidebarContrastTests`' approved 5.6:1 dark floor cannot hold with any glass that makes the card visible (see "Tests to retire").
 
 <details><summary>Resolutions of ambiguities in the design source</summary>
 
@@ -166,6 +166,7 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
 - **An unfold always finishes:** the engine cancels the whole event lane on a project switch, which can freeze a folded project half-open mid new tab. Here a group's `open` is never touched by a select.
 - **Reduce Motion never resets content:** the engine resets an in-flight new row's content to 0 under Reduce Motion; here it fades on from its current value.
 - **The tile's ink follows the card's opacity:** the engine sets each tile's ink from its group's card opacity, so `GroupLook.card` drives both.
-- **Curves:** Sean changed the engine's single ease-in-out to ease-in-out with a slight overshoot on size channels only (2026-10-19). Opacity channels keep the engine's curve.
+- **Curves:** Sean changed the engine's single ease-in-out to ease-in-out with a slight overshoot on size channels only (2026-10-19), y2 = 1.2. Opacity channels keep the engine's curve.
+- **Overshoot window:** with y2 = 1.2 the size curve passes its target from about 70% of the segment; the tests check it is over at 75% and 90%, under at 65%, and exact at 100%.
 
 </details>

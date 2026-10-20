@@ -58,7 +58,7 @@ struct SelectedRowMixModelTests {
         #expect(M.reduceMotionInMs == 120)
         #expect(M.reduceMotionOutMs == 100)
         #expect(M.restOutlineOpacity == 0.4)
-        #expect(M.overshootY2 == 1.1)
+        #expect(M.overshootY2 == 1.2)
     }
 
     @Test("Opacity curve: bezier(0.77, 0, 0.175, 1)", arguments: [
@@ -69,8 +69,8 @@ struct SelectedRowMixModelTests {
     }
 
     @Test("Size curve: bezier(0.77, 0, 0.175, overshootY2)", arguments: [
-        (0.0, 0.0), (0.1, 0.007079), (0.25, 0.057907), (0.5, 0.637595), (0.75, 0.985179),
-        (0.8, 0.997808), (0.85, 1.004434), (0.9, 1.006427), (0.95, 1.004726), (1.0, 1.0),
+        (0.0, 0.0), (0.1, 0.007713), (0.25, 0.062925), (0.5, 0.67922), (0.75, 1.014076),
+        (0.8, 1.021255), (0.85, 1.022214), (0.9, 1.018386), (0.95, 1.010749), (1.0, 1.0),
     ])
     func easeOvershootMatchesTheReference(x: Double, y: Double) {
         #expect(near(M.easeOvershoot(x), y), "easeOvershoot(\(x)) = \(M.easeOvershoot(x))")
@@ -85,9 +85,9 @@ struct SelectedRowMixModelTests {
             #expect(M.ease(x) <= 1 + 1e-9, "opacity curve never overshoots (x \(x))")
             peak = max(peak, M.easeOvershoot(x))
         }
-        #expect(peak > 1.002 && peak <= 1.03, "size overshoot peak \(peak): visible-small, never more than 3%")
-        #expect(M.easeOvershoot(0.85) > 1 && M.easeOvershoot(0.9) > 1, "past the target late in the segment")
-        #expect(M.easeOvershoot(0.75) < 1, "not before three quarters")
+        #expect(peak > 1.015 && peak <= 1.03, "size overshoot peak \(peak): visible (about 1pt on a 48pt row), never more than 3%")
+        #expect(M.easeOvershoot(0.75) > 1 && M.easeOvershoot(0.9) > 1, "past the target late in the segment")
+        #expect(M.easeOvershoot(0.65) < 1, "not before about 70%")
         #expect(M.easeOvershoot(1) == 1 && M.ease(1) == 1 && M.easeOvershoot(0) == 0)
         #expect(M.ease(-1) == 0 && M.ease(2) == 1 && M.easeOvershoot(2) == 1)
     }
@@ -193,8 +193,8 @@ struct SelectedRowMixModelTests {
     @Test("New tab into the active project: outline first, the slot grows under it, content fills after", arguments: [
         // t, from (o, tint), new (o, tint, height, content)
         (0.0, 0.4, 1.0, 0.0, 0.0, 0.0, 0.0),
-        (150.0, 0.161612, 0.077666, 0.238388, 0.096638, 0.295833, 0.0),
-        (300.0, 0.0, 0.0, 0.4, 1.0, 1.004103, 0.0),
+        (150.0, 0.161612, 0.077666, 0.238388, 0.096638, 0.31905, 0.0),
+        (300.0, 0.0, 0.0, 0.4, 1.0, 1.022325, 0.0),
         (450.0, 0.0, 0.0, 0.4, 1.0, 1.0, 0.36372),
         (600.0, 0.0, 0.0, 0.4, 1.0, 1.0, 1.0),
     ])
@@ -208,16 +208,16 @@ struct SelectedRowMixModelTests {
         #expect(tl.active == n1 && tl.activeGroup == "A")
     }
 
-    @Test("New tab: the row's height overshoots slightly late in its 354.5ms segment and lands exactly on 1")
+    @Test("New tab: the row's height overshoots about 2% late in its 354.5ms segment and lands exactly on 1")
     func newTabHeightOvershoots() {
         var tl = fresh()
         tl.newTab(n1, in: "A", reduceMotion: false, at: 0)
         let end = 260.0 * 600 / 440
-        for (pct, want) in [(80.0, 0.997808), (85.0, 1.004434), (90.0, 1.006427), (95.0, 1.004726)] {
+        for (pct, want) in [(80.0, 1.021255), (85.0, 1.022214), (90.0, 1.018386), (95.0, 1.010749)] {
             let h = tl.row(n1, at: end * pct / 100).height
             #expect(near(h, want), "height @\(pct)% = \(h)")
         }
-        #expect(tl.row(n1, at: end * 0.9).height > 1.002, "visible overshoot at 90%")
+        #expect(tl.row(n1, at: end * 0.85).height > 1.015, "visible overshoot (about 1pt on 48pt) at 85%")
         #expect(tl.row(n1, at: end).height == 1, "lands exactly at 100%")
         #expect(tl.row(n1, at: 600).height == 1)
         #expect(tl.settledAt == 600)
@@ -229,8 +229,8 @@ struct SelectedRowMixModelTests {
     @Test("New tab into a folded project: only it unfolds (overshoot curve), the card cross-fades over 327ms", arguments: [
         // t, card A, card C, open C, new height
         (0.0, 1.0, 0.0, 0.0, 0.0),
-        (150.0, 0.600893, 0.399107, 0.295833, 0.295833),
-        (300.0, 0.003759, 0.996241, 1.004103, 1.004103),
+        (150.0, 0.600893, 0.399107, 0.31905, 0.31905),
+        (300.0, 0.003759, 0.996241, 1.022325, 1.022325),
         (450.0, 0.0, 1.0, 1.0, 1.0),
         (600.0, 0.0, 1.0, 1.0, 1.0),
     ])
