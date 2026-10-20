@@ -56,7 +56,7 @@ struct SidebarContrastTests {
             let text = try rgba(NSColor(secondary)).rgb
             let cardColor = ProjectGroupCardGlass.representative(scheme)
             let card = try rgba(cardColor).rgb
-            let chipInk = RailProjectColumn.tintInk(scheme).opacity(RailProjectColumn.selectedChipTintOpacity)
+            let chipInk = RailProjectColumn.selectedChipTint(scheme)
             let chip = try composite(chipInk, over: cardColor)
             let onCard = contrast(text, card)
             let onChrome = contrast(text, try rgba(chrome).rgb)
