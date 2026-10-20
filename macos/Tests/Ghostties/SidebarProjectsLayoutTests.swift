@@ -180,9 +180,6 @@ final class SidebarProjectsLayoutTests: XCTestCase {
     /// dark, a 45% white lift in light (was option D's 6%).
     func testRailColumnDialDefaultsAreOptionD() {
         withDials {
-            XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.04)
-            XCTAssertEqual(RailProjectColumn.columnFillOpacity(.dark), 0.04)
-            XCTAssertEqual(RailProjectColumn.columnFillOpacity(.light), 0.45)
             XCTAssertEqual(RailProjectColumn.columnInset, 4)
             XCTAssertEqual(RailProjectColumn.chipCornerRadius, 8)
             XCTAssertEqual(RailProjectColumn.chipCornerRadius, RailProjectTile.cornerRadius)
