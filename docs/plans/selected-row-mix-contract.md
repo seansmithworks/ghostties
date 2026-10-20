@@ -16,7 +16,7 @@ trace): nothing is traced any more; the outline cross-fades.
   place, 300ms; the row hand-off plays inside it and lands at 275ms. No group folds.
 - **New tab:** the outline lands first on an empty slot that grows under it, then the
   session's content fades in; 600ms. Into a folded project, only that project unfolds.
-- **Keys (Cmd+Shift+] / [):** snap to the end state. **Retarget:** starts from the
+- **Keys (Cmd+Shift+] / [):** ~~snap to the end state~~ (retired by Amendment 4: keys animate like a click). **Retarget:** starts from the
   current value, never from 0, never queued. **Reduce Motion:** opacity fades only,
   120ms in / 100ms out, nothing changes size or position.
 - **Curves:** opacity `bezier(0.77, 0, 0.175, 1)`; size `bezier(0.77, 0, 0.175, overshootY2)`,
@@ -51,7 +51,7 @@ enum SelectedRowMix {
     /// One project group. card: the active-group card's opacity behind it, and its tile's
     /// ink fill; open: how unfolded it is, 0...1 (may pass 1 by < 3% while unfolding).
     struct GroupLook: Equatable { var card, open: Double }
-    enum Input: Equatable { case click, key }
+    enum Input: Equatable { case click, key }   // retired by Amendment 4: one input, no click-vs-key
 
     struct Timeline {   // a value type; every input is explicit, no clock inside
         init(active: UUID?, activeGroup: String?, collapsed: Set<String>)
@@ -117,11 +117,11 @@ which is how the board's Mix ("total" mode) plays them.
 
 ## Rules
 
-- **Keys snap.** Cmd+Shift+] / [ (and any key-driven selection) first lands every channel in flight at its target, then shows the new end state at once: target row at rest, every other row clear, the card on the target's group. No frame in between.
+- **Keys snap. (Retired by Amendment 4.)** Cmd+Shift+] / [ (and any key-driven selection) first lands every channel in flight at its target, then shows the new end state at once: target row at rest, every other row clear, the card on the target's group. No frame in between.
 - **Retarget never restarts or queues.** A new event replaces the tracks of the channels it touches, from their current values, with full durations from the new event; untouched channels keep running. Velocity matching is not required.
 - **Touched by a select:** the previously selected row, the new one, and (on a project switch) every group's card. Not touched: other rows still fading, an in-flight new row's height and content, and any group's `open`.
 - **A second new tab** lands the earlier new row's height and content at once, then plays its own.
-- **Reduce Motion** replaces every track with a timed `ease` fade from the current value: fade-ins 120ms (new row outline + tint, target card, new row content), fade-outs 100ms (old row, old cards). Nothing changes size: a folded target opens at once, a new row is full height at once, an in-flight unfold or growth lands at once. Reduce Motion wins over the key snap (the engine fades on keys too).
+- **Reduce Motion** replaces every track with a timed `ease` fade from the current value: fade-ins 120ms (new row outline + tint, target card, new row content), fade-outs 100ms (old row, old cards). Nothing changes size: a folded target opens at once, a new row is full height at once, an in-flight unfold or growth lands at once. Reduce Motion wins over the key snap (the engine fades on keys too; the key snap is retired by Amendment 4, so Reduce Motion is simply the fade for every selection change).
 - **Groups:** expand and collapse independently. The model never folds a group; a project switch never changes any `open` or the `collapsed` set. A new tab into a folded project removes only that project from `collapsed`; the builder persists it with `ProjectAccordionState.expanded`.
 - **Opacity** channels stay in 0...1 (the outline in 0...0.4); size channels may pass 1 by under 3% and land exactly on 1.
 
@@ -143,7 +143,7 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
 
 - **Gone:** the trace (`traceProgress`, the 0.6 draw opacity, `outlinePath`'s start-at-leading-middle order), `.leaving` 100ms, the click-origin window (`recordClick`, `clickWindow`), and the rail's selection-chip travel (`SelectionChipTravel` on `.move`).
 - **Kept:** the 1pt `inkSecondary` stroke inset 1pt at radius 8 (`SelectedRowOutline.strokeWidth/inset/cornerRadius`, `box()` for the rail morph), the tint token, the resting look.
-- **Click vs key:** decided by the input, not by a timing window. A row tap passes `.click`; Cmd+Shift+] / [ passes `.key`; anything else that changes the selection (Cmd+1–9, a session closing) passes `.key`.
+- **Click vs key (retired by Amendment 4):** decided by the input, not by a timing window. A row tap passes `.click`; Cmd+Shift+] / [ passes `.key`; anything else that changes the selection (Cmd+1–9, a session closing) passes `.key`.
 
 ## Tests to retire (the builder updates or deletes these with the change)
 
@@ -162,6 +162,30 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
 1. **Dark selected-row subtitle must clear AA.** Measured 3.3:1: `inkSecondary` on the 10% selected tint over the glass card. Fix (Sean, 2026-10-19): in dark, the selected row and the rail chip use a 10% **black** tint, not white. White over the dark glass card cannot clear AA (4.54:1 untinted, 3.35:1 at 10%), and lowering a white tint can't clear AA either; 10% black measures 4.976:1 for `inkSecondary` on the card's top stop. The subtitle colour is unchanged. Light is unchanged (10% `ink`, which is black). The resting-tint pixel gate renders the dark row over the card's representative colour (the selected row always sits on the active-group card), not the bare chrome.
 2. **Dark group-card text floor 5.6 to 4.5 (commit `cd006b697`) is confirmed.** "Decision 2" below is resolved.
 3. **Empty-project tile glyph, "on card" case dropped** from `emptyProjectTileGlyphClearsAA`; see "Tests to retire". Off-card cases stay. The same impossible "group card" case is also dropped from `emptyProjectHeaderTextClearsAA`, for the same reason.
+
+### Amendments (2026-10-20, Sean)
+
+4. **Every selection change animates the click hand-off (Sean, 2026-10-20).** A click, Cmd+Shift+] / [, Cmd+1-9 and a session closing all play the same hand-off at the same timings (row switch @300; project switch @300 with the hand-off landing at 275), about 300ms.
+   - **Retarget, never queue.** A rapid repeat replaces the channels it touches from their current presented value (the Rules above, unchanged). A key press mid-flight never snaps, never restarts from 0, never waits.
+   - **Reduce Motion is unchanged:** the 120ms in / 100ms out fade, for every selection change.
+   - **Retired:** the click-vs-key distinction. Gone are `enum Input { click, key }` and the `via:` parameter of `Timeline.select` (the API block above), the "Keys (Cmd+Shift+] / [)" snap in "Rest", the "Keys snap" rule, the "Reduce Motion wins over the key snap" clause, and the "Click vs key" bullet. `SelectedRowMixDriver.update` no longer branches on the cause for click vs key; `SessionCoordinator.SelectionCause` keeps only what a new tab needs. A stale click cause can no longer make a later Cmd+1-9 differ from a click, because there is nothing to differ.
+   - **Superseded tests, and what each becomes** (the builder edits them; the amender did not):
+     - `SelectedRowMixModelTests.keysSnap` and `.keyMidMotionSnaps` ("Keys snap" MARK): delete. Replace with the click tables run through the one `select` (no `via:`): the end state is reached by 300 (275 across projects), mid-values are strictly between, and a second `select` at 100 retargets from the live frame (the existing "Retarget mid-switch" cases already cover the numbers).
+     - `SelectedRowMixModelTests.projectSwitchNeverChangesFolds`: drop the `.key` pair; iterate `(rm: false, true)` only, calls without `via:`.
+     - `SelectedRowMixMotionGateTests.keySelectionSnapsWithNoIntermediateFrame`: delete (it asserts every probed outline and card is 0 or at rest). `SelectedRowKeyMotionGateTests` replaces it. The harness's `noteSelectionCause(.click, ...)` calls in the other cases of that file are then unnecessary; drop them with `via:`.
+     - Any other call of `select(..., via:` or `M.Input`: update to the signature without `via:`.
+5. **The card wraps the plate with an even 4pt gap (Sean, 2026-10-20).** The glass active-group card sits 4pt from the selected-row plate's drawn box on every side (left, right, bottom), with concentric corners: plate radius `SelectedRowOutline.cornerRadius` (8) + gap 4 = card radius 12.
+   - **Why it changed:** the card was sized for the old 32pt chip. `chipTrim` is `(rowHeight - chipSize) / 2 = 8`, so the card's bottom is the last row's bottom - 8 + `groupCardInset` 6 = 2pt above the plate (gap -2, Sean saw about 0), and `horizontalOutset` is `groupCardInset 6 - rowLeadingPadding 4 + chipOverhang 0 = 2` past the row frame (gap 2, Sean saw about 2.5).
+   - **The plate's box is the row frame.** In the expanded list the plate is drawn on the whole row (`SelectedRowOutline.box(row:...)` at morph 0), so its box is the row's `RedlineID.row` frame. The card's extent is then fixed by the full row frames in the group (first and last), never by which row is selected: the card frame is identical whichever row is selected, and with any row selected the card is 4pt past the last row's frame at the bottom and 4pt past the row frames left and right.
+   - **Top edge unchanged:** `unionMinY + tileTrim - verticalInset`.
+   - **Rail column unchanged:** `columnInset` 4 around the rail chip already is the concentric 4pt gap there; this amendment is the expanded sidebar card only.
+   - **Gate:** `SelectedRowCardFitGateTests` (live container, Redlines frames, tolerance 0.5pt).
+   - **Superseded tests, and what each becomes** (the builder edits them; the amender did not):
+     - `SidebarProjectsLayoutTests.testOptionDGroupCardAndColumnGeometry`: `groupCardInset() == 6` and `horizontalOutset(cardInset: 6, rowLeadingPadding: 4, chipOverhang: 0) == 2` pin the chip-based numbers. Becomes the new outset: 4 (card edge to the row frame is the gap, so the outset equals the gap, not `inset - leading + overhang`), and whatever the builder renames the inset to. Also its helper `assertGroupCardAndColumnInsetOnAllSides`: its expanded-card legs (`markLeading`/`markTrailing` from the tile and chip, `extent.upperBound - (last.midY + chip / 2) == inset`, and the folded-card legs) measure the gap "from the chip"; rewrite them to measure from the row frame for the expanded card (4pt) and keep the folded card (header tile, no rows) and the rail column legs as they are.
+     - `SidebarMorphMetricsTests.expandedEndMatchesOptionD` (:30-34): `card.minX == 6`, `card.maxX == 258` (list x 8..256 plus a 2pt outset) become 4 and 260; `card.verticalInset == 6` becomes the new inset (4 from the plate, with `chipTrim` no longer 8: the card's bottom is `unionMaxY + 4`).
+     - `SidebarMorphMetricsTests.midpointIsHalfwayOnEveryValue` (:63): `cm.verticalInset == 5` is the midpoint of 6 and 4; becomes the midpoint of the new sidebar inset and 4.
+     - `SidebarMorphMetricsTests.endsAgreeWithTheSettledViews` (:75-90): its dials (`groupCardInset` 10, `chipOverhang`) feed `horizontalOutset`; keep the property (the metrics' card edge equals the settled view's) against the new formula.
+     - `railEndMatchesOptionD` (:44-52): unchanged (rail column).
 
 ## Decisions
 
