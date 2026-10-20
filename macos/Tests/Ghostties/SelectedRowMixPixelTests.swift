@@ -68,8 +68,8 @@ struct SelectedRowMixPixelTests {
 
     private func theme(_ scheme: ColorScheme) -> ChromeTheme { ChromeTheme.active(scheme) }
 
-    private func snapshot<V: View>(_ view: V, size: CGSize, scheme: ColorScheme) throws -> Render {
-        let chrome = theme(scheme).chrome
+    private func snapshot<V: View>(_ view: V, size: CGSize, scheme: ColorScheme, background: NSColor? = nil) throws -> Render {
+        let chrome = background ?? theme(scheme).chrome
         // The list and rail read the sidebar tab from store-less `@AppStorage`;
         // pin the Projects tab in a private suite.
         let tabSuiteName = "com.seansmithdesign.ghostties.tests.selected-row-mix.\(UUID().uuidString)"
@@ -130,15 +130,22 @@ struct SelectedRowMixPixelTests {
                 .padding(.vertical, rowInset)
                 .environmentObject(SidebarWidthModel(width: rowWidth))
                 .environmentObject(SessionCoordinator())
-            let r = try snapshot(view, size: size, scheme: scheme)
+            let r = try snapshot(view, size: size, scheme: scheme, background: rowBase(scheme))
             return (r, CGRect(x: rowInset, y: rowInset, width: rowWidth - 2 * rowInset, height: rowHeight))
         }
     }
 
-    /// The chrome under the resting tint.
+    /// What the resting row sits on. In dark the selected session's project
+    /// always holds the glass card, so the row renders over the card's
+    /// representative colour; light stays on the bare chrome.
+    private func rowBase(_ scheme: ColorScheme) -> NSColor {
+        scheme == .dark ? ProjectGroupCardGlass.representative(scheme) : theme(scheme).chrome
+    }
+
+    /// The row's base under the resting tint.
     private func tinted(_ scheme: ColorScheme) throws -> RGB {
         let tint = try #require(NSColor(SidebarColors.selectedRowTint(scheme)).usingColorSpace(.sRGB))
-        return over(try rgb(tint), alpha: Double(tint.alphaComponent), try rgb(theme(scheme).chrome))
+        return over(try rgb(tint), alpha: Double(tint.alphaComponent), try rgb(rowBase(scheme)))
     }
 
     /// |change| from `reference` in luminance, integrated in points along a line.
@@ -183,8 +190,8 @@ struct SelectedRowMixPixelTests {
     @Test("Resting selected row: the tint fills inside the outline at the token, light and dark", arguments: [ColorScheme.light, .dark])
     func restingRowTint(scheme: ColorScheme) throws {
         let (r, row) = try renderRow(scheme)
-        let want = try tinted(scheme), bare = try rgb(theme(scheme).chrome)
-        #expect(abs(lum(bare) - lum(want)) > 0.02, "\(scheme): tint indistinguishable from chrome; gate vacuous")
+        let want = try tinted(scheme), bare = try rgb(rowBase(scheme))
+        #expect(abs(lum(bare) - lum(want)) > 0.02, "\(scheme): tint indistinguishable from its base (card in dark, chrome in light); gate vacuous (\(abs(lum(bare) - lum(want))))")
         for fx in [0.25, 0.5, 0.75] {
             let got = try pixel(r, x: row.minX + row.width * fx, y: row.minY + 3.5)
             #expect(abs(got.r - want.r) < 0.02 && abs(got.g - want.g) < 0.02 && abs(got.b - want.b) < 0.02,

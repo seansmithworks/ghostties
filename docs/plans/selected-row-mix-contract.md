@@ -158,7 +158,7 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
 
 ## Amendments (2026-10-19, Sean)
 
-1. **Dark selected-row subtitle must clear AA.** Measured 3.3:1: `inkSecondary` on the 10% selected tint over the glass card. Fix (Sean, 2026-10-19): in dark, the selected row and the rail chip use a 10% **black** tint, not white. White over the dark glass card cannot clear AA (4.54:1 untinted, 3.35:1 at 10%), and lowering a white tint can't clear AA either; 10% black measures 4.976:1 for `inkSecondary` on the card's top stop. The subtitle colour is unchanged. Light is unchanged (10% `ink`, which is black).
+1. **Dark selected-row subtitle must clear AA.** Measured 3.3:1: `inkSecondary` on the 10% selected tint over the glass card. Fix (Sean, 2026-10-19): in dark, the selected row and the rail chip use a 10% **black** tint, not white. White over the dark glass card cannot clear AA (4.54:1 untinted, 3.35:1 at 10%), and lowering a white tint can't clear AA either; 10% black measures 4.976:1 for `inkSecondary` on the card's top stop. The subtitle colour is unchanged. Light is unchanged (10% `ink`, which is black). The resting-tint pixel gate renders the dark row over the card's representative colour (the selected row always sits on the active-group card), not the bare chrome.
 2. **Dark group-card text floor 5.6 to 4.5 (commit `cd006b697`) is confirmed.** "Decision 2" below is resolved.
 3. **Empty-project tile glyph, "on card" case dropped** from `emptyProjectTileGlyphClearsAA`; see "Tests to retire". Off-card cases stay.
 
