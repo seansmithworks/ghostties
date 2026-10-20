@@ -1,5 +1,9 @@
 # Selected-row outline: model contract
 
+> **Superseded (2026-10-19)** by `docs/plans/selected-row-mix-contract.md`: Sean picked
+> the r9 mix (04 Hand-off, P1 Cross-fade, N4 Outline first, glass). The trace below no
+> longer ships; this file stays as the record of the r7 06 gate.
+
 The gate for the "drawn outline" selected state (card 06, r7, with Sean's
 "ease in and out" change). The builder implements this API; the tests in
 `macos/Tests/Ghostties/SelectedRowOutline*Tests.swift` check it against
