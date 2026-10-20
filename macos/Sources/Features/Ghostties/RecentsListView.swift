@@ -282,10 +282,7 @@ struct RecentsListView: View {
                 isActive: coordinator.isHistoryPresented,
                 staggerIndex: historyCascadeIndex(sections),
                 dialEpoch: SidebarDialTuning.epoch(),
-                onTap: {
-                    coordinator.noteSelectionCause(.click, for: SelectedRowMix.historyRowID)
-                    coordinator.presentHistory()
-                }
+                onTap: { coordinator.presentHistory() }
             )
         }
     }

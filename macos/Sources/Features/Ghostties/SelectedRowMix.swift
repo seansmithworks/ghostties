@@ -66,8 +66,6 @@ enum SelectedRowMix {
     /// pass 1 by < 3% while unfolding).
     struct GroupLook: Equatable { var card, open: Double }
 
-    enum Input: Equatable { case click, key }
-
     // MARK: - Variant numbers
 
     /// The variants' own (unscaled) numbers; one factor per event scales
@@ -130,9 +128,6 @@ enum SelectedRowMix {
     private struct RowChannels: Equatable {
         var outline = Channel(0), tint = Channel(0), height = Channel(1, size: true), content = Channel(1)
         var all: [Channel] { [outline, tint, height, content] }
-        mutating func finishAll(_ t: Double) {
-            outline.finish(t); tint.finish(t); height.finish(t); content.finish(t)
-        }
     }
 
     private struct GroupChannels: Equatable {
@@ -221,22 +216,11 @@ enum SelectedRowMix {
             }
         }
 
-        mutating func select(_ session: UUID, in group: String, via: Input, reduceMotion: Bool, at t: Double) {
+        mutating func select(_ session: UUID, in group: String, reduceMotion: Bool, at t: Double) {
             guard session != active else { return }
             let from = active, sameGroup = group == activeGroup
             if reduceMotion {
                 reduceMotionFade(from: from, to: session, target: group, t)
-            } else if via == .key {
-                // Keys snap: everything in flight lands, then the new end state at once.
-                for id in rows.keys { rows[id]!.finishAll(t) }
-                for id in groups.keys { groups[id]!.card.finish(t); groups[id]!.open.finish(t) }
-                ensureRow(session)
-                ensureGroup(group)
-                for id in rows.keys {
-                    rows[id]!.outline.snap(t, id == session ? restOutlineOpacity : 0)
-                    rows[id]!.tint.snap(t, id == session ? 1 : 0)
-                }
-                for id in groups.keys { groups[id]!.card.snap(t, id == group ? 1 : 0) }
             } else {
                 if !sameGroup { crossFade(to: group, t, k: kSwitch) }
                 handOff(from: from, to: session, t, k: sameGroup ? kRow : kSwitch)

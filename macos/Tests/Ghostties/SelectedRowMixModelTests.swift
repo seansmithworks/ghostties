@@ -109,7 +109,7 @@ struct SelectedRowMixModelTests {
     @Test("Selecting the row that is already active does nothing")
     func reselectIsANoOp() {
         var tl = fresh()
-        tl.select(a1, in: "A", via: .click, reduceMotion: false, at: 50)
+        tl.select(a1, in: "A", reduceMotion: false, at: 50)
         expectRow(tl.row(a1, at: 60), 0.4, 1, 1, 1, "still resting")
         #expect(tl.settledAt <= 50)
     }
@@ -126,7 +126,7 @@ struct SelectedRowMixModelTests {
     ])
     func rowSwitch(t: Double, fo: Double, ft: Double, to: Double, tt: Double) {
         var tl = fresh()
-        tl.select(a2, in: "A", via: .click, reduceMotion: false, at: 0)
+        tl.select(a2, in: "A", reduceMotion: false, at: 0)
         expectRow(tl.row(a1, at: t), fo, ft, 1, 1, "from @\(t)")
         expectRow(tl.row(a2, at: t), to, tt, 1, 1, "to @\(t)")
         expectGroup(tl.group("A", at: t), 1, 1, "card stays on A @\(t)")
@@ -135,7 +135,7 @@ struct SelectedRowMixModelTests {
     @Test("Row switch: the old tint is gone by 218ms, the new tint waits until 82ms, all done at 300")
     func rowSwitchOffsets() {
         var tl = fresh()
-        tl.select(a2, in: "A", via: .click, reduceMotion: false, at: 0)
+        tl.select(a2, in: "A", reduceMotion: false, at: 0)
         #expect(tl.settledAt == 300)
         #expect(tl.row(a2, at: 81).tint == 0, "new tint has not started at 81ms")
         #expect(tl.row(a2, at: 100).tint > 1e-3, "new tint is under way by 100ms")
@@ -154,7 +154,7 @@ struct SelectedRowMixModelTests {
     ])
     func projectSwitch(t: Double, fo: Double, ft: Double, to: Double, tt: Double, ca: Double, cb: Double) {
         var tl = fresh()
-        tl.select(b1, in: "B", via: .click, reduceMotion: false, at: 0)
+        tl.select(b1, in: "B", reduceMotion: false, at: 0)
         expectRow(tl.row(a1, at: t), fo, ft, 1, 1, "from @\(t)")
         expectRow(tl.row(b1, at: t), to, tt, 1, 1, "to @\(t)")
         expectGroup(tl.group("A", at: t), ca, 1, "A @\(t)")
@@ -165,7 +165,7 @@ struct SelectedRowMixModelTests {
     @Test("Project switch: the row lands at 275, the card at 300")
     func projectSwitchLanding() {
         var tl = fresh()
-        tl.select(b1, in: "B", via: .click, reduceMotion: false, at: 0)
+        tl.select(b1, in: "B", reduceMotion: false, at: 0)
         #expect(tl.settledAt == 300)
         expectRow(tl.row(b1, at: 275), 0.4, 1, 1, 1, "hand-off done at 275")
         #expect(tl.group("B", at: 275).card < 1 - 1e-4, "card still landing at 275")
@@ -175,15 +175,15 @@ struct SelectedRowMixModelTests {
         }
     }
 
-    @Test("A project switch never folds or unfolds any group: click, key and Reduce Motion")
+    @Test("A project switch never folds or unfolds any group, with or without Reduce Motion")
     func projectSwitchNeverChangesFolds() {
-        for (via, rm) in [(M.Input.click, false), (.key, false), (.click, true)] {
+        for rm in [false, true] {
             var tl = fresh()
-            tl.select(b1, in: "B", via: via, reduceMotion: rm, at: 0)
-            #expect(tl.collapsed == ["C", "E"], "\(via) rm=\(rm): collapsed set changed")
+            tl.select(b1, in: "B", reduceMotion: rm, at: 0)
+            #expect(tl.collapsed == ["C", "E"], "rm=\(rm): collapsed set changed")
             for t in stride(from: 0.0, through: 400, by: 25) {
-                #expect(tl.group("A", at: t).open == 1 && tl.group("B", at: t).open == 1, "\(via) rm=\(rm) open groups @\(t)")
-                #expect(tl.group("C", at: t).open == 0 && tl.group("E", at: t).open == 0, "\(via) rm=\(rm) folded groups @\(t)")
+                #expect(tl.group("A", at: t).open == 1 && tl.group("B", at: t).open == 1, "rm=\(rm) open groups @\(t)")
+                #expect(tl.group("C", at: t).open == 0 && tl.group("E", at: t).open == 0, "rm=\(rm) folded groups @\(t)")
             }
         }
     }
@@ -265,30 +265,35 @@ struct SelectedRowMixModelTests {
         #expect(tl.settledAt == 700)
     }
 
-    // MARK: - Keys snap
+    // MARK: - One motion for every selection change (Amendment 4)
 
-    @Test("Cmd+Shift+] / [ across projects: the end state at once, no frame in between")
-    func keysSnap() {
-        var tl = fresh()
-        tl.select(b1, in: "B", via: .key, reduceMotion: false, at: 0)
-        expectRow(tl.row(a1, at: 0), 0, 0, 1, 1, "old row gone")
-        expectRow(tl.row(b1, at: 0), 0.4, 1, 1, 1, "new row at rest")
-        expectGroup(tl.group("A", at: 0), 0, 1, "A")
-        expectGroup(tl.group("B", at: 0), 1, 1, "B")
-        #expect(tl.settledAt <= 0)
-    }
+    @Test("Every selection change (click, Cmd+Shift+] / [, Cmd+1-9, a session closing) plays the hand-off through the one select")
+    func everySelectionHandsOff() {
+        // Same project: lands by 300, strictly between at 150.
+        var row = fresh()
+        row.select(a2, in: "A", reduceMotion: false, at: 0)
+        let ra = row.row(a1, at: 150), rb = row.row(a2, at: 150)
+        #expect(ra.outline > 0 && ra.outline < 0.4 && rb.outline > 0 && rb.outline < 0.4, "mid-switch outlines \(ra.outline) / \(rb.outline)")
+        #expect(rb.tint > 0 && rb.tint < 1, "mid-switch new tint \(rb.tint)")
+        expectRow(row.row(a1, at: 300), 0, 0, 1, 1, "old row clear by 300")
+        expectRow(row.row(a2, at: 300), 0.4, 1, 1, 1, "new row at rest by 300")
+        #expect(near(row.settledAt, 300))
 
-    @Test("A key press mid-motion lands everything in flight and snaps to the new row")
-    func keyMidMotionSnaps() {
-        var tl = fresh()
-        tl.newTab(n1, in: "C", reduceMotion: false, at: 0)
-        tl.select(a2, in: "A", via: .key, reduceMotion: false, at: 100)
-        expectRow(tl.row(n1, at: 100), 0, 0, 1, 1, "inserted row landed, not selected")
-        expectGroup(tl.group("C", at: 100), 0, 1, "C finished opening")
-        expectRow(tl.row(a2, at: 100), 0.4, 1, 1, 1, "key target at rest")
-        expectRow(tl.row(a1, at: 100), 0, 0, 1, 1, "earlier row cleared")
-        expectGroup(tl.group("A", at: 100), 1, 1, "card on A")
-        #expect(tl.settledAt <= 100)
+        // Across projects: the hand-off lands by 275, the card by 300.
+        var cross = fresh()
+        cross.select(b1, in: "B", reduceMotion: false, at: 0)
+        let ca = cross.group("A", at: 150).card, cb = cross.group("B", at: 150).card
+        #expect(ca > 0 && ca < 1 && cb > 0 && cb < 1, "mid-switch cards \(ca) / \(cb)")
+        expectRow(cross.row(b1, at: 275), 0.4, 1, 1, 1, "hand-off done at 275")
+        expectGroup(cross.group("A", at: 300), 0, 1, "A by 300")
+        expectGroup(cross.group("B", at: 300), 1, 1, "B by 300")
+
+        // A second select at 100 continues from the live frame: no jump.
+        var live = fresh()
+        live.select(b1, in: "B", reduceMotion: false, at: 0)
+        let before = (live.row(b1, at: 100), live.group("B", at: 100).card)
+        live.select(a1, in: "A", reduceMotion: false, at: 100)
+        #expect(near(live.row(b1, at: 100).outline, before.0.outline) && near(live.group("B", at: 100).card, before.1), "retarget starts from the presented value")
     }
 
     // MARK: - Retarget
@@ -303,8 +308,8 @@ struct SelectedRowMixModelTests {
     ])
     func retarget(t: Double, ca: Double, cb: Double, ao: Double, at: Double, bo: Double, bt: Double) {
         var tl = fresh()
-        tl.select(b1, in: "B", via: .click, reduceMotion: false, at: 0)
-        tl.select(a1, in: "A", via: .click, reduceMotion: false, at: 100)
+        tl.select(b1, in: "B", reduceMotion: false, at: 0)
+        tl.select(a1, in: "A", reduceMotion: false, at: 100)
         expectGroup(tl.group("A", at: t), ca, 1, "A @\(t)")
         expectGroup(tl.group("B", at: t), cb, 1, "B @\(t)")
         expectRow(tl.row(a1, at: t), ao, at, 1, 1, "a1 @\(t)")
@@ -314,12 +319,12 @@ struct SelectedRowMixModelTests {
     @Test("Retarget: no jump at the retarget instant, monotonic after it, done 300ms after it")
     func retargetIsContinuous() {
         var live = fresh()
-        live.select(b1, in: "B", via: .click, reduceMotion: false, at: 0)
+        live.select(b1, in: "B", reduceMotion: false, at: 0)
         let cardA: M.GroupLook = live.group("A", at: 100)
         let cardB: M.GroupLook = live.group("B", at: 100)
         let rowA: M.RowLook = live.row(a1, at: 100)
         let rowB: M.RowLook = live.row(b1, at: 100)
-        live.select(a1, in: "A", via: .click, reduceMotion: false, at: 100)
+        live.select(a1, in: "A", reduceMotion: false, at: 100)
         #expect(live.group("A", at: 100) == cardA, "A's card jumped at the retarget")
         #expect(live.group("B", at: 100) == cardB, "B's card jumped at the retarget")
         #expect(live.row(a1, at: 100) == rowA, "a1 jumped at the retarget")
@@ -339,7 +344,7 @@ struct SelectedRowMixModelTests {
     func switchDuringUnfold() {
         var tl = fresh()
         tl.newTab(n1, in: "C", reduceMotion: false, at: 0)
-        tl.select(b1, in: "B", via: .click, reduceMotion: false, at: 150)
+        tl.select(b1, in: "B", reduceMotion: false, at: 150)
         expectGroup(tl.group("C", at: 450), 0, 1, "C finished opening, card moved on to B (switch @150 + 300)")
         #expect(tl.row(n1, at: 600).height == 1 && tl.row(n1, at: 600).content == 1, "the insert finished")
         #expect(tl.collapsed == ["E"])
@@ -357,7 +362,7 @@ struct SelectedRowMixModelTests {
     ])
     func reduceMotionSwitch(t: Double, fo: Double, ft: Double, to: Double, tt: Double, ca: Double, cb: Double) {
         var tl = fresh()
-        tl.select(b1, in: "B", via: .click, reduceMotion: true, at: 0)
+        tl.select(b1, in: "B", reduceMotion: true, at: 0)
         expectRow(tl.row(a1, at: t), fo, ft, 1, 1, "from @\(t)")
         expectRow(tl.row(b1, at: t), to, tt, 1, 1, "to @\(t)")
         expectGroup(tl.group("A", at: t), ca, 1, "A @\(t)")
@@ -381,8 +386,8 @@ struct SelectedRowMixModelTests {
     func reduceMotionIsOpacityOnly(scenario: Int) {
         var tl = fresh()
         switch scenario {
-        case 0: tl.select(a2, in: "A", via: .click, reduceMotion: true, at: 0)
-        case 1: tl.select(b1, in: "B", via: .click, reduceMotion: true, at: 0)
+        case 0: tl.select(a2, in: "A", reduceMotion: true, at: 0)
+        case 1: tl.select(b1, in: "B", reduceMotion: true, at: 0)
         case 2: tl.newTab(n1, in: "A", reduceMotion: true, at: 0)
         default: tl.newTab(n1, in: "C", reduceMotion: true, at: 0)
         }
@@ -401,10 +406,10 @@ struct SelectedRowMixModelTests {
     @Test("Opacities stay in 0...1 (outline 0...0.4) on every frame of every event; size overshoot stays under 3%")
     func channelRanges() {
         var scenarios: [M.Timeline] = []
-        var s = fresh(); s.select(a2, in: "A", via: .click, reduceMotion: false, at: 0); scenarios.append(s)
-        s = fresh(); s.select(b1, in: "B", via: .click, reduceMotion: false, at: 0); s.select(a1, in: "A", via: .click, reduceMotion: false, at: 100); scenarios.append(s)
+        var s = fresh(); s.select(a2, in: "A", reduceMotion: false, at: 0); scenarios.append(s)
+        s = fresh(); s.select(b1, in: "B", reduceMotion: false, at: 0); s.select(a1, in: "A", reduceMotion: false, at: 100); scenarios.append(s)
         s = fresh(); s.newTab(n1, in: "C", reduceMotion: false, at: 0); scenarios.append(s)
-        s = fresh(); s.newTab(n1, in: "A", reduceMotion: false, at: 0); s.select(b1, in: "B", via: .click, reduceMotion: false, at: 200); scenarios.append(s)
+        s = fresh(); s.newTab(n1, in: "A", reduceMotion: false, at: 0); s.select(b1, in: "B", reduceMotion: false, at: 200); scenarios.append(s)
         for (i, tl) in scenarios.enumerated() {
             for t in stride(from: 0.0, through: 900, by: 3) {
                 for id in [a1, a2, b1, n1] {

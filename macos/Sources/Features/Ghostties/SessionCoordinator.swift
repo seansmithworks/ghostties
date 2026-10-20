@@ -53,11 +53,12 @@ final class SessionCoordinator: ObservableObject {
     }
 
     /// What made the latest selection change, tagged with its target, so
-    /// every list's `SelectedRowMixDriver` reads the same input: a row
-    /// click, or a new session taking the canvas. Untagged changes
-    /// (Cmd+Shift+] / [, Cmd+1-9, a session closing) are keys, and snap.
+    /// every list's `SelectedRowMixDriver` reads the same input: a new
+    /// session taking the canvas. Every other change (a click,
+    /// Cmd+Shift+] / [, Cmd+1-9, a session closing) is untagged and plays
+    /// the same hand-off.
     struct SelectionCause: Equatable {
-        enum Kind: Equatable { case click, newTab }
+        enum Kind: Equatable { case newTab }
         let id: UUID
         let kind: Kind
     }
@@ -1957,7 +1958,6 @@ final class SessionCoordinator: ObservableObject {
         guard CaptureFixture.isActive, !sessions.isEmpty else { return nil }
         let current = sessions.firstIndex(where: { $0.id == activeSessionId }) ?? (offset > 0 ? -1 : 0)
         let target = sessions[((current + offset) % sessions.count + sessions.count) % sessions.count]
-        if CaptureFixture.selectSequenceAsClick { noteSelectionCause(.click, for: target.id) }
         isHistoryPresented = false
         activeSessionId = target.id
         sidebarItemActivated.send()

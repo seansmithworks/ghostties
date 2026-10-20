@@ -684,11 +684,6 @@ enum CaptureFixture {
     }
 
     static var selectSequence: SelectSequence? { parseSelectSequence(env("GHOSTTIES_CAPTURE_SELECT_SEQUENCE")) }
-    /// `GHOSTTIES_CAPTURE_SELECT_AS=click`: each select-sequence step takes
-    /// a row click's path (`SessionCoordinator.noteSelectionCause`), so the
-    /// selected row hands off; unset, the steps snap like the shortcut.
-    static var selectSequenceAsClick: Bool { env("GHOSTTIES_CAPTURE_SELECT_AS") == "click" }
-
     /// `GHOSTTIES_CAPTURE_MIX_FREEZE_MS=<ms>`: the selected-row mix's clock
     /// (`SelectedRowMixDriver`) stops that many ms into each selection
     /// event, so a capture holds one mid-event frame.

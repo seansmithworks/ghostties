@@ -63,9 +63,9 @@ final class SelectedRowMixDriver: ObservableObject {
         SelectedRowMix.Timeline(active: s.selected, activeGroup: s.selected == nil ? nil : s.group, collapsed: s.collapsed)
     }
 
-    /// A list change. A new selection is one event: a click (the row was
-    /// tapped), a new tab (a session created into a row that was not there
-    /// before), otherwise a key, which snaps.
+    /// A list change. A new selection is one event: a new tab (a session
+    /// created into a row that was not there before), otherwise the
+    /// hand-off, whatever caused it (a click, a key, a session closing).
     func update(_ snapshot: Snapshot, cause: SessionCoordinator.SelectionCause?, reduceMotion: Bool, now: Date = Date()) {
         guard var tl = timeline, let last else {
             prime(snapshot)
@@ -77,11 +77,10 @@ final class SelectedRowMixDriver: ObservableObject {
         if snapshot.selected != last.selected {
             touched.groups = tl.litGroups(at: t)
             if let id = snapshot.selected {
-                let input = cause?.id == id ? cause?.kind : nil
-                if input == .newTab, !last.rows.contains(id) {
+                if cause?.id == id, cause?.kind == .newTab, !last.rows.contains(id) {
                     tl.newTab(id, in: snapshot.group, reduceMotion: reduceMotion, at: t)
                 } else {
-                    tl.select(id, in: snapshot.group, via: input == nil ? .key : .click, reduceMotion: reduceMotion, at: t)
+                    tl.select(id, in: snapshot.group, reduceMotion: reduceMotion, at: t)
                 }
             } else {
                 // Nothing selected (the last session closed): at rest on nothing.

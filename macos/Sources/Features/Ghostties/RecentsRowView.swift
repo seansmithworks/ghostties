@@ -123,7 +123,6 @@ struct RecentsRowView: View, Equatable {
         }
         .onTapGesture {
             guard !isEditing else { return }
-            coordinator.noteSelectionCause(.click, for: session.id)
             onTap()
         }
         .accessibilityElement(children: .combine)

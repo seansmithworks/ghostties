@@ -163,7 +163,6 @@ struct SelectedRowMixMotionGateTests {
         #expect(try luminance(live, cell: rowA) > 0.9, "start: A's outline should be drawn")
         #expect(try luminance(live, cell: rowB) < 0.1, "start: B's outline should be clear")
 
-        live.coordinator.noteSelectionCause(.click, for: Self.rowB)
         live.stage.snapshot = Snapshot(selected: Self.rowB, group: Self.g1, rows: [Self.rowA, Self.rowB], collapsed: [])
         pump(0.15) // about half of the 300ms switch
 
@@ -193,7 +192,6 @@ struct SelectedRowMixMotionGateTests {
         #expect(try luminance(live, cell: group1) > 0.9, "start: group one's card should be lit")
         #expect(try luminance(live, cell: group2) < 0.1, "start: group two's card should be clear")
 
-        live.coordinator.noteSelectionCause(.click, for: Self.rowB)
         live.stage.snapshot = Snapshot(selected: Self.rowB, group: Self.g2, rows: [Self.rowA, Self.rowB], collapsed: [])
         pump(0.15)
 
@@ -231,31 +229,5 @@ struct SelectedRowMixMotionGateTests {
         let end = try #require(live.probe.lastRow(Self.rowC))
         #expect(abs(end.height - 1) < 0.001 && abs(end.content - 1) < 0.001 && abs(end.outline - SelectedRowMix.restOutlineOpacity) < 0.001,
                 "settled: \(end)")
-    }
-
-    // MARK: - Keys snap
-
-    @Test func keySelectionSnapsWithNoIntermediateFrame() throws {
-        let live = makeLive()
-        defer { live.window.orderOut(nil) }
-        let rest = SelectedRowMix.restOutlineOpacity
-
-        // Untagged change: no noteSelectionCause, as Cmd+Shift+] / [.
-        live.stage.snapshot = Snapshot(selected: Self.rowB, group: Self.g2, rows: [Self.rowA, Self.rowB], collapsed: [])
-        pump(0.3)
-
-        // Vacuity guard: B went from clear to drawn, A the other way.
-        let bs = try #require(live.probe.rows[Self.rowB]), cs = try #require(live.probe.cards[Self.g2])
-        #expect(bs.first?.outline == 0 && abs((bs.last?.outline ?? 0) - rest) < 0.001, "B should end drawn")
-        #expect(cs.first == 0 && abs((cs.last ?? 0) - 1) < 0.001, "group two should end lit")
-
-        for look in bs + (live.probe.rows[Self.rowA] ?? []) {
-            let o = look.outline
-            #expect(abs(o) < 0.001 || abs(o - rest) < 0.001, "key snap drew an intermediate outline \(o)")
-        }
-        for level in cs + (live.probe.cards[Self.g1] ?? []) {
-            #expect(abs(level) < 0.001 || abs(level - 1) < 0.001, "key snap drew an intermediate card \(level)")
-        }
-        #expect(try luminance(live, cell: rowA) < 0.05 && luminance(live, cell: rowB) > 0.95, "snapped pixels")
     }
 }
