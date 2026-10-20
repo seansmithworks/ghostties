@@ -536,20 +536,26 @@ struct ProjectMonogramTileFace: View {
     /// Re-renders on every dial write; the fill reads "Selected tile fill".
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @ChromeScheme private var colorScheme
-
-    /// Ink laid over the tile tint: 0 unselected, the dial when selected.
-    private var inkFill: Double { isSelectedProject ? RailProjectColumn.selectedTileFill : 0 }
-    /// Past the midpoint the tile reads as ink, so its text flips to the
-    /// chrome colour to stay legible.
-    private var isFilled: Bool { inkFill > 0.5 }
+    /// The header's group: its ink follows the group's card (`SelectedRowMix`).
+    @Environment(\.selectedRowMixGroup) private var mixGroup
 
     // Option D (`hRCBC`: `#28221E1A`), per appearance.
     private var tint: Color { SidebarColors.tileFill(colorScheme, isEmpty: isEmpty) }
     var body: some View {
+        SelectedRowMixGroupReader(id: mixGroup, fallback: isSelectedProject ? 1 : 0) { card in
+            face(inkFill: card * RailProjectColumn.selectedTileFill)
+        }
+    }
+
+    /// `inkFill`: ink laid over the tile tint, 0 unselected, the dial when
+    /// selected. Past the midpoint the tile reads as ink, so its text flips
+    /// to the chrome colour to stay legible.
+    private func face(inkFill: Double) -> some View {
+        let isFilled = inkFill > 0.5
         let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
         // Tint fades out as ink fades in, so each end draws exactly one
         // fill: the plain tile at 0, solid ink at 1.
-        shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(RailProjectTile.ink(colorScheme).opacity(inkFill)))
+        return shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(RailProjectTile.ink(colorScheme).opacity(inkFill)))
             .frame(width: size, height: size)
             // Inside the scale, so Redlines reports the drawn tile.
             .redlineFrame(redlineID)
@@ -727,7 +733,11 @@ struct ProjectAccordionAutoExpand: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onReceive(NotificationCenter.default.publisher(for: .workspaceDidCreateSessionInProject)) { expand($0) }
+            // A new tab into a folded project unfolds only that project, on
+            // the selected-row mix's size curve (N4).
+            .onReceive(NotificationCenter.default.publisher(for: .workspaceDidCreateSessionInProject)) {
+                expand($0, animation: SelectedRowMix.unfoldAnimation())
+            }
             .onReceive(NotificationCenter.default.publisher(for: .workspaceDidFocusSessionFromShortcut)) { expand($0) }
             #if DEBUG
             .onReceive(NotificationCenter.default.publisher(for: .captureProjectFold)) { captureFold($0) }
@@ -750,11 +760,13 @@ struct ProjectAccordionAutoExpand: ViewModifier {
     }
     #endif
 
-    private func expand(_ notification: Notification) {
+    private func expand(_ notification: Notification, animation: Animation? = nil) {
         guard SidebarDialTuning.projectsLayout() == .oneView,
               notification.object as? NSWindow === window(),
               let projectId = notification.userInfo?["projectId"] as? UUID,
               ProjectAccordionState.decode(collapsedRaw).contains(projectId) else { return }
-        collapsedRaw = ProjectAccordionState.expanded(collapsedRaw, projectId)
+        withAnimation(animation) {
+            collapsedRaw = ProjectAccordionState.expanded(collapsedRaw, projectId)
+        }
     }
 }

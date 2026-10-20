@@ -26,6 +26,9 @@ struct RecentsListView: View {
     /// on Escape — see `SessionDragState.cancel()` and
     /// `installDragEndMonitors()`.
     @State private var dragState = SessionDragState()
+    /// This list's selected-row motion (`SelectedRowMix`): the sidebar
+    /// list, the rail and the hover panel each run their own.
+    @StateObject private var mix = SelectedRowMixDriver()
     /// The one-view project drag (`ProjectDragState`) — same lifecycle as
     /// `dragState`, and never set at the same time as it.
     @State private var projectDragState = ProjectDragState()
@@ -139,6 +142,11 @@ struct RecentsListView: View {
         // The rail is this same list, held at morph 1.
         let layout = displaySections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
 
+        // The selected-row mix reads the selection, its group, the rows and
+        // the folds; each change of selection is one event.
+        let mixSnapshot = mixSnapshot(displaySections)
+        let _ = mix.prime(mixSnapshot)
+
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
                 emptyState
@@ -177,6 +185,10 @@ struct RecentsListView: View {
             }
         }
         .background(.clear)
+        .environment(\.selectedRowMixDriver, mix)
+        .onChange(of: mixSnapshot) { snapshot in
+            mix.update(snapshot, cause: coordinator.selectionCause, reduceMotion: reduceMotion)
+        }
         .onChange(of: dragState.isDragging || projectDragState.isDragging) { isDragging in
             if isDragging {
                 installDragEndMonitors()
@@ -224,9 +236,10 @@ struct RecentsListView: View {
             }
         }
         // Option D: the selected session's project group on one card,
-        // narrowing into the rail's column.
-        .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
-            ProjectGroupCard(anchors: anchors)
+        // narrowing into the rail's column; a project switch cross-fades it
+        // from the old group to the new one (`SelectedRowMix`).
+        .backgroundPreferenceValue(RailGroupColumnKey.self) { groups in
+            ProjectGroupCard(groups: groups, selected: selectedGroupId(sections.active))
         }
     }
 
@@ -269,7 +282,10 @@ struct RecentsListView: View {
                 isActive: coordinator.isHistoryPresented,
                 staggerIndex: historyCascadeIndex(sections),
                 dialEpoch: SidebarDialTuning.epoch(),
-                onTap: { coordinator.presentHistory() }
+                onTap: {
+                    coordinator.noteSelectionCause(.click, for: SelectedRowMix.historyRowID)
+                    coordinator.presentHistory()
+                }
             )
         }
     }
@@ -389,6 +405,8 @@ struct RecentsListView: View {
             uniquingKeysWith: { first, _ in first }
         )
         let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
+        // Every group whose card is lit or fading carries its card's anchors.
+        let cardGroups = mix.cardGroups(selected: selectedGroupId)
         ForEach(items) { item in
             switch item {
             case .spacer:
@@ -404,7 +422,8 @@ struct RecentsListView: View {
                     monogram: monograms[group.id] ?? "?", isSelectedProject: group.id == selectedGroupId,
                     staggerIndex: cascade.headers[group.id] ?? cascadeStart
                 )
-                .railGroupColumn(group.id == selectedGroupId)
+                .environment(\.selectedRowMixGroup, group.id)
+                .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
             case .row(let session, let group):
                 if session.id != dragState.draggingSessionId {
                     if gapBeforeId == .some(session.id) {
@@ -416,7 +435,7 @@ struct RecentsListView: View {
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
-                    .railGroupColumn(group.id == selectedGroupId)
+                    .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
                 }
             }
         }
@@ -426,6 +445,25 @@ struct RecentsListView: View {
         if projectGapBefore == .some(nil) {
             ProjectDragGapView()
         }
+    }
+
+    /// The selected session's project group, or none (nothing selected,
+    /// pinned, History, or a layout without groups).
+    private func selectedGroupId(_ active: [AgentSession]) -> SidebarProjectGroup.ID? {
+        guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else { return nil }
+        return RailProjectColumn.selectedGroupId(
+            SidebarProjectGroup.make(active: active, projects: store.projects),
+            selectedSessionId: coordinator.sidebarSelectedSessionId
+        )
+    }
+
+    private func mixSnapshot(_ sections: SidebarSessionSections) -> SelectedRowMixDriver.Snapshot {
+        SelectedRowMixDriver.Snapshot(
+            selected: coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.activeSessionId,
+            group: selectedGroupId(sections.active) ?? SelectedRowMix.noGroup,
+            rows: Set(sections.pinned.map(\.id) + sections.active.map(\.id)),
+            collapsed: Set(ProjectAccordionState.decode(collapsedProjectsRaw).map(\.uuidString))
+        )
     }
 
     /// One project's accordion header. A real project's header is a drag

@@ -199,6 +199,7 @@ struct HistoryRowView: View {
             isActive: isActive,
             staggerIndex: staggerIndex,
             redlineID: Self.redlineID,
+            mixID: SelectedRowMix.historyRowID,
             railHelp: "History — \(subtitle)"
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
@@ -206,10 +207,7 @@ struct HistoryRowView: View {
             // In its chip like every row: "Thread tile icon".
             HistoryGlyph(size: size)
         }
-        .onTapGesture {
-            SelectedRowOutline.recordClick(Self.redlineID)
-            onTap()
-        }
+        .onTapGesture { onTap() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("History, \(subtitle)")
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : [.isButton])

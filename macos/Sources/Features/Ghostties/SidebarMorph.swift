@@ -381,7 +381,7 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
                     scale: MorphTileScale.scale(from: chipSizes.from, to: chipSizes.to, progress: progress),
                     // Hover only: selection is the row's outline
                     // (`SelectedRowOutlineSurface`).
-                    isActive: false, isHovered: isHovered, redlineID: chipID
+                    isHovered: isHovered, redlineID: chipID
                 )
                 .morphIdentityProbe(chipID)
             }

@@ -1288,6 +1288,14 @@ class WorkspaceViewContainer: NSView {
             }
             tick(CaptureFixture.selectSequenceTicks)
         }
+        if let newTab = CaptureFixture.newTab, CaptureFixture.claimHook("newTab") {
+            // As a new tab into that project: unfold it if folded, then the session.
+            DispatchQueue.main.asyncAfter(deadline: .now() + newTab.delay) { [weak self] in
+                guard let self, let project = self.store.projects.first(where: { $0.name == newTab.projectName }) else { return }
+                NotificationCenter.default.post(name: .workspaceDidCreateSessionInProject, object: self.window, userInfo: ["projectId": project.id])
+                self.coordinator.insertSessionForCapture(in: project, store: self.store)
+            }
+        }
         if let steps = CaptureFixture.morphSteps, CaptureFixture.claimHook("morphSteps") {
             // After the window has taken its capture size (0.5s, above).
             let log = CaptureFixture.harnessStateDir?.appendingPathComponent("morph-steps.log")

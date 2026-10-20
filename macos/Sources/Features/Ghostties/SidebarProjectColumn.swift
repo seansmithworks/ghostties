@@ -30,14 +30,12 @@ enum RailProjectColumn {
     /// The rail column: the tile plus this margin on every side (option D:
     /// 4, a 38pt column round the 30pt tile).
     static let defaultColumnInset: CGFloat = 4
-    /// The column's and the expanded group card's fill in dark: white at
-    /// this opacity over the chrome (`#2D2D2D` on `#242424`; beta.26
-    /// sidebar contrast, was 6%). The "Column tint" dial.
+    /// The "Column tint" dial's default: the dark flat fill the glass card
+    /// replaced (`ProjectGroupCardGlass`); the Colors panel's contrast
+    /// readout still reads it.
     static let defaultColumnTintOpacity: Double = 0.04
-    /// The column's and the expanded group card's fill in light: a lift,
-    /// white at this opacity over the chrome (`#F7F3F1` on `#F0E9E6`;
-    /// beta.26 sidebar contrast, was a 6% black shade), so secondary text
-    /// reads on it at the same contrast as on the chrome.
+    /// The light flat fill's lift the glass card replaced; the Colors
+    /// panel's contrast readout still reads it.
     static let lightColumnLiftOpacity: Double = 0.45
     /// The selected project's tile: 1 is full ink, 0 the plain tile tint.
     static let defaultSelectedTileFill: Double = 1
@@ -70,16 +68,6 @@ enum RailProjectColumn {
     /// The column's corner, concentric with the chip inside it (option D:
     /// 8 + 4 = 12). The expanded group card takes the same corner.
     static var columnCornerRadius: CGFloat { chipCornerRadius + columnInset }
-
-    /// The column's and the expanded group card's fill: white in both
-    /// appearances, a lift over the chrome, at `columnFillOpacity`.
-    static func columnFill(_ colorScheme: ColorScheme) -> Color {
-        Color.white.opacity(columnFillOpacity(colorScheme))
-    }
-    /// `columnFill`'s opacity: the light lift, or the dark "Column tint" dial.
-    static func columnFillOpacity(_ colorScheme: ColorScheme) -> Double {
-        colorScheme == .dark ? columnTintOpacity : lightColumnLiftOpacity
-    }
 
     /// The ink the chip tints are laid in: solid black in
     /// light, white in dark (`ChromeTheme.ink`), so an opacity here is the
@@ -129,20 +117,21 @@ enum RailProjectColumn {
     }
 }
 
-/// The bounds of every item in the selected project's group: the rail's
-/// column and the expanded list's group card both read it.
+/// The bounds of every item in each project group whose card is lit or
+/// fading, by group: the rail's column and the expanded list's group card
+/// both read it.
 struct RailGroupColumnKey: PreferenceKey {
-    static var defaultValue: [Anchor<CGRect>] = []
-    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
-        value += nextValue()
+    static var defaultValue: [SidebarProjectGroup.ID: [Anchor<CGRect>]] = [:]
+    static func reduce(value: inout [SidebarProjectGroup.ID: [Anchor<CGRect>]], nextValue: () -> [SidebarProjectGroup.ID: [Anchor<CGRect>]]) {
+        value.merge(nextValue()) { $0 + $1 }
     }
 }
 
 extension View {
     @ViewBuilder
-    func railGroupColumn(_ isInColumn: Bool) -> some View {
-        if isInColumn {
-            anchorPreference(key: RailGroupColumnKey.self, value: .bounds) { [$0] }
+    func railGroupColumn(_ group: SidebarProjectGroup.ID, isLit: Bool) -> some View {
+        if isLit {
+            anchorPreference(key: RailGroupColumnKey.self, value: .bounds) { [group: [$0]] }
         } else {
             self
         }
@@ -169,7 +158,10 @@ struct ProjectGroupCard: View {
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
-    let anchors: [Anchor<CGRect>]
+    /// Each lit or fading group's laid-out items.
+    let groups: [SidebarProjectGroup.ID: [Anchor<CGRect>]]
+    /// The selected session's group: its card carries the Redlines tag.
+    let selected: SidebarProjectGroup.ID?
 
     /// How far the expanded card reaches past the row frames on each side:
     /// the card inset, less the row's own leading padding before its tile
@@ -193,16 +185,24 @@ struct ProjectGroupCard: View {
     var body: some View {
         let metrics = widthModel.metrics(morphOverride ?? widthModel.morph, dials: morphDials)
         GeometryReader { proxy in
-            if let first = anchors.first {
-                let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
-                ProjectGroupCardShape(
-                    metrics: metrics,
-                    progress: metrics.progress,
-                    hasRows: anchors.count > 1,
-                    unionMinY: union.minY,
-                    unionMaxY: union.maxY,
-                    originX: proxy.frame(in: .named(Self.sidebarSpace)).minX
-                )
+            ForEach(groups.keys.sorted(), id: \.self) { id in
+                if let anchors = groups[id], let first = anchors.first {
+                    let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
+                    // The card's opacity: 1 at rest on the selected group,
+                    // cross-fading between groups on a project switch.
+                    SelectedRowMixGroupReader(id: id, fallback: 1) { card in
+                        ProjectGroupCardShape(
+                            metrics: metrics,
+                            progress: metrics.progress,
+                            hasRows: anchors.count > 1,
+                            unionMinY: union.minY,
+                            unionMaxY: union.maxY,
+                            originX: proxy.frame(in: .named(Self.sidebarSpace)).minX,
+                            isPrimary: id == selected
+                        )
+                        .opacity(card)
+                    }
+                }
             }
         }
         .allowsHitTesting(false)
@@ -224,6 +224,8 @@ private struct ProjectGroupCardShape: View, Animatable {
     /// The local space's x from the sidebar's leading edge, where the
     /// metrics measure from.
     let originX: CGFloat
+    /// The selected group's card: the one Redlines and the morph probe tag.
+    let isPrimary: Bool
 
     @ChromeScheme private var colorScheme
 
@@ -238,25 +240,90 @@ private struct ProjectGroupCardShape: View, Animatable {
         ).card(hasRows: hasRows)
         let top = unionMinY + card.tileTrim - card.verticalInset
         let bottom = max(top, unionMaxY - (hasRows ? card.chipTrim : card.tileTrim) + card.verticalInset)
-        RoundedRectangle(cornerRadius: card.cornerRadius, style: .continuous)
-            .fill(RailProjectColumn.columnFill(colorScheme))
+        ProjectGroupCardGlass(cornerRadius: card.cornerRadius)
             .frame(width: card.width, height: bottom - top)
-            .redlineFrame(RedlineID.groupCard)
-            .morphIdentityProbe(RedlineID.groupCard)
+            .redlineFrame(isPrimary ? RedlineID.groupCard : nil)
+            .morphIdentityProbe(isPrimary ? RedlineID.groupCard : nil)
             .position(x: card.minX - originX + card.width / 2, y: (top + bottom) / 2)
     }
 }
 
-/// A session row's (and History's) selection and hover mark (option D), in
-/// the expanded list and the rail alike: a tile-sized chip behind its glyph,
-/// flat (`RailProjectColumn.selectedChipTintOpacity`), no chromatic rim;
-/// hover is the row's hover tint.
-///
-/// Motion (`SidebarUISpring`): hover fades in and out on the hover spring,
-/// never overshooting; a new selection's chip travels from the previously
-/// selected row on the `.move` spring when the list provides a namespace
-/// (`sidebarSelectionChipNamespace`), else it appears in place. Reduce
-/// Motion: both snap.
+/// The active-group card's material (r8 05's glass, contract "Glass"), in
+/// tokens over the chrome. Dark: `ink` 11% at the top to 6% at the bottom
+/// (the mock's 12% top stop leaves `inkSecondary` under the header at
+/// 4.39:1; 11% keeps it at AA), a 1px inner top highlight of `ink` at 16%,
+/// a 0.5pt inner hairline of `ink` at 8%, a `0 2 12` glow of `shadow` at
+/// 6%. Light: `canvas` 90% to 55%, a 1px `canvas` top highlight, a 0.5pt
+/// `ink` hairline at 6%, a `0 2 12` shadow of `shadow` at 8%. The mock's
+/// backdrop blur is invisible over the flat chrome, so it is left out.
+struct ProjectGroupCardGlass: View {
+    let cornerRadius: CGFloat
+
+    @ChromeScheme private var colorScheme
+
+    /// The dark gradient's top stop: the mock's 12% less the AA margin.
+    static let darkTopStop: Double = 0.11
+
+    private struct Stops {
+        let top: Color, bottom: Color, highlight: Color, hairline: Color, shadow: Color
+    }
+
+    private static func stops(_ theme: ChromeTheme) -> Stops {
+        let ink = Color(theme.ink), canvas = Color(theme.canvas), shadow = Color(theme.shadow)
+        return theme.polarity == .dark
+            ? Stops(top: ink.opacity(darkTopStop), bottom: ink.opacity(0.06), highlight: ink.opacity(0.16),
+                    hairline: ink.opacity(0.08), shadow: shadow.opacity(0.06))
+            : Stops(top: canvas.opacity(0.9), bottom: canvas.opacity(0.55), highlight: canvas,
+                    hairline: ink.opacity(0.06), shadow: shadow.opacity(0.08))
+    }
+
+    /// The card's top stop over the chrome, opaque: the worst case for the
+    /// muted text under its header, and the colour that stands for the
+    /// card wherever one flat colour must.
+    static func representative(_ scheme: ColorScheme) -> NSColor {
+        let theme = ChromeTheme.active(scheme)
+        let chrome = theme.chrome.usingColorSpace(.sRGB) ?? theme.chrome
+        let (fill, alpha) = theme.polarity == .dark ? (theme.ink, darkTopStop) : (theme.canvas, 0.9)
+        let top = fill.usingColorSpace(.sRGB) ?? fill
+        func over(_ f: CGFloat, _ b: CGFloat) -> CGFloat { f * alpha + b * (1 - alpha) }
+        return NSColor(
+            srgbRed: over(top.redComponent, chrome.redComponent),
+            green: over(top.greenComponent, chrome.greenComponent),
+            blue: over(top.blueComponent, chrome.blueComponent), alpha: 1
+        )
+    }
+
+    var body: some View {
+        let stops = Self.stops(ChromeTheme.active(colorScheme))
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        shape
+            .fill(LinearGradient(colors: [stops.top, stops.bottom], startPoint: .top, endPoint: .bottom))
+            // Inner top highlight: the shape less itself 1pt lower.
+            .overlay {
+                ZStack {
+                    shape.fill(stops.highlight)
+                    shape.offset(y: 1).fill(Color.black).blendMode(.destinationOut)
+                }
+                .compositingGroup()
+                .clipShape(shape)
+            }
+            .overlay { shape.strokeBorder(stops.hairline, lineWidth: 0.5) }
+            // An outer shadow only, as CSS draws it: the glow less the shape.
+            .background {
+                ZStack {
+                    shape.fill(Color.black).shadow(color: stops.shadow, radius: 6, x: 0, y: 2)
+                    shape.fill(Color.black).blendMode(.destinationOut)
+                }
+                .compositingGroup()
+            }
+    }
+}
+
+/// A session row's (and History's) hover mark (option D), in the
+/// expanded list and the rail alike: a tile-sized chip behind its glyph,
+/// the row's hover tint, fading in and out on the hover spring, never
+/// overshooting. Selection is the row's outline (`SelectedRowOutlineSurface`).
+/// Reduce Motion: it snaps.
 struct SidebarRowChipBackground: View {
     /// The chip's container: the rail's chip side (`RailProjectColumn.chipSize`).
     let size: CGFloat
@@ -264,59 +331,21 @@ struct SidebarRowChipBackground: View {
     /// (`MorphTileScale`): the sidebar's chip over the rail's at 0, 1 on the
     /// rail.
     var scale: CGFloat = 1
-    let isActive: Bool
     let isHovered: Bool
     /// DEBUG Redlines tag for the chip's frame.
     var redlineID: String? = nil
 
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @ChromeScheme private var colorScheme
-    @Environment(\.sidebarSelectionChipNamespace) private var selectionNamespace
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
-        ZStack {
-            // Hover keeps the row hover's `.primary` tint, under the
-            // selection. Carries the Redlines tag: always present, same
-            // frame as the selection.
-            // A tint: it settles on either change, never riding the
-            // selection's bounce.
-            face(shape.fill(Color.primary.opacity(isHovered && !isActive ? RailProjectColumn.hoverChipTintOpacity : 0)), redlineID: redlineID)
-                .animation(SidebarUISpring.hover.settle(), value: isHovered)
-                .animation(SidebarUISpring.move.settle(), value: isActive)
-            // Selection: the canvas's alpha on solid ink. Matched outside
-            // the morph's scale, so the travel is exact at any scale. Only
-            // its geometry bounces; its fade in and out settles.
-            if isActive {
-                face(shape.fill(SidebarColors.selectedRowTint(colorScheme)), redlineID: nil)
-                    .modifier(SelectionChipTravel(namespace: selectionNamespace))
-                    .transition(AnyTransition.opacity.animation(SidebarUISpring.move.settle()))
-            }
-        }
-        .animation(SidebarUISpring.move.animation(), value: isActive)
-    }
-
-    private func face(_ fill: some View, redlineID: String?) -> some View {
-        fill
+        // Carries the Redlines tag: always present.
+        shape.fill(Color.primary.opacity(isHovered ? RailProjectColumn.hoverChipTintOpacity : 0))
             .frame(width: size, height: size)
             // Inside the scale, so Redlines reports the drawn chip.
             .redlineFrame(redlineID)
             .scaleEffect(scale)
-    }
-}
-
-/// The selected chip's travel between rows: one matched geometry across the
-/// list's rows, so the chip leaving the old row and the one arriving in the
-/// new row are one moving chip.
-private struct SelectionChipTravel: ViewModifier {
-    let namespace: Namespace.ID?
-
-    func body(content: Content) -> some View {
-        if let namespace {
-            content.matchedGeometryEffect(id: SidebarUISpring.selectionChipID, in: namespace)
-        } else {
-            content
-        }
+            .animation(SidebarUISpring.hover.settle(), value: isHovered)
     }
 }
 
