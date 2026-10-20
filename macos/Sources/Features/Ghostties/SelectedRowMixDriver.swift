@@ -184,7 +184,10 @@ struct SelectedRowMixRowReader<Content: View>: View {
     @State private var settleTick = 0
 
     var body: some View {
-        let _ = settleTick
+        // An event that touched this reader (`generation`) or the end of its
+        // motion (`settleTick`) re-reads the timeline, so `running` unpauses
+        // the clock at the event and pauses it again at rest.
+        let _ = (generation, settleTick)
         let end = id.flatMap { driver?.timeline?.rowSettledAt($0) } ?? 0
         let running = driver.map { $0.ms() < end } ?? false
         TimelineView(.animation(minimumInterval: nil, paused: !running)) { context in
@@ -217,7 +220,10 @@ struct SelectedRowMixGroupReader<Content: View>: View {
     @State private var settleTick = 0
 
     var body: some View {
-        let _ = settleTick
+        // An event that touched this reader (`generation`) or the end of its
+        // motion (`settleTick`) re-reads the timeline, so `running` unpauses
+        // the clock at the event and pauses it again at rest.
+        let _ = (generation, settleTick)
         let end = id.flatMap { driver?.timeline?.cardSettledAt($0) } ?? 0
         let running = driver.map { $0.ms() < end } ?? false
         TimelineView(.animation(minimumInterval: nil, paused: !running)) { context in
