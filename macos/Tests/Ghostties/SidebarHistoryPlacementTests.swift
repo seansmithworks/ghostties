@@ -276,9 +276,10 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     private func selectedChip(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
-        let cardAlpha = RailProjectColumn.columnFillOpacity(.light)
+        // The glass card at its top stop (`ProjectGroupCardGlass.representative`).
+        let card = try XCTUnwrap(ProjectGroupCardGlass.representative(.light).usingColorSpace(.sRGB))
         let chipAlpha = RailProjectColumn.selectedChipTintOpacity
-        let cardSum = base * (1 - cardAlpha) + 3 * cardAlpha
+        let cardSum = card.redComponent + card.greenComponent + card.blueComponent
         let cardDrop = base - cardSum
         let chipOverCardDrop = base - cardSum * (1 - chipAlpha)
         let lowerBound = (cardDrop + chipOverCardDrop) / 2

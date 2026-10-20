@@ -115,7 +115,8 @@ struct SidebarBeta26FeedbackGateTests {
         try withDials {
             let ink = try resolved(NSColor(WorkspaceLayout.emptyProjectForeground), scheme)
             let chromeRGB = try rgba(chrome(scheme)).rgb
-            let card = over(try rgba(NSColor(RailProjectColumn.columnFill(scheme))), chromeRGB)
+            // The glass card at its top stop (`ProjectGroupCardGlass.representative`), opaque.
+            let card = try rgba(ProjectGroupCardGlass.representative(scheme)).rgb
             for (name, base) in [("chrome", chromeRGB), ("group card", card)] {
                 // Text alpha is composited over its surface before measuring.
                 let text = over(ink, base)
@@ -132,7 +133,8 @@ struct SidebarBeta26FeedbackGateTests {
         try withDials {
             let ink = try resolved(NSColor(WorkspaceLayout.emptyProjectForeground), scheme)
             let chromeRGB = try rgba(chrome(scheme)).rgb
-            let card = over(try rgba(NSColor(RailProjectColumn.columnFill(scheme))), chromeRGB)
+            // The glass card at its top stop (`ProjectGroupCardGlass.representative`), opaque.
+            let card = try rgba(ProjectGroupCardGlass.representative(scheme)).rgb
             // `ProjectMonogramTileFace.tint`, unselected: white 7% dark,
             // (40,34,30) at `RailProjectTile.emptyTintOpacity` light: an empty
             // project's tile is lighter than a live one's.
