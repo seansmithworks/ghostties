@@ -79,7 +79,7 @@ enum SidebarColors {
         #if DEBUG
         if ChromeTheme.activeIsGhostties(scheme), let tuned = SidebarColorTuning.override(.selectedRowTint, scheme, defaults: defaults) { return tuned.color }
         #endif
-        return RailProjectColumn.tintInk(scheme).opacity(RailProjectColumn.selectedChipTintOpacity)
+        return RailProjectColumn.tintInk(scheme).opacity(RailProjectColumn.selectedChipTintOpacity(scheme))
     }
 
     /// An empty project's header and monogram
@@ -184,7 +184,7 @@ enum SidebarColorTuning {
                 ? RGBA(theme.ink, scheme).withAlpha(ChromeTheme.Step.tile.opacity(.dark))
                 : RGBA(theme.tileFillBase, scheme).withAlpha(RailProjectTile.tintOpacity)
         case .selectedRowTint:
-            return RGBA(ChromeTheme.ghostties(scheme).ink, scheme).withAlpha(RailProjectColumn.selectedChipTintOpacity)
+            return RGBA(ChromeTheme.ghostties(scheme).ink, scheme).withAlpha(RailProjectColumn.selectedChipTintOpacity(scheme))
         }
     }
 
