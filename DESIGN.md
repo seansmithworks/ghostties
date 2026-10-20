@@ -124,7 +124,7 @@ Every chrome colour that changes with the theme lives in one value type, `Chrome
 
 Named steps on those five:
 
-- `Step.row` ink at 4% (light) / 6% (dark): the active and hovered session row. `Step.composerRow` 6% / 10%: the highlighted row in the Cmd+T composer. `Step.tile` 7%: a project tile's plain fill in dark. The selected row's tint (`selectedRowTint`) is `ink` at 10% in light and none in dark: `inkSecondary` is 4.54:1 on the dark glass card's top stop and any tint over it falls below AA (10% measured 3.35:1), so dark marks the row with the outline alone.
+- `Step.row` ink at 4% (light) / 6% (dark): the active and hovered session row. `Step.composerRow` 6% / 10%: the highlighted row in the Cmd+T composer. `Step.tile` 7%: a project tile's plain fill in dark. The selected row's tint (`selectedRowTint`) is 10% `ink` in light and 10% black in dark: white over the dark glass card drops `inkSecondary` to 3.35:1, under AA, while black keeps it at 4.98:1.
 - `Lift.container` and `Lift.border`: the chrome lifted toward white. `container` is the expanded project group's surface (white in light, `0.16` grey in dark); `border` is the tray glass's rim (`#2A2A2A` in dark).
 
 One value sits outside the five because no step of them reproduces the shipped colour: `tileFillBase` (`#28221E`, the light tile fill's base), a candidate to merge into `ink` when a design pass allows a visible shift. A project tile's monogram and the selected project's fill are plain `ink` (`#000000` / `#FFFFFF`); the separate `tileInk` (`#232120` / `#F0EFED`) was merged into it.

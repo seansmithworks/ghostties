@@ -42,13 +42,11 @@ enum RailProjectColumn {
     /// The selected chip's fill (option D `#0000001A`). Flat: no chromatic
     /// rim.
     static let selectedChipTintOpacity: Double = 0.10
-    /// The selected row's fill in dark: none. `inkSecondary` is 4.54:1 on
-    /// the glass card's top stop and any `ink` tint over it drops below AA
-    /// (10% gave 3.35:1), so the outline alone marks the row.
-    static let darkSelectedChipTintOpacity: Double = 0
-    /// `selectedChipTintOpacity` in `scheme`'s appearance.
-    static func selectedChipTintOpacity(_ scheme: ColorScheme) -> Double {
-        scheme == .dark ? darkSelectedChipTintOpacity : selectedChipTintOpacity
+    /// The selected row's fill: `ink` at `selectedChipTintOpacity` in light,
+    /// black at the same opacity in dark. White over the dark glass card
+    /// fails AA for `inkSecondary` (3.35:1); black keeps it at 4.98:1.
+    static func selectedChipTint(_ scheme: ColorScheme) -> Color {
+        (scheme == .dark ? Color.black : tintInk(scheme)).opacity(selectedChipTintOpacity)
     }
     /// A hovered, unselected chip's fill: subordinate to the selected tint.
     static let hoverChipTintOpacity: Double = 0.04
