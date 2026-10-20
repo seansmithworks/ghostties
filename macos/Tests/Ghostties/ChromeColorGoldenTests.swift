@@ -18,7 +18,7 @@ import Testing
 ///   (DEBUG), `TrayGlassStyle.{glassTint, surfaceFill, rimColor, iconColor,
 ///   chromaticColors, light, dark, opaqueDarkEdgeColor}`,
 ///   `SidebarDialTuning.trayGlass(for:state:defaults:)`,
-///   `RailProjectColumn.{columnFill, tintInk}`, `RailCountBadge.style`.
+///   `RailProjectColumn.tintInk`, `RailCountBadge.style`.
 /// - Planned for deletion or rename (slice 1 deletes the WorkspaceLayout
 ///   colour statics, so each reader below must be repointed to the new
 ///   accessor; the golden stays): `WorkspaceLayout.{textSecondaryLight/Dark,
@@ -107,8 +107,6 @@ struct ChromeColorGoldenTests {
         add("tile.badgeText") { rgba(RailProjectTile.badgeText($0), $0) }
         add("tile.countBadge.fill") { rgba(RailCountBadge.style(selected: false, colorScheme: $0).fill, $0) }
         add("tile.countBadge.text") { rgba(RailCountBadge.style(selected: false, colorScheme: $0).text, $0) }
-        add("column.fill") { rgba(RailProjectColumn.columnFill($0), $0) }
-        add("column.fillDarkAtDefaultTint") { rgba(Color.white.opacity(RailProjectColumn.defaultColumnTintOpacity), $0) }
         add("column.lightLift") { rgba(Color.white.opacity(RailProjectColumn.lightColumnLiftOpacity), $0) }
         add("column.selectedChip") { rgba(RailProjectColumn.tintInk($0).opacity(RailProjectColumn.selectedChipTintOpacity), $0) }
         add("column.hoverChip") { rgba(RailProjectColumn.tintInk($0).opacity(RailProjectColumn.hoverChipTintOpacity), $0) }
@@ -276,10 +274,6 @@ struct ChromeColorGoldenTests {
         "chrome.background|light": [0.941, 0.914, 0.902, 1.0],
         "chrome.hoverBarFill|dark": [0.14, 0.14, 0.14, 1.0],
         "chrome.hoverBarFill|light": [0.941, 0.914, 0.902, 1.0],
-        "column.fillDarkAtDefaultTint|dark": [1.0, 1.0, 1.0, 0.04],
-        "column.fillDarkAtDefaultTint|light": [1.0, 1.0, 1.0, 0.04],
-        "column.fill|dark": [1.0, 1.0, 1.0, 0.04],
-        "column.fill|light": [1.0, 1.0, 1.0, 0.45],
         "column.hoverChip|dark": [1.0, 1.0, 1.0, 0.04],
         "column.hoverChip|light": [0.0, 0.0, 0.0, 0.04],
         "column.lightLift|dark": [1.0, 1.0, 1.0, 0.45],
