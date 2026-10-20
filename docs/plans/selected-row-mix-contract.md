@@ -6,7 +6,8 @@ Sean's pick (2026-10-19, r9 board, Mix): row motion **04 Hand-off**, project swi
 trace): nothing is traced any more; the outline cross-fades.
 
 - **Rest:** the selected row is a 1pt `inkSecondary` outline at 0.4 over the
-  selected-row tint (`SidebarColors.selectedRowTint`), exactly as 06's rest. One
+  selected-row tint (`SidebarColors.selectedRowTint`), exactly as 06's rest. The dark tint
+  value is set by Amendment 1 below. One
   active-group card (the glass card) sits behind the project holding the active
   session; its tile is ink-filled. Tokens only, no new colour, no edge stripe.
 - **Row switch (same project), click:** the old row's outline and tint fade out as the
@@ -152,12 +153,19 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
 - **`ChromeColorGoldenTests`** goldens `column.fill|dark/light` and `column.fillDarkAtDefaultTint`: same flat fill.
 - **`SidebarContrastTests.secondaryTextClearsAAOnCardAndChrome`:** its approved dark card floor (5.6:1) caps the dark card at about 4.5% white, which is the card Sean reported as invisible; even the glass's weakest stop (6%) gives 5.35:1. It conflicts with the glass; see the decision below. AA (4.5) stays.
 - **`SidebarBeta26FeedbackGateTests` empty-project AA tests and `SidebarRetiredDialsTests`/`SidebarHistoryPlacementTests` reads of `columnFillOpacity(.light)`:** they treat `columnFill` as the card's fill; repoint them at the new card's representative colour (its top stop, the worst case for text).
+- **`SidebarBeta26FeedbackGateTests.emptyProjectTileGlyphClearsAA`, the "group card" case** (amended 2026-10-19, removed by the amender, not the builder): an empty project never holds the active-group card, so the tile glyph is never drawn on it. The chrome case stays.
 - **Still valid, keep:** `SelectedRowOutlinePixelTests` (resting outline + tint, light), `SelectedRowFootprintTests` (rail chip footprint, row-wide expanded surface).
+
+## Amendments (2026-10-19, Sean)
+
+1. **Dark selected-row subtitle must clear AA.** Measured 3.3:1: `inkSecondary` on the 10% selected tint over the glass card. Fix: lower the dark selected-row tint until `inkSecondary` clears 4.5:1 on the dark card's top stop (tint composited on the card). The subtitle colour is unchanged. The tint is therefore "whatever value clears 4.5:1 for `inkSecondary` on the dark card top stop"; the builder reports the value. Light is unchanged.
+2. **Dark group-card text floor 5.6 to 4.5 (commit `cd006b697`) is confirmed.** "Decision 2" below is resolved.
+3. **Empty-project tile glyph, "on card" case dropped** from `emptyProjectTileGlyphClearsAA`; see "Tests to retire". Off-card cases stay.
 
 ## Decisions
 
 1. **Overshoot size: decided, 1.2** (2026-10-19). 1.1 peaked at +0.64% (about 0.3pt on a 48pt row), present but invisible; 1.2 peaks at +2.25%, under the 3% cap.
-2. **Dark card contrast floor: Sean to confirm.** The gate requires AA 4.5:1 for `inkSecondary` on the card's top band, which caps the dark top stop at about 11% `ink`. `SidebarContrastTests`' approved 5.6:1 dark floor cannot hold with any glass that makes the card visible (see "Tests to retire").
+2. **Dark card contrast floor: confirmed by Sean (2026-10-19).** The gate requires AA 4.5:1 for `inkSecondary` on the card's top band, which caps the dark top stop at about 11% `ink`. `SidebarContrastTests`' approved 5.6:1 dark floor cannot hold with any glass that makes the card visible (see "Tests to retire").
 
 <details><summary>Resolutions of ambiguities in the design source</summary>
 
