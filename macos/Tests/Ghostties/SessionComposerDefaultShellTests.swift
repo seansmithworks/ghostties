@@ -21,7 +21,7 @@ struct SessionComposerDefaultShellTests {
     /// in the project: index 0 used to be seeded and so was Browser.
     @Test func blankQuerySelectsShellEvenWhenBrowserLeads() {
         let options = [option(.browser), option(.shell), option(.claudeCode)]
-        let index = SessionComposerPalette.restStateSelectionIndex(in: options)
+        let index = SessionComposerPalette.restStateSelectionIndex(in: options) ?? 0
         #expect(options[index].template?.kind == .shell)
     }
 

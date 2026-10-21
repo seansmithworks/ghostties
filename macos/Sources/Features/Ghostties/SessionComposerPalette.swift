@@ -912,15 +912,14 @@ struct SessionComposerPalette: View {
     /// Pure composition of lane 1 — extracted as a static, directly
     /// testable seam (this file's established pattern, e.g.
     /// `SessionComposerStore.resolveLaunchTemplate`) because `onAppear`'s
-    /// `selectedIndex = bestSelectionIndex(in: flattenedOptions)` seeds off
-    /// `flattenedOptions[0]`, i.e. THIS array's first element whenever the
-    /// query is blank (`SessionComposerRanking.bestMatchIndex` returns 0 for
-    /// a blank query) — and neither `flattenedOptions` nor `onAppear`'s
+    /// `selectedIndex = bestSelectionIndex(in: flattenedOptions)` no longer
+    /// seeds off `flattenedOptions[0]` at a blank query: it selects Shell
+    /// (`restStateSelectionIndex`), so lane order decides only what RENDERS
+    /// first, not what Return commits — and neither `flattenedOptions` nor `onAppear`'s
     /// `@State` write is otherwise reachable from a test (no SwiftUI
     /// view-test harness in this repo). G-F8: pinned options always precede
-    /// non-pinned recents here, so a pin existing moves index 0 from "most
-    /// recent" to "top pinned" — a real, deliberate first-open-Return change
-    /// (11.11, flagged to Sean), proven by
+    /// non-pinned recents here (display order only; the blank-query default
+    /// is Shell regardless), proven by
     /// `SessionComposerLaneOrderingTests.composeLane1PutsThePinnedHeadAtIndexZero`.
     static func composeLane1(pinned: [ComposerOption], recent: [ComposerOption]) -> [ComposerOption] {
         let pinnedIds = Set(pinned.map { $0.id })
@@ -947,25 +946,31 @@ struct SessionComposerPalette: View {
         return Array(options.prefix(restStateLaneCap))
     }
 
+    /// The single Shell predicate: the built-in Shell (by id) if listed,
+    /// else the first shell-kind template.
+    private static func shellIndex(in options: [ComposerOption]) -> Int? {
+        options.firstIndex { $0.template?.id == AgentTemplate.shell.id }
+            ?? options.firstIndex { $0.template?.kind == .shell }
+    }
+
     /// Sean's rule (2026-10-20): the default is ALWAYS Shell. At a blank
     /// query the highlighted row is Shell, never whatever happens to lead
     /// the list — index 0 is a pin, the project's last-used template, or
     /// its `defaultTemplateId`, any of which can be Browser (the bug: the
     /// ghost read "<repo> > Default > Browser" and Tab/Return opened a
     /// browser). Browser or any other template opens only when typed or
-    /// picked. Falls back to 0 only if no Shell row exists at all.
-    static func restStateSelectionIndex(in options: [ComposerOption]) -> Int {
-        options.firstIndex { $0.template?.id == AgentTemplate.shell.id }
-            ?? options.firstIndex { $0.template?.kind == .shell }
-            ?? 0
+    /// picked, so a non-Shell template is NEVER selected implicitly: with
+    /// no Shell row the first non-template row (a project row, whose
+    /// Return opens a Shell at its root, 933e910ce) is used, else `nil`.
+    static func restStateSelectionIndex(in options: [ComposerOption]) -> Int? {
+        shellIndex(in: options) ?? options.firstIndex { $0.template == nil }
     }
 
-    /// Hoists Shell to the head of the rest-state TEMPLATES lane, so the
-    /// 3-row rest-state cap (`applyRestStateCap`) can't drop it when a
-    /// project default or presets sort ahead of it and the default
-    /// selection above has a row to land on. Stable otherwise.
+    /// Hoists Shell (same predicate as the selection) to the head of the
+    /// rest-state TEMPLATES lane, so the 3-row rest-state cap
+    /// (`applyRestStateCap`) can't drop it. Stable otherwise.
     static func shellFirst(_ options: [ComposerOption]) -> [ComposerOption] {
-        guard let i = options.firstIndex(where: { $0.template?.kind == .shell }), i > 0 else { return options }
+        guard let i = shellIndex(in: options), i > 0 else { return options }
         var result = options
         result.insert(result.remove(at: i), at: 0)
         return result
@@ -1037,11 +1042,10 @@ struct SessionComposerPalette: View {
     /// navigation and selection clamping. COMMAND renders last — matching
     /// templates in TEMPLATES rank first, per the locked design.
     ///
-    /// G-F8 (Step 2): lane 1 is now pinned-then-recent, not recent-only, so
-    /// index 0 here — what `onAppear` seeds `selectedIndex` to — is the top
-    /// PINNED template whenever any pin exists, not the most recent one.
-    /// Deliberate consequence of pinned-first ordering (11.11 flagged to
-    /// Sean), not an accident of this refactor.
+    /// G-F8 (Step 2): lane 1 is pinned-then-recent, so index 0 here is the
+    /// top PINNED template when any pin exists. That is display order only:
+    /// `onAppear` seeds `selectedIndex` via `bestSelectionIndex`, which
+    /// selects Shell at a blank query regardless of what leads.
     private var flattenedOptions: [ComposerOption] {
         lane1Options + lane2Options + filteredProjectOptions + commandOptions
     }
@@ -1067,7 +1071,7 @@ struct SessionComposerPalette: View {
     /// itself). Ties — including a blank query, where every option is
     /// untiered — keep index 0, i.e. current section order, so unambiguous
     /// queries and the empty-query default are unchanged.
-    private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
+    private func bestSelectionIndex(in options: [ComposerOption]) -> UInt? {
         // Composer variant G (Sean's ruling, 2026-08-31): a typed `>` is the
         // deliberate, formal way to declare a branch — once the field offers
         // a create-branch/create-worktree row for it (`typedBranchCreateOffer`),
@@ -1097,7 +1101,7 @@ struct SessionComposerPalette: View {
         // Blank field: the default is Shell, regardless of pins, recents
         // or the project's own default template (see `restStateSelectionIndex`).
         if composerStore.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return UInt(Self.restStateSelectionIndex(in: options))
+            return Self.restStateSelectionIndex(in: options).map { UInt($0) }
         }
         if let index = Self.projectWordIndex(
             in: options,
@@ -1165,12 +1169,10 @@ struct SessionComposerPalette: View {
             .onAppear {
                 resumeState.reset()
                 composerStore.open(projectBinding: request.projectBinding, workspaceStore: store)
-                // S5: row 0 is the project's default template (Phase 1's
-                // default-first ordering) and the legend reads "↵ start" —
-                // seed the selection so Return isn't a dead key on first
-                // open. `bestSelectionIndex` is index 0 here since the
-                // query is blank on first open (D1's cross-section ranking
-                // only applies once there's a query to rank against).
+                // S5: the legend reads "↵ start" — seed the selection so
+                // Return isn't a dead key on first open. The query is blank
+                // here, so `bestSelectionIndex` selects Shell (the default is
+                // always Shell, whatever pins/recents/project default lead).
                 selectedIndex = bestSelectionIndex(in: flattenedOptions)
                 // R14: open beat. `onAppear` doesn't refire on a fast
                 // re-open of an already-mounted palette — see the matching
@@ -1214,6 +1216,14 @@ struct SessionComposerPalette: View {
                 resumeState.collapseSections()
             }
             .onChange(of: composerStore.selectedProjectId) { _ in
+                // A blank field re-seeds the Shell default for the NEW
+                // project (searchText is unchanged, so its handler never
+                // fires); clamping alone would keep a stale in-range index
+                // that can land on Browser in the new list.
+                if composerStore.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    reselectBestMatch()
+                    return
+                }
                 // N5: changing the project via the dropdown or a project row
                 // changes `flattenedOptions.count` with `query` unchanged, so
                 // the query-only clamp above never ran — `selectedOption`
