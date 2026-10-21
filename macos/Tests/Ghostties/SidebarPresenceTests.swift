@@ -638,6 +638,70 @@ struct ClosedSidebarEdgeStripTests {
         }
     }
 
+    // MARK: Defect 2 — a reveal never saves a mode or width
+
+    private static let widthKeys = ["ghostties.sidebarWidth.projectFirst", "ghostties.sidebarWidth.taskFirst"]
+
+    /// Drags the sidebar's own drag handle by `dx` points, mouse-down to
+    /// mouse-up, by sending the events to the handle directly (whether or
+    /// not it is shown).
+    private func dragSidebarEdge(_ container: WorkspaceViewContainer, in window: NSWindow, by dx: CGFloat) throws {
+        let handle = try #require(container.subviews.first {
+            String(describing: type(of: $0)) == "PanelDragHandleView"
+                && $0.frame == container.sidebarDragHandleFrameForTesting
+        })
+        let start = handle.convert(NSPoint(x: handle.bounds.midX, y: handle.bounds.midY), to: nil)
+        func mouse(_ type: NSEvent.EventType, x: CGFloat) -> NSEvent {
+            NSEvent.mouseEvent(
+                with: type, location: NSPoint(x: x, y: start.y), modifierFlags: [],
+                timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1
+            )!
+        }
+        handle.mouseDown(with: mouse(.leftMouseDown, x: start.x))
+        handle.mouseDragged(with: mouse(.leftMouseDragged, x: start.x + dx))
+        handle.mouseUp(with: mouse(.leftMouseUp, x: start.x + dx))
+    }
+
+    /// Dragging the edge past the snap point during a reveal must not
+    /// collapse to the rail — which would save `.collapsed` as the user's
+    /// mode.
+    @Test func dragPastTheSnapPointDuringHoverRevealDoesNotCollapse() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let store = makeStore()
+            let (container, window) = makeWindow(mode: .closed, store: store)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            spin(0.6)  // past the open and the 0.25s transition debounce
+            try dragSidebarEdge(container, in: window, by: -400)
+            #expect(container.sidebarModeForTesting != .collapsed)
+            #expect(store.sidebarMode != .collapsed)
+            #expect(store.sidebarMode != .pinned)
+        }
+    }
+
+    /// A drag during a reveal must not save a width: with no width saved
+    /// yet, none is saved after the drag's mouse-up. (The test host's own
+    /// defaults hold the keys; they are put back afterwards.)
+    @Test func dragDuringHoverRevealDoesNotSaveAWidth() throws {
+        let defaults = UserDefaults.standard
+        let saved = Self.widthKeys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(Self.widthKeys, saved) {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+            }
+        }
+        Self.widthKeys.forEach { defaults.removeObject(forKey: $0) }
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            spin(0.6)
+            try dragSidebarEdge(container, in: window, by: 40)
+            #expect(Self.widthKeys.allSatisfy { defaults.object(forKey: $0) == nil })
+        }
+    }
+
     /// The rail never gets the strip: its hover reveal has its own gate.
     @Test func railInstallsNoEdgeStrip() {
         let (container, window) = makeWindow(mode: .collapsed)
