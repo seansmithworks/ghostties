@@ -117,6 +117,53 @@ struct AgentCloseRequestTests {
         window.orderOut(nil)
     }
 
+    /// Inline DevTools is a second CEF browser that shares the view's client
+    /// and so its life-span handler. Closing it is not the page closing: the
+    /// session and its tab must survive.
+    @Test func closingInlineDevToolsLeavesTheBrowserAlone() async {
+        CEFBridgeManager.initializeIfNeeded()
+        guard CEFBridgeManager.isInitialized else {
+            Issue.record("CEF did not initialize; cannot exercise the close path (this must fail, not skip)")
+            return
+        }
+
+        let window = CountingWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        window.contentView = host
+        let recorder = Recorder()
+        let view = CEFBrowserView(frame: NSRect(x: 0, y: 0, width: 800, height: 300), url: "about:blank")
+        view.delegate = recorder
+        host.addSubview(view)
+        let devToolsHost = NSView(frame: NSRect(x: 0, y: 300, width: 800, height: 300))
+        host.addSubview(devToolsHost)
+        window.orderBack(nil)
+
+        await pump(until: { recorder.created }, timeout: 20)
+        guard recorder.created else {
+            Issue.record("CEF browser was never created; cannot exercise the close path")
+            window.orderOut(nil)
+            return
+        }
+
+        view.showInlineDevTools(devToolsHost)
+        await pump(until: { false }, timeout: 2)
+        view.closeDevTools()
+        await pump(until: { recorder.closeRequests > 0 || view.window == nil }, timeout: 3)
+
+        #expect(recorder.closeRequests == 0, "closing DevTools was reported as the page closing")
+        #expect(view.window != nil, "closing DevTools tore down the main browser view")
+        #expect(view.executeDevToolsMethod(forTesting: "Runtime.enable"), "the main browser is no longer there")
+        view.closeBrowser()
+        await pump(until: { false }, timeout: 0.5)
+        window.contentView = nil
+        window.orderOut(nil)
+    }
+
     @Test func appInitiatedCloseDoesNotRequestClose() async {
         CEFBridgeManager.initializeIfNeeded()
         guard CEFBridgeManager.isInitialized else {
