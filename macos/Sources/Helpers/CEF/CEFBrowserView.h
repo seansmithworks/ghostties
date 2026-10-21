@@ -59,6 +59,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// Close DevTools (works for both popup and inline).
 - (void)closeDevTools;
 - (void)closeBrowser;
+/// Asks Chromium for this browser's DevTools target id (the id CDP clients
+/// see in `/json/list` and `Target.getTargets`). Waits for the browser to
+/// materialise, then runs `Target.getTargetInfo` in-process. Calls
+/// `completion` on the main thread with the id, or nil if it could not be
+/// determined within `timeout` seconds.
+- (void)fetchDevToolsTargetIdWithTimeout:(NSTimeInterval)timeout
+                              completion:(void (^)(NSString * _Nullable targetId))completion;
 /// Attempt browser creation again after a failure. No-op if a browser
 /// already exists or is already pending. Unsafe to rely on alone when
 /// `creationFailedDueToPreviousCrash` is YES — it will simply re-detect the

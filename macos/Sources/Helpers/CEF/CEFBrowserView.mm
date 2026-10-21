@@ -13,6 +13,9 @@
 #import "include/cef_browser.h"
 #import "include/cef_client.h"
 #import "include/cef_life_span_handler.h"
+#import "include/cef_devtools_message_observer.h"
+#import "include/cef_registration.h"
+#include <vector>
 #import "include/cef_display_handler.h"
 #import "include/cef_load_handler.h"
 #import "include/wrapper/cef_helpers.h"
@@ -217,6 +220,45 @@ private:
     IMPLEMENT_REFCOUNTING(GhosttiesCefClient);
 };
 
+#pragma mark - GhosttiesTargetIdObserver
+
+/// One-shot observer for a single `Target.getTargetInfo` call. Reads
+/// `targetInfo.targetId` out of the method result and hands it to the
+/// completion on the main queue.
+class GhosttiesTargetIdObserver : public CefDevToolsMessageObserver {
+public:
+    explicit GhosttiesTargetIdObserver(void (^completion)(NSString * _Nullable))
+        : completion_([completion copy]) {}
+
+    void SetMessageId(int messageId) { messageId_ = messageId; }
+
+    void OnDevToolsMethodResult(CefRefPtr<CefBrowser> browser,
+                                int message_id,
+                                bool success,
+                                const void* result,
+                                size_t result_size) override {
+        if (message_id != messageId_ || !completion_) return;
+        NSString *targetId = nil;
+        if (success && result && result_size > 0) {
+            NSData *data = [NSData dataWithBytes:result length:result_size];
+            id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if ([json isKindOfClass:[NSDictionary class]]) {
+                id info = ((NSDictionary *)json)[@"targetInfo"];
+                id tid = [info isKindOfClass:[NSDictionary class]] ? ((NSDictionary *)info)[@"targetId"] : nil;
+                if ([tid isKindOfClass:[NSString class]] && [(NSString *)tid length] > 0) targetId = tid;
+            }
+        }
+        void (^done)(NSString * _Nullable) = completion_;
+        completion_ = nil;
+        dispatch_async(dispatch_get_main_queue(), ^{ done(targetId); });
+    }
+
+private:
+    int messageId_ = 0;
+    void (^completion_)(NSString * _Nullable);
+    IMPLEMENT_REFCOUNTING(GhosttiesTargetIdObserver);
+};
+
 #endif // GHOSTTIES_CEF_AVAILABLE
 
 #pragma mark - CEFBrowserView private interface
@@ -225,8 +267,14 @@ private:
 #if GHOSTTIES_CEF_AVAILABLE
     CefRefPtr<CefBrowser> _browser;
     CefRefPtr<GhosttiesCefClient> _client;
+    /// Keeps DevTools observers registered until they have delivered.
+    std::vector<CefRefPtr<CefRegistration>> _devToolsRegistrations;
 #endif
 }
+
+/// Work waiting for `OnAfterCreated` (e.g. a target-id lookup issued right
+/// after creating the view). Drained in -_browserDidCreate:.
+@property (nonatomic, strong) NSMutableArray<void (^)(void)> *afterCreateBlocks;
 
 #if DEBUG
 /// Set from OnAfterCreated (via -_browserDidCreate:), read by the
@@ -273,6 +321,7 @@ private:
     self.browserCreated = NO;
 
     self.pendingURL = url ?: @"about:blank";
+    self.afterCreateBlocks = [NSMutableArray array];
 
 #if GHOSTTIES_CEF_AVAILABLE
     [CEFBridgeManager initializeIfNeeded];
@@ -426,6 +475,50 @@ private:
     }
 #else
     NSLog(@"[CEFBrowserView] closeBrowser: stub — CEF not available");
+#endif
+}
+
+#pragma mark - DevTools target id
+
+- (void)fetchDevToolsTargetIdWithTimeout:(NSTimeInterval)timeout
+                              completion:(void (^)(NSString * _Nullable))completion {
+    // Whichever of result / timeout lands first wins; the other is a no-op.
+    __block BOOL finished = NO;
+    void (^finish)(NSString * _Nullable) = ^(NSString * _Nullable targetId) {
+        if (finished) return;
+        finished = YES;
+        completion(targetId);
+    };
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ finish(nil); });
+#if GHOSTTIES_CEF_AVAILABLE
+    __weak CEFBrowserView *weakSelf = self;
+    void (^run)(void) = ^{
+        CEFBrowserView *strongSelf = weakSelf;
+        if (!strongSelf || !strongSelf->_browser) { finish(nil); return; }
+        CefRefPtr<GhosttiesTargetIdObserver> observer(new GhosttiesTargetIdObserver(finish));
+        CefRefPtr<CefRegistration> registration =
+            strongSelf->_browser->GetHost()->AddDevToolsMessageObserver(observer);
+        strongSelf->_devToolsRegistrations.push_back(registration);
+        // CEF can deliver the result before ExecuteDevToolsMethod returns, so
+        // the id must be chosen up front rather than read from the return
+        // value. Explicit ids must keep increasing per browser.
+        static int nextMessageId = 1000000;
+        int messageId = nextMessageId++;
+        observer->SetMessageId(messageId);
+        int rc = strongSelf->_browser->GetHost()->ExecuteDevToolsMethod(
+                messageId, "Target.getTargetInfo", nullptr);
+        if (rc == 0) {
+            finish(nil);
+        }
+    };
+    if (_browser) {
+        run();
+    } else {
+        [self.afterCreateBlocks addObject:[run copy]];
+    }
+#else
+    dispatch_async(dispatch_get_main_queue(), ^{ finish(nil); });
 #endif
 }
 
@@ -745,10 +838,14 @@ private:
     if ([self.delegate respondsToSelector:@selector(browserViewDidCreate:)]) {
         [self.delegate browserViewDidCreate:self];
     }
+    NSArray<void (^)(void)> *waiting = [self.afterCreateBlocks copy];
+    [self.afterCreateBlocks removeAllObjects];
+    for (void (^block)(void) in waiting) block();
 }
 
 - (void)_browserDidClose {
     _browser = nullptr;
+    _devToolsRegistrations.clear();
     [self removeFromSuperview];
 }
 #endif
