@@ -406,6 +406,10 @@ private:
 
 #pragma mark - Navigation
 
++ (BOOL)isAllowedURL:(NSString *)url {
+    return GhosttiesIsAllowedScheme(url);
+}
+
 - (void)loadURL:(NSString *)url {
 #if GHOSTTIES_CEF_AVAILABLE
     if (!GhosttiesIsAllowedScheme(url)) {

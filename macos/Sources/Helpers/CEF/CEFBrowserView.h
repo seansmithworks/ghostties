@@ -65,6 +65,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Close DevTools (works for both popup and inline).
 - (void)closeDevTools;
 - (void)closeBrowser;
+/// YES for the URL schemes `-loadURL:` accepts (http, https, about). Lets a
+/// caller reject a URL before creating anything for it.
++ (BOOL)isAllowedURL:(NSString *)url;
 /// Asks Chromium for this browser's DevTools target id (the id CDP clients
 /// see in `/json/list` and `Target.getTargets`). Waits for the browser to
 /// materialise, then runs `Target.getTargetInfo` in-process. Calls

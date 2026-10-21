@@ -293,6 +293,7 @@ final class SessionCoordinator: ObservableObject {
         // Before any session spawns, so restored terminals get the control
         // endpoint in their environment. Idempotent across windows.
         BrowserAgentGateway.shared.start(publishingTo: WorkspacePersistence.directory)
+        BrowserAgentControl.register(self)
         #endif
         observeLifecycle()
         observeProjectRemoval()
@@ -576,16 +577,22 @@ final class SessionCoordinator: ObservableObject {
 
     /// Create a browser session. Instead of a Ghostty surface, this initializes CEF
     /// and shows a browser panel in the terminal area.
-    private func createBrowserSession(
+    ///
+    /// `activate: false` is for a browser an agent opens: it appears beside
+    /// the terminal and in the sidebar but never takes the user's selection
+    /// (`activeSessionId`), history view or per-project "last session".
+    func createBrowserSession(
         session: AgentSession,
         template: AgentTemplate,
-        project: Project
+        project: Project,
+        startURL: String = "https://www.google.com",
+        activate: Bool = true
     ) -> Bool {
         CEFBridgeManager.initializeIfNeeded()
         guard CEFBridgeManager.isInitialized else { return false }
 
         let manager = BrowserTabManager()
-        let tab = manager.createTab(url: "https://www.google.com")
+        let tab = manager.createTab(url: startURL)
 
         let browserView = CEFBrowserView(frame: NSRect(x: 0, y: 0, width: 800, height: 600),
                                          url: tab.url)
@@ -602,15 +609,17 @@ final class SessionCoordinator: ObservableObject {
         }
         browserBridges[session.id] = bridge
 
-        snapshotActiveTree()
+        if activate { snapshotActiveTree() }
 
         browserManagers[session.id] = manager
         sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
-        noteSelectionCause(.newTab, for: session.id)
-        activeSessionId = session.id
-        isHistoryPresented = false
-        lastActiveSessionPerProject[session.projectId] = session.id
+        if activate {
+            noteSelectionCause(.newTab, for: session.id)
+            activeSessionId = session.id
+            isHistoryPresented = false
+            lastActiveSessionPerProject[session.projectId] = session.id
+        }
         // Stamp creation as activity so the project surfaces in `.recent`
         // right away (browser sessions don't emit terminal output events).
         // isOutput: true — browser sessions never fire `lastOutputSubject` at
@@ -620,7 +629,7 @@ final class SessionCoordinator: ObservableObject {
         // of tracking real recency. Also covers browser relaunch reusing a
         // stale persisted `lastOutputAt` — same reasoning as the terminal
         // creation site above.
-        WorkspaceStore.shared.recordActivity(
+        sessionStore.recordActivity(
             sessionId: session.id,
             projectId: session.projectId,
             isOutput: true
@@ -630,8 +639,19 @@ final class SessionCoordinator: ObservableObject {
 
         // Sidebar smart-sections (plan unit 4): browser-session creation is a
         // structural change too — release any held freeze snapshot.
-        WorkspaceStore.shared.releaseSnapshot()
+        sessionStore.releaseSnapshot()
         return true
+    }
+
+    /// The store session records live in. `.shared` in production; a test's
+    /// isolated store when one is injected, so tests never write
+    /// `workspace.json`.
+    private var sessionStore: WorkspaceStore {
+        #if DEBUG
+        agentKindLookupStoreForTesting ?? .shared
+        #else
+        .shared
+        #endif
     }
 
     /// A browser tab closed from outside the app (an agent, or the page
@@ -646,10 +666,87 @@ final class SessionCoordinator: ObservableObject {
             return
         }
         manager.closeTab(id: tabId)
-        if activeSessionId == sessionId {
+        if shownBrowserSessionId == sessionId {
             showBrowserInContainer(manager)
         }
     }
+
+    #if DEBUG
+    /// Whether `id` is a live terminal session in this window.
+    func ownsTerminalSession(_ id: UUID) -> Bool {
+        sessionTrees[id] != nil
+    }
+
+    /// `gt browser open <url>` from the terminal `sessionId`: opens (or
+    /// navigates) the browser paired with that terminal, shows it beside the
+    /// terminal, and answers with how to attach a CDP client to it.
+    ///
+    /// It never moves the user: the new browser is not selected, and the
+    /// terminal keeps focus. Replies once the panel is on screen and the
+    /// browser has a DevTools target id.
+    func openAgentBrowser(
+        sessionId: UUID,
+        url: String,
+        targetTimeout: TimeInterval = 10
+    ) async -> BrowserAgentHTTP.Response {
+        guard CEFBrowserView.isAllowedURL(url) else {
+            return .json(400, ["error": "only http, https and about: URLs can be opened"])
+        }
+        guard ownsTerminalSession(sessionId) else {
+            return .json(404, ["error": "no such terminal session"])
+        }
+
+        let manager: BrowserTabManager
+        if let pairedId = pairedBrowserByTerminal[sessionId],
+           let existing = browserManagers[pairedId],
+           let view = existing.activeBrowserView as? CEFBrowserView {
+            view.loadURL(url)
+            showBrowserInContainer(existing)
+            manager = existing
+        } else {
+            guard let record = sessionStore.sessions.first(where: { $0.id == sessionId }),
+                  let project = sessionStore.projects.first(where: { $0.id == record.projectId })
+            else {
+                return .json(404, ["error": "the terminal session has no project"])
+            }
+            let name = "\(AgentTemplate.browser.name) \(sessionStore.sessions(for: project.id).count + 1)"
+            let session = sessionStore.addSession(name: name, templateId: AgentTemplate.browser.id, projectId: project.id)
+            guard createBrowserSession(session: session, template: .browser, project: project, startURL: url, activate: false),
+                  let created = browserManagers[session.id]
+            else {
+                sessionStore.removeSession(id: session.id)
+                return .json(503, ["error": "the browser could not start"])
+            }
+            pairedBrowserByTerminal[sessionId] = session.id
+            manager = created
+        }
+
+        // The panel animates open; CEF needs real width before it can render.
+        if let container = containerView as? WorkspaceViewContainer {
+            for _ in 0..<20 where container.browserPanelWidth <= 0 {
+                try? await _Concurrency.Task.sleep(for: .milliseconds(50))
+            }
+        }
+
+        guard let view = manager.activeBrowserView as? CEFBrowserView else {
+            return .json(503, ["error": "the browser could not start"])
+        }
+        let targetId: String? = await withCheckedContinuation { continuation in
+            view.fetchDevToolsTargetId(withTimeout: targetTimeout) { continuation.resume(returning: $0) }
+        }
+        let gateway = BrowserAgentGateway.shared
+        guard let targetId, let endpoint = gateway.endpoint,
+              let port = gateway.routePort(forPath: "/devtools/page/\(targetId)")
+        else {
+            return .json(504, ["error": "the browser did not report its DevTools target"])
+        }
+        return .json(200, [
+            "endpoint": endpoint,
+            "targetId": targetId,
+            "wsUrl": "ws://127.0.0.1:\(port)/devtools/page/\(targetId)",
+        ])
+    }
+    #endif
 
     /// Whether a session is a browser session (not a terminal session).
     func isSessionBrowser(_ id: UUID) -> Bool {
@@ -663,6 +760,7 @@ final class SessionCoordinator: ObservableObject {
 
     /// Show the given browser manager's content in the workspace container.
     private func showBrowserInContainer(_ manager: BrowserTabManager) {
+        shownBrowserSessionId = browserManagers.first { $0.value === manager }?.key
         guard let container = containerView as? WorkspaceViewContainer else { return }
         container.showBrowserContent(manager, bridge: browserBridges.values.first {
             $0.tabManager === manager
@@ -671,9 +769,21 @@ final class SessionCoordinator: ObservableObject {
 
     /// Restore the terminal display in the workspace container.
     private func showTerminalInContainer() {
+        shownBrowserSessionId = nil
         guard let container = containerView as? WorkspaceViewContainer else { return }
         container.showTerminalContent()
     }
+
+    /// The browser session whose tabs the side panel is showing, if any. Not
+    /// always `activeSessionId`: a browser an agent opened stays up beside its
+    /// terminal while the terminal is the selected session.
+    private(set) var shownBrowserSessionId: UUID?
+
+    /// Terminal session → the browser an agent opened for it (`gt browser
+    /// open`). Runtime only, never persisted: it resets on relaunch with the
+    /// browser itself. Focusing the terminal keeps its paired browser beside
+    /// it instead of collapsing the panel.
+    private(set) var pairedBrowserByTerminal: [UUID: UUID] = [:]
 
     // MARK: - Session Switching
 
@@ -715,8 +825,13 @@ final class SessionCoordinator: ObservableObject {
         snapshotActiveTree()
 
         activeSessionId = id
-        // Restore terminal display if coming from a browser session.
-        showTerminalInContainer()
+        // Restore terminal display if coming from a browser session — unless
+        // an agent opened a browser for this terminal, which stays beside it.
+        if let pairedId = pairedBrowserByTerminal[id], let pairedManager = browserManagers[pairedId] {
+            showBrowserInContainer(pairedManager)
+        } else {
+            showTerminalInContainer()
+        }
         showSession(tree, focusView: tree.first)
 
         // Record this session as the last active one for its project.
@@ -924,9 +1039,14 @@ final class SessionCoordinator: ObservableObject {
             manager.closeAllTabs()
             browserManagers.removeValue(forKey: id)
             browserBridges.removeValue(forKey: id)
+            pairedBrowserByTerminal = pairedBrowserByTerminal.filter { $0.value != id }
             setStatus(.killed, for: id)
             if activeSessionId == id {
                 switchAfterClosingActiveBrowser(projectId: closingProjectId)
+            } else if shownBrowserSessionId == id {
+                // A paired browser beside the selected terminal: nothing left
+                // to show, so the panel collapses and the terminal stays.
+                showTerminalInContainer()
             }
             return
         }
@@ -934,6 +1054,7 @@ final class SessionCoordinator: ObservableObject {
         guard let tree = sessionTrees[id] else { return }
 
         // Remove from our tracking first, then close surfaces via the controller.
+        pairedBrowserByTerminal.removeValue(forKey: id)
         sessionTrees.removeValue(forKey: id)
         outputSubscriptions.removeValue(forKey: id)
         cancelTerminalSync(for: id)
