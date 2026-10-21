@@ -34,4 +34,34 @@ struct SessionComposerDefaultShellTests {
         )
         #expect(lane.contains { $0.template?.kind == .shell })
     }
+
+    private func projectRow() -> ComposerOption {
+        ComposerOption(id: UUID(), title: "repo", subtitle: nil, leadingIcon: nil, action: {})
+    }
+
+    /// No Shell row: never implicitly select a non-Shell template. A
+    /// project row is safe (Return opens a Shell at its root).
+    @Test func noShellRowSelectsTheProjectRowNotBrowser() {
+        let options = [option(.browser), option(.claudeCode), projectRow()]
+        let index: Int? = SessionComposerPalette.restStateSelectionIndex(in: options)
+        #expect(index == 2)
+    }
+
+    /// No Shell row and no project row: select nothing.
+    @Test func noShellRowAndNoSafeRowSelectsNothing() {
+        let options = [option(.browser), option(.claudeCode)]
+        let index: Int? = SessionComposerPalette.restStateSelectionIndex(in: options)
+        #expect(index == nil)
+    }
+
+    /// A custom shell-kind template ahead of the built-in Shell: both the
+    /// hoist and the selection must prefer the built-in Shell id.
+    @Test func defaultShellIdBeatsAnotherShellKindTemplate() {
+        let custom = AgentTemplate(name: "My Shell", kind: .shell)
+        let options = [option(.browser), option(custom), option(.shell)]
+        let hoisted = SessionComposerPalette.shellFirst(options)
+        #expect(hoisted.first?.id == AgentTemplate.shell.id)
+        let index: Int? = SessionComposerPalette.restStateSelectionIndex(in: options)
+        #expect(options[index ?? 0].id == AgentTemplate.shell.id)
+    }
 }
