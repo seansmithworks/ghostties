@@ -3874,9 +3874,10 @@ class WorkspaceViewContainer: NSView {
         browserPanelView.translatesAutoresizingMaskIntoConstraints = false
         browserShadowHost.addSubview(browserPanelView)
 
-        // Read persisted sidebar mode. Another window's peek out of closed
-        // is not this window's mode: it opens closed.
-        let initialMode = store.sidebarMode.persisted
+        // Read persisted sidebar mode. Another window's hover reveal is not
+        // this window's mode: it opens closed, as it did when the store
+        // still said `.closed` during a reveal.
+        let initialMode = store.sidebarMode == .hoverRevealed ? .closed : store.sidebarMode
         self.sidebarMode = initialMode
         let isPinned = initialMode == .pinned
         // Pinned and collapsed both push the terminal right and share space
