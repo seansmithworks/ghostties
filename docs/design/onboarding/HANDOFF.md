@@ -56,14 +56,18 @@ Same source file as round 2 (`onboarding-round2-demo-project.pen`), new "Round 3
 
 Frames:
 - 01–03 R3-A launch cinematic, 1.8s, first launch only: the ghost rises and the wordmark types in (A1), the ghost flies to the sidebar and lands as switchboard's icon while its rows cascade in (A2), hand-off to hello with input live (A3). Any key or click skips to A3. With Reduce Motion on, A3 is reached by a 150ms crossfade. No sound
-- 04–05 R3-B terminal host: hello runs as a real session row under "Setup", started by the app from a binary inside the .app (no PATH install). It looks around first, then asks you to confirm
+- 04–05 R3-B terminal host: hello runs as a real session row under "Setup", started by the app itself (no PATH command). You run it again from that row or Settings › Setup. It looks around first, then asks you to confirm
 - 06–07 R3-B native host: the same steps in a centered sheet, at the centered-modal scale
 - 08 R3-B verdict
-- 09–11 R3-C day one, hosted in hello: repos (found on disk, picked, previewed in the sidebar), agents (login-shell detection, sign-in, the Claude Code "needs you" hook shown as a one-line diff before it's written), prefs (copied from Ghostty, iTerm2 or Terminal; the originals are never edited). switchboard stays in the sidebar throughout. Skip and Later on every step
+- 09–11 R3-C day one, hosted in hello: repos (found on disk, picked, previewed in the sidebar), agents (login-shell detection, sign-in, the Claude Code "needs you" hook: +7 hook entries pointing at `ghostties-status.sh`, with the full diff one key away), prefs (Ghostties already reads your Ghostty config, so that's just confirmed; the real import is from iTerm2 or Terminal.app, and the originals are never edited). switchboard stays in the sidebar throughout. Skip and Later on every step
 - 12 R3-D setup across sessions: notifications (session 2, on the row), appearance (session ~5, sidebar footer), keybinds and the embedded browser (later). Each one is a single line tied to a moment that just happened. Progress is a "Setup n/7" count in the sidebar footer, which opens the hello list
 - 13 R3-E funnel: steps 9–21 added on top of round 2's 1–8, still counted on this Mac only
 
 Recommendation: **host hello in the terminal.** It shows the product on day one, and the same row is where later setup comes back, so day one and week three are one system. Settings › Setup gives mouse and VoiceOver users a native version of the same list. hello is scripted, not an LLM, so it works before any agent is found and costs nothing to run.
+
+Build note: hosting hello in the terminal means shipping its binary inside the .app. That is new build work: today `gt` only exists by symlinking from a repo checkout (`scripts/install-gt.sh`).
+
+"Sound fundamentals" in Sean's brief meant solid basics, not audio. No sound work is planned.
 
 Rules carried into the frames: only one ask at a time, so the example's live agent waits to reach "needs you" until hello is done or set aside. Terracotta stays reserved for waiting, so hello uses ink only.
 
