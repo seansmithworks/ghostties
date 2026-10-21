@@ -289,6 +289,11 @@ final class SessionCoordinator: ObservableObject {
 
     init(ghostty: Ghostty.App) {
         self.ghostty = ghostty
+        #if DEBUG
+        // Before any session spawns, so restored terminals get the control
+        // endpoint in their environment. Idempotent across windows.
+        BrowserAgentGateway.shared.start(publishingTo: WorkspacePersistence.directory)
+        #endif
         observeLifecycle()
         observeProjectRemoval()
         observeCommandFinished()

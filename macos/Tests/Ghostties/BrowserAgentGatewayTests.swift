@@ -129,6 +129,29 @@ struct BrowserAgentGatewayTests {
         #expect(!stub.received.contains { $0.contains("Target.createTarget") })
     }
 
+    @Test func aWebPageCannotConnectBecauseItsUpgradeCarriesAnOrigin() async throws {
+        let stub = try StubCDPServer()
+        defer { stub.stop() }
+        let gateway = BrowserAgentGateway(upstreamPort: { stub.port })
+        defer { gateway.stop() }
+        let port = try #require(gateway.routePort(forPath: "/devtools/browser/abc"))
+
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        var request = URLRequest(url: URL(string: "ws://127.0.0.1:\(port)/devtools/browser/abc")!)
+        request.setValue("https://evil.example", forHTTPHeaderField: "Origin")
+        let task = session.webSocketTask(with: request)
+        task.resume()
+        task.send(.string(#"{"id":1,"method":"Page.navigate"}"#)) { _ in }
+        // A refused upgrade never produces a reply; waiting longer than the
+        // allowed round trip takes is enough to tell.
+        try await _Concurrency.Task.sleep(for: .seconds(2))
+
+        // (`otherCommandsPassThroughBothWays` is the control: the same send
+        // without an Origin reaches the stub within milliseconds.)
+        #expect(stub.received.isEmpty, "a request with an Origin header reached the browser")
+    }
+
     @Test func otherCommandsPassThroughBothWays() async throws {
         let stub = try StubCDPServer()
         defer { stub.stop() }

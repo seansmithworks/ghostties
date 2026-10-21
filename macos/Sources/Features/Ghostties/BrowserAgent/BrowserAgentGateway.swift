@@ -1,4 +1,5 @@
 #if DEBUG
+import AppKit
 import Foundation
 import Network
 
@@ -29,12 +30,172 @@ final class BrowserAgentGateway: @unchecked Sendable {
         self.upstreamPort = upstreamPort
     }
 
+    /// The process-wide gateway. Started by the first `SessionCoordinator`.
+    static let shared = BrowserAgentGateway(upstreamPort: { Int(CEFBridgeManager.remoteDebuggingPort) })
+
+    /// Bearer token the `gt` control route requires. Handed to terminals as
+    /// `GHOSTTIES_BROWSER_TOKEN` and to tools through `cdp.json`.
+    let token: String = {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status != errSecSuccess { bytes = (0..<32).map { _ in UInt8.random(in: 0...255) } }
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }()
+
+    /// Answers `POST /ghostties/browser/open`. Set by the app once a
+    /// coordinator exists; nil until then.
+    var openHandler: (@Sendable (_ sessionId: UUID, _ url: String) async -> BrowserAgentHTTP.Response)? {
+        get { lock.lock(); defer { lock.unlock() }; return _openHandler }
+        set { lock.lock(); _openHandler = newValue; lock.unlock() }
+    }
+    private var _openHandler: (@Sendable (UUID, String) async -> BrowserAgentHTTP.Response)?
+
+    private var http: BrowserAgentHTTP.Server?
+    private var publisher: BrowserControlPublisher?
+
+    /// Port of the HTTP endpoint (`/json/*` and the control route), or 0
+    /// before `start`.
+    var httpPort: Int {
+        lock.lock(); defer { lock.unlock() }
+        return http?.port ?? 0
+    }
+
+    /// `http://127.0.0.1:<port>`, or nil before `start`.
+    var endpoint: String? {
+        let port = httpPort
+        return port > 0 ? "http://127.0.0.1:\(port)" : nil
+    }
+
+    /// Starts the HTTP endpoint (once) and, when `directory` is given,
+    /// publishes `cdp.json` there. Returns whether the gateway is running.
+    @discardableResult
+    func start(publishingTo directory: URL?) -> Bool {
+        lock.lock()
+        if http != nil { lock.unlock(); return true }
+        lock.unlock()
+
+        let server = BrowserAgentHTTP.Server { [weak self] request, respond in
+            guard let self else { respond(.json(503, ["error": "gateway stopped"])); return }
+            self.handle(request, respond)
+        }
+        guard let port = server.start() else { return false }
+        lock.lock()
+        http = server
+        lock.unlock()
+
+        if let directory {
+            let publisher = BrowserControlPublisher(directory: directory)
+            try? publisher.publish(endpoint: "http://127.0.0.1:\(port)", token: token)
+            lock.lock()
+            self.publisher = publisher
+            lock.unlock()
+            // A quit takes cdp.json with it; a crash leaves it behind, which
+            // is why it also records the pid.
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+            ) { [weak self] _ in self?.stop() }
+        }
+        return true
+    }
+
     func stop() {
         lock.lock()
         let all = routes.values
         routes.removeAll()
+        let server = http
+        http = nil
+        let publisher = publisher
+        self.publisher = nil
         lock.unlock()
         for route in all { route.cancel() }
+        server?.stop()
+        publisher?.remove()
+    }
+
+    // MARK: - HTTP
+
+    private static let jsonPaths: Set<String> = ["/json", "/json/list", "/json/version"]
+
+    private func handle(_ request: BrowserAgentHTTP.Request, _ respond: @escaping @Sendable (BrowserAgentHTTP.Response) -> Void) {
+        // A web page can aim a DNS name at 127.0.0.1; its requests carry that
+        // name as Host. Only our own loopback spellings pass.
+        let port = httpPort
+        guard let host = request.headers["host"], host == "127.0.0.1:\(port)" || host == "localhost:\(port)" else {
+            respond(.json(403, ["error": "Ghostties: unexpected Host header"]))
+            return
+        }
+
+        let path = request.path
+        if path == "/json/new" {
+            respond(.json(403, ["error": "Ghostties: /json/new is not allowed; use `gt browser open`"]))
+        } else if request.method == "GET", Self.jsonPaths.contains(path) {
+            proxyJSON(path, rewrite: true, respond)
+        } else if request.method == "GET", path == "/json/protocol"
+                    || path.hasPrefix("/json/close/") || path.hasPrefix("/json/activate/") {
+            proxyJSON(path, rewrite: false, respond)
+        } else if request.method == "POST", path == "/ghostties/browser/open" {
+            openBrowser(request, respond)
+        } else {
+            respond(.json(404, ["error": "not found"]))
+        }
+    }
+
+    private func proxyJSON(_ path: String, rewrite: Bool, _ respond: @escaping @Sendable (BrowserAgentHTTP.Response) -> Void) {
+        let raw = upstreamPort()
+        guard raw > 0, let url = URL(string: "http://127.0.0.1:\(raw)\(path)") else {
+            respond(.json(502, ["error": "the browser is not running yet; run `gt browser open <url>`"]))
+            return
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+            guard let self, let data, let http = response as? HTTPURLResponse else {
+                respond(.json(502, ["error": "the browser did not answer"]))
+                return
+            }
+            var body = data
+            if rewrite {
+                body = CDPJSONRewrite.rewrite(data, rawPort: raw) { self.routePort(forPath: $0) }
+                if path != "/json/version" { self.pruneRoutes(keepingPagesIn: body) }
+            }
+            var out = BrowserAgentHTTP.Response(status: http.statusCode, body: body)
+            if let type = http.value(forHTTPHeaderField: "Content-Type") { out.contentType = type }
+            respond(out)
+        }.resume()
+    }
+
+    private func openBrowser(_ request: BrowserAgentHTTP.Request, _ respond: @escaping @Sendable (BrowserAgentHTTP.Response) -> Void) {
+        guard request.headers["authorization"] == "Bearer \(token)" else {
+            respond(.json(401, ["error": "missing or wrong token"]))
+            return
+        }
+        guard let object = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
+              let sessionId = (object["sessionId"] as? String).flatMap(UUID.init(uuidString:)),
+              let url = object["url"] as? String
+        else {
+            respond(.json(400, ["error": "body must be {\"sessionId\": <uuid>, \"url\": <string>}"]))
+            return
+        }
+        guard let handler = openHandler else {
+            respond(.json(503, ["error": "browser control is not ready"]))
+            return
+        }
+        _Concurrency.Task { respond(await handler(sessionId, url)) }
+    }
+
+    /// Drops page routes whose page is no longer in `listJSON` (a `/json/list`
+    /// body, already rewritten). Keeps the browser route.
+    private func pruneRoutes(keepingPagesIn listJSON: Data) {
+        guard let entries = try? JSONSerialization.jsonObject(with: listJSON) as? [[String: Any]] else { return }
+        let live = Set(entries.compactMap { entry -> String? in
+            guard let url = entry["webSocketDebuggerUrl"] as? String, let range = url.range(of: "/devtools/page/") else { return nil }
+            return String(url[range.lowerBound...])
+        })
+        lock.lock()
+        let stale = routes.filter { $0.key.hasPrefix("/devtools/page/") && !live.contains($0.key) }
+        for key in stale.keys { routes.removeValue(forKey: key) }
+        lock.unlock()
+        for route in stale.values { route.cancel() }
     }
 
     // MARK: - Routes
@@ -67,12 +228,20 @@ final class BrowserAgentGateway: @unchecked Sendable {
             let websocket = NWProtocolWebSocket.Options()
             websocket.autoReplyPing = true
             websocket.maximumMessageSize = BrowserAgentGateway.maximumMessageSize
+            let queue = DispatchQueue(label: "ghostties.browser-agent.route")
+            // Browsers always send an Origin header on WebSocket upgrades;
+            // agents' CDP clients do not. Refusing any upgrade that carries
+            // one stops a web page from reaching the browser through here.
+            websocket.setClientRequestHandler(queue) { _, headers in
+                let fromWebPage = headers.contains { $0.name.lowercased() == "origin" }
+                return NWProtocolWebSocket.Response(status: fromWebPage ? .reject : .accept, subprotocol: nil)
+            }
             let parameters = NWParameters.tcp
             parameters.defaultProtocolStack.applicationProtocols.insert(websocket, at: 0)
             parameters.requiredInterfaceType = .loopback
             guard let listener = try? NWListener(using: parameters) else { return nil }
             self.listener = listener
-            self.queue = DispatchQueue(label: "ghostties.browser-agent.route")
+            self.queue = queue
 
             let ready = DispatchSemaphore(value: 0)
             let failed = Flag()
@@ -193,8 +362,15 @@ final class BrowserAgentGateway: @unchecked Sendable {
         }
 
         private func handleClientText(_ text: String) {
-            upstream.send(.string(text)) { [weak self] error in
-                if error != nil { self?.close() }
+            switch CDPPolicy.action(forClientFrame: text) {
+            case .forward:
+                upstream.send(.string(text)) { [weak self] error in
+                    if error != nil { self?.close() }
+                }
+            case .reply(let response):
+                sendToClient(Data(response.utf8), opcode: .text)
+            case .drop:
+                break
             }
         }
 
