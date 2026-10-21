@@ -61,6 +61,12 @@ struct SessionComposerPalette: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
     @ObservedObject private var composerStore: SessionComposerStore
+    /// `theme` / `/theme` (`ComposerThemePickerModel`): the field's text
+    /// picks a theme instead of a session.
+    @ObservedObject private var themePicker: ComposerThemePickerModel
+    /// The window's width (`SessionComposerOverlay`): the theme grid's
+    /// card clamps to it.
+    @Environment(\.composerAvailableWidth) private var composerAvailableWidth
 
     /// `composerStore` defaults to the real process-wide singleton for
     /// every production call site (`SessionComposerOverlay`,
@@ -99,6 +105,7 @@ struct SessionComposerPalette: View {
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
+        self._themePicker = ObservedObject(wrappedValue: composerStore.themePicker)
         self.tuningDefaultsForTesting = tuningDefaultsForTesting
         self.resumeRelaunchForTesting = resumeRelaunchForTesting
         self.nowForTesting = nowForTesting
@@ -276,8 +283,8 @@ struct SessionComposerPalette: View {
         // project token was typed (the common "typed-project" shape), a
         // trimmed `commandParse` meant that shape never saw the raw-text
         // path `effectiveCommandParse` otherwise gets everywhere else —
-        // `"ghostties orchestrator "` failed to resolve the operator while
-        // the implied-project equivalent `"orchestrator "` did.
+        // `"ghostties codex "` failed to resolve the operator while
+        // the implied-project equivalent `"codex "` did.
         SessionComposerCommandParser.parse(
             query: composerStore.searchText,
             projects: store.projects,
@@ -498,59 +505,26 @@ struct SessionComposerPalette: View {
     /// computes — `selectedOption?.title` was always the right segment 3,
     /// the bug was only ever the project segment.
     ///
-    /// Selection is a PROJECT-switch row (a different project than
-    /// `currentProject`): resolves THAT project's own destination via
-    /// `destination(for:)` — not `currentProject`'s.
+    /// Selection is a PROJECT row: Return opens a Shell at that project's
+    /// root (`commitShell(in:)`), so the ghost reads `destination(for:)`
+    /// — for every project row, the current project's included.
     private var ghostFullPathForField: String {
         guard let selectedOption else { return ghostPlaceholder }
         if selectedOption.template == nil,
-           let targetProject = store.projects.first(where: { $0.id == selectedOption.id }),
-           targetProject.id != currentProject?.id {
-            return SessionComposerPalette.destination(
-                for: targetProject,
-                store: store,
-                recentSelections: composerStore.recentSelections
-            )
+           let targetProject = store.projects.first(where: { $0.id == selectedOption.id }) {
+            return SessionComposerPalette.destination(for: targetProject)
         }
         return ghostPlaceholder
     }
 
-    /// The destination a Return commit would resolve to for `project` if
-    /// the user switched to it right now — used only by
-    /// `ghostFullPathForField` above, for a project OTHER than
-    /// `currentProject`. A `static` pure function (not a `self`-scoped
-    /// computed property) deliberately, so it's directly unit-testable
-    /// without constructing a `SessionComposerPalette` view — this repo's
-    /// usual private-computed-property-on-a-View test gap doesn't apply
-    /// here. Branch is always `"Default"`: this repo caches git branch
-    /// data (`SessionComposerStore.currentBranchAtProjectRoot`) for
-    /// `currentProject` alone (refreshed async on `open()`/project
-    /// switch), so a highlighted-but-not-yet-switched-to project's real
-    /// current branch is genuinely unknown without a new async git query —
-    /// out of scope here (`SessionComposerStore` persistence/git plumbing
-    /// is explicitly untouched by this task). `"Default"` mirrors
-    /// `resolutionLineSegments`'s own "no override" fallback rather than
-    /// inventing a second, differently-worded placeholder for the same
-    /// idea.
-    static func destination(
-        for project: Project,
-        store: WorkspaceStore,
-        recentSelections: [RecentComposerSelection]
-    ) -> String {
-        let templates = SessionTemplateResolver.templates(for: project, store: store)
-        let templateTitle: String
-        if let defaultId = project.defaultTemplateId,
-           let match = templates.first(where: { $0.id == defaultId }) {
-            templateTitle = match.name
-        } else if let recent = recentSelections.first(where: { $0.projectId == project.id }),
-                  let match = templates.first(where: { $0.id == recent.templateId }) {
-            templateTitle = match.name
-        } else if let first = templates.first {
-            templateTitle = first.name
-        } else {
-            templateTitle = "Shell"
-        }
-        return "\(project.name) > Default > \(templateTitle)"
+    /// What Return on `project`'s row launches: a Shell at the project
+    /// root (Sean, 2026-10-12). Before that, Return on a project row only
+    /// switched to it, and this resolved the template a SECOND Return would
+    /// have launched there (default, then recent, then first available).
+    /// `"Default"` is the branch segment's own "no override" wording, as in
+    /// `resolutionLineSegments`.
+    static func destination(for project: Project) -> String {
+        "\(project.name) > Default > \(AgentTemplate.shell.name)"
     }
 
     /// Step 4 (Composer UI 11 plan §3): the status strip's single occupant —
@@ -723,9 +697,9 @@ struct SessionComposerPalette: View {
     /// command is recognized. Blanket-running the remainder happens ONLY
     /// here, behind the same ≥2-token + project-match gate as the rest of
     /// the grammar — `filteredTemplateOptions` above still ranks any
-    /// matching template first, so `ghostties orchestrator` keeps reaching
-    /// the Orchestrator template instead of trying to exec a nonexistent
-    /// `orchestrator` binary. Fix 4 (round-2 review): gates on
+    /// matching template first, so `ghostties codex` keeps reaching
+    /// the Codex template instead of exec'ing a bare `codex` through the
+    /// Run row. Fix 4 (round-2 review): gates on
     /// `currentProject`/`effectiveCommandParse` for the same reason
     /// `templateFilterQuery` above does — a bare `cco` typed with no
     /// project prefix, against an already-implied `currentProject`, still
@@ -826,12 +800,20 @@ struct SessionComposerPalette: View {
         )
     }
 
+    /// A project row (Sean, 2026-10-12, reversing variant G's "selecting a
+    /// project starts nothing"): Return opens a Shell session in that
+    /// project via `commitShell(in:)`; a click still scopes the composer
+    /// to the project (`clickAction`) so the mouse keeps a route to that
+    /// project's other templates. Typing `<project> <command>` and Tab
+    /// completion never touch this row — see `projectWordIndex`, which
+    /// only highlights a project row for a single word.
     private func makeOption(for project: Project) -> ComposerOption {
         ComposerOption(
             id: project.id,
             title: project.name,
             subtitle: nil,
             leadingIcon: "folder",
+            action: { commitShell(in: project) },
             // `SessionComposerStore.selectProject(_:)` clears the query
             // alongside the id — load-bearing, not tidying: leaving a
             // project-scoping query like "ghos" in place after a project
@@ -848,7 +830,7 @@ struct SessionComposerPalette: View {
             // composerStore.searchText)` -> `reselectBestMatch()` (round-4
             // review swapped this trigger from `query`) re-seeds it in the
             // same update pass, so nothing is lost.
-            action: {
+            clickAction: {
                 selectedIndex = nil
                 composerStore.selectProject(project.id)
             }
@@ -930,15 +912,14 @@ struct SessionComposerPalette: View {
     /// Pure composition of lane 1 — extracted as a static, directly
     /// testable seam (this file's established pattern, e.g.
     /// `SessionComposerStore.resolveLaunchTemplate`) because `onAppear`'s
-    /// `selectedIndex = bestSelectionIndex(in: flattenedOptions)` seeds off
-    /// `flattenedOptions[0]`, i.e. THIS array's first element whenever the
-    /// query is blank (`SessionComposerRanking.bestMatchIndex` returns 0 for
-    /// a blank query) — and neither `flattenedOptions` nor `onAppear`'s
+    /// `selectedIndex = bestSelectionIndex(in: flattenedOptions)` no longer
+    /// seeds off `flattenedOptions[0]` at a blank query: it selects Shell
+    /// (`restStateSelectionIndex`), so lane order decides only what RENDERS
+    /// first, not what Return commits — and neither `flattenedOptions` nor `onAppear`'s
     /// `@State` write is otherwise reachable from a test (no SwiftUI
     /// view-test harness in this repo). G-F8: pinned options always precede
-    /// non-pinned recents here, so a pin existing moves index 0 from "most
-    /// recent" to "top pinned" — a real, deliberate first-open-Return change
-    /// (11.11, flagged to Sean), proven by
+    /// non-pinned recents here (display order only; the blank-query default
+    /// is Shell regardless), proven by
     /// `SessionComposerLaneOrderingTests.composeLane1PutsThePinnedHeadAtIndexZero`.
     static func composeLane1(pinned: [ComposerOption], recent: [ComposerOption]) -> [ComposerOption] {
         let pinnedIds = Set(pinned.map { $0.id })
@@ -965,6 +946,36 @@ struct SessionComposerPalette: View {
         return Array(options.prefix(restStateLaneCap))
     }
 
+    /// The single Shell predicate: the built-in Shell (by id) if listed,
+    /// else the first shell-kind template.
+    private static func shellIndex(in options: [ComposerOption]) -> Int? {
+        options.firstIndex { $0.template?.id == AgentTemplate.shell.id }
+            ?? options.firstIndex { $0.template?.kind == .shell }
+    }
+
+    /// Sean's rule (2026-10-20): the default is ALWAYS Shell. At a blank
+    /// query the highlighted row is Shell, never whatever happens to lead
+    /// the list — index 0 is a pin, the project's last-used template, or
+    /// its `defaultTemplateId`, any of which can be Browser (the bug: the
+    /// ghost read "<repo> > Default > Browser" and Tab/Return opened a
+    /// browser). Browser or any other template opens only when typed or
+    /// picked, so a non-Shell template is NEVER selected implicitly: with
+    /// no Shell row the first non-template row (a project row, whose
+    /// Return opens a Shell at its root, 933e910ce) is used, else `nil`.
+    static func restStateSelectionIndex(in options: [ComposerOption]) -> Int? {
+        shellIndex(in: options) ?? options.firstIndex { $0.template == nil }
+    }
+
+    /// Hoists Shell (same predicate as the selection) to the head of the
+    /// rest-state TEMPLATES lane, so the 3-row rest-state cap
+    /// (`applyRestStateCap`) can't drop it. Stable otherwise.
+    static func shellFirst(_ options: [ComposerOption]) -> [ComposerOption] {
+        guard let i = shellIndex(in: options), i > 0 else { return options }
+        var result = options
+        result.insert(result.remove(at: i), at: 0)
+        return result
+    }
+
     /// Lane 2 (board 11.2): remaining templates minus anything already
     /// surfaced in lane 1 (recent OR pinned) — `filteredTemplateOptions`
     /// already excludes recents; this additionally excludes pins so a
@@ -972,7 +983,7 @@ struct SessionComposerPalette: View {
     private var lane2Options: [ComposerOption] {
         let pinnedIds = Set(pinnedOptions.map { $0.id })
         let options = filteredTemplateOptions.filter { !pinnedIds.contains($0.id) }
-        return Self.applyRestStateCap(to: options, query: query)
+        return Self.applyRestStateCap(to: query.isEmpty ? Self.shellFirst(options) : options, query: query)
     }
 
     /// Query-matching projects (S2, locked decision: "the search field
@@ -982,8 +993,8 @@ struct SessionComposerPalette: View {
     /// that "the projects were going to be in the search / input results."
     /// A blank query now populates this lane with every project instead of
     /// returning empty, so browsing moved INTO the results well rather than
-    /// disappearing. Selecting a row here sets the composer's selected
-    /// project; it does not start a session.
+    /// disappearing. Return on a row here opens a Shell session in that
+    /// project; a click scopes the composer to it (`makeOption(for:)`).
     private var filteredProjectOptions: [ComposerOption] {
         // N3: `.locked` fixes the project at the write path (`commit()`
         // resolves from the bound project, never `selectedProjectId`), so
@@ -1031,11 +1042,10 @@ struct SessionComposerPalette: View {
     /// navigation and selection clamping. COMMAND renders last — matching
     /// templates in TEMPLATES rank first, per the locked design.
     ///
-    /// G-F8 (Step 2): lane 1 is now pinned-then-recent, not recent-only, so
-    /// index 0 here — what `onAppear` seeds `selectedIndex` to — is the top
-    /// PINNED template whenever any pin exists, not the most recent one.
-    /// Deliberate consequence of pinned-first ordering (11.11 flagged to
-    /// Sean), not an accident of this refactor.
+    /// G-F8 (Step 2): lane 1 is pinned-then-recent, so index 0 here is the
+    /// top PINNED template when any pin exists. That is display order only:
+    /// `onAppear` seeds `selectedIndex` via `bestSelectionIndex`, which
+    /// selects Shell at a blank query regardless of what leads.
     private var flattenedOptions: [ComposerOption] {
         lane1Options + lane2Options + filteredProjectOptions + commandOptions
     }
@@ -1056,12 +1066,12 @@ struct SessionComposerPalette: View {
     /// only ranks WITHIN each section — so a `.substring` match on a
     /// Templates row's subtitle used to always beat an `.exactPrefix` match
     /// on a Projects row purely because Templates renders above Projects
-    /// (e.g. typing "ghos" selected a "Linear Sync" template whose
+    /// (e.g. typing "ghos" selected a preset template whose
     /// description mentions "Ghostties" over the "ghostties" project
     /// itself). Ties — including a blank query, where every option is
     /// untiered — keep index 0, i.e. current section order, so unambiguous
     /// queries and the empty-query default are unchanged.
-    private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
+    private func bestSelectionIndex(in options: [ComposerOption]) -> UInt? {
         // Composer variant G (Sean's ruling, 2026-08-31): a typed `>` is the
         // deliberate, formal way to declare a branch — once the field offers
         // a create-branch/create-worktree row for it (`typedBranchCreateOffer`),
@@ -1088,6 +1098,11 @@ struct SessionComposerPalette: View {
            let index = options.firstIndex(where: { $0.id == resolvedTemplateId }) {
             return UInt(index)
         }
+        // Blank field: the default is Shell, regardless of pins, recents
+        // or the project's own default template (see `restStateSelectionIndex`).
+        if composerStore.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return Self.restStateSelectionIndex(in: options).map { UInt($0) }
+        }
         if let index = Self.projectWordIndex(
             in: options,
             projectIds: Set(filteredProjectOptions.map(\.id)),
@@ -1110,6 +1125,12 @@ struct SessionComposerPalette: View {
     /// Skipped when the word also prefixes the current project's name:
     /// template rows already ghost "<current project> > …" then, so the
     /// name completes without moving the highlight off the templates.
+    ///
+    /// Also skipped when the word IS a listed template's name ("codex",
+    /// any casing): Return on a project row opens a shell there, so a
+    /// project like "codex-fork" must not take "codex" + Return away from
+    /// the Codex template. A mere prefix ("Code" vs "Codex") still goes to
+    /// the project.
     static func projectWordIndex(
         in options: [ComposerOption],
         projectIds: Set<UUID>,
@@ -1119,6 +1140,9 @@ struct SessionComposerPalette: View {
         guard !rawQuery.isEmpty, rawQuery.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
         if let currentProjectName,
            currentProjectName.range(of: rawQuery, options: [.caseInsensitive, .anchored]) != nil {
+            return nil
+        }
+        if options.contains(where: { $0.template != nil && $0.title.caseInsensitiveCompare(rawQuery) == .orderedSame }) {
             return nil
         }
         return options.firstIndex { option in
@@ -1145,12 +1169,10 @@ struct SessionComposerPalette: View {
             .onAppear {
                 resumeState.reset()
                 composerStore.open(projectBinding: request.projectBinding, workspaceStore: store)
-                // S5: row 0 is the project's default template (Phase 1's
-                // default-first ordering) and the legend reads "↵ start" —
-                // seed the selection so Return isn't a dead key on first
-                // open. `bestSelectionIndex` is index 0 here since the
-                // query is blank on first open (D1's cross-section ranking
-                // only applies once there's a query to rank against).
+                // S5: the legend reads "↵ start" — seed the selection so
+                // Return isn't a dead key on first open. The query is blank
+                // here, so `bestSelectionIndex` selects Shell (the default is
+                // always Shell, whatever pins/recents/project default lead).
                 selectedIndex = bestSelectionIndex(in: flattenedOptions)
                 // R14: open beat. `onAppear` doesn't refire on a fast
                 // re-open of an already-mounted palette — see the matching
@@ -1188,11 +1210,20 @@ struct SessionComposerPalette: View {
             // branch, not a project name) fires either — this is the only
             // trigger that subsumes every case, since `searchText` changes
             // on every keystroke `query` does plus every one it drops.
-            .onChange(of: composerStore.searchText) { _ in
+            .onChange(of: composerStore.searchText) { text in
+                themePicker.sync(text: text, projectNames: store.projects.map(\.name))
                 reselectBestMatch()
                 resumeState.collapseSections()
             }
             .onChange(of: composerStore.selectedProjectId) { _ in
+                // A blank field re-seeds the Shell default for the NEW
+                // project (searchText is unchanged, so its handler never
+                // fires); clamping alone would keep a stale in-range index
+                // that can land on Browser in the new list.
+                if composerStore.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    reselectBestMatch()
+                    return
+                }
                 // N5: changing the project via the dropdown or a project row
                 // changes `flattenedOptions.count` with `query` unchanged, so
                 // the query-only clamp above never ran — `selectedOption`
@@ -1307,7 +1338,7 @@ struct SessionComposerPalette: View {
     /// always open and centres as a whole.
     @ViewBuilder
     private var anchoredComposerCard: some View {
-        if resumeLayout == .list {
+        if resumeLayout == .list || themePicker.isActive {
             singleLineComposerCard
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(height: newStyleFieldLineHeight + 2 * singleLineVerticalPadding, alignment: .top)
@@ -1417,7 +1448,7 @@ struct SessionComposerPalette: View {
                     isSelected: !resumeState.isResumeColumnFocused && selected == index,
                     showsReturnGlyph: true,
                     titleSize: rowTitleSize,
-                    action: { option.action() }
+                    action: { (option.clickAction ?? option.action)() }
                 )
             }
         }
@@ -1438,8 +1469,8 @@ struct SessionComposerPalette: View {
     }
 
     /// A5's PROJECTS section: the composer's own project rows, filtered by
-    /// the typed text. Each row's action is the option's own
-    /// `selectProject` — the same path a project row has always taken.
+    /// the typed text. Return runs the option's own action (a Shell in that
+    /// project); a click runs its `clickAction` (scope to the project).
     private var downListProjectOptions: [ComposerOption] {
         guard resumeLayout == .list else { return [] }
         return filteredProjectOptions
@@ -1451,7 +1482,7 @@ struct SessionComposerPalette: View {
             systemImage: option.leadingIcon ?? "sparkle",
             title: option.title,
             meta: Self.startRowMeta(option),
-            action: option.action
+            action: option.clickAction ?? option.action
         )
     }
 
@@ -1496,9 +1527,11 @@ struct SessionComposerPalette: View {
     }
 
     /// The card's width: the width dial, widened by a quarter for A4's two
-    /// columns so a resume row's title and meta both fit.
+    /// columns so a resume row's title and meta both fit, and to the theme
+    /// grid's width while it shows (three full rows of cards).
     private var composerCardWidth: CGFloat {
-        resumeLayout == .columns ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
+        if themePicker.isGridShown { return ComposerThemeGrid.cardWidth(available: composerAvailableWidth) }
+        return resumeLayout == .columns && !themePicker.isActive ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
     }
 
     private var newStyleField: some View {
@@ -1524,16 +1557,23 @@ struct SessionComposerPalette: View {
                 rowHeight: newStyleFieldLineHeight,
                 focusTrigger: $composerStore.focusSearchFieldTrigger,
                 hasSelection: fieldHasSelection,
-                ghostFullPath: query.isEmpty ? "" : ghostFullPathForField,
-                horizontalArrowClaim: resumeLayout == .columns
-                    ? (resumeState.isResumeColumnFocused ? .left : .rightAtEnd)
-                    : .none
+                ghostFullPath: themePicker.ghostFullPath(typed: composerStore.searchText)
+                    ?? (query.isEmpty ? "" : ghostFullPathForField),
+                horizontalArrowClaim: fieldHorizontalArrowClaim
             ) { event in
                 handle(event)
             }
             .accessibilityLabel(ComposerGhostTextField.accessibilityFieldLabel)
         }
         .frame(width: newStyleFieldRenderWidth, height: newStyleFieldLineHeight)
+    }
+
+    /// ← / → move the theme grid's selection; otherwise the A4 column
+    /// switch, else the caret.
+    private var fieldHorizontalArrowClaim: ComposerGhostTextField.HorizontalArrowClaim {
+        if themePicker.claimsHorizontalArrows { return .both }
+        guard resumeLayout == .columns, !themePicker.isActive else { return .none }
+        return resumeState.isResumeColumnFocused ? .left : .rightAtEnd
     }
 
     /// The classic "no worktree found" message says "Use the create-branch
@@ -1621,13 +1661,30 @@ struct SessionComposerPalette: View {
             VStack(alignment: .leading, spacing: 8) {
                 newStyleField
                     .overlay(alignment: .trailing) { resumeHint }
-                newStyleStatusStrip
+                if themePicker.isChipsShown {
+                    ComposerThemeChips(model: themePicker, titleSize: rowTitleSize, onCommit: dismissComposer)
+                } else if !themePicker.isActive {
+                    newStyleStatusStrip
+                }
             }
             .padding(.vertical, singleLineVerticalPadding)
             .padding(.horizontal, singleLineHorizontalPadding)
-            resumeSurface
+            if themePicker.isGridShown {
+                ComposerThemeGrid(
+                    model: themePicker, width: composerCardWidth, titleSize: rowTitleSize, onCommit: dismissComposer
+                )
+                .transition(.composerRevealDown)
+            } else if !themePicker.isActive {
+                resumeSurface
+            }
         }
         .frame(width: composerCardWidth)
+        // C2's expand (the grid grows down from the field); none under
+        // Reduce Motion.
+        .animation(
+            reduceMotionEnabled ? nil : .timingCurve(0.2, 0.8, 0.2, 1, duration: 0.22),
+            value: themePicker.isGridShown
+        )
 
         let materialBackground = content
             .background(
@@ -1793,7 +1850,7 @@ struct SessionComposerPalette: View {
         // Run row. Before this, `precommit` resolved the write target from
         // `composerStore.selectedProjectId`, which typing a command never
         // changes (see `currentProject`), so a `.exactPrefix` template row
-        // auto-selected under a command like `ghostties orchestrator` would
+        // auto-selected under a command like `ghostties codex` would
         // commit into whatever project the dropdown was still showing.
         // Setting `selectedProjectId` directly here, rather than via
         // `selectProject(_:)`, is deliberate: `selectProject` also clears
@@ -1870,6 +1927,39 @@ struct SessionComposerPalette: View {
         }
     }
 
+    /// Return on a PROJECTS row: a Shell session in THAT project, at its
+    /// root. Not routed through `commit(template:)` — that resolves the
+    /// target from the typed command (`commandProject`) and validates the
+    /// typed branch, and neither belongs to the highlighted project: a
+    /// query like "ghostties web" parses "ghostties" as the command
+    /// project while the row being committed is "ghostties web".
+    /// `precommit(atRootOf:)` targets the project and ignores the branch
+    /// pick, even for the current project — the row says the project, so
+    /// the shell starts at its root — without writing the composer's
+    /// selected project or branch, so a failed commit leaves them as they
+    /// were.
+    ///
+    /// Double-fire: `selectedIndex = nil` first (N1/F1, same as every
+    /// other row action), and `precommit`'s own `guard isOpen` rejects a
+    /// second same-keystroke call after the first one closes the store.
+    private func commitShell(in project: Project) {
+        selectedIndex = nil
+        let success = composerStore.precommit(
+            template: .shell, coordinator: coordinator, workspaceStore: store, atRootOf: project
+        )
+        if success {
+            witnessBeat = witnessBeat.next(.launch)
+            isPresented = false
+            NotificationCenter.default.post(
+                name: .workspaceDidCreateSessionInProject,
+                object: coordinator.containerView?.window,
+                userInfo: ["projectId": project.id]
+            )
+        } else {
+            selectedIndex = bestSelectionIndex(in: flattenedOptions)
+        }
+    }
+
     /// Return and ⌥+Return are identical: both start the session, which
     /// already reveals/focuses it (`SessionCoordinator.createSession` makes
     /// the new surface "the sole occupant of the terminal area"), then
@@ -1878,6 +1968,9 @@ struct SessionComposerPalette: View {
     /// that contradicted the plan's own legend (`↵ start · ⌥↵ start +
     /// reveal · esc cancel`) — deleted, not kept as a fallback.
     private func handle(_ event: ComposerGhostTextField.KeyboardEvent) {
+        // The theme picker owns the keys while the text is `theme …`.
+        if themePicker.isActive, handleTheme(event) { return }
+
         // Resume keys first (↓ reveals the list, Return on a resume row
         // resumes it); anything the resume state passes through falls to
         // the start handling below, unchanged.
@@ -1916,6 +2009,36 @@ struct SessionComposerPalette: View {
         case .acceptedGhost:
             witnessBeat = witnessBeat.next(.tabAccept)
         }
+    }
+
+    /// Theme mode: arrows move (and preview), Return stores the pick and
+    /// closes (on the All themes tile it opens All themes in place), Esc
+    /// reverts: from All themes back to the grid, from the grid out of
+    /// theme mode with the composer open. False for keys it leaves to
+    /// `handle(_:)` (Tab's ghost-accept beat).
+    private func handleTheme(_ event: ComposerGhostTextField.KeyboardEvent) -> Bool {
+        switch event {
+        case .exit:
+            if themePicker.isBrowsing {
+                let hadQuery = !themePicker.query.isEmpty
+                themePicker.closeBrowse()
+                if hadQuery { composerStore.searchText = ComposerThemeCommand.word + " " }
+            } else {
+                themePicker.reset()
+                composerStore.searchText = ""
+            }
+        case .submit, .submitNoMatch:
+            switch themePicker.activate() {
+            case .committed: dismissComposer()
+            case .openedBrowse: break
+            case .none: triggerNoMatchFeedback()
+            }
+        case .move(let direction):
+            _ = themePicker.move(direction, columns: ComposerThemeGrid.columns(cardWidth: composerCardWidth))
+        case .acceptedGhost:
+            return false
+        }
+        return true
     }
 
     // MARK: - Resume
@@ -1967,8 +2090,7 @@ struct SessionComposerPalette: View {
 
     /// Feeds one key to the resume state. `true` when it took the key.
     /// Return on a template row runs that option's own start action; on a
-    /// project row, the option's own project selection, after which the
-    /// list closes onto the newly scoped field.
+    /// project row, the option's own action, which opens a Shell there.
     private func routeToResume(_ key: ComposerResumeState.Key) -> Bool {
         switch resumeState.handle(key, layout: resumeLayout, rowIDs: resumeKeyboardRowIDs) {
         case .passThrough:
@@ -2003,6 +2125,7 @@ struct SessionComposerPalette: View {
 
     /// Return is live whenever whichever list owns the keyboard has a row.
     private var fieldHasSelection: Bool {
+        if themePicker.isActive { return themePicker.hasSelection }
         if resumeState.ownsKeyboard {
             return resumeState.selection(in: resumeKeyboardRowIDs) != nil
         }
@@ -2086,6 +2209,10 @@ struct ComposerOption: Identifiable, Hashable {
     let template: AgentTemplate?
     let templateGroup: SessionTemplateResolver.Group?
     let trailingMeta: TrailingMeta?
+    /// What a pointer click runs instead of `action` (Return), when the
+    /// two differ. Only project rows set it: Return opens a shell there,
+    /// a click scopes the composer to the project.
+    let clickAction: (() -> Void)?
 
     init(
         id: UUID,
@@ -2095,7 +2222,8 @@ struct ComposerOption: Identifiable, Hashable {
         action: @escaping () -> Void,
         template: AgentTemplate? = nil,
         templateGroup: SessionTemplateResolver.Group? = nil,
-        trailingMeta: TrailingMeta? = nil
+        trailingMeta: TrailingMeta? = nil,
+        clickAction: (() -> Void)? = nil
     ) {
         self.id = id
         self.title = title
@@ -2105,6 +2233,7 @@ struct ComposerOption: Identifiable, Hashable {
         self.template = template
         self.templateGroup = templateGroup
         self.trailingMeta = trailingMeta
+        self.clickAction = clickAction
     }
 
     /// Returns a copy with `trailingMeta` replaced — every other field
@@ -2121,7 +2250,8 @@ struct ComposerOption: Identifiable, Hashable {
             action: action,
             template: template,
             templateGroup: templateGroup,
-            trailingMeta: meta
+            trailingMeta: meta,
+            clickAction: clickAction
         )
     }
 

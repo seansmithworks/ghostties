@@ -1,9 +1,7 @@
 import SwiftUI
 
+/// The Settings window's General tab: today's notes, unchanged.
 struct SettingsView: View {
-    // We need access to our app delegate to know if we're quitting or not.
-    @EnvironmentObject private var appDelegate: AppDelegate
-
     var body: some View {
         HStack {
             Image("AppIconImage")

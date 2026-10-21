@@ -205,6 +205,10 @@ private struct SidebarHostRoot: View {
             // edge, so a sub-frame mismatch between the AppKit width and
             // `model.width` mid-morph moves nothing.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // The group card measures from the sidebar's leading edge, not
+            // the window's: they differ in overlay, where the column sits
+            // the window margin in.
+            .coordinateSpace(name: ProjectGroupCard.sidebarSpace)
             .overlay(alignment: .bottom) {
                 if vertical || showsTrayWhenExpanded {
                     SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch(), panelWidth: model.width)
@@ -212,6 +216,7 @@ private struct SidebarHostRoot: View {
             }
             .environment(\.sidebarTrailingGutter, trailingGutter)
             .environment(\.sidebarRailWidth, model.railWidth)
+            .environment(\.sidebarMode, store.sidebarMode)
     }
 
     /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
@@ -366,18 +371,10 @@ class WorkspaceViewContainer: NSView {
     /// Shadow host wraps the terminal container so the drop shadow renders
     /// outside `masksToBounds` clipping. The shadow host carries the shadow;
     /// the inner terminal container clips its corners.
-    private let terminalShadowHost: NSView = {
-        let view = NSView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
-    }()
+    private let terminalShadowHost = CardShadowHostView()
 
     /// Shadow host for the browser panel — identical layer config to terminalShadowHost.
-    private let browserShadowHost: NSView = {
-        let view = NSView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
-    }()
+    private let browserShadowHost = CardShadowHostView()
 
     /// The browser panel content (navigation bar + content area placeholder).
     private let browserPanelView = BrowserPanelView()
@@ -605,6 +602,13 @@ class WorkspaceViewContainer: NSView {
     /// never splits a reveal from its collapse.
     private var railRevealStyle: RailRevealStyle = .push
 
+    /// Spike ("Hover shows full sidebar" dial): true while the closed-mode
+    /// hover strip has revealed the real pinned layout. The container is in
+    /// `.pinned`, but it is not a pin: the store keeps `.closed` (nothing
+    /// persists), the hover exit closes it, and Cmd+S promotes it to a real
+    /// pin in place (`toggleSidebar`). Any other transition ends it.
+    private var isClosedHoverRevealed = false
+
     /// True while an overlay-style reveal is presented: the card holds its x
     /// and the sidebar is drawn over it on `railRevealBacking`.
     private var railRevealOverlays: Bool { isRailRevealPresented && railRevealStyle == .overlay }
@@ -668,6 +672,7 @@ class WorkspaceViewContainer: NSView {
     var sidebarModeForTesting: SidebarMode { sidebarMode }
     /// Test seam: the terminal card's and the sidebar's frames.
     var cardFrameForTesting: NSRect { terminalShadowHost.frame }
+    var cardLayerForTesting: CALayer? { terminalShadowHost.layer }
     var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
     var sidebarHostingViewForTesting: NSView { sidebarHostingView }
     var sidebarDragHandleFrameForTesting: NSRect { sidebarDragHandle.frame }
@@ -694,6 +699,26 @@ class WorkspaceViewContainer: NSView {
     /// trailing edge is pinned to the card, so this alone places it.
     private var sidebarDragHandleWidthConstraint: NSLayoutConstraint!
     private var shadowHostLeadingToSuperview: NSLayoutConstraint!
+
+    /// The sidebar column's leading and bottom insets from the window: 0,
+    /// except in overlay, where the column sits the window margin in so the
+    /// overlay card around it keeps the terminal card's margin and the
+    /// column's contents keep their pinned offsets from the card's edges.
+    private var sidebarHostLeadingConstraint: NSLayoutConstraint!
+    private var sidebarHostBottomConstraint: NSLayoutConstraint!
+    /// The overlay card (`sidebarOverlayBackground`): the window margin off
+    /// the window's top, leading and bottom edges, and the pinned gutter
+    /// past the sidebar column's trailing edge.
+    private var overlayPanelTopConstraint: NSLayoutConstraint!
+    private var overlayPanelLeadingConstraint: NSLayoutConstraint!
+    private var overlayPanelBottomConstraint: NSLayoutConstraint!
+    private var overlayPanelTrailingConstraint: NSLayoutConstraint!
+    /// The sidebar drag handle's trailing edge — mutually exclusive, like
+    /// the card's leading pair. Pinned/collapsed: on the card's leading
+    /// edge. Overlay: on the overlay card's trailing edge, so the handle
+    /// fills the pinned gutter inside the card.
+    private var sidebarDragHandleTrailingToCard: NSLayoutConstraint!
+    private var sidebarDragHandleTrailingToPanel: NSLayoutConstraint!
 
     /// Whether the browser panel is currently visible (expanded).
     private var isBrowserVisible = false
@@ -757,40 +782,43 @@ class WorkspaceViewContainer: NSView {
         return effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
     }
 
-    /// `sidebarHostingView`'s appearance: pinned to the overlay fill's
-    /// luminance in overlay mode, and nil (follow the window) in every other
-    /// mode. (The DEBUG appearance preview sets the whole app's appearance,
-    /// so the window carries it here.)
+    /// `sidebarHostingView`'s appearance: pinned to `chromeScheme` (the
+    /// theme's polarity, the same rule as the container's own appearance) in
+    /// overlay mode, and nil (follow the container) in every other mode.
+    /// (The DEBUG appearance preview sets the whole app's appearance, so the
+    /// window carries it here.)
     private var sidebarAppearanceOverride: NSAppearance? {
         return sidebarMode == .overlay
-            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
+            ? NSAppearance(named: chromeScheme == .dark ? .darkAqua : .aqua)
             : nil
     }
 
-    /// Canvas palette color for the current OS appearance. The canvas layer
-    /// covers the terminal card background (internal header strip + card rim
-    /// around the GPU-rendered terminal area). Owned by the Ghostties design
-    /// system — intentionally independent of terminal theme.
+    /// The side the chrome draws on: the active theme's polarity, read from
+    /// the store rather than `effectiveAppearance` so a repaint in the same
+    /// pass as a theme change never reads the previous appearance. The
+    /// window's appearance before a config has loaded (and in unit tests).
+    private var chromeScheme: ColorScheme {
+        ChromeThemeStore.shared.current?.polarity.colorScheme ?? (isLightAppearance ? .light : .dark)
+    }
+
+    /// Canvas colour of the active theme (`ChromeTheme.canvas`: the
+    /// terminal's own background). The canvas layer covers the terminal card
+    /// background (internal header strip + card rim around the GPU-rendered
+    /// terminal area).
     private var canvasPaletteNSColor: NSColor {
-        isLightAppearance
-            ? WorkspaceLayout.canvasBackgroundLight
-            : WorkspaceLayout.canvasBackgroundDark
+        CanvasStyle.background(chromeScheme)
     }
 
-    /// Chrome palette color for the current OS appearance. The chrome layer
-    /// covers the left sidebar column and the gutter padding around the
-    /// terminal card. Owned by the Ghostties design system — intentionally
-    /// independent of terminal theme.
+    /// Chrome colour of the active theme (`ChromeTheme.chrome`). The chrome
+    /// layer covers the left sidebar column and the gutter padding around
+    /// the terminal card.
     private var chromePaletteNSColor: NSColor {
-        isLightAppearance
-            ? WorkspaceLayout.chromeBackgroundLight
-            : WorkspaceLayout.chromeBackgroundDark
+        SidebarColors.background(chromeScheme)
     }
 
-    /// Terminal card background — the canvas layer. Always the Ghostties
-    /// canvas palette; terminal theme is intentionally NOT bound here. The
-    /// terminal content area inside the card is still painted by GhosttyKit
-    /// (its theme system owns that rectangle).
+    /// Terminal card background — the canvas layer, the terminal theme's
+    /// background. The terminal content area inside the card is painted by
+    /// GhosttyKit (its theme system owns that rectangle).
     private var cardBackgroundCGColor: CGColor {
         canvasPaletteNSColor.cgColor
     }
@@ -802,42 +830,16 @@ class WorkspaceViewContainer: NSView {
     }
 
     /// Outer workspace canvas behind the sidebar and the gutter around the
-    /// terminal card — the chrome layer. Always the Ghostties chrome palette;
-    /// terminal theme is intentionally NOT bound here.
+    /// terminal card — the chrome layer, the active theme's chrome.
     private var canvasBackgroundCGColor: CGColor {
         chromePaletteNSColor.cgColor
     }
 
-    /// The focused terminal session's live background color — same accessor
-    /// `TerminalWindow.preferredBackgroundColor` uses (`surface.backgroundColor`,
-    /// the post-OSC-11 live value, falling back to `derivedConfig.backgroundColor`,
-    /// the static theme default) — kept in sync with `observedSurface` by
-    /// `rebindFocusedSurfaceTheme()`. `nil` for a browser session or when
-    /// nothing is focused yet.
-    private var focusedTerminalBackgroundNSColor: NSColor? {
-        guard let surface = observedSurface else { return nil }
-        return NSColor(surface.backgroundColor ?? surface.derivedConfig.backgroundColor)
-    }
-
-    /// Overlay panel fill (Flow 01 §04, Sean's review): matches the focused
-    /// terminal session's own background — light over a light terminal
-    /// theme, dark over a dark one — rather than following OS appearance.
-    /// Falls back to the static canvas token (`canvasPaletteNSColor`) when
-    /// no terminal surface is focused, e.g. a browser pane.
+    /// Overlay panel fill (beta.26, Sean): the pinned sidebar's chrome
+    /// (`ChromeTheme.chrome`) of the active theme. Re-read on every theme
+    /// and appearance change (`applyChromeColor`).
     private var overlayBackgroundNSColor: NSColor {
-        focusedTerminalBackgroundNSColor ?? canvasPaletteNSColor
-    }
-
-    /// Whether `overlayBackgroundNSColor` reads as dark, so the overlay's
-    /// SwiftUI content (`sidebarHostingView`) should render its dark-token
-    /// (light-on-dark) text/icon set instead of the light-token one — kept
-    /// legible against a dark terminal theme even when the OS is in light
-    /// mode. Threshold is the standard WCAG-adjacent 0.5 midpoint on
-    /// perceptual (ITU-R BT.601) luminance.
-    private var overlayBackgroundIsDark: Bool {
-        guard let rgb = overlayBackgroundNSColor.usingColorSpace(.deviceRGB) else { return !isLightAppearance }
-        let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
-        return luminance < 0.5
+        ChromeTheme.active(chromeScheme).chrome
     }
 
     init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil, store: WorkspaceStore = .shared) {
@@ -910,6 +912,37 @@ class WorkspaceViewContainer: NSView {
             name: SidebarDialTuning.didChangeNotification,
             object: nil
         )
+
+        // The chrome follows the terminal theme: repaint when it changes.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(chromeThemeDidChange),
+            name: ChromeThemeStore.didChange,
+            object: ChromeThemeStore.shared
+        )
+        applyChromeTheme()
+    }
+
+    @objc private func chromeThemeDidChange() {
+        applyChromeTheme()
+    }
+
+    /// The one repaint for a theme change. The window's content takes the
+    /// theme's polarity as its appearance, so every SwiftUI and AppKit token
+    /// below resolves on the theme's side whatever the Mac's appearance is.
+    /// Then the layers repaint and the card shadows re-cast: AppKit zeroes a
+    /// card's `shadowOpacity` when its appearance changes (#240), and a theme
+    /// change can be one.
+    ///
+    /// Ordering: `ChromeThemeStore` updates synchronously inside the config
+    /// change that a light/dark flip triggers, before the run loop draws, and
+    /// this container's colours read the store, not its appearance, so no
+    /// frame shows the old theme's chrome.
+    private func applyChromeTheme() {
+        appearance = ChromeThemeStore.shared.current?.polarity.appearance
+        applyChromeColor()
+        terminalShadowHost.applyShadow()
+        browserShadowHost.applyShadow()
     }
 
     @objc private func sidebarDialsChanged() {
@@ -921,6 +954,11 @@ class WorkspaceViewContainer: NSView {
         }
         applyWindowMargin()
         #if DEBUG
+        // A live "Sidebar background" or "Canvas" dial repaints the chrome
+        // and card layers and re-casts the card shadows.
+        applyChromeColor()
+        terminalShadowHost.applyShadow()
+        browserShadowHost.applyShadow()
         redlineOverlay.refresh()
         #endif
     }
@@ -946,6 +984,11 @@ class WorkspaceViewContainer: NSView {
         if railRevealTarget {
             railRevealBackingGutter.constant = WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset)
         }
+        applyOverlayPanelInsets(inset)
+        if sidebarMode == .overlay {
+            sidebarHostLeadingConstraint.constant = inset
+            sidebarHostBottomConstraint.constant = -inset
+        }
         // Overlay collapses the browser to zero insets; leave it there.
         if sidebarMode != .overlay {
             browserShadowHostTopConstraint.constant = inset
@@ -959,11 +1002,21 @@ class WorkspaceViewContainer: NSView {
         terminalContainer.layer?.cornerRadius = radius
         terminalShadowHost.layer?.cornerRadius = radius
         historyHostingView.layer?.cornerRadius = radius
+        sidebarOverlayBackground.layer?.cornerRadius = radius
         if sidebarMode != .overlay {
             browserShadowHost.layer?.cornerRadius = radius
         }
         needsLayout = true
         invalidateIntrinsicContentSize()
+    }
+
+    /// The overlay card's frame constants at a window margin. Only visible
+    /// in overlay, so they're written outright rather than animated.
+    private func applyOverlayPanelInsets(_ inset: CGFloat) {
+        overlayPanelTopConstraint.constant = inset
+        overlayPanelLeadingConstraint.constant = inset
+        overlayPanelBottomConstraint.constant = -inset
+        overlayPanelTrailingConstraint.constant = WorkspaceLayout.sidebarTrailingGutter(for: .overlay, margin: inset)
     }
 
     @available(*, unavailable)
@@ -981,6 +1034,7 @@ class WorkspaceViewContainer: NSView {
         // Clean up previous window's observers (handles view moving between windows).
         NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: NSWindow.willEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: fullScreenObservedWindow)
@@ -1023,6 +1077,16 @@ class WorkspaceViewContainer: NSView {
             self,
             selector: #selector(windowDidBecomeKey),
             name: NSWindow.didBecomeKeyNotification,
+            object: window
+        )
+
+        // Closing this window while it owns the composer (the red button,
+        // with the app still active) tears the composer down here rather
+        // than waiting on SwiftUI's `.onDisappear`.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillCloseComposerOwner),
+            name: NSWindow.willCloseNotification,
             object: window
         )
 
@@ -1130,13 +1194,36 @@ class WorkspaceViewContainer: NSView {
     }
 
     #if DEBUG
+    /// `GHOSTTIES_CAPTURE_COMPOSER_TEXT` / `_THEME_SELECT` / `_THEME_BENCH`:
+    /// fills the just-opened composer and drives its theme picker through
+    /// the same calls typing and the arrow keys make.
+    private static func applyCaptureComposerText() {
+        guard let text = CaptureFixture.composerText else { return }
+        let composer = SessionComposerStore.shared
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            composer.searchText = text
+            guard let index = CaptureFixture.themeSelection else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                composer.themePicker.select(index)
+                guard let bench = CaptureFixture.themeBench else { return }
+                for step in 0..<bench.steps {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + bench.interval * Double(step + 1)) {
+                        _ = composer.themePicker.move(.right, columns: 3)
+                    }
+                }
+            }
+        }
+    }
+
     /// Capture-rig launch hooks that live on the container because it exists
     /// in every sidebar mode (the sidebar itself is unmounted when closed).
     /// Each calls the action its click or shortcut calls.
     private func triggerCaptureLaunchHooksIfNeeded() {
         if let hook = CaptureFixture.composerHook, CaptureFixture.claimHook("composer") {
+            CaptureFixture.applyThemePresentation()
             DispatchQueue.main.asyncAfter(deadline: .now() + hook.delay) { [weak self] in
                 guard let self else { return }
+                defer { Self.applyCaptureComposerText() }
                 switch hook.target {
                 case .open:
                     // The tray "+" (`SidebarTrayItems.sidebarTrayItems`).
@@ -1183,6 +1270,55 @@ class WorkspaceViewContainer: NSView {
             DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
                 guard let self, self.sidebarMode == .collapsed else { return }
                 self.railHover.revealNow()
+                guard let collapse = CaptureFixture.railRevealCollapseAfter else { return }
+                // The pointer leaving: the exit grace, then the same collapse.
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapse) { [weak self] in
+                    self?.railHover.pointerExited()
+                }
+            }
+        }
+        if let start = CaptureFixture.hoverRevealLoopStart, CaptureFixture.claimHook("hoverRevealLoop") {
+            // The closed edge strip's hover, without a pointer: its
+            // mouseEntered reveal, a hold, its mouseExited close, a hold.
+            let hold = CaptureFixture.hoverRevealLoopHold
+            func cycle(_ remaining: Int, after delay: TimeInterval) {
+                guard remaining > 0 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self, self.sidebarMode == .closed else { return }
+                    self.revealFromClosedStrip()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
+                        guard let self, self.sidebarMode == .overlay || self.isClosedHoverRevealed else { return }
+                        self.closeRevealFromClosedStrip()
+                        cycle(remaining - 1, after: hold)
+                    }
+                }
+            }
+            cycle(CaptureFixture.hoverRevealLoopCycles, after: start)
+        }
+        if let sequence = CaptureFixture.selectSequence, CaptureFixture.claimHook("selectSequence") {
+            // Cmd+Shift+] / [ order over the rows the mounted sidebar lists
+            // (`railSessions`), repeating, so it works pinned and on the rail.
+            // Fixture sessions have no terminal, so the shortcut's own path
+            // (`focusAdjacentLiveSession`, live surfaces only) finds nothing:
+            // select through `activeSessionId`, which every row's chip reads.
+            func tick(_ remaining: Int) {
+                guard remaining > 0 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
+                    guard let self else { return }
+                    let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab))
+                    self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
+                    tick(remaining - 1)
+                }
+            }
+            tick(CaptureFixture.selectSequenceTicks)
+        }
+        if let newTab = CaptureFixture.newTab, CaptureFixture.claimHook("newTab") {
+            // As a new tab into that project: unfold it if folded, then the session.
+            DispatchQueue.main.asyncAfter(deadline: .now() + newTab.delay) { [weak self] in
+                guard let self, let project = self.store.projects.first(where: { $0.name == newTab.projectName }) else { return }
+                NotificationCenter.default.post(name: .workspaceDidCreateSessionInProject, object: self.window, userInfo: ["projectId": project.id])
+                self.coordinator.insertSessionForCapture(in: project, store: self.store)
             }
         }
         if let steps = CaptureFixture.morphSteps, CaptureFixture.claimHook("morphSteps") {
@@ -1240,16 +1376,11 @@ class WorkspaceViewContainer: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
-        // Canvas still follows OS light/dark — it's Ghostties chrome, not
-        // terminal content.
-        layer?.backgroundColor = canvasBackgroundCGColor
-        // Terminal card follows the focused surface's theme when available;
-        // the resolver handles the light/dark fallback itself.
-        terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
-        // Browser card has no theme concept — always the light/dark fallback.
-        browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-        railRevealBacking.layer?.backgroundColor = canvasBackgroundCGColor
+        // The layer colours are resolved `cgColor`s: repaint them, the hover
+        // bar's included, or they keep the old appearance. Same repaint as a
+        // theme change; with a theme loaded this only runs when the theme's
+        // polarity moves the forced appearance (or on attaching to a window).
+        applyChromeColor()
     }
 
     /// Zero out safe area insets so Auto Layout constraints measure from
@@ -1402,12 +1533,20 @@ class WorkspaceViewContainer: NSView {
         }
         // The shadow lives on `backgroundEffectView` now (see its declaration
         // comment) — a rounded-rect path matching the panel it sits behind,
-        // same perf rationale as the two shadow paths above.
-        if !backgroundEffectView.bounds.isEmpty {
+        // same perf rationale as the two shadow paths above. Inset by the
+        // blur top and bottom: the bar shares the card's top, leading and
+        // bottom edges, where the card's own shadow already reads as the
+        // stack's edge, so the bar only casts onto the canvas — no second
+        // band in the window margin above and below it. The inset tracks the
+        // blur, not the 8pt margin: how far the shadow bleeds past the path
+        // scales with the blur, and at blur 16 an 8pt inset would put a band
+        // ~2–6× darker than before into the margin above and below the bar.
+        let hoverBarShadowBounds = backgroundEffectView.bounds.insetBy(dx: 0, dy: WorkspaceLayout.hoverBarShadowRadius)
+        if !hoverBarShadowBounds.isEmpty {
             backgroundEffectView.layer?.shadowPath = CGPath(
-                roundedRect: backgroundEffectView.bounds,
-                cornerWidth: 18,
-                cornerHeight: 18,
+                roundedRect: hoverBarShadowBounds,
+                cornerWidth: WorkspaceLayout.terminalCornerRadius,
+                cornerHeight: WorkspaceLayout.terminalCornerRadius,
                 transform: nil
             )
         }
@@ -1827,7 +1966,8 @@ class WorkspaceViewContainer: NSView {
     /// width straight to the narrow rail. `closed` is left in the model
     /// (persistence, the hot zone, and the overlay reveal all still work),
     /// but the toggle can no longer reach or leave it — a persisted `closed`
-    /// state only exits via the hot zone → overlay → promote-to-pinned path.
+    /// state exits via Cmd+Shift+S / the View menu, or the hot zone →
+    /// overlay → promote-to-pinned path.
     /// Overlay isn't part of the cycle — it's a transient hover state, not
     /// one of the persisted widths — so the toggle promotes it straight to
     /// pinned, same as before Flow 01.
@@ -1846,6 +1986,14 @@ class WorkspaceViewContainer: NSView {
     }
 
     @objc func toggleSidebar() {
+        // Cmd+S during a closed hover reveal pins it for real, in place:
+        // the layout is already pinned, so nothing moves.
+        if isClosedHoverRevealed {
+            isClosedHoverRevealed = false
+            store.updateSidebarMode(.pinned)
+            updateTrackingAreas()
+            return
+        }
         transitionTo(Self.nextSidebarMode(after: sidebarMode))
     }
 
@@ -1935,7 +2083,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Shadow + corner radius (non-animatable).
-        browserShadowHost.layer?.shadowOpacity = visible ? WorkspaceLayout.canvasShadowOpacity : 0
+        browserShadowHost.castsShadow = visible
 
         invalidateIntrinsicContentSize()
     }
@@ -2016,6 +2164,14 @@ class WorkspaceViewContainer: NSView {
         let inset = SidebarDialTuning.windowMargin()
         let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
         let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
+        // Overlay only resizes: no snapping to the rail, no pinning. It
+        // writes the same width pinned uses.
+        if sidebarMode == .overlay {
+            guard !isSidebarTransitionAnimating else { return }
+            applyDraggedSidebarWidth(min(max(pointer, WorkspaceLayout.sidebarMinWidth), upperBound))
+            return
+        }
+
         let target = Self.sidebarDragTarget(
             pointerWidth: pointer,
             railWidth: WorkspaceLayout.collapsedRailWidth(in: self),
@@ -2037,7 +2193,11 @@ class WorkspaceViewContainer: NSView {
         // animation is driving the width constraint — writing it mid-flight
         // would fight the animator. The next tick after it settles catches up.
         guard target.mode == .pinned, !isSidebarTransitionAnimating else { return }
+        applyDraggedSidebarWidth(target.width)
+    }
 
+    /// Writes a dragged sidebar width — pinned's and overlay's one path.
+    private func applyDraggedSidebarWidth(_ width: CGFloat) {
         // Single source of truth: writing through `currentSidebarWidth` updates
         // the same stored value `applySidebarView()` reads when it next runs,
         // and writing `widthModel.width` updates the live SwiftUI
@@ -2049,15 +2209,44 @@ class WorkspaceViewContainer: NSView {
         // TaskSidebarView + environment objects) and was previously invoked on
         // every mouseDragged tick at 60-120Hz — the sidebar subtree has a
         // documented render-cost history (two shipped 100%-CPU beachballs).
-        sidebarWidthConstraint.constant = target.width
-        currentSidebarWidth = target.width
-        widthModel.expandedWidth = target.width
-        widthModel.width = target.width
+        sidebarWidthConstraint.constant = width
+        currentSidebarWidth = width
+        widthModel.expandedWidth = width
+        widthModel.width = width
     }
 
     private func endSidebarDrag() {
         sidebarDragPointerWidth = nil
         persistSidebarWidth()
+        // The overlay held open through the drag (`mouseExited`). Its hover
+        // zone follows the new width, and a drag that ended outside it
+        // closes the overlay as any exit does: the exit AppKit may still
+        // deliver belongs to the replaced tracking area, so it's ignored.
+        guard sidebarMode == .overlay || isClosedHoverRevealed else { return }
+        updateTrackingAreas()
+        if !pointerIsInOverlayZone {
+            // Not debounced: a drag can end within the guard's 0.25s of the
+            // overlay opening, and this close must not be dropped.
+            transitionTo(.closed, debounced: false)
+        }
+    }
+
+    /// Whether the pointer is inside the open overlay's hover zone.
+    private var pointerIsInOverlayZone: Bool {
+        guard let window else { return false }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        return openRevealZone.contains(point)
+    }
+
+    /// The open reveal's hover zone: the overlay's, or for a closed hover
+    /// reveal the pinned sidebar out to the card's leading edge.
+    private var openRevealZone: CGRect {
+        let margin = SidebarDialTuning.windowMargin()
+        if isClosedHoverRevealed {
+            let width = currentSidebarWidth + WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: margin)
+            return CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height)
+        }
+        return WorkspaceLayout.overlayRevealZone(in: bounds, sidebarWidth: currentSidebarWidth, margin: margin)
     }
 
     /// Persist the drag-resized width to this view mode's UserDefaults key.
@@ -2245,14 +2434,25 @@ class WorkspaceViewContainer: NSView {
     private var lastTransitionTime: CFTimeInterval = 0
 
     /// Centralized state transition. All sidebar mode changes go through here.
-    private func transitionTo(_ newMode: SidebarMode) {
+    /// `debounced: false` skips the oscillation guard, for a transition that
+    /// is a deliberate one-off rather than a hover flicker (the close at the
+    /// end of an overlay drag).
+    private func transitionTo(_ newMode: SidebarMode, debounced: Bool = true, closedHoverReveal: Bool = false) {
         guard newMode != sidebarMode else { return }
         let now = CACurrentMediaTime()
-        guard now - lastTransitionTime > 0.25 else { return }
+        guard !debounced || now - lastTransitionTime > 0.25 else { return }
         lastTransitionTime = now
+        let endsClosedHoverReveal = isClosedHoverRevealed && newMode == .closed
+        isClosedHoverRevealed = closedHoverReveal
         isMorphStepHeld = false
         let previousMode = sidebarMode
         sidebarMode = newMode
+        // An overlay drag ends with the overlay: a later overlay must never
+        // inherit a drag whose mouse-up was lost (`mouseExited` holds an
+        // overlay open while one is in progress).
+        if previousMode == .overlay {
+            sidebarDragPointerWidth = nil
+        }
 
         // Leaving the rail ends any hover reveal. Cmd+S while revealed pins
         // it: the sidebar is already out at the pinned width, so it stays
@@ -2272,8 +2472,8 @@ class WorkspaceViewContainer: NSView {
 
         // Re-derive the overlay's text/icon legibility override — only
         // overlay mode needs `sidebarHostingView`'s appearance pinned to
-        // `overlayBackgroundNSColor`'s luminance; every other mode must
-        // clear it and fall back to the OS appearance.
+        // the theme's polarity; every other mode must clear it and follow
+        // the container (the same polarity).
         applyChromeColor()
 
         let inset = SidebarDialTuning.windowMargin()
@@ -2315,6 +2515,16 @@ class WorkspaceViewContainer: NSView {
             applySidebarView()
         }
 
+        // A closed hover reveal's close: the card starts from where it is.
+        // `shadowHostLeadingToSuperview` still holds the closed inset from
+        // before the reveal, so the swap below would jump the card there in
+        // the first layout pass, over the sidebar still animating out — the
+        // close read as instant. (Cmd+Shift+S from pinned has the same jump;
+        // left as is in this spike.)
+        if endsClosedHoverReveal {
+            shadowHostLeadingToSuperview.constant = cardLeadingFromConstraints
+        }
+
         // 1. Swap leading constraints before animation.
         switch newMode {
         case .pinned, .collapsed:
@@ -2324,6 +2534,13 @@ class WorkspaceViewContainer: NSView {
             shadowHostLeadingToSidebar.isActive = false
             shadowHostLeadingToSuperview.isActive = true
         }
+        if newMode == .overlay {
+            sidebarDragHandleTrailingToCard.isActive = false
+            sidebarDragHandleTrailingToPanel.isActive = true
+        } else {
+            sidebarDragHandleTrailingToPanel.isActive = false
+            sidebarDragHandleTrailingToCard.isActive = true
+        }
 
         // 2. Z-ordering for overlay mode. A pinned reveal keeps the sidebar
         // above the card until the card has slid out from under it.
@@ -2332,6 +2549,10 @@ class WorkspaceViewContainer: NSView {
             sidebarHostingView.layer?.zPosition = overlayZ
         }
         sidebarOverlayBackground.layer?.zPosition = newMode == .overlay ? 99 : 0
+        // The bar's shadow caster sits directly under the bar and above the
+        // terminal card. At 0 it was the first subview, under the opaque
+        // card, so its shadow only showed in the window margins.
+        backgroundEffectView.layer?.zPosition = newMode == .overlay ? 98 : 0
 
         // 3. Toggle isHidden so inactive NSVisualEffectViews leave the compositing tree.
         //    The background material is only visible in overlay mode (floating hover state).
@@ -2346,9 +2567,9 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Sidebar drag handle: active while pinned or collapsed — dragging
-        // snaps between the two. Hidden in closed mode (sidebar isn't there)
-        // and in overlay mode (transient hover state — not a resize target).
-        sidebarDragHandle.isHidden = !(newMode == .pinned || newMode == .collapsed)
+        // snaps between the two — and in overlay, where it only resizes.
+        // Hidden in closed mode (sidebar isn't there).
+        sidebarDragHandle.isHidden = newMode == .closed
 
         // 4. Animate constraints, widths, alphas — duration/curve come from
         // the Flow 05 named-transition table (`WorkspaceLayout.
@@ -2363,7 +2584,17 @@ class WorkspaceViewContainer: NSView {
         // doc comment) — retargeting the constraint itself is safe, but a
         // SUPERSEDED transition's own completion firing late is not.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
+        // A closed hover reveal opens and closes on its own dials ("Reveal
+        // open"/"Reveal close"), ease-in-out; every other transition keeps
+        // its row in the Flow 05 table.
+        let timing: WorkspaceLayout.SidebarTransitionTiming
+        if closedHoverReveal {
+            timing = .init(duration: SidebarDialTuning.hoverRevealOpenDuration(), curve: .legacyEaseInOut)
+        } else if endsClosedHoverReveal {
+            timing = .init(duration: SidebarDialTuning.hoverRevealCloseDuration(), curve: .legacyEaseInOut)
+        } else {
+            timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
+        }
         isSidebarTransitionAnimating = true
         sidebarTransitionGeneration += 1
         let generation = sidebarTransitionGeneration
@@ -2456,12 +2687,12 @@ class WorkspaceViewContainer: NSView {
         case .pinned, .collapsed:
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castsShadow = true
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-            browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
+            browserShadowHost.castsShadow = isBrowserVisible
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .closed:
@@ -2472,12 +2703,12 @@ class WorkspaceViewContainer: NSView {
             // token the pinned state uses, not a distinct "closed" radius.
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castsShadow = true
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
-            browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
+            browserShadowHost.castsShadow = isBrowserVisible
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .overlay:
@@ -2485,14 +2716,14 @@ class WorkspaceViewContainer: NSView {
             // always reads as a floating card, even while the sidebar hovers.
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.castsShadow = true
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
             // Browser panel is force-collapsed on entry to overlay (see above);
             // leave its own card styling untouched.
             browserShadowHost.layer?.cornerRadius = 0
             browserShadowHost.layer?.backgroundColor = nil
-            browserShadowHost.layer?.shadowOpacity = 0
+            browserShadowHost.castsShadow = false
             layer?.backgroundColor = canvasBackgroundCGColor
             // The shadow lives on `backgroundEffectView`, not
             // `sidebarOverlayBackground` — the latter is now the opaque,
@@ -2500,7 +2731,7 @@ class WorkspaceViewContainer: NSView {
             // a `masksToBounds` layer gets clipped along with everything
             // else outside its bounds, so it has to live on the unclipped
             // sibling that sits directly behind it.
-            backgroundEffectView.layer?.shadowOpacity = 0.5
+            backgroundEffectView.layer?.shadowOpacity = WorkspaceLayout.hoverBarShadowOpacity
         }
 
         // 6. Traffic lights.
@@ -2525,7 +2756,10 @@ class WorkspaceViewContainer: NSView {
         }
 
         // 8. Persist (overlay is transient — store persists it as .closed).
-        store.updateSidebarMode(newMode)
+        // A closed hover reveal never reaches the store: it stays `.closed`.
+        if !isClosedHoverRevealed {
+            store.updateSidebarMode(newMode)
+        }
 
         invalidateIntrinsicContentSize()
     }
@@ -2567,6 +2801,8 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.expandedWidth = currentSidebarWidth
             if updatesWidthModel { widthModel.width = currentSidebarWidth }
+            set(sidebarHostLeadingConstraint, 0)
+            set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .pinned, margin: inset))
@@ -2587,6 +2823,8 @@ class WorkspaceViewContainer: NSView {
             let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
             set(sidebarWidthConstraint, railWidth)
             if updatesWidthModel { widthModel.width = railWidth }
+            set(sidebarHostLeadingConstraint, 0)
+            set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .collapsed, margin: inset))
@@ -2609,6 +2847,8 @@ class WorkspaceViewContainer: NSView {
             // this mode per the leading-constraint swap above). Never full
             // bleed — overrides Flow 05's own "card padding-left 8 → 0."
             set(sidebarWidthConstraint, 0)
+            set(sidebarHostLeadingConstraint, 0)
+            set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSuperview, inset)
             if !isBrowserVisible {
@@ -2632,6 +2872,13 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
             widthModel.expandedWidth = currentSidebarWidth
+            // The pinned sidebar, moved off the window edge by the card
+            // margin: same width and gutter as pinned, so the list, chips
+            // and tray keep their pinned insets inside the overlay card.
+            set(sidebarHostLeadingConstraint, inset)
+            set(sidebarHostBottomConstraint, -inset)
+            applyOverlayPanelInsets(inset)
+            set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .overlay, margin: inset))
             // Terminal floats as a carded, inset canvas — same outer inset
             // as pinned/closed. The sidebar (z-order above the card) floats
             // over its left edge rather than sharing space with it.
@@ -2900,8 +3147,18 @@ class WorkspaceViewContainer: NSView {
     /// the panel are routed to it here.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        guard railRevealOverlays, let hit else { return hit }
+        guard let hit else { return hit }
         let local = convert(point, from: superview)
+        // The overlay card's drag handle sits in the card's gutter, over the
+        // terminal card. Only a hit the terminal or browser would otherwise
+        // take goes to it; anything layered above them (the composer) keeps
+        // its click.
+        if sidebarMode == .overlay, !sidebarDragHandle.isHidden,
+           sidebarDragHandle.frame.contains(local),
+           [terminalShadowHost, browserShadowHost].contains(where: { hit === $0 || hit.isDescendant(of: $0) }) {
+            return sidebarDragHandle.hitTest(local) ?? hit
+        }
+        guard railRevealOverlays else { return hit }
         guard railRevealBacking.frame.contains(local) else { return hit }
         let underPanel = [terminalShadowHost, browserShadowHost, sidebarDragHandle, browserDragHandle]
             .contains { hit === $0 || hit.isDescendant(of: $0) }
@@ -2923,13 +3180,8 @@ class WorkspaceViewContainer: NSView {
         switch sidebarMode {
         case .closed:
             // Install trigger zone: thin strip at left edge.
-            let triggerRect = CGRect(
-                x: 0, y: 0,
-                width: WorkspaceLayout.overlayTriggerWidth,
-                height: bounds.height
-            )
             let area = NSTrackingArea(
-                rect: triggerRect,
+                rect: WorkspaceLayout.closedRevealZone(in: bounds),
                 options: [.mouseEnteredAndExited, .activeInKeyWindow],
                 owner: self,
                 userInfo: nil
@@ -2939,13 +3191,22 @@ class WorkspaceViewContainer: NSView {
 
         case .overlay:
             // Install sidebar zone: covers sidebar width.
-            let sidebarRect = CGRect(
-                x: 0, y: 0,
-                width: currentSidebarWidth,
-                height: bounds.height
-            )
             let area = NSTrackingArea(
-                rect: sidebarRect,
+                rect: WorkspaceLayout.overlayRevealZone(
+                    in: bounds,
+                    sidebarWidth: currentSidebarWidth,
+                    margin: SidebarDialTuning.windowMargin()
+                ),
+                options: [.mouseEnteredAndExited, .activeInKeyWindow],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+            activeTrackingArea = area
+
+        case .pinned where isClosedHoverRevealed:
+            let area = NSTrackingArea(
+                rect: openRevealZone,
                 options: [.mouseEnteredAndExited, .activeInKeyWindow],
                 owner: self,
                 userInfo: nil
@@ -2954,29 +3215,63 @@ class WorkspaceViewContainer: NSView {
             activeTrackingArea = area
 
         case .pinned, .collapsed:
-            // No tracking areas needed — decision 2: the rail gets no
-            // hover-reveal of its own; the only way back to 244pt from a
-            // non-pinned state is the closed-mode hot zone above.
+            // No tracking areas needed. The rail's hover reveal runs on its
+            // own gate (`RailHoverReveal`), not here.
             break
         }
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if sidebarMode == .closed {
+        // Only the closed strip's own tracking area (installed from
+        // `WorkspaceLayout.closedRevealZone(in:)`) reveals. Subviews
+        // forward their mouseEntered up the responder chain to here — the
+        // terminal's SurfaceView calls `super.mouseEntered` from a
+        // whole-surface tracking area — so without this check entering
+        // the terminal anywhere opened the overlay.
+        guard sidebarMode == .closed,
+              let area = activeTrackingArea, event.trackingArea === area
+        else { return }
+        revealFromClosedStrip()
+    }
+
+    /// The closed strip's reveal: what `mouseEntered` runs once the pointer
+    /// is in the strip's own tracking area.
+    private func revealFromClosedStrip() {
+        // "Hover shows full sidebar": the real pinned layout, not a pin.
+        if SidebarDialTuning.hoverBarPushesCanvas() {
+            transitionTo(.pinned, closedHoverReveal: true)
+        } else {
             transitionTo(.overlay)
         }
     }
 
     override func mouseExited(with event: NSEvent) {
-        if sidebarMode == .overlay {
-            transitionTo(.closed)
-        }
+        // Same rule: only the overlay's own tracking area closes it, never
+        // an exit forwarded up from a subview. A sidebar drag holds it
+        // open; `endSidebarDrag` closes it if the drag ends outside.
+        guard sidebarMode == .overlay || isClosedHoverRevealed,
+              let area = activeTrackingArea, event.trackingArea === area,
+              sidebarDragPointerWidth == nil
+        else { return }
+        closeRevealFromClosedStrip()
+    }
+
+    /// The reveal's close: what `mouseExited` runs once the pointer leaves
+    /// the overlay's (or the hover reveal's) own tracking area.
+    private func closeRevealFromClosedStrip() {
+        transitionTo(.closed)
     }
 
     // MARK: - Window Focus
 
     @objc private func windowDidResignKey() {
-        if sidebarMode == .overlay {
+        // A drag whose mouse-up never arrives (the window lost key mid-drag)
+        // ends here, so it can't hold any overlay open later.
+        if sidebarDragPointerWidth != nil {
+            sidebarDragPointerWidth = nil
+            persistSidebarWidth()
+        }
+        if sidebarMode == .overlay || isClosedHoverRevealed {
             transitionTo(.closed)
         }
         // Rail hover reveal: leaving the window collapses a reveal and
@@ -3034,6 +3329,16 @@ class WorkspaceViewContainer: NSView {
     /// that actually have an installed overlay do anything.
     @objc private func applicationDidResignActive() {
         dismissComposerOverlayIfPresented()
+    }
+
+    /// This window is closing: if it owns the composer, close the composer
+    /// and revert any theme preview now.
+    @objc private func windowWillCloseComposerOwner() {
+        guard SessionComposerStore.shared.owningWindow === window else { return }
+        dismissComposerOverlayIfPresented()
+        // The overlay may not be installed yet (opened this runloop turn),
+        // so the store is closed here too; it no-ops when already closed.
+        SessionComposerStore.shared.closeForOverlayTeardown()
     }
 
     @objc private func windowDidBecomeKey() {
@@ -3268,6 +3573,23 @@ class WorkspaceViewContainer: NSView {
     /// overlay back out mid-animation.
     private var composerOverlayTransitionGeneration = 0
 
+    #if DEBUG
+    /// Whether the composer overlay is installed and not on its way out.
+    var isComposerOverlayPresentedForTesting: Bool {
+        composerOverlayHostingView.superview != nil && !isDismissingComposerOverlay
+    }
+
+    /// Fade-ins/outs run by a dismiss or re-present (one per call that
+    /// actually starts one).
+    var composerOverlayTransitionCountForTesting: Int { composerOverlayTransitionGeneration }
+    #endif
+
+    /// True from the start of a dismiss until its fade removes the overlay
+    /// (or a re-present supersedes it). Makes the dismiss path idempotent:
+    /// the store's `isOpen` sink re-enters it after the teardown closes the
+    /// store, and that second call must not restart the fade.
+    private var isDismissingComposerOverlay = false
+
     /// Adds the composer overlay hosting view as a subview, pinned to the
     /// container's full bounds — not `layout()` — so its dismiss layer can
     /// span the whole terminal. Fades in (F8, Phase 3 review) to match
@@ -3278,6 +3600,7 @@ class WorkspaceViewContainer: NSView {
     /// re-adding it.
     private func installComposerOverlayIfNeeded() {
         composerOverlayTransitionGeneration += 1
+        isDismissingComposerOverlay = false
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         // R3 (Phase 3 review round 2): re-enable hit-testing on (re-)present
         // — a fast dismiss-then-reopen can land here while a previous
@@ -3356,8 +3679,14 @@ class WorkspaceViewContainer: NSView {
     /// tab-title editing (`TerminalWindow.tabTitleEditor(_:didFinishEditing:)`).
     /// Without this, Escape (or any other dismiss) leaves the terminal
     /// keyboard-dead until the user clicks it.
-    private func dismissComposerOverlayIfPresented() {
-        guard composerOverlayHostingView.superview != nil else { return }
+    func dismissComposerOverlayIfPresented() {
+        guard composerOverlayHostingView.superview != nil, !isDismissingComposerOverlay else { return }
+        isDismissingComposerOverlay = true
+
+        // Close the store (and revert a theme preview) here, not via the
+        // palette's `.onDisappear`, which only runs once the fade below
+        // finishes and the hosting view leaves the hierarchy.
+        SessionComposerStore.shared.closeForOverlayTeardown()
 
         // Blocker 3 (Phase 3 review round 3): clear ownership if this
         // window was the owner, so the next `presentComposerOverlay` call
@@ -3415,6 +3744,7 @@ class WorkspaceViewContainer: NSView {
         }, completionHandler: { [weak self] in
             guard let self, self.composerOverlayTransitionGeneration == myGeneration else { return }
             self.composerOverlayHostingView.removeFromSuperview()
+            self.isDismissingComposerOverlay = false
         })
     }
 
@@ -3484,25 +3814,25 @@ class WorkspaceViewContainer: NSView {
         // Enable layers for z-ordering in overlay mode.
         sidebarHostingView.wantsLayer = true
 
-        // Shadow host (Flow 01 §04): black, offset (12, 0), blur 16 — cast
-        // right, onto the terminal. Opacity is toggled per-mode in
-        // `transitionTo` (0 except in overlay, where it's 0.5 ≈ `#00000080`).
+        // Shadow host: the hover bar's shadow (`hoverBarShadow*`, beta.26),
+        // offset (12, 0) — cast right, onto the terminal. Opacity is toggled
+        // per-mode in `transitionTo` (0 except in overlay).
         backgroundEffectView.wantsLayer = true
-        backgroundEffectView.layer?.shadowColor = NSColor.black.cgColor
-        backgroundEffectView.layer?.shadowRadius = 16
+        backgroundEffectView.layer?.shadowColor = WorkspaceLayout.hoverBarShadowColor
+        backgroundEffectView.layer?.shadowRadius = WorkspaceLayout.hoverBarShadowRadius
         backgroundEffectView.layer?.shadowOffset = CGSize(width: 12, height: 0)
 
         // Opaque panel content: fills with `overlayBackgroundNSColor` — the
-        // focused terminal session's own background (Sean's review — light
-        // over a light terminal theme, dark over a dark one), falling back
-        // to the static canvas token before a surface is observed. This
+        // pinned sidebar's chrome for the current appearance. This
         // initial value is immediately superseded by `applyChromeColor()`
         // below, which is the real source of truth and repaints on every
-        // session swap and theme reload. Radius 18, 1pt stroke `#00000026`,
+        // session swap and theme reload. Concentric with the window corner
+        // at the window margin it sits inside, like the terminal card
+        // (`applyWindowMargin` keeps it live); 1pt stroke `#00000026`,
         // clipped to the rounded rect.
         sidebarOverlayBackground.wantsLayer = true
         sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
-        sidebarOverlayBackground.layer?.cornerRadius = 18
+        sidebarOverlayBackground.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
         sidebarOverlayBackground.layer?.masksToBounds = true
         sidebarOverlayBackground.layer?.borderWidth = 1
         sidebarOverlayBackground.layer?.borderColor = NSColor.black.withAlphaComponent(CGFloat(0x26) / 255.0).cgColor
@@ -3545,12 +3875,23 @@ class WorkspaceViewContainer: NSView {
         sidebarDragHandle.isHidden = !occupiesSpace
 
         sidebarWidthConstraint = sidebarHostingView.widthAnchor.constraint(equalToConstant: initialWidth)
+        // Overlay is never the launch mode (it persists as closed), so the
+        // column starts flush with the window.
+        sidebarHostLeadingConstraint = sidebarHostingView.leadingAnchor.constraint(equalTo: leadingAnchor)
+        sidebarHostBottomConstraint = sidebarHostingView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        overlayPanelTopConstraint = sidebarOverlayBackground.topAnchor.constraint(equalTo: topAnchor)
+        overlayPanelLeadingConstraint = sidebarOverlayBackground.leadingAnchor.constraint(equalTo: leadingAnchor)
+        overlayPanelBottomConstraint = sidebarOverlayBackground.bottomAnchor.constraint(equalTo: bottomAnchor)
+        overlayPanelTrailingConstraint = sidebarOverlayBackground.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor)
+        sidebarDragHandleTrailingToCard = sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor)
+        sidebarDragHandleTrailingToPanel = sidebarDragHandle.trailingAnchor.constraint(equalTo: sidebarOverlayBackground.trailingAnchor)
 
         // Closed launches with the same 8pt card margin as every other
         // mode (Sean's closed-state layout call — see `transitionTo`'s
         // `applyTransitionConstraints(for:.closed:)` doc comment); it is
         // never full bleed.
         let inset: CGFloat = SidebarDialTuning.windowMargin()
+        applyOverlayPanelInsets(inset)
         // Inset constraints target the shadow host, not the terminal directly.
         shadowHostTopConstraint = terminalShadowHost.topAnchor.constraint(
             equalTo: topAnchor, constant: inset)
@@ -3610,24 +3951,22 @@ class WorkspaceViewContainer: NSView {
             railHoverZone.bottomAnchor.constraint(equalTo: bottomAnchor),
             railHoverZone.trailingAnchor.constraint(equalTo: railRevealBacking.trailingAnchor),
 
-            // Flow 01 §04: the overlay panel is inset 4pt from the window's
-            // top/left/bottom edges (its trailing edge isn't a window edge —
-            // it floats near the left, so it tracks the sidebar's own width
-            // instead, uninset).
-            backgroundEffectView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            backgroundEffectView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            backgroundEffectView.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
-            backgroundEffectView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-
-            // Overlay background tracks sidebar width via trailing edge.
-            sidebarOverlayBackground.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            sidebarOverlayBackground.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            sidebarOverlayBackground.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-            sidebarOverlayBackground.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
+            // The overlay card: the window margin off the window's
+            // top/left/bottom edges, like the terminal card, and the pinned
+            // gutter past the sidebar column (`applyOverlayPanelInsets`).
+            // The shadow host behind it shares its frame.
+            overlayPanelTopConstraint,
+            overlayPanelLeadingConstraint,
+            overlayPanelBottomConstraint,
+            overlayPanelTrailingConstraint,
+            backgroundEffectView.topAnchor.constraint(equalTo: sidebarOverlayBackground.topAnchor),
+            backgroundEffectView.leadingAnchor.constraint(equalTo: sidebarOverlayBackground.leadingAnchor),
+            backgroundEffectView.trailingAnchor.constraint(equalTo: sidebarOverlayBackground.trailingAnchor),
+            backgroundEffectView.bottomAnchor.constraint(equalTo: sidebarOverlayBackground.bottomAnchor),
 
             sidebarHostingView.topAnchor.constraint(equalTo: topAnchor),
-            sidebarHostingView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            sidebarHostingView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            sidebarHostLeadingConstraint,
+            sidebarHostBottomConstraint,
             sidebarWidthConstraint,
 
             shadowHostTopConstraint,
@@ -3666,7 +4005,7 @@ class WorkspaceViewContainer: NSView {
             sidebarDragHandle.topAnchor.constraint(equalTo: sidebarHostingView.topAnchor),
             sidebarDragHandle.bottomAnchor.constraint(equalTo: sidebarHostingView.bottomAnchor),
             sidebarDragHandleWidthConstraint,
-            sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
+            sidebarDragHandleTrailingToCard,
 
             // Build-info badge: top-right corner of the whole window, on top
             // of sidebar and terminal alike. Trailing inset clears the DEBUG
@@ -3691,11 +4030,10 @@ class WorkspaceViewContainer: NSView {
 
         // Configure shadow on the host layer. Must happen after addSubview so the
         // layer exists (wantsLayer in a property closure may not create it in time).
+        // The host owns color/radius/offset and re-applies them with the opacity
+        // (`CardShadowHostView`).
         terminalShadowHost.wantsLayer = true
-        terminalShadowHost.layer?.shadowColor = WorkspaceLayout.canvasShadowColor
-        terminalShadowHost.layer?.shadowOpacity = hasCardInset ? WorkspaceLayout.canvasShadowOpacity : 0
-        terminalShadowHost.layer?.shadowRadius = WorkspaceLayout.canvasShadowRadius
-        terminalShadowHost.layer?.shadowOffset = WorkspaceLayout.canvasShadowOffset
+        terminalShadowHost.castsShadow = hasCardInset
 
         // Card background behind the title bar region. No masksToBounds — shadow
         // must render outside the layer bounds.
@@ -3705,10 +4043,7 @@ class WorkspaceViewContainer: NSView {
 
         // Browser shadow host — identical layer config to terminal shadow host.
         browserShadowHost.wantsLayer = true
-        browserShadowHost.layer?.shadowColor = WorkspaceLayout.canvasShadowColor
-        browserShadowHost.layer?.shadowOpacity = 0  // hidden initially
-        browserShadowHost.layer?.shadowRadius = WorkspaceLayout.canvasShadowRadius
-        browserShadowHost.layer?.shadowOffset = WorkspaceLayout.canvasShadowOffset
+        browserShadowHost.castsShadow = false  // hidden initially
         browserShadowHost.layer?.cornerRadius = hasCardInset ? initialTerminalRadius : 0
         browserShadowHost.layer?.cornerCurve = .continuous
         browserShadowHost.layer?.backgroundColor = hasCardInset ? browserCardBackgroundCGColor : nil
@@ -3929,27 +4264,23 @@ class WorkspaceViewContainer: NSView {
     }
 
     /// Repaint the chrome/canvas layers and the reveal overlay panel. The
-    /// terminal/browser cards and the outer layer use the static Ghostties
-    /// design-system palette (canvas/chrome tone) — terminal theme is
-    /// intentionally NOT bound there. The focused-surface Combine
-    /// subscription still drives this on session swaps and config changes —
-    /// for those three layers it's effectively a no-op repaint with static
-    /// tokens, but left in place to preserve the session-swap invalidation
-    /// path with minimal churn.
+    /// terminal/browser cards and the outer layer use the active theme's
+    /// canvas and chrome (`ChromeThemeStore`); `applyChromeTheme` drives this
+    /// on a theme change. The focused-surface Combine subscription still
+    /// drives it on session swaps and config changes — for those layers it's
+    /// effectively a no-op repaint, left in place to preserve the
+    /// session-swap invalidation path with minimal churn.
     ///
-    /// The reveal overlay panel (`sidebarOverlayBackground`) is the one
-    /// layer that IS theme-bound: it always repaints here, in every mode,
-    /// with `overlayBackgroundNSColor` — the focused terminal session's own
-    /// background (falling back to the static canvas token with no surface
-    /// focused, e.g. a browser pane) — so it's already correct the next
-    /// time overlay mode shows it, matching light-terminal/light-panel,
-    /// dark-terminal/dark-panel (Sean's review). `sidebarHostingView`'s
-    /// appearance is overridden to match that same fill's luminance while
+    /// The reveal overlay panel (`sidebarOverlayBackground`) always
+    /// repaints here, in every mode, with `overlayBackgroundNSColor` — the
+    /// pinned sidebar's chrome (beta.26) — so it's already correct the next
+    /// time overlay mode shows it. `sidebarHostingView`'s
+    /// appearance is pinned to the theme's polarity (`chromeScheme`) while
     /// overlay mode is active, so its SwiftUI text/icon tokens
-    /// (`sectionHeaderForeground(for:)` and friends, which read
-    /// `@Environment(\.colorScheme)`) stay legible against it; outside
-    /// overlay mode the override is cleared so the sidebar follows the OS
-    /// appearance as usual.
+    /// (`ChromeTheme.inkSecondary` and friends, which read
+    /// `@ChromeScheme`) resolve on the same side as that fill; outside
+    /// overlay mode the override is cleared and the sidebar follows the
+    /// container, whose appearance is the same theme polarity.
     ///
     /// The rest of this function no-ops in overlay mode, which intentionally
     /// clears the card/canvas layers to let the vibrancy material show
@@ -3997,6 +4328,56 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
             return true
         }
         return false
+    }
+}
+
+// MARK: - Card Shadow Host
+
+/// The terminal and browser cards' shadow host. It is the single owner of its
+/// layer's drop shadow: callers set `castsShadow` and never write
+/// `layer.shadow*` themselves. The shadow itself is the DESIGN.md canvas
+/// shadow for this view's appearance (`CanvasStyle`).
+///
+/// Why it has to own it: on every effective-appearance change (a light/dark
+/// switch, and attaching to a window) AppKit's `-[NSView
+/// _viewDidChangeAppearance:]` re-syncs a layer-backed view's layer shadow
+/// from `NSView.shadow` — nil here — which zeroes `layer.shadowOpacity`. That
+/// reset runs on this view after any ancestor's appearance callback, so only
+/// the view itself can re-apply in time; it does so in
+/// `viewDidChangeEffectiveAppearance`. The container also re-applies on
+/// every theme change (`applyChromeTheme`).
+private final class CardShadowHostView: NSView {
+    /// Whether the card casts its shadow. Mode transitions and the browser
+    /// toggle set this.
+    var castsShadow = false {
+        didSet { applyShadow() }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyShadow()
+    }
+
+    /// Also called on a theme change and a live "Canvas" dial change (DEBUG).
+    /// The side is the active theme's polarity (the store, not
+    /// `effectiveAppearance`, which can lag the forced appearance by a pass).
+    func applyShadow() {
+        guard let layer else { return }
+        let scheme: ColorScheme = ChromeThemeStore.shared.current?.polarity.colorScheme
+            ?? (effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light)
+        layer.shadowColor = CanvasStyle.shadowColor(scheme)
+        layer.shadowRadius = CanvasStyle.shadowRadius(scheme)
+        layer.shadowOffset = CanvasStyle.shadowOffset(scheme)
+        layer.shadowOpacity = castsShadow ? Float(CanvasStyle.shadowOpacity(scheme)) : 0
     }
 }
 
@@ -4206,5 +4587,39 @@ extension WorkspaceViewContainer: CaptureScript.Host {
     }
 
     func setPref(_ value: Bool?) { CaptureScript.applyPref(value) }
+
+    // MARK: Sidebar ops
+
+    private func postCaptureFold(_ ids: [UUID], fold: Bool, selectProject: Bool) {
+        NotificationCenter.default.post(
+            name: .captureProjectFold, object: window,
+            userInfo: ["projectIds": ids, "fold": fold, "selectProject": selectProject])
+    }
+
+    func foldAll() { postCaptureFold(store.projects.map(\.id), fold: true, selectProject: false) }
+
+    func setFolded(project name: String, folded: Bool) throws {
+        let project = try CaptureScript.resolveProject(name, in: store.projects, op: folded ? "fold" : "unfold")
+        postCaptureFold([project.id], fold: folded, selectProject: true)
+    }
+
+    func select(session name: String) throws {
+        let session = try CaptureScript.resolveSession(name, in: store.sessions)
+        // A row click on a visible row; unfold first, without moving the
+        // project selection, in case the row's project is folded.
+        postCaptureFold([session.projectId], fold: false, selectProject: false)
+        coordinator.focusSession(id: session.id)
+    }
+
+    func setPinned(project name: String, pinned: Bool) throws {
+        let op = pinned ? "pin" : "unpin"
+        let project = try CaptureScript.resolveProject(name, in: store.projects, op: op)
+        // A no-op here would be a shot with nothing moving.
+        guard project.isPinned != pinned else {
+            throw CaptureScript.Failure("\(op): '\(project.name)' is already \(pinned ? "pinned" : "unpinned")")
+        }
+        // The project context menu's Pin / Unpin.
+        store.togglePin(id: project.id)
+    }
 }
 #endif

@@ -151,8 +151,7 @@ extension HistoryEntry {
                 projectName: projects.first { $0.id == session.projectId }?.name ?? "Unknown",
                 title: session.name,
                 lastActiveAt: session.displayTimestamp ?? .distantPast,
-                isArchived: archivedIds.contains(session.id),
-                isPinned: session.isPinnedForDisplay()
+                isArchived: archivedIds.contains(session.id)
             )
         }
     }
@@ -165,12 +164,12 @@ extension HistoryEntry {
 struct HistoryGlyph: View {
     var size: CGFloat = WorkspaceLayout.sessionGhostSize
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         Image(systemName: "clock.arrow.circlepath")
             .font(.system(size: size * 0.8, weight: .medium))
-            .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+            .foregroundStyle(SidebarColors.secondaryText(colorScheme))
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }
@@ -200,6 +199,7 @@ struct HistoryRowView: View {
             isActive: isActive,
             staggerIndex: staggerIndex,
             redlineID: Self.redlineID,
+            mixID: SelectedRowMix.historyRowID,
             railHelp: "History — \(subtitle)"
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
@@ -207,7 +207,7 @@ struct HistoryRowView: View {
             // In its chip like every row: "Thread tile icon".
             HistoryGlyph(size: size)
         }
-        .onTapGesture(perform: onTap)
+        .onTapGesture { onTap() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("History, \(subtitle)")
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : [.isButton])
@@ -217,11 +217,10 @@ struct HistoryRowView: View {
 // MARK: - Canvas Host
 
 /// The history browser's actions, wired to the existing flows: resume →
-/// `SessionCoordinator.resumeFromHistory` (the relaunch flow), pin → the
-/// sidebar's pin action, close → back to the prior selection.
+/// `SessionCoordinator.resumeFromHistory` (the relaunch flow), close → back
+/// to the prior selection.
 struct HistoryActions {
     let resume: (UUID) -> Void
-    let togglePin: (UUID) -> Void
     let close: () -> Void
 
     @MainActor
@@ -235,7 +234,6 @@ struct HistoryActions {
                 guard let store, let coordinator else { return }
                 coordinator.resumeFromHistory(id: id, in: store, relaunch: relaunch)
             },
-            togglePin: { [weak store] id in store?.toggleSessionPin(id: id) },
             close: { [weak coordinator] in coordinator?.dismissHistory() }
         )
     }
@@ -243,11 +241,11 @@ struct HistoryActions {
 
 /// Hosted in the canvas card by `WorkspaceViewContainer` while
 /// `SessionCoordinator.isHistoryPresented`. Builds the entries live from the
-/// store so the list tracks sessions starting, stopping and pinning.
+/// store so the list tracks sessions starting and stopping.
 struct HistoryCanvasHost: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         let sections = SidebarSessionSections.make(
@@ -259,10 +257,9 @@ struct HistoryCanvasHost: View {
         HistoryBrowserView(
             entries: HistoryEntry.entries(from: sections, projects: store.projects),
             onResume: actions.resume,
-            onTogglePin: actions.togglePin,
             onClose: actions.close
         )
         // The canvas card's own fill, opaque over the terminal underneath.
-        .background(Color(nsColor: colorScheme == .dark ? WorkspaceLayout.canvasBackgroundDark : WorkspaceLayout.canvasBackgroundLight))
+        .background(Color(nsColor: ChromeTheme.active(colorScheme).canvas))
     }
 }

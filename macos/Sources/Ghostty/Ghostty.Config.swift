@@ -37,8 +37,8 @@ extension Ghostty {
             self.config = config
         }
 
-        convenience init(at path: String? = nil, finalize: Bool = true) {
-            self.init(config: Self.loadConfig(at: path, finalize: finalize))
+        convenience init(at path: String? = nil, finalize: Bool = true, picks: GhosttiesThemePicks = .none) {
+            self.init(config: Self.loadConfig(at: path, finalize: finalize, picks: picks))
         }
 
         convenience init(clone config: ghostty_config_t) {
@@ -57,7 +57,9 @@ extension Ghostty {
         /// - Parameters:
         ///   - path: An optional preferred config file path. Pass `nil` to load the default configuration files.
         ///   - finalize: Whether to finalize the configuration to populate default values.
-        static func loadConfig(at path: String?, finalize: Bool) -> ghostty_config_t? {
+        ///   - picks: The Settings > Appearance theme pick (Ghostties). Non-empty
+        ///     loads a `theme =` override after everything else, before finalize.
+        static func loadConfig(at path: String?, finalize: Bool, picks: GhosttiesThemePicks = .none) -> ghostty_config_t? {
             // Initialize the global configuration.
             guard let cfg = ghostty_config_new() else {
                 logger.critical("ghostty_config_new failed")
@@ -83,6 +85,15 @@ extension Ghostty {
             }
 
             ghostty_config_load_recursive_files(cfg)
+
+            // MARK: - Ghostties fork fence (Appearance pick)
+            // The pane's pick loads last so it beats the user's `theme =` line;
+            // finalize still replays their explicit colour keys over the theme.
+            if let override = GhosttiesConfigDefaults.overrideFileURL(picks: picks) {
+                ghostty_config_load_file(cfg, override.path)
+                try? FileManager.default.removeItem(at: override)
+            }
+            // MARK: - End Ghostties fork fence (Appearance pick)
 
             // TODO: we'd probably do some config loading here... for now we'd
             // have to do this synchronously. When we support config updating we can do
@@ -478,6 +489,24 @@ extension Ghostty {
                 blue: Double(color.b) / 255
             )
         }
+
+        // MARK: - Ghostties fork fence (chrome follows the terminal theme)
+        /// The resolved `foreground`, read like `backgroundColor`; the chrome
+        /// derives its ink from it (`ChromeThemeStore`).
+        var foregroundColor: Color {
+            var color: ghostty_config_color_s = .init()
+            let fg_key = "foreground"
+            if !ghostty_config_get(config, &color, fg_key, UInt(fg_key.lengthOfBytes(using: .utf8))) {
+                return Color(NSColor.textColor)
+            }
+
+            return .init(
+                red: Double(color.r) / 255,
+                green: Double(color.g) / 255,
+                blue: Double(color.b) / 255
+            )
+        }
+        // MARK: - End Ghostties fork fence (chrome follows the terminal theme)
 
         var backgroundOpacity: Double {
             guard let config = self.config else { return 1 }

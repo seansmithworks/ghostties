@@ -3,17 +3,17 @@ import SwiftUI
 import GhosttiesCore
 @testable import Ghostty
 
-/// The Sessions tab selects a row the way the Projects tab does (option D,
-/// one rule): a tile-sized chip behind the glyph, not the full-row card, in
-/// the expanded list (behind the leading glyph slot) and the rail (centred
-/// on the rail) alike. Read off rendered pixels of the real `RecentsListView`
+/// The Sessions tab selects a row the way the Projects tab does: in the
+/// expanded list the row-wide tint inside its drawn outline (r7 card 06), in
+/// the rail a tile-sized chip centred on the rail. Read off rendered pixels of the real `RecentsListView`
 /// and `SidebarRailView` with the tab pinned to Sessions, for a selected
 /// active row and a selected pinned row (Pinned renders through the same
 /// flat path in both tabs).
 ///
-/// The chip is a 10% ink tint on the chrome; there is no group card behind
-/// it here. Measured down a line 8pt inside the chip's leading edge (past its
-/// corner curve; the stopped glyph draws nothing) and across the row there.
+/// The mark is a 10% ink tint on the chrome; there is no group card behind
+/// it here. Measured down a line 8pt inside the glyph tile's leading edge
+/// (past the row's corner curve; the stopped glyph draws nothing) and across
+/// the row 4pt below its top (inside the outline, above the title).
 @MainActor
 final class SidebarSessionsTabSelectionTests: XCTestCase {
     private struct Render {
@@ -56,7 +56,7 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
 
             let width: CGFloat = rail ? try railWidth() : 260
             let height: CGFloat = 400
-            let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+            let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
             // The list reads the tab from store-less `@AppStorage`; pin it to
             // Sessions in a private suite, never the Dev app's domain.
             let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
@@ -91,16 +91,18 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
         }
     }
 
-    /// Darker than the chrome by a tint (selected chip or row card), lighter
-    /// than text ink.
+    /// Darker than the chrome by a tint (selected chip or row surface),
+    /// lighter than text ink. The ceiling clears the selected outline's
+    /// stroke (about 1.9x the tint's drop at its resting 0.4), which is part
+    /// of the selected surface.
     private func isTint(_ r: Render, px x: Int, _ y: Int) -> Bool {
-        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+        guard let chrome = ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB),
               x >= 0, y >= 0, x < r.rep.pixelsWide, y < r.rep.pixelsHigh,
               let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         let drop = base - (c.redComponent + c.greenComponent + c.blueComponent)
         let chipDrop = base * RailProjectColumn.selectedChipTintOpacity
-        return drop > chipDrop / 3 && drop < chipDrop * 2
+        return drop > chipDrop / 3 && drop < chipDrop * 3
     }
 
     /// Contiguous tint runs, in points.
@@ -114,25 +116,24 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
         return runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
     }
 
-    func testSelectedSessionsTabRowIsTheChipNotTheRowCard() throws {
+    func testSelectedSessionsTabRowIsTheRowWideSurface() throws {
         for selectPinned in [false, true] {
             let tag = selectPinned ? "pinned" : "active"
             let r = try render(selectPinned: selectPinned)
             let chip = RailProjectColumn.chipSize(.sidebar)
-            let slotMidX = SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading()
-                + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
-            let probeX = slotMidX - chip / 2 + 8
+            let rowMinX = SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading()
+            let probeX = rowMinX + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2 - chip / 2 + 8
             // Exactly one tint run down the glyph column: the selected row's
-            // mark, chip-tall (a row card would be row-tall).
+            // surface, row-tall (the old chip was chip-tall).
             let down = runs(r, alongX: false, at: probeX)
-            XCTAssertEqual(down.count, 1, "\(tag): one selected mark down the glyph column, got \(down)")
-            let mark = try XCTUnwrap(down.first, "\(tag): no selected mark")
-            XCTAssertEqual(mark.upperBound - mark.lowerBound, chip, accuracy: 1.0, "\(tag): selected mark is chip-tall, not a \(SidebarDialTuning.rowHeight())pt row card")
-            // Across its centre line: one chip-wide run on the glyph slot.
-            let across = runs(r, alongX: true, at: (mark.lowerBound + mark.upperBound) / 2)
-            let run = try XCTUnwrap(across.first { $0.contains(probeX) }, "\(tag): no mark across the slot")
-            XCTAssertEqual(run.upperBound - run.lowerBound, chip, accuracy: 1.0, "\(tag): selected mark is chip-wide (~\(chip)pt), not the row's width")
-            XCTAssertEqual(run.lowerBound, slotMidX - chip / 2, accuracy: 1.0, "\(tag): chip leading edge on the glyph slot")
+            XCTAssertEqual(down.count, 1, "\(tag): one selected surface down the glyph column, got \(down)")
+            let mark = try XCTUnwrap(down.first, "\(tag): no selected surface")
+            XCTAssertEqual(mark.upperBound - mark.lowerBound, SidebarDialTuning.rowHeight(), accuracy: 1.0, "\(tag): selected surface is row-tall, not chip-tall (\(chip)pt)")
+            // Across the row near its top: one run from the row's leading edge, far wider than a chip.
+            let across = runs(r, alongX: true, at: mark.lowerBound + 4)
+            let run = try XCTUnwrap(across.first { $0.contains(probeX) }, "\(tag): no surface across the row")
+            XCTAssertGreaterThan(run.upperBound - run.lowerBound, chip * 3, "\(tag): selected surface is row-wide, not chip-wide (~\(chip)pt)")
+            XCTAssertEqual(run.lowerBound, rowMinX, accuracy: 1.0, "\(tag): surface starts at the row's leading edge")
         }
     }
 

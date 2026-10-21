@@ -26,6 +26,9 @@ struct RecentsListView: View {
     /// on Escape — see `SessionDragState.cancel()` and
     /// `installDragEndMonitors()`.
     @State private var dragState = SessionDragState()
+    /// This list's selected-row motion (`SelectedRowMix`): the sidebar
+    /// list, the rail and the hover panel each run their own.
+    @StateObject private var mix = SelectedRowMixDriver()
     /// The one-view project drag (`ProjectDragState`) — same lifecycle as
     /// `dragState`, and never set at the same time as it.
     @State private var projectDragState = ProjectDragState()
@@ -37,9 +40,6 @@ struct RecentsListView: View {
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
-    /// One selection chip across every row and History: a new selection's
-    /// chip travels from the old row (`SidebarRowChipBackground`).
-    @Namespace private var selectionChipNamespace
 
     #if DEBUG
     /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).
@@ -142,6 +142,11 @@ struct RecentsListView: View {
         // The rail is this same list, held at morph 1.
         let layout = displaySections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
 
+        // The selected-row mix reads the selection, its group, the rows and
+        // the folds; each change of selection is one event.
+        let mixSnapshot = mixSnapshot(displaySections)
+        let _ = mix.prime(mixSnapshot)
+
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
                 emptyState
@@ -180,7 +185,10 @@ struct RecentsListView: View {
             }
         }
         .background(.clear)
-        .environment(\.sidebarSelectionChipNamespace, selectionChipNamespace)
+        .environment(\.selectedRowMixDriver, mix)
+        .onChange(of: mixSnapshot) { snapshot in
+            mix.update(snapshot, cause: coordinator.selectionCause, reduceMotion: reduceMotion)
+        }
         .onChange(of: dragState.isDragging || projectDragState.isDragging) { isDragging in
             if isDragging {
                 installDragEndMonitors()
@@ -223,22 +231,15 @@ struct RecentsListView: View {
         // will stop picking up renames, activity changes, and
         // timestamp updates.
         VStack(spacing: SidebarDialTuning.rowGap()) {
-            // Pinned is the one section that's hidden entirely
-            // when empty — it's an opt-in section. An in-progress
-            // drag renders an explicit "Drop to pin" zone here
-            // instead (item 2) so pinning a first session no
-            // longer requires the context menu.
-            if SessionPinning.isAvailable && sections.pinned.isEmpty && dragState.isDragging {
-                emptyPinnedDropZone
-            }
             ForEach(slots, id: \.self) { slot in
                 slotContent(slot, sections)
             }
         }
         // Option D: the selected session's project group on one card,
-        // narrowing into the rail's column.
-        .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
-            ProjectGroupCard(anchors: anchors)
+        // narrowing into the rail's column; a project switch cross-fades it
+        // from the old group to the new one (`SelectedRowMix`).
+        .backgroundPreferenceValue(RailGroupColumnKey.self) { groups in
+            ProjectGroupCard(groups: groups, selected: selectedGroupId(sections.active))
         }
     }
 
@@ -308,6 +309,8 @@ struct RecentsListView: View {
                     .modifier(SidebarColumnPadding())
                     .animation(reflowAnimation, value: dragState)
                     .animation(reflowAnimation, value: projectDragState)
+                    // Pin/Unpin moves a project group (`ProjectListOrder`).
+                    .animation(reflowAnimation, value: Set(store.projects.filter(\.isPinned).map(\.id)))
                     // Room for the group card above a first-row header,
                     // inside the clip; the scroll view reaches up the same
                     // amount, so rows keep their y.
@@ -399,6 +402,8 @@ struct RecentsListView: View {
             uniquingKeysWith: { first, _ in first }
         )
         let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
+        // Every group whose card is lit or fading carries its card's anchors.
+        let cardGroups = mix.cardGroups(selected: selectedGroupId)
         ForEach(items) { item in
             switch item {
             case .spacer:
@@ -414,7 +419,8 @@ struct RecentsListView: View {
                     monogram: monograms[group.id] ?? "?", isSelectedProject: group.id == selectedGroupId,
                     staggerIndex: cascade.headers[group.id] ?? cascadeStart
                 )
-                .railGroupColumn(group.id == selectedGroupId)
+                .environment(\.selectedRowMixGroup, group.id)
+                .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
             case .row(let session, let group):
                 if session.id != dragState.draggingSessionId {
                     if gapBeforeId == .some(session.id) {
@@ -426,7 +432,7 @@ struct RecentsListView: View {
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
-                    .railGroupColumn(group.id == selectedGroupId)
+                    .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
                 }
             }
         }
@@ -436,6 +442,25 @@ struct RecentsListView: View {
         if projectGapBefore == .some(nil) {
             ProjectDragGapView()
         }
+    }
+
+    /// The selected session's project group, or none (nothing selected,
+    /// pinned, History, or a layout without groups).
+    private func selectedGroupId(_ active: [AgentSession]) -> SidebarProjectGroup.ID? {
+        guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else { return nil }
+        return RailProjectColumn.selectedGroupId(
+            SidebarProjectGroup.make(active: active, projects: store.projects),
+            selectedSessionId: coordinator.sidebarSelectedSessionId
+        )
+    }
+
+    private func mixSnapshot(_ sections: SidebarSessionSections) -> SelectedRowMixDriver.Snapshot {
+        SelectedRowMixDriver.Snapshot(
+            selected: coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.activeSessionId,
+            group: selectedGroupId(sections.active) ?? SelectedRowMix.noGroup,
+            rows: Set(sections.pinned.map(\.id) + sections.active.map(\.id)),
+            collapsed: Set(ProjectAccordionState.decode(collapsedProjectsRaw).map(\.uuidString))
+        )
     }
 
     /// One project's accordion header. A real project's header is a drag
@@ -498,8 +523,10 @@ struct RecentsListView: View {
     }
 
     private func projectDropTarget(_ slot: ProjectDropSlot) -> ProjectDropTarget {
-        ProjectDropTarget(slot: slot, state: $projectDragState) { [self] draggedId, gapIndex in
-            let beforeId = ProjectDragReflow.beforeId(gapIndex: gapIndex, order: store.projects.map(\.id), dragged: draggedId)
+        let order = ProjectListOrder.pinnedFirst(store.projects)
+        let allowedGaps = projectDragState.draggingProjectId.map { ProjectDragReflow.allowedGaps(order: order, dragged: $0) }
+        return ProjectDropTarget(slot: slot, state: $projectDragState, allowedGaps: allowedGaps) { [self] draggedId, gapIndex in
+            let beforeId = ProjectDragReflow.beforeId(gapIndex: gapIndex, order: order.map(\.id), dragged: draggedId)
             store.moveProject(id: draggedId, before: beforeId)
             return true
         }
@@ -517,7 +544,7 @@ struct RecentsListView: View {
     /// VoiceOver/keyboard counterpart to dragging a project: swap with the
     /// neighbour above (-1) or below (+1); a no-op past either end.
     private func moveProject(_ id: UUID, by direction: Int) {
-        let order = store.projects.map(\.id)
+        let order = ProjectListOrder.pinnedFirst(store.projects).map(\.id)
         guard let index = order.firstIndex(of: id), order.indices.contains(index + direction) else { return }
         let beforeId = direction < 0 ? order[index - 1] : (order.indices.contains(index + 2) ? order[index + 2] : nil)
         store.moveProject(id: id, before: beforeId)
@@ -574,40 +601,6 @@ struct RecentsListView: View {
                 },
                 draggedContext: { [self] id in draggedContext(for: id) },
                 performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) }
-            ))
-        } else {
-            base
-        }
-    }
-
-    /// An empty Pinned section's stand-in drop target, sized like one row
-    /// (item 2). Only rendered while a drag is in progress and Pinned is
-    /// currently empty.
-    @ViewBuilder
-    private var emptyPinnedDropZone: some View {
-        let base = HStack {
-            Text("Drop to pin")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.tertiary)
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-        .frame(height: SessionDragReflow.rowHeight)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Color.primary.opacity(0.15), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-        )
-        .contentShape(Rectangle())
-        if dragInteractionsEnabledForRendering {
-            base.onDrop(of: [.text], delegate: SessionEndZoneDropDelegate(
-                section: .pinned,
-                dragState: $dragState,
-                resolveGap: { draggedSection, draggedIsOpen in
-                    SessionDragReflow.endInsertionPoint(draggedSection: draggedSection, draggedIsOpen: draggedIsOpen, targetSection: .pinned)
-                },
-                draggedContext: { [self] id in draggedContext(for: id) },
-                performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: []) }
             ))
         } else {
             base
@@ -834,36 +827,14 @@ struct RecentsListView: View {
         )
         .equatable()
         .contextMenu {
-            Button("Rename") {
-                beginRename(session: session)
-            }
-            Divider()
-            if SessionPinning.isAvailable {
-                Button(session.isPinned ? "Unpin" : "Pin") {
-                    store.toggleSessionPin(id: session.id)
-                }
-                Divider()
-            }
-            if coordinator.isRunning(id: session.id) {
-                Button("Stop") {
-                    // A stopped session must never keep rendering as Active
-                    // for the rest of an open relaunch hold (BACKLOG I) —
-                    // end it outright rather than wait out the timeout.
-                    pendingLaunchGenerations = PendingLaunchHold.end(id: session.id, in: pendingLaunchGenerations)
-                    coordinator.closeSession(id: session.id)
-                }
-            } else {
-                if session.resume != nil {
-                    Button("Resume") {
-                        relaunchSession(session, mode: .resume)
+            let actions = SessionRowMenu.actions(isRunning: coordinator.isRunning(id: session.id), canResume: session.resume != nil)
+            ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                if let action {
+                    Button(action.title, role: action == .delete ? .destructive : nil) {
+                        perform(action, on: session)
                     }
-                }
-                Button("Start Fresh") {
-                    relaunchSession(session, mode: .fresh)
-                }
-                Button("Delete", role: .destructive) {
-                    coordinator.clearRuntime(id: session.id)
-                    store.removeSession(id: session.id)
+                } else {
+                    Divider()
                 }
             }
         }
@@ -889,6 +860,27 @@ struct RecentsListView: View {
         .accessibilityAction(named: Text("Move Down")) {
             guard supportsReorder else { return }
             moveWithinSection(session: session, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
+        }
+    }
+
+    /// Runs one `SessionRowMenu` action on `session`.
+    private func perform(_ action: SessionRowMenu.Action, on session: AgentSession) {
+        switch action {
+        case .rename:
+            beginRename(session: session)
+        case .stop:
+            // A stopped session must never keep rendering as Active
+            // for the rest of an open relaunch hold (BACKLOG I) —
+            // end it outright rather than wait out the timeout.
+            pendingLaunchGenerations = PendingLaunchHold.end(id: session.id, in: pendingLaunchGenerations)
+            coordinator.stopSessionWithConfirmation(id: session.id)
+        case .resume:
+            relaunchSession(session, mode: .resume)
+        case .startFresh:
+            relaunchSession(session, mode: .fresh)
+        case .delete:
+            coordinator.clearRuntime(id: session.id)
+            store.removeSession(id: session.id)
         }
     }
 
@@ -1141,6 +1133,39 @@ struct RecentsListView: View {
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
+    }
+}
+
+/// A session row's context menu, as data so tests can read it. Sessions
+/// have no Pin: pinning is a project-only concept (Sean, 2026-10-12), and
+/// `AgentSession.isPinned` stays only so older workspace files still load.
+enum SessionRowMenu {
+    enum Action: Equatable {
+        case rename, stop, resume, startFresh, delete
+
+        var title: String {
+            switch self {
+            case .rename: return "Rename"
+            case .stop: return "Stop"
+            case .resume: return "Resume"
+            case .startFresh: return "Start Fresh"
+            case .delete: return "Delete"
+            }
+        }
+    }
+
+    /// A `nil` entry is a divider. A running session can only be stopped;
+    /// a closed one can be resumed (when it has a resume handle), started
+    /// fresh, or deleted.
+    static func actions(isRunning: Bool, canResume: Bool) -> [Action?] {
+        var result: [Action?] = [.rename, nil]
+        if isRunning {
+            result.append(.stop)
+        } else {
+            if canResume { result.append(.resume) }
+            result.append(contentsOf: [.startFresh, .delete])
+        }
+        return result
     }
 }
 

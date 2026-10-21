@@ -429,8 +429,8 @@ jobs:
   #
   # For stable releases (tag has no "-beta"): update both appcast-stable.xml
   #   and appcast-beta.xml so stable users and beta users both receive the update.
-  # For beta releases (tag contains "-beta"): update only appcast-beta.xml so
-  #   stable channel users are not offered pre-release builds.
+  # For beta releases (tag contains "-beta"): TEMPORARILY (until v1.0) also
+  #   update both, since all installs default to the stable channel.
   # ---------------------------------------------------------------------------
   appcast:
     needs: [setup, build-macos]
@@ -558,24 +558,18 @@ jobs:
                   item_xml
               ))
 
-          if is_beta:
-              # Beta release: stable channel gets a no-op placeholder so the
-              # artifact always exists on the GitHub Release for download by URL.
-              print("Beta tag detected — stable channel unchanged.")
-              stable_xml = """<?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-            <channel>
-              <title>Ghostties Stable Releases</title>
-              <description>No stable release available yet.</description>
-            </channel>
-          </rss>"""
-          else:
-              print("Stable tag detected — updating both channels.")
-              stable_xml = make_appcast(
-                  "Ghostties Stable Releases",
-                  "Stable releases of Ghostties",
-                  item_xml
-              )
+          # TEMPORARY RULE (until v1.0): betas go to the stable feed too, because
+          # every install defaults to the stable channel and nobody would ever be
+          # offered a beta otherwise. REVERT to stable-only (restore the
+          # "No stable release available yet." placeholder for -beta tags, and the
+          # IS_BETA guard in "Commit appcast to web/") when v1.0 ships, or when
+          # Sean decides stable should be stable-only again.
+          print("Updating both channels.")
+          stable_xml = make_appcast(
+              "Ghostties Stable Releases",
+              "Stable releases of Ghostties",
+              item_xml
+          )
 
           with open("appcast-stable.xml", "w") as f:
               f.write(stable_xml)
@@ -607,9 +601,8 @@ jobs:
           git switch main
 
           cp /tmp/appcast-beta.xml web/appcast-beta.xml
-          if [[ "$IS_BETA" != "true" ]]; then
-            cp /tmp/appcast-stable.xml web/appcast-stable.xml
-          fi
+          # Until v1.0, betas also update the stable feed (see appcast job).
+          cp /tmp/appcast-stable.xml web/appcast-stable.xml
 
           # Update version strings in web HTML files. DMG size is passed
           # so the meta line on /download stays in sync with the binary.

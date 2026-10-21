@@ -89,17 +89,23 @@ struct SidebarMorphMetrics: Equatable {
 
     /// The selected group's card in the expanded list and its column on the
     /// rail, as one shape: horizontal span, the inset above the tile and
-    /// below the last chip, corner radius, and how far the tile and the
-    /// last chip sit inside their header and row (the card's top and
-    /// bottom are measured from those, not from the frames).
+    /// below the group's last mark, corner radius, and how far the tile and
+    /// the last row's mark sit inside their header and row (the card's top
+    /// and bottom are measured from those, not from the frames).
     struct Card: Equatable {
         var minX: CGFloat
         var width: CGFloat
+        /// Above the tile.
+        var topInset: CGFloat
+        /// Below the group's last mark: the last row's frame expanded (the
+        /// selected-row plate's box), its chip on the rail, the tile when the
+        /// header is alone.
         var verticalInset: CGFloat
         var cornerRadius: CGFloat
         /// The tile's inset from its header's top and bottom.
         var tileTrim: CGFloat
-        /// The chip's inset from its row's top and bottom.
+        /// The last row's mark's inset from the row's top and bottom: the
+        /// chip's on the rail, 0 expanded, where the plate is the whole row.
         var chipTrim: CGFloat
         var maxX: CGFloat { minX + width }
         var midX: CGFloat { minX + width / 2 }
@@ -192,19 +198,25 @@ struct SidebarMorphMetrics: Equatable {
         hasRows ? max(0, chip - tile) / 2 : 0
     }
 
-    /// The expanded group card: the list, widened past each edge by the card
-    /// inset less the row's leading padding, plus the chip's overhang
-    /// (`ProjectGroupCard.horizontalOutset`).
+    /// The expanded group card (`ProjectGroupCard.horizontalOutset`): with
+    /// rows, it wraps the row frames (the selected-row plate's box) by
+    /// `ProjectGroupCard.plateGap` at the sides and the bottom, concentric
+    /// with the plate, so its size never depends on which row is selected;
+    /// a header alone sits the card inset round its tile. The top is the
+    /// card inset above the tile either way.
     func sidebarCard(hasRows: Bool) -> Card {
-        let outset = dials.groupCardInset - dials.rowLeadingPadding
-            + sideOverhang(tile: dials.sidebarTileSize, chip: dials.sidebarChipSize, hasRows: hasRows)
+        let gap = ProjectGroupCard.plateGap
+        let outset = ProjectGroupCard.horizontalOutset(
+            hasRows: hasRows, cardInset: dials.groupCardInset, rowLeadingPadding: dials.rowLeadingPadding
+        )
         return Card(
             minX: listMinX - outset,
             width: max(0, listMaxX - listMinX + outset * 2),
-            verticalInset: dials.groupCardInset,
-            cornerRadius: dials.chipCornerRadius + dials.columnInset,
+            topInset: dials.groupCardInset,
+            verticalInset: hasRows ? gap : dials.groupCardInset,
+            cornerRadius: SelectedRowOutline.cornerRadius + gap,
             tileTrim: (dials.sidebarHeaderHeight - dials.sidebarTileSize) / 2,
-            chipTrim: max(0, (dials.rowHeight - dials.sidebarChipSize) / 2)
+            chipTrim: 0
         )
     }
 
@@ -216,6 +228,7 @@ struct SidebarMorphMetrics: Equatable {
         return Card(
             minX: railTileCenterX - width / 2,
             width: width,
+            topInset: dials.columnInset,
             verticalInset: dials.columnInset,
             cornerRadius: dials.chipCornerRadius + dials.columnInset,
             tileTrim: (dials.railHeaderHeight - dials.railTileSize) / 2,
@@ -231,6 +244,7 @@ struct SidebarMorphMetrics: Equatable {
         return Card(
             minX: lerp(from.minX, to.minX),
             width: lerp(from.width, to.width),
+            topInset: lerp(from.topInset, to.topInset),
             verticalInset: lerp(from.verticalInset, to.verticalInset),
             cornerRadius: lerp(from.cornerRadius, to.cornerRadius),
             tileTrim: lerp(from.tileTrim, to.tileTrim),
@@ -361,7 +375,6 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
     let slotWidth: CGFloat
     let glyphSizes: (from: CGFloat, to: CGFloat)
     let chipSizes: (from: CGFloat, to: CGFloat)
-    let isActive: Bool
     let isHovered: Bool
     let chipID: String
     @ViewBuilder let glyph: (CGFloat) -> Glyph
@@ -380,7 +393,9 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
                 SidebarRowChipBackground(
                     size: chipSizes.to,
                     scale: MorphTileScale.scale(from: chipSizes.from, to: chipSizes.to, progress: progress),
-                    isActive: isActive, isHovered: isHovered, redlineID: chipID
+                    // Hover only: selection is the row's outline
+                    // (`SelectedRowOutlineSurface`).
+                    isHovered: isHovered, redlineID: chipID
                 )
                 .morphIdentityProbe(chipID)
             }

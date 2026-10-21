@@ -26,6 +26,11 @@ Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action it
 - `VERIFY_FIXTURE_PROJECTS=none`: seeds 0 projects and 0 sessions (contract X3: with any project the Run row accepts any text). `VERIFY_COMPOSER=open` still works. Don't combine with hooks that name a project.
 - `VERIFY_FIXTURE_TEMPLATE_IN_USE=1`: seeds one user template, "Mine", used by two trove sessions ("build fix", "release notes"). With `VERIFY_PROJECT_SETTINGS=<project>:templates-delete` the alert reads "Used by build fix and release notes. Sessions using "Mine" will keep...". Templates are global, so any project's settings show it (contract T6).
 - `VERIFY_SIDEBAR_TOGGLE_AFTER=<s>`: runs Cmd+S's action after N s (pinned to rail), again after 2N s (back).
+- `VERIFY_RAIL_REVEAL_AFTER=<s>`: on the rail (`MODE=collapsed`), reveals the sidebar as a hover dwell would.
+- `VERIFY_REVEAL_STYLE=push|overlay`: the reveal style, seeded into the fixture's throwaway dial suite.
+- `VERIFY_RAIL_REVEAL_COLLAPSE_AFTER=<s>`: s seconds after the reveal, the pointer-exit path runs (exit grace, then the collapse). Needs `RAIL_REVEAL_AFTER`.
+- `VERIFY_SELECT_SEQUENCE=<s>:<n>`: every s seconds, moves the selection chip n rows along the rows the sidebar or rail lists (Cmd+Shift+] order, wrapping; negative goes back; 12 ticks), pinned or rail. Fixture sessions have no terminal, so it sets the selected session directly (what every row's chip reads); the terminal pane does not change. Use s >= 3 when recording (recording starts ~2s after the window appears).
+- `VERIFY_FOLD_TOGGLE=<project>:<s>`: selects that project once, then every s seconds, 6 times, folds or unfolds its accordion the way its header click does (implies `TAB=projects`). Use s >= 3 when recording.
 `up` launches the binary directly (not `open`, which only focuses a running Dev build sharing the bundle id), strips `GHOSTTIES_SESSION_ID`/`GHOSTTIES_LAUNCHER`, sets `GHOSTTIES_STATE_DIR` to the evidence dir, records the pid, and records the old `ghostties.sidebarTab` value if a tab was requested. Mode is fixed at launch: one flow = one `up`/`down` cycle.
 
 ## Doctor
@@ -33,7 +38,7 @@ Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action it
 
 ## Drive
 Each flow is `down`, `up` with that flow's env, `doctor`, wait ~5s, `shot <name>`. Then Read the PNG.
-- **A. Expanded sidebar, Sessions tab** (`MODE=pinned TAB=sessions`). Look for: Active/Inactive/Archive sections; status glyphs (spinner, `?`, check, x) on the right edge of rows, with the hover/selected row showing a kebab instead; tray at the bottom with + / folder / gear / sidebar; 8pt card margin; sidebar bg follows the terminal theme. Fixture "Claude Code 6" is the `?` row.
+- **A. Expanded sidebar, Sessions tab** (`MODE=pinned TAB=sessions`). Look for: Active/Inactive/Archive sections; status glyphs (spinner, `?`, check, x) on the right edge of rows, with the hover/selected row showing a kebab instead; tray at the bottom with + / folder / gear / sidebar; 8pt card margin; sidebar bg follows the terminal theme. Fixture "auth migration" is the `?` row.
 - **B. Collapsed rail** (`MODE=collapsed TAB=sessions`). Look for: ~128pt-ish narrow rail, glyphs centered in the rail (not right-aligned), section chevrons, and the tray as a thin centered pill with + / folder / gear / sidebar stacked.
 - **C. Projects tab** (`MODE=pinned TAB=projects`). Look for: project list instead of sessions; same tray.
 - **D. Popover states** (`MODE=pinned POPOVER=<needs-bash|needs-edit|running|done>`, one launch each). Look for: card anchored to its row, tool/command or file path (needs-*), prompt + current step (running). `done` shows no card by design. If the popover is its own window, the largest-window capture misses it: check the first PNG.

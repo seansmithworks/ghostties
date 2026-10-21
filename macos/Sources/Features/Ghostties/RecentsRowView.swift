@@ -87,6 +87,7 @@ struct RecentsRowView: View, Equatable {
             isActive: isActive,
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id),
+            mixID: session.id,
             popover: (session.id, coordinator.sessionPopover)
         ) {
             if isEditing {
@@ -205,6 +206,7 @@ struct SidebarListRowTitle: View {
     let isActive: Bool
 
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @ChromeScheme private var colorScheme
 
     var body: some View {
         Text(text)
@@ -212,7 +214,7 @@ struct SidebarListRowTitle: View {
                 size: SidebarDialTuning.rowTitleSize(),
                 weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
             ))
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(SidebarColors.primaryText(colorScheme))
             .lineLimit(1)
     }
 }
@@ -234,6 +236,9 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     /// `WorkspaceLayout.morphFadeWindow`.
     var staggerIndex: Int = 0
     let redlineID: String
+    /// The row's id on the list's `SelectedRowMix` timeline (a session, or
+    /// `SelectedRowMix.historyRowID`); nil shows the resting look.
+    var mixID: UUID? = nil
     /// The session whose hover card this row shows, if any. Sidebar only:
     /// on the rail, resting the pointer reveals the whole sidebar instead
     /// (`RailHoverReveal`).
@@ -244,7 +249,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     /// The status glyph at a given side (the morph's size for this frame).
     @ViewBuilder let glyph: (CGFloat) -> Glyph
 
-    @Environment(\.colorScheme) private var colorScheme
+    @ChromeScheme private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
@@ -259,43 +264,60 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         let progress = morphOverride ?? widthModel.morph
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
-        HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Selection and hover are a tile-sized chip behind the glyph in
-            // every list (option D): one rule; the group card is drawn only
-            // around a project group.
-            MorphGlyphSlot(
-                progress: progress,
-                slotWidth: dials.sidebarTileSize,
-                glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
-                chipSizes: (dials.sidebarChipSize, dials.railChipSize),
-                isActive: isActive,
-                isHovered: isHovered,
-                chipID: redlineID + ".chip",
-                glyph: glyph
-            )
-            .redlineFrame(redlineID + ".glyph")
-            .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
+        // The selection (`SelectedRowMix`): this instant's outline, tint,
+        // and, for a new row, its growing slot and fading-in content.
+        SelectedRowMixRowReader(id: mixID, isActive: isActive) { look in
+            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+                // Hover is a tile-sized chip behind the glyph in every list
+                // (option D); the group card is drawn only around a project
+                // group.
+                MorphGlyphSlot(
+                    progress: progress,
+                    slotWidth: dials.sidebarTileSize,
+                    glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
+                    chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                    // The chip is hover only; selection is the row's outline.
+                    isHovered: isHovered && !isActive,
+                    chipID: redlineID + ".chip",
+                    glyph: glyph
+                )
+                .redlineFrame(redlineID + ".glyph")
+                .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
 
-            // Title + subtitle stacked
-            VStack(alignment: .leading, spacing: 1) {
-                title()
+                // Title + subtitle stacked
+                VStack(alignment: .leading, spacing: 1) {
+                    title()
 
-                Text(subtitle)
-                    .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
-                    .lineLimit(1)
+                    Text(subtitle)
+                        .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
+                        .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+                        .lineLimit(1)
+                }
+                .redlineFrame(redlineID + ".label")
+                .modifier(MorphLabelFade(staggerIndex: staggerIndex))
+
+                Spacer(minLength: 4)
             }
-            .redlineFrame(redlineID + ".label")
-            .modifier(MorphLabelFade(staggerIndex: staggerIndex))
-
-            Spacer(minLength: 4)
+            .opacity(look.content)
+            .redlineFrame(redlineID + ".content")
+            .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+            .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+            // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch. A new
+            // row's slot, gap included, grows from nothing (N4).
+            .frame(height: SidebarDialTuning.rowHeight() * look.height)
+            .redlineFrame(redlineID)
+            // The row-wide tint and its outline, drawn round the chip on the rail.
+            .background {
+                SelectedRowOutlineSurface(
+                    look: look,
+                    progress: progress,
+                    chipCenterX: dials.rowLeadingPadding + dials.sidebarTileSize / 2,
+                    chipTravel: metrics.tileTravel,
+                    chipSizes: (dials.sidebarChipSize, dials.railChipSize)
+                )
+            }
+            .padding(.top, look.height == 1 ? 0 : SidebarDialTuning.rowGap() * (look.height - 1))
         }
-        .redlineFrame(redlineID + ".content")
-        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
-        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-        // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch.
-        .frame(height: SidebarDialTuning.rowHeight())
-        .redlineFrame(redlineID)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .help(progress >= 0.5 ? (railHelp ?? "") : "")

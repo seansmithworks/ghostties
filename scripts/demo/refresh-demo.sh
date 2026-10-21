@@ -18,7 +18,7 @@
 #
 # USAGE
 #   ./scripts/demo/refresh-demo.sh                       # latest release (incl. pre-releases)
-#   ./scripts/demo/refresh-demo.sh --from-release v0.1.0-beta.24
+#   ./scripts/demo/refresh-demo.sh --from-release v0.5.0-beta.26
 #   ./scripts/demo/refresh-demo.sh --from-source          # build local checkout (Debug)
 #   ./scripts/demo/refresh-demo.sh --from-source --pull-main
 #   ./scripts/demo/refresh-demo.sh --dest /tmp/x.app --no-launch

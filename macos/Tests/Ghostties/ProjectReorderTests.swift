@@ -43,8 +43,8 @@ final class ProjectReorderTests: XCTestCase {
         XCTAssertEqual(store.projects.map(\.name), ["atlas-api", "orbit-web", "quiet", "fieldwork"])
     }
 
-    /// Pinning is a separate flag the one-view order ignores: a reorder
-    /// keeps every project's pin, and the one-view groups follow the array.
+    /// A reorder keeps every project's pin, and a pinned project leads the
+    /// one-view groups wherever it sits in the array.
     func testMoveProjectKeepsPinsAndDrivesGroupOrder() {
         var pinnedOrbit = orbit
         pinnedOrbit.isPinned = true
@@ -52,8 +52,103 @@ final class ProjectReorderTests: XCTestCase {
         store.moveProject(id: pinnedOrbit.id, before: nil)
         store.moveProject(id: atlas.id, before: nil)
 
-        XCTAssertEqual(store.projects.map(\.isPinned), [false, true, false])
-        XCTAssertEqual(SidebarProjectGroup.make(active: [], projects: store.projects).map(\.name), ["fieldwork", "orbit-web", "atlas-api"])
+        XCTAssertEqual(store.projects.map(\.isPinned), [false, false, true])
+        XCTAssertEqual(SidebarProjectGroup.make(active: [], projects: store.projects).map(\.name), ["orbit-web", "fieldwork", "atlas-api"])
+    }
+
+    // MARK: - Pin
+
+    private func names(_ store: WorkspaceStore) -> [String] {
+        SidebarProjectGroup.make(active: [], projects: store.projects).map(\.name)
+    }
+
+    /// Pin puts a project at the top of the list and the rail, pinned ones
+    /// keep their own relative order, and Unpin returns a project to its
+    /// place in the manual order.
+    func testPinnedProjectsLeadTheListAndRailAndUnpinRestoresOrder() {
+        let sessions = [session("a1", atlas), session("f1", fieldwork), session("o1", orbit), session("q1", quiet)]
+        let store = WorkspaceStore(testingProjects: [atlas, fieldwork, orbit, quiet], testingSessions: sessions)
+        for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
+        XCTAssertEqual(names(store), ["atlas-api", "fieldwork", "orbit-web", "quiet"])
+
+        store.togglePin(id: quiet.id)
+        XCTAssertEqual(names(store), ["quiet", "atlas-api", "fieldwork", "orbit-web"])
+
+        // Pinned later but earlier in the manual order: fieldwork leads.
+        store.togglePin(id: fieldwork.id)
+        XCTAssertEqual(names(store), ["fieldwork", "quiet", "atlas-api", "orbit-web"])
+        XCTAssertEqual(store.railSessions(layout: .oneView).map(\.name), ["f1", "q1", "a1", "o1"])
+
+        store.togglePin(id: fieldwork.id)
+        XCTAssertEqual(names(store), ["quiet", "atlas-api", "fieldwork", "orbit-web"])
+        XCTAssertEqual(store.railSessions(layout: .oneView).map(\.name), ["q1", "a1", "f1", "o1"])
+
+        store.togglePin(id: quiet.id)
+        XCTAssertEqual(names(store), ["atlas-api", "fieldwork", "orbit-web", "quiet"])
+    }
+
+    /// A move stays inside its pin group: a target across the boundary (or
+    /// none) lands the project at its own group's near edge, and the other
+    /// group never moves.
+    func testMoveProjectStaysInsideItsPinGroup() {
+        var pinnedAtlas = atlas
+        pinnedAtlas.isPinned = true
+        var pinnedOrbit = orbit
+        pinnedOrbit.isPinned = true
+        let store = WorkspaceStore(testingProjects: [pinnedAtlas, fieldwork, pinnedOrbit, quiet])
+        XCTAssertEqual(names(store), ["atlas-api", "orbit-web", "fieldwork", "quiet"])
+
+        // Within Pinned.
+        store.moveProject(id: pinnedOrbit.id, before: pinnedAtlas.id)
+        XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "fieldwork", "quiet"])
+
+        // Pinned dropped among the rest, or at the very end: end of Pinned.
+        store.moveProject(id: pinnedOrbit.id, before: quiet.id)
+        XCTAssertEqual(names(store), ["atlas-api", "orbit-web", "fieldwork", "quiet"])
+        store.moveProject(id: pinnedAtlas.id, before: nil)
+        XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "fieldwork", "quiet"])
+
+        // Unpinned dropped above a pinned project: top of the rest.
+        store.moveProject(id: quiet.id, before: pinnedOrbit.id)
+        XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "quiet", "fieldwork"])
+
+        // Within the rest, to the end.
+        store.moveProject(id: quiet.id, before: nil)
+        XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "fieldwork", "quiet"])
+        XCTAssertEqual(store.projects.map(\.isPinned), [true, false, true, false])
+    }
+
+    /// The drag gap stays inside the dragged project's pin group, counted
+    /// with the dragged project removed.
+    func testAllowedGapsKeepADragInsideItsPinGroup() {
+        var pinnedAtlas = atlas
+        pinnedAtlas.isPinned = true
+        var pinnedOrbit = orbit
+        pinnedOrbit.isPinned = true
+        let order = ProjectListOrder.pinnedFirst([pinnedAtlas, fieldwork, pinnedOrbit, quiet])
+        XCTAssertEqual(order.map(\.name), ["atlas-api", "orbit-web", "fieldwork", "quiet"])
+        XCTAssertEqual(ProjectDragReflow.allowedGaps(order: order, dragged: pinnedAtlas.id), 0...1)
+        XCTAssertEqual(ProjectDragReflow.allowedGaps(order: order, dragged: fieldwork.id), 2...3)
+        // No pins: the whole list.
+        XCTAssertEqual(ProjectDragReflow.allowedGaps(order: [atlas, fieldwork, orbit], dragged: atlas.id), 0...2)
+    }
+
+    /// Pin goes through the real `persist()` into an injected temp dir and
+    /// a fresh store loaded from it comes back pinned, at the top.
+    func testPinPersistsAndRoundTrips() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectReorderTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        WorkspacePersistence.save(WorkspacePersistence.State(projects: [atlas, fieldwork, orbit]), to: dir)
+        let store = WorkspaceStore(testingStateDirectory: dir)
+        store.togglePin(id: orbit.id)
+        await store.flushPersistenceForTesting()
+
+        let reloaded = WorkspaceStore(testingStateDirectory: dir)
+        XCTAssertEqual(reloaded.projects.map(\.isPinned), [false, false, true])
+        XCTAssertEqual(names(reloaded), ["orbit-web", "atlas-api", "fieldwork"])
     }
 
     /// The move goes through the real `persist()` into an injected temp dir,

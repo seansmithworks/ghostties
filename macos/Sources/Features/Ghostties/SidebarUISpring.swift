@@ -4,8 +4,7 @@ import SwiftUI
 /// The springs the sidebar's small UI motion runs on (Sean, 2026-10-11:
 /// "the motion needs a little bit of bounce/spring ... fluidity"): the
 /// project accordion's fold and its chevrons and rail count badge, the
-/// selection chip travelling between rows, the drag-reflow gap and section
-/// reorder, and hover on row chips, rail tiles and tray buttons. One source
+/// drag-reflow gap and section reorder, and hover on row chips, rail tiles and tray buttons. One source
 /// of truth, read from the Sidebar DialKit panel's "UI springs" group at the
 /// moment each animation starts, so a dial change lands on the next one.
 ///
@@ -23,8 +22,7 @@ import SwiftUI
 enum SidebarUISpring {
     /// The accordion's fold and unfold, its chevrons, the rail count badge.
     case fold
-    /// Something travelling to a new place: the selection chip between
-    /// rows, a section reorder.
+    /// Something travelling to a new place: a section reorder.
     case move
     /// Hover on a row chip, rail tile or tray button: snappier.
     case hover
@@ -39,10 +37,6 @@ enum SidebarUISpring {
     /// chip travel (0.15 was ~0.6%, invisible).
     static let defaultBounce: Double = 0.25
     static let defaultHoverResponse: Double = 0.2
-
-    /// The selection chip's `matchedGeometryEffect` id
-    /// (`SidebarRowChipBackground`).
-    static let selectionChipID = "sidebar.selectionChip"
 
     struct Parameters: Equatable {
         var response: Double
@@ -100,21 +94,5 @@ enum SidebarUISpring {
         entering
             ? animation(reduceMotion: reduceMotion, defaults: defaults)
             : settle(reduceMotion: reduceMotion, defaults: defaults)
-    }
-}
-
-// MARK: - Selection chip namespace
-
-private struct SidebarSelectionChipNamespaceKey: EnvironmentKey {
-    static let defaultValue: Namespace.ID? = nil
-}
-
-extension EnvironmentValues {
-    /// The list's namespace for the selection chip: with one set, the chip
-    /// travels from the old selected row to the new one on the `.move`
-    /// spring; without one (a lone row, a test), it appears in place.
-    var sidebarSelectionChipNamespace: Namespace.ID? {
-        get { self[SidebarSelectionChipNamespaceKey.self] }
-        set { self[SidebarSelectionChipNamespaceKey.self] = newValue }
     }
 }

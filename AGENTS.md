@@ -19,12 +19,17 @@ shipped, or tested here.
 > now macOS 27.0 as of 2026-09-20, so nothing has changed that would fix it.
 > Build through Xcode until Zig 0.16 ships, then re-check.
 
-- **Build + launch**: open `macos/Ghostties.xcodeproj`, Cmd+R
+- **Build + launch Dev (terminal)**:
+  `xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration Debug -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`,
+  then `open "macos/build/Build/Products/Debug/Ghostties Dev.app"`. From inside a
+  Ghostties terminal, prefix `env -u GHOSTTIES_SESSION_ID -u GHOSTTIES_LAUNCHER`.
+  Agents build and launch it for Sean; never hand him steps.
+- **Xcode** is only for when it's really required (something the terminal genuinely can't do), never the default path.
 - **Build (release, CLI)**:
   `xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration Release -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`
 - **Clean rebuild**: `rm -rf macos/build`, then the command above
 - **Launch built app**: `open macos/build/Build/Products/Release/Ghostties.app`
-- **Test (macOS app)**: open `macos/Ghostties.xcodeproj`, Cmd+U
+- **Test (macOS app)**: the `xcodebuild test` command in [TESTING.md](TESTING.md)
 - **Test (Swift package)**: `cd cli && swift test --parallel`
 - **DialKit inspector** (live-tunes Dev; start it before Dev): `bash scripts/open-dialkit.sh` (starts detached, returns at once; `--foreground` for humans)
 - **Browser (CEF)**: `bash scripts/download-cef.sh` — ~300MB, only needed for

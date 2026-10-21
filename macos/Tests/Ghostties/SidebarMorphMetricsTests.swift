@@ -27,9 +27,11 @@ struct SidebarMorphMetricsTests {
         #expect(m.glyphSize == 16)
         #expect(m.labelOpacity == 1)
         let card = m.card(hasRows: true)
-        #expect(card.minX == 6, "list x 8, card 2pt past it")
-        #expect(card.maxX == 258, "list x 256, card 2pt past it")
-        #expect(card.verticalInset == 6)
+        #expect(card.minX == 4, "list x 8, card 4pt past it")
+        #expect(card.maxX == 260, "list x 256, card 4pt past it")
+        #expect(card.verticalInset == 4, "4pt below the last row's frame, the plate's box")
+        #expect(card.chipTrim == 0, "the plate is the whole row: the bottom is unionMaxY + 4")
+        #expect(card.topInset == 6, "the top edge is unchanged")
         #expect(card.cornerRadius == 12)
     }
 
@@ -60,7 +62,8 @@ struct SidebarMorphMetricsTests {
         let ca = a.card(hasRows: true), cb = b.card(hasRows: true), cm = m.card(hasRows: true)
         #expect(cm.minX == (ca.minX + cb.minX) / 2)
         #expect(cm.maxX == (ca.maxX + cb.maxX) / 2)
-        #expect(cm.verticalInset == 5)
+        #expect(cm.verticalInset == (ca.verticalInset + cb.verticalInset) / 2)
+        #expect(cm.verticalInset == 4)
         #expect(m.labelOpacity == 0, "labels are gone by the midpoint")
         #expect(metrics(0.25).labelOpacity == 0.5)
     }
@@ -83,9 +86,9 @@ struct SidebarMorphMetricsTests {
         }) {
             let expanded = SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: 0)
             let outset = ProjectGroupCard.horizontalOutset(
+                hasRows: true,
                 cardInset: SidebarDialTuning.groupCardInset(),
-                rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
-                chipOverhang: RailProjectColumn.sideOverhang(anchorCount: 2, context: .sidebar)
+                rowLeadingPadding: SidebarDialTuning.rowLeadingPadding()
             )
             #expect(expanded.card(hasRows: true).minX == expanded.listMinX - outset)
             #expect(expanded.chipSize == RailProjectColumn.chipSize(.sidebar))

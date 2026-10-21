@@ -166,6 +166,16 @@ public:
         }
     }
 
+    // Without this override CEF's default sends `performClose:` to the
+    // browser's top-level NSWindow, which here is the whole workspace window
+    // (it raises "Close Window?" and, on a repeat, closes every terminal).
+    // Returning true tells CEF we own the close: it proceeds to destroy the
+    // browser and fires OnBeforeClose, where the view is removed.
+    bool DoClose(CefRefPtr<CefBrowser> browser) override {
+        CEF_REQUIRE_UI_THREAD();
+        return true;
+    }
+
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
         CEFBrowserView *v = view_;
@@ -739,6 +749,7 @@ private:
 
 - (void)_browserDidClose {
     _browser = nullptr;
+    [self removeFromSuperview];
 }
 #endif
 

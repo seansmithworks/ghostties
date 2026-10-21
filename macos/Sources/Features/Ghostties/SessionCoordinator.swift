@@ -43,7 +43,32 @@ final class SessionCoordinator: ObservableObject {
     weak var sessionDraftStore: SessionDraftStore?
 
     /// The currently displayed session. Nil before any session is created.
-    @Published private(set) var activeSessionId: UUID?
+    @Published private(set) var activeSessionId: UUID? {
+        didSet {
+            // A cause belongs to the one change it tagged.
+            if let cause = selectionCause, cause.id != activeSessionId {
+                selectionCause = nil
+            }
+        }
+    }
+
+    /// What made the latest selection change, tagged with its target, so
+    /// every list's `SelectedRowMixDriver` reads the same input: a new
+    /// session taking the canvas. Every other change (a click,
+    /// Cmd+Shift+] / [, Cmd+1-9, a session closing) is untagged and plays
+    /// the same hand-off.
+    struct SelectionCause: Equatable {
+        enum Kind: Equatable { case newTab }
+        let id: UUID
+        let kind: Kind
+    }
+
+    private(set) var selectionCause: SelectionCause?
+
+    /// Call before the change it causes (a row's tap, before `onTap`).
+    func noteSelectionCause(_ kind: SelectionCause.Kind, for id: UUID) {
+        selectionCause = SelectionCause(id: id, kind: kind)
+    }
 
     /// True while the sidebar's History row is selected and the canvas shows
     /// the history browser (mock I3). `activeSessionId` is left untouched
@@ -182,7 +207,27 @@ final class SessionCoordinator: ObservableObject {
     /// `.shared` (which reads/writes the real `~/.ghostties/state/`, where
     /// live sessions are writing right now). nil in production.
     var claudeStateStoreForTesting: ClaudeStateStore?
+
+    /// Test-only: stands in for the close-confirmation sheet, which needs a
+    /// live window. Receives (message, informative text, proceed); a test
+    /// calls `proceed` to confirm and drops it to cancel. nil in production.
+    var confirmCloseOverrideForTesting: ((String, String, @escaping () -> Void) -> Void)?
+
+    /// Test-only: stands in for closing the workspace window, so tests can
+    /// count window-close requests without a live window. nil in production.
+    var closeWindowOverrideForTesting: (() -> Void)?
 #endif
+
+    /// Closes this coordinator's workspace window.
+    private func closeWindow() {
+#if DEBUG
+        if let closeWindowOverrideForTesting {
+            closeWindowOverrideForTesting()
+            return
+        }
+#endif
+        terminalController?.window?.close()
+    }
 
     /// The `ClaudeStateStore` this coordinator reads/writes. Always
     /// `.shared` in production; overridable in DEBUG builds via
@@ -397,6 +442,7 @@ final class SessionCoordinator: ObservableObject {
         sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
         subscribeToOutput(surface: newView, sessionId: session.id)
+        noteSelectionCause(.newTab, for: session.id)
         activeSessionId = session.id
         isHistoryPresented = false
         lastActiveSessionPerProject[session.projectId] = session.id
@@ -552,6 +598,7 @@ final class SessionCoordinator: ObservableObject {
         browserManagers[session.id] = manager
         sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
+        noteSelectionCause(.newTab, for: session.id)
         activeSessionId = session.id
         isHistoryPresented = false
         lastActiveSessionPerProject[session.projectId] = session.id
@@ -759,6 +806,11 @@ final class SessionCoordinator: ObservableObject {
             }) {
                 return match
             }
+            // A retired built-in's name (a task saved with
+            // `template: Orchestrator`) starts its replacement.
+            if let replacement = AgentTemplate.replacement(forRetiredName: requested) {
+                return store.templates.first(where: { $0.id == replacement.id }) ?? replacement
+            }
             FileHandle.standardError.write(Data(
                 "⚠️ Ghostties: template '\(requested)' not found; falling back to default\n".utf8
             ))
@@ -842,12 +894,13 @@ final class SessionCoordinator: ObservableObject {
     func closeSession(id: UUID) {
         // Browser session path.
         if let manager = browserManagers[id] {
+            let closingProjectId = sessionRecordStore.sessions.first { $0.id == id }?.projectId
             manager.closeAllTabs()
             browserManagers.removeValue(forKey: id)
             browserBridges.removeValue(forKey: id)
             setStatus(.killed, for: id)
             if activeSessionId == id {
-                switchToNextSession()
+                switchAfterClosingActiveBrowser(projectId: closingProjectId)
             }
             return
         }
@@ -891,8 +944,15 @@ final class SessionCoordinator: ObservableObject {
             // convention: ⌘W then closes the window. If live sessions DO exist but
             // none is active, stay a no-op rather than closing out from under them.
             if sessionTrees.isEmpty && browserManagers.isEmpty {
-                terminalController?.window?.close()
+                closeWindow()
             }
+            return
+        }
+
+        // A browser asks first and closes only itself: the window and every
+        // terminal session stay, even when it was the last session.
+        if browserManagers[id] != nil {
+            stopSessionWithConfirmation(id: id)
             return
         }
 
@@ -902,7 +962,7 @@ final class SessionCoordinator: ObservableObject {
         func performClose() {
             closeSession(id: id)
             if sessionTrees.isEmpty && browserManagers.isEmpty {
-                terminalController?.window?.close()
+                closeWindow()
             }
         }
 
@@ -917,6 +977,40 @@ final class SessionCoordinator: ObservableObject {
         ) {
             performClose()
         }
+    }
+
+    /// Stop from the sidebar. A browser session asks first, using the same
+    /// sheet as the terminal's close confirmation; terminal sessions stop
+    /// immediately, as before. Closing one tab inside the browser never
+    /// comes through here, so it never prompts.
+    func stopSessionWithConfirmation(id: UUID) {
+        guard let manager = browserManagers[id] else {
+            closeSession(id: id)
+            return
+        }
+        let count = manager.tabs.count
+        let messageText = "Close browser?"
+        let tabsClause = count > 1 ? "Its \(count) tabs will close." : "This tab will close."
+        let informativeText = "\(tabsClause) Your terminal sessions stay open."
+        let proceed: () -> Void = { [weak self] in
+            self?.closeSession(id: id)
+        }
+#if DEBUG
+        if let confirmCloseOverrideForTesting {
+            confirmCloseOverrideForTesting(messageText, informativeText, proceed)
+            return
+        }
+#endif
+        guard let controller = terminalController else {
+            closeSession(id: id)
+            return
+        }
+        controller.confirmClose(
+            messageText: messageText,
+            informativeText: informativeText,
+            confirmButtonTitle: "Close Browser",
+            completion: proceed
+        )
     }
 
     /// Clean up runtime state for a session (after removing from the store).
@@ -987,6 +1081,52 @@ final class SessionCoordinator: ObservableObject {
             return
         }
         activeSessionId = nil
+    }
+
+    /// Where the closed browser's focus goes. Browser-only: terminals keep
+    /// `switchToNextSession()`. A running terminal in the same project wins;
+    /// otherwise the most recently active running session anywhere; otherwise
+    /// nothing.
+    private func switchAfterClosingActiveBrowser(projectId: UUID?) {
+        let records = sessionRecordStore.sessions
+        func isRunning(_ id: UUID) -> Bool {
+            statuses[id] == .running && (sessionTrees[id] != nil || browserManagers[id] != nil)
+        }
+        func lastActive(_ id: UUID) -> Date {
+            records.first { $0.id == id }?.lastActiveAt ?? .distantPast
+        }
+        func project(_ id: UUID) -> UUID? {
+            records.first { $0.id == id }?.projectId
+        }
+
+        let sameProjectTerminal = sessionTrees.keys
+            .filter { isRunning($0) && project($0) == projectId && projectId != nil }
+            .max { lastActive($0) < lastActive($1) }
+        let nextId = sameProjectTerminal
+            ?? Set(sessionTrees.keys).union(browserManagers.keys)
+                .filter(isRunning)
+                .max { lastActive($0) < lastActive($1) }
+
+        guard let nextId else {
+            activeSessionId = nil
+            return
+        }
+        activeSessionId = nextId
+        if let nextTree = sessionTrees[nextId] {
+            showTerminalInContainer()
+            showSession(nextTree, focusView: nextTree.first)
+        } else if let nextManager = browserManagers[nextId] {
+            showBrowserInContainer(nextManager)
+        }
+    }
+
+    /// The store session records are read from. `.shared` in production.
+    private var sessionRecordStore: WorkspaceStore {
+#if DEBUG
+        agentKindLookupStoreForTesting ?? WorkspaceStore.shared
+#else
+        WorkspaceStore.shared
+#endif
     }
 
     /// Close all sessions belonging to a project. Called before the project is
@@ -1191,9 +1331,10 @@ final class SessionCoordinator: ObservableObject {
     // MARK: - Marketing Capture Fixture
 
     /// The command every fixture-mode session runs instead of a real shell —
-    /// see `CaptureFixture.writeTranscriptScript(id:)`.
+    /// see `CaptureFixture.transcriptScript(forSessionId:)`.
     nonisolated private static func captureFixtureCommand(for sessionId: UUID) -> String {
-        CaptureFixture.writeTranscriptScript(id: sessionId.uuidString)
+        CaptureFixture.writeTranscriptScript(
+            id: sessionId.uuidString, script: CaptureFixture.transcriptScript(forSessionId: sessionId))
     }
 
     // MARK: - Launcher Script Lifecycle
@@ -1886,12 +2027,11 @@ final class SessionCoordinator: ObservableObject {
     /// Capture-rig-only seam (round 6 follow-up): marks a session focused
     /// for `GHOSTTIES_CAPTURE_FIXTURE` screenshots so the sidebar's
     /// selected-row styling actually renders (`RecentsRowView`/
-    /// the rail key off `activeSessionId`). Sets `activeSessionId`
-    /// directly instead of routing through `focusSession(id:)` — the real
-    /// path snapshots/swaps the terminal's `SplitTree`, which the fixture's
-    /// canned sessions don't have (their terminal content comes from the
-    /// default-window transcript, not a per-session surface — see
-    /// `CaptureFixture`'s doc comment on `TerminalController.init`).
+    /// the rail key off `activeSessionId`). Sets `activeSessionId` at once
+    /// so the first frame already shows the selection, then (once per
+    /// process) gives each live fixture session a real surface through
+    /// `relaunch` and selects the focused one through `focusSession(id:)`,
+    /// the row-click path — see `spawnCaptureFixtureSessions()`.
     ///
     /// Called from BOTH `WorkspaceSidebarView.onAppear` and
     /// `SidebarRailColumn.onAppear` — a capture can cold-launch straight into
@@ -1909,8 +2049,62 @@ final class SessionCoordinator: ObservableObject {
             activeSessionId = id
         }
         sessionPopover.openForCaptureFixtureIfNeeded()
+        if CaptureFixture.claimHook("spawnFixtureSessions") {
+            _Concurrency.Task { @MainActor [weak self] in
+                await self?.spawnCaptureFixtureSessions()
+            }
+        }
         #endif
     }
+
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_SELECT_SEQUENCE`: moves the selection `offset` rows
+    /// along `sessions` (wrapping) the way a row click selects, minus the
+    /// terminal swap — fixture sessions have no surface tree, so
+    /// `focusSession` returns early for them.
+    func selectAdjacentForCapture(offset: Int, in sessions: [AgentSession]) -> AgentSession? {
+        guard CaptureFixture.isActive, !sessions.isEmpty else { return nil }
+        let current = sessions.firstIndex(where: { $0.id == activeSessionId }) ?? (offset > 0 ? -1 : 0)
+        let target = sessions[((current + offset) % sessions.count + sessions.count) % sessions.count]
+        isHistoryPresented = false
+        activeSessionId = target.id
+        sidebarItemActivated.send()
+        return target
+    }
+
+    /// `GHOSTTIES_CAPTURE_NEW_TAB`: a new session in `project` takes the
+    /// canvas the way `createSession` makes one (running, started this
+    /// launch, tagged a new tab), minus the surface.
+    func insertSessionForCapture(in project: Project, store: WorkspaceStore) {
+        guard CaptureFixture.isActive else { return }
+        let session = store.addSession(name: "New session", templateId: AgentTemplate.shell.id, projectId: project.id)
+        sessionIdsStartedThisLaunch.insert(session.id)
+        setStatus(.running, for: session.id)
+        noteSelectionCause(.newTab, for: session.id)
+        isHistoryPresented = false
+        activeSessionId = session.id
+        sidebarItemActivated.send()
+    }
+
+    /// Each live fixture session runs its own transcript in a real surface
+    /// (the Relaunch path), and the focused one is selected the way a row
+    /// click selects it, so picking any row switches the terminal.
+    private func spawnCaptureFixtureSessions() async {
+        let store = WorkspaceStore.shared
+        for id in CaptureFixture.spawnedSessionIds {
+            guard let session = store.sessions.first(where: { $0.id == id }) else { continue }
+            await relaunch(session: session, mode: .fresh)
+        }
+        if let id = CaptureFixture.focusedSessionId {
+            focusSession(id: id)
+        }
+        // Printing the transcripts reset each session's output clock and
+        // relaunch cleared its seeded state; restore the fixture's states
+        // once that output has landed.
+        try? await _Concurrency.Task.sleep(for: .seconds(1))
+        CaptureFixture.seedCoordinator(self, store: store)
+    }
+    #endif
 
     /// Test-only: current count of live name-sync subscriptions, so tests
     /// can assert the dictionary shrinks after teardown without reaching
@@ -1924,6 +2118,16 @@ final class SessionCoordinator: ObservableObject {
     /// surface. Never used in production.
     func setStatusForTesting(_ status: SessionStatus, for id: UUID) {
         setStatus(status, for: id)
+    }
+
+    /// Test-only: registers a browser session with one tab and no CEF view,
+    /// running. Never used in production.
+    func seedBrowserSessionForTesting(id: UUID) {
+        let manager = BrowserTabManager()
+        manager.createTab(url: "about:blank")
+        browserManagers[id] = manager
+        sessionIdsStartedThisLaunch.insert(id)
+        statuses[id] = .running
     }
 
     /// Test-only: seed a "live" session (running + producing recent output)
