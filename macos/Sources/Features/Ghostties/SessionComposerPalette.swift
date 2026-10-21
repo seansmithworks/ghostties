@@ -947,11 +947,29 @@ struct SessionComposerPalette: View {
         return Array(options.prefix(restStateLaneCap))
     }
 
-    /// Rest-state default selection (see the fix commit): stub, identity.
-    static func restStateSelectionIndex(in options: [ComposerOption]) -> Int { 0 }
+    /// Sean's rule (2026-10-20): the default is ALWAYS Shell. At a blank
+    /// query the highlighted row is Shell, never whatever happens to lead
+    /// the list — index 0 is a pin, the project's last-used template, or
+    /// its `defaultTemplateId`, any of which can be Browser (the bug: the
+    /// ghost read "<repo> > Default > Browser" and Tab/Return opened a
+    /// browser). Browser or any other template opens only when typed or
+    /// picked. Falls back to 0 only if no Shell row exists at all.
+    static func restStateSelectionIndex(in options: [ComposerOption]) -> Int {
+        options.firstIndex { $0.template?.id == AgentTemplate.shell.id }
+            ?? options.firstIndex { $0.template?.kind == .shell }
+            ?? 0
+    }
 
-    /// Rest-state lane-2 ordering (see the fix commit): stub, identity.
-    static func shellFirst(_ options: [ComposerOption]) -> [ComposerOption] { options }
+    /// Hoists Shell to the head of the rest-state TEMPLATES lane, so the
+    /// 3-row rest-state cap (`applyRestStateCap`) can't drop it when a
+    /// project default or presets sort ahead of it and the default
+    /// selection above has a row to land on. Stable otherwise.
+    static func shellFirst(_ options: [ComposerOption]) -> [ComposerOption] {
+        guard let i = options.firstIndex(where: { $0.template?.kind == .shell }), i > 0 else { return options }
+        var result = options
+        result.insert(result.remove(at: i), at: 0)
+        return result
+    }
 
     /// Lane 2 (board 11.2): remaining templates minus anything already
     /// surfaced in lane 1 (recent OR pinned) — `filteredTemplateOptions`
@@ -960,7 +978,7 @@ struct SessionComposerPalette: View {
     private var lane2Options: [ComposerOption] {
         let pinnedIds = Set(pinnedOptions.map { $0.id })
         let options = filteredTemplateOptions.filter { !pinnedIds.contains($0.id) }
-        return Self.applyRestStateCap(to: options, query: query)
+        return Self.applyRestStateCap(to: query.isEmpty ? Self.shellFirst(options) : options, query: query)
     }
 
     /// Query-matching projects (S2, locked decision: "the search field
@@ -1075,6 +1093,11 @@ struct SessionComposerPalette: View {
         if let resolvedTemplateId = effectiveCommandParse.resolvedTemplateId,
            let index = options.firstIndex(where: { $0.id == resolvedTemplateId }) {
             return UInt(index)
+        }
+        // Blank field: the default is Shell, regardless of pins, recents
+        // or the project's own default template (see `restStateSelectionIndex`).
+        if composerStore.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return UInt(Self.restStateSelectionIndex(in: options))
         }
         if let index = Self.projectWordIndex(
             in: options,
