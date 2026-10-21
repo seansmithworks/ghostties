@@ -120,19 +120,18 @@ function pngWidth(buf) {
   return buf.readUInt32BE(16);
 }
 
+// The target id itself is checked against /json/list; Playwright's own
+// newCDPSession needs Target.attachToBrowserTarget, which the gateway denies,
+// so the page is found by the URL `gt browser open` was given.
 async function pageForTarget(browser, targetId) {
   for (let i = 0; i < 30; i++) {
     for (const ctx of browser.contexts()) {
-      for (const p of ctx.pages()) {
-        const session = await ctx.newCDPSession(p);
-        const { targetInfo } = await session.send('Target.getTargetInfo');
-        await session.detach();
-        if (targetInfo.targetId === targetId) return p;
-      }
+      const p = ctx.pages().find((candidate) => candidate.url() === PAGE_URL);
+      if (p) return p;
     }
     await sleep(500);
   }
-  throw new Error(`Playwright never saw target ${targetId}`);
+  throw new Error(`Playwright never saw the page for target ${targetId}`);
 }
 
 // ---- 0. outside a Ghostties terminal, gt refuses ----------------------------
