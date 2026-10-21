@@ -61,6 +61,7 @@ static bool GhosttiesIsAllowedSchemeCef(const CefString &url) {
 - (void)_browserDidCreate:(CefRefPtr<CefBrowser>)browser;
 - (void)_browserDidClose;
 - (BOOL)_isAppInitiatedClose;
+- (void)_noteOutsideCloseAccepted;
 - (void)_browserDidRequestClose;
 #endif
 @end
@@ -185,6 +186,7 @@ public:
         CEF_REQUIRE_UI_THREAD();
         CEFBrowserView *v = view_;
         if (v && ![v _isAppInitiatedClose]) {
+            [v _noteOutsideCloseAccepted];
             dispatch_async(dispatch_get_main_queue(), ^{
                 [v _browserDidRequestClose];
             });
@@ -316,6 +318,10 @@ private:
 /// dealloc), so `DoClose` can tell that apart from a close that came from
 /// the page or a DevTools client.
 @property (nonatomic) BOOL appInitiatedClose;
+/// Set when `DoClose` accepted a close that did not come from the app. CEF
+/// then considers the close under way, so a later `CloseBrowser` is a no-op
+/// and the browser has to be finished by tearing down its native view.
+@property (nonatomic) BOOL outsideCloseAccepted;
 /// Pending URL captured at init time; consumed the moment creation is
 /// actually attempted (deferred until the view is in a window).
 @property (nonatomic, copy, nullable) NSString *pendingURL;
@@ -501,6 +507,15 @@ private:
     if (_browser) {
         self.appInitiatedClose = YES;
         _browser->GetHost()->CloseBrowser(true);
+        if (self.outsideCloseAccepted) {
+            // DoClose already accepted this close (see the property), so the
+            // call above did nothing. CEF's contract for DoClose() == true is
+            // that the app completes the close by tearing down the host
+            // view hierarchy; OnBeforeClose follows from that.
+            for (NSView *child in [self.subviews copy]) {
+                [child removeFromSuperview];
+            }
+        }
         // _browser is nilled in OnBeforeClose callback
     }
 #else
@@ -886,6 +901,10 @@ private:
 
 - (BOOL)_isAppInitiatedClose {
     return self.appInitiatedClose;
+}
+
+- (void)_noteOutsideCloseAccepted {
+    self.outsideCloseAccepted = YES;
 }
 
 - (void)_browserDidRequestClose {
