@@ -207,7 +207,27 @@ final class SessionCoordinator: ObservableObject {
     /// `.shared` (which reads/writes the real `~/.ghostties/state/`, where
     /// live sessions are writing right now). nil in production.
     var claudeStateStoreForTesting: ClaudeStateStore?
+
+    /// Test-only: stands in for the close-confirmation sheet, which needs a
+    /// live window. Receives (message, informative text, proceed); a test
+    /// calls `proceed` to confirm and drops it to cancel. nil in production.
+    var confirmCloseOverrideForTesting: ((String, String, @escaping () -> Void) -> Void)?
+
+    /// Test-only: stands in for closing the workspace window, so tests can
+    /// count window-close requests without a live window. nil in production.
+    var closeWindowOverrideForTesting: (() -> Void)?
 #endif
+
+    /// Closes this coordinator's workspace window.
+    private func closeWindow() {
+#if DEBUG
+        if let closeWindowOverrideForTesting {
+            closeWindowOverrideForTesting()
+            return
+        }
+#endif
+        terminalController?.window?.close()
+    }
 
     /// The `ClaudeStateStore` this coordinator reads/writes. Always
     /// `.shared` in production; overridable in DEBUG builds via
@@ -874,12 +894,13 @@ final class SessionCoordinator: ObservableObject {
     func closeSession(id: UUID) {
         // Browser session path.
         if let manager = browserManagers[id] {
+            let closingProjectId = sessionRecordStore.sessions.first { $0.id == id }?.projectId
             manager.closeAllTabs()
             browserManagers.removeValue(forKey: id)
             browserBridges.removeValue(forKey: id)
             setStatus(.killed, for: id)
             if activeSessionId == id {
-                switchToNextSession()
+                switchAfterClosingActiveBrowser(projectId: closingProjectId)
             }
             return
         }
@@ -923,8 +944,15 @@ final class SessionCoordinator: ObservableObject {
             // convention: ⌘W then closes the window. If live sessions DO exist but
             // none is active, stay a no-op rather than closing out from under them.
             if sessionTrees.isEmpty && browserManagers.isEmpty {
-                terminalController?.window?.close()
+                closeWindow()
             }
+            return
+        }
+
+        // A browser asks first and closes only itself: the window and every
+        // terminal session stay, even when it was the last session.
+        if browserManagers[id] != nil {
+            stopSessionWithConfirmation(id: id)
             return
         }
 
@@ -934,7 +962,7 @@ final class SessionCoordinator: ObservableObject {
         func performClose() {
             closeSession(id: id)
             if sessionTrees.isEmpty && browserManagers.isEmpty {
-                terminalController?.window?.close()
+                closeWindow()
             }
         }
 
@@ -949,6 +977,40 @@ final class SessionCoordinator: ObservableObject {
         ) {
             performClose()
         }
+    }
+
+    /// Stop from the sidebar. A browser session asks first, using the same
+    /// sheet as the terminal's close confirmation; terminal sessions stop
+    /// immediately, as before. Closing one tab inside the browser never
+    /// comes through here, so it never prompts.
+    func stopSessionWithConfirmation(id: UUID) {
+        guard let manager = browserManagers[id] else {
+            closeSession(id: id)
+            return
+        }
+        let count = manager.tabs.count
+        let messageText = "Close browser?"
+        let tabsClause = count > 1 ? "Its \(count) tabs will close." : "This tab will close."
+        let informativeText = "\(tabsClause) Your terminal sessions stay open."
+        let proceed: () -> Void = { [weak self] in
+            self?.closeSession(id: id)
+        }
+#if DEBUG
+        if let confirmCloseOverrideForTesting {
+            confirmCloseOverrideForTesting(messageText, informativeText, proceed)
+            return
+        }
+#endif
+        guard let controller = terminalController else {
+            closeSession(id: id)
+            return
+        }
+        controller.confirmClose(
+            messageText: messageText,
+            informativeText: informativeText,
+            confirmButtonTitle: "Close Browser",
+            completion: proceed
+        )
     }
 
     /// Clean up runtime state for a session (after removing from the store).
@@ -1019,6 +1081,52 @@ final class SessionCoordinator: ObservableObject {
             return
         }
         activeSessionId = nil
+    }
+
+    /// Where the closed browser's focus goes. Browser-only: terminals keep
+    /// `switchToNextSession()`. A running terminal in the same project wins;
+    /// otherwise the most recently active running session anywhere; otherwise
+    /// nothing.
+    private func switchAfterClosingActiveBrowser(projectId: UUID?) {
+        let records = sessionRecordStore.sessions
+        func isRunning(_ id: UUID) -> Bool {
+            statuses[id] == .running && (sessionTrees[id] != nil || browserManagers[id] != nil)
+        }
+        func lastActive(_ id: UUID) -> Date {
+            records.first { $0.id == id }?.lastActiveAt ?? .distantPast
+        }
+        func project(_ id: UUID) -> UUID? {
+            records.first { $0.id == id }?.projectId
+        }
+
+        let sameProjectTerminal = sessionTrees.keys
+            .filter { isRunning($0) && project($0) == projectId && projectId != nil }
+            .max { lastActive($0) < lastActive($1) }
+        let nextId = sameProjectTerminal
+            ?? Set(sessionTrees.keys).union(browserManagers.keys)
+                .filter(isRunning)
+                .max { lastActive($0) < lastActive($1) }
+
+        guard let nextId else {
+            activeSessionId = nil
+            return
+        }
+        activeSessionId = nextId
+        if let nextTree = sessionTrees[nextId] {
+            showTerminalInContainer()
+            showSession(nextTree, focusView: nextTree.first)
+        } else if let nextManager = browserManagers[nextId] {
+            showBrowserInContainer(nextManager)
+        }
+    }
+
+    /// The store session records are read from. `.shared` in production.
+    private var sessionRecordStore: WorkspaceStore {
+#if DEBUG
+        agentKindLookupStoreForTesting ?? WorkspaceStore.shared
+#else
+        WorkspaceStore.shared
+#endif
     }
 
     /// Close all sessions belonging to a project. Called before the project is
@@ -2010,6 +2118,16 @@ final class SessionCoordinator: ObservableObject {
     /// surface. Never used in production.
     func setStatusForTesting(_ status: SessionStatus, for id: UUID) {
         setStatus(status, for: id)
+    }
+
+    /// Test-only: registers a browser session with one tab and no CEF view,
+    /// running. Never used in production.
+    func seedBrowserSessionForTesting(id: UUID) {
+        let manager = BrowserTabManager()
+        manager.createTab(url: "about:blank")
+        browserManagers[id] = manager
+        sessionIdsStartedThisLaunch.insert(id)
+        statuses[id] = .running
     }
 
     /// Test-only: seed a "live" session (running + producing recent output)

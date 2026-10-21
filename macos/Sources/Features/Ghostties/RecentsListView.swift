@@ -873,7 +873,7 @@ struct RecentsListView: View {
             // for the rest of an open relaunch hold (BACKLOG I) —
             // end it outright rather than wait out the timeout.
             pendingLaunchGenerations = PendingLaunchHold.end(id: session.id, in: pendingLaunchGenerations)
-            coordinator.closeSession(id: session.id)
+            coordinator.stopSessionWithConfirmation(id: session.id)
         case .resume:
             relaunchSession(session, mode: .resume)
         case .startFresh:
