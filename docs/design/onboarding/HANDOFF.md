@@ -49,3 +49,25 @@ Open questions:
 1. B2 as-is, or B3's coach mark for the first time only?
 2. A8: one-time Remove/Keep prompt, or keep the example until removed by hand?
 3. Should the funnel counts be visible to the user in Settings, or stored only?
+
+## Round 3: agent-driven hello (2026-10-21)
+
+Same source file as round 2 (`onboarding-round2-demo-project.pen`), new "Round 3" area below the round-2 frames, which are unchanged. PNGs in `round3-agent-hello/`.
+
+Frames:
+- 01–03 R3-A launch cinematic, 1.8s, first launch only: the ghost rises and the wordmark types in (A1), the ghost flies to the sidebar and lands as switchboard's icon while its rows cascade in (A2), hand-off to hello with input live (A3). Any key or click skips to A3. With Reduce Motion on, A3 is reached by a 150ms crossfade. No sound
+- 04–05 R3-B terminal host: hello runs as a real session row under "Setup", started by the app from a binary inside the .app (no PATH install). It looks around first, then asks you to confirm
+- 06–07 R3-B native host: the same steps in a centered sheet, at the centered-modal scale
+- 08 R3-B verdict
+- 09–11 R3-C day one, hosted in hello: repos (found on disk, picked, previewed in the sidebar), agents (login-shell detection, sign-in, the Claude Code "needs you" hook shown as a one-line diff before it's written), prefs (copied from Ghostty, iTerm2 or Terminal; the originals are never edited). switchboard stays in the sidebar throughout. Skip and Later on every step
+- 12 R3-D setup across sessions: notifications (session 2, on the row), appearance (session ~5, sidebar footer), keybinds and the embedded browser (later). Each one is a single line tied to a moment that just happened. Progress is a "Setup n/7" count in the sidebar footer, which opens the hello list
+- 13 R3-E funnel: steps 9–21 added on top of round 2's 1–8, still counted on this Mac only
+
+Recommendation: **host hello in the terminal.** It shows the product on day one, and the same row is where later setup comes back, so day one and week three are one system. Settings › Setup gives mouse and VoiceOver users a native version of the same list. hello is scripted, not an LLM, so it works before any agent is found and costs nothing to run.
+
+Rules carried into the frames: only one ask at a time, so the example's live agent waits to reach "needs you" until hello is done or set aside. Terracotta stays reserved for waiting, so hello uses ink only.
+
+Open questions:
+1. Does the cinematic earn 1.8s on every first launch, or should it be shorter (A1 + A3 only, about 0.8s)?
+2. Should the hello row leave the sidebar at the end of day one, as drawn, or stay pinned under Setup until 7/7?
+3. Is 7 the right set, or do any later steps (keybinds, browser) belong in Settings only?
