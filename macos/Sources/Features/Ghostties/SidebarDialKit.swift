@@ -195,8 +195,8 @@ enum SidebarDialTuning {
     static let hoverRevealDwellKey = "ghostties.sidebarDial.hoverReveal.dwell"
     static let hoverRevealExitGraceKey = "ghostties.sidebarDial.hoverReveal.exitGrace"
     static let hoverRevealStyleKey = "ghostties.sidebarDial.hoverReveal.style"
-    /// Spike (`spike/hover-pushes-canvas`): closed-mode hover bar lays the
-    /// terminal card out beside it, instead of floating over it.
+    /// Spike (`spike/hover-pushes-canvas`): the closed-mode hover strip
+    /// reveals the real pinned layout (not a pin) instead of the hover bar.
     static let hoverBarPushesCanvasKey = "ghostties.sidebarDial.hoverBar.pushesCanvas"
 
     // MARK: UI springs: the sidebar's small motion (`SidebarUISpring`).
@@ -1552,11 +1552,11 @@ enum SidebarListDialPanel: FocusedDialPanel {
                 .slider("hoverRevealDwell", keyPath: \.hoverRevealDwell, label: "Dwell", range: 0.3...3.0, step: 0.1, unit: "s"),
                 .slider("hoverRevealExitGrace", keyPath: \.hoverRevealExitGrace, label: "Exit grace", range: 0...1.0, step: 0.05, unit: "s"),
             ]),
-            // Closed mode: the left-edge hover bar shrinks the terminal card
-            // to sit beside it (on the sidebar's open timing) instead of
-            // floating over it. Off = the overlay as before.
+            // Closed mode: the left-edge hover strip shows the pinned sidebar
+            // and canvas layout (not a pin) instead of the floating hover
+            // bar. Off = the overlay as before.
             .group("hoverBar", label: "Hover bar", children: [
-                .toggle("hoverBarPushesCanvas", keyPath: \.hoverBarPushesCanvas, label: "Hover bar pushes canvas"),
+                .toggle("hoverBarPushesCanvas", keyPath: \.hoverBarPushesCanvas, label: "Hover shows full sidebar"),
             ]),
             // The sidebar ⇄ rail morph's springs (toggle and hover reveal).
             // Bounce 0 = no overshoot (critically damped).
