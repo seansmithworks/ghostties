@@ -28,3 +28,24 @@ Branch `design/onboarding-revamp` · draft PR #209 (green, no review comments, d
 Open: on-device onboarding funnel counting — yes or no.
 
 The `.pen` source (`onboarding-20-concepts.pen`) lives in iCloud at `~/Library/Mobile Documents/com~apple~CloudDocs/Ghostties/onboarding/`, gitignored and kept out of the public repo.
+
+## Round 2: pre-installed demo project (2026-10-20)
+
+Built around concept #11. Source: `onboarding-round2-demo-project.pen` (same iCloud folder, gitignored). PNGs in `round2-demo-project/`.
+
+Decisions (locked by Sean):
+1. One demo project (`switchboard`, tagged Example), five sessions in mixed states.
+2. All sessions static except one scripted live agent ("Validate OAuth scopes") that progresses and reaches "needs you", the hero moment.
+3. Funnel counted on-device only, nothing sent.
+
+Frames:
+- A1 first launch · A2 explore while the live agent works · A3 the agent needs you · A4 open it and answer · A5 it finishes · A6 bridge to your own project · A7 own project on top, example collapses · A8 offer to remove the example once (recommended; alternative auto-archive after 7 days, rejected as silent)
+- B1 mild (glyph only) · B2 question forward · B3 bolder (one-time coach mark + terracotta)
+- C funnel: `onb.demo_shown`, `onb.needs_you_shown`, `onb.needs_you_opened`, `onb.needs_you_answered`, `onb.demo_finished`, `onb.add_project_clicked`, `onb.own_project_added`, `onb.demo_dismissed` / `onb.demo_kept`
+
+Recommended "needs you": **B2** (A3 uses it). It is the row users keep forever, so the demo teaches the real signal and what to do about it, with no onboarding-only chrome and no break from the ink-only pattern D.
+
+Open questions:
+1. B2 as-is, or B3's coach mark for the first time only?
+2. A8: one-time Remove/Keep prompt, or keep the example until removed by hand?
+3. Should the funnel counts be visible to the user in Settings, or stored only?
