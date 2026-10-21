@@ -1992,6 +1992,7 @@ class WorkspaceViewContainer: NSView {
             sidebarMode = .pinned
             store.updateSidebarMode(.pinned)
             applySidebarView()
+            sidebarDragHandle.isHidden = !Self.sidebarEdgeDrags(in: .pinned)
             updateTrackingAreas()
             return
         }
@@ -2140,7 +2141,21 @@ class WorkspaceViewContainer: NSView {
         return (.pinned, min(max(pointerWidth, WorkspaceLayout.sidebarMinWidth), upperBound))
     }
 
+    /// Whether the sidebar's edge drags in `mode`: pinned and the rail snap
+    /// between each other, the overlay only resizes. Closed has no edge;
+    /// the hover reveal is a peek, which never saves a mode or a width —
+    /// Cmd+S pins it, and then it drags.
+    static func sidebarEdgeDrags(in mode: SidebarMode) -> Bool {
+        switch mode {
+        case .pinned, .collapsed, .overlay: return true
+        case .closed, .hoverRevealed: return false
+        }
+    }
+
+    /// Starts a drag only where the edge drags: with no drag started,
+    /// `handleSidebarDrag` and `endSidebarDrag` do nothing.
     private func beginSidebarDrag() {
+        guard Self.sidebarEdgeDrags(in: sidebarMode) else { return }
         // A drag takes the width from wherever a toggle's spring has it.
         if motion.isRunning {
             cancelMorphMotion()
@@ -2217,13 +2232,14 @@ class WorkspaceViewContainer: NSView {
     }
 
     private func endSidebarDrag() {
+        guard sidebarDragPointerWidth != nil else { return }
         sidebarDragPointerWidth = nil
         persistSidebarWidth()
         // The overlay held open through the drag (`mouseExited`). Its hover
         // zone follows the new width, and a drag that ended outside it
         // closes the overlay as any exit does: the exit AppKit may still
         // deliver belongs to the replaced tracking area, so it's ignored.
-        guard sidebarMode.isClosedPeek else { return }
+        guard sidebarMode == .overlay else { return }
         updateTrackingAreas()
         if !pointerIsInOverlayZone {
             // Not debounced: a drag can end within the guard's 0.25s of the
@@ -2566,10 +2582,9 @@ class WorkspaceViewContainer: NSView {
             sidebarOverlayBackground.isHidden = false
         }
 
-        // Sidebar drag handle: active while pinned or collapsed — dragging
-        // snaps between the two — and in overlay, where it only resizes.
-        // Hidden in closed mode (sidebar isn't there).
-        sidebarDragHandle.isHidden = newMode == .closed
+        // Sidebar drag handle: shown wherever the edge drags
+        // (`sidebarEdgeDrags(in:)`).
+        sidebarDragHandle.isHidden = !Self.sidebarEdgeDrags(in: newMode)
 
         // 4. Animate constraints, widths, alphas — duration/curve come from
         // the Flow 05 named-transition table (`WorkspaceLayout.
