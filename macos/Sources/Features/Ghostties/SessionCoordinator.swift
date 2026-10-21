@@ -719,6 +719,7 @@ final class SessionCoordinator: ObservableObject {
             }
             pairedBrowserByTerminal[sessionId] = session.id
             manager = created
+            NSLog("[BrowserAgent] opened browser session %@ for terminal %@", session.id.uuidString, sessionId.uuidString)
         }
 
         // The panel animates open; CEF needs real width before it can render.
@@ -1041,6 +1042,9 @@ final class SessionCoordinator: ObservableObject {
             browserBridges.removeValue(forKey: id)
             pairedBrowserByTerminal = pairedBrowserByTerminal.filter { $0.value != id }
             setStatus(.killed, for: id)
+            #if DEBUG
+            NSLog("[BrowserAgent] closed browser session %@", id.uuidString)
+            #endif
             if activeSessionId == id {
                 switchAfterClosingActiveBrowser(projectId: closingProjectId)
             } else if shownBrowserSessionId == id {

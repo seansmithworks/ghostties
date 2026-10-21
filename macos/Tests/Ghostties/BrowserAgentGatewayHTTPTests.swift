@@ -49,6 +49,10 @@ struct BrowserAgentGatewayHTTPTests {
         let browserPort = try #require(gateway.routePort(forPath: "/devtools/browser/abc"))
         #expect(version.contains("ws://127.0.0.1:\(browserPort)/devtools/browser/abc"))
 
+        // Playwright's connectOverCDP asks for the trailing-slash spelling.
+        let (slashStatus, _) = try await get("\(base)/json/version/")
+        #expect(slashStatus == 200)
+
         let (_, listData) = try await get("\(base)/json/list")
         let list = String(decoding: listData, as: UTF8.self)
         #expect(!list.contains("\(stub.port)"), "the browser's own port leaked: \(list)")

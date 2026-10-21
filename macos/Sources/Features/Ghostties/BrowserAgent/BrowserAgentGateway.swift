@@ -125,7 +125,9 @@ final class BrowserAgentGateway: @unchecked Sendable {
             return
         }
 
-        let path = request.path
+        // Playwright asks for "/json/version/" with a trailing slash.
+        var path = request.path
+        while path.count > 1, path.hasSuffix("/") { path.removeLast() }
         if path == "/json/new" {
             respond(.json(403, ["error": "Ghostties: /json/new is not allowed; use `gt browser open`"]))
         } else if request.method == "GET", Self.jsonPaths.contains(path) {
@@ -148,9 +150,12 @@ final class BrowserAgentGateway: @unchecked Sendable {
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 10
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+        // Chromium's DevTools server drops connections between requests; a
+        // reused one fails. Ask for a fresh one each time.
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        fetch(request, attemptsLeft: 5) { [weak self] data, response, error in
             guard let self, let data, let http = response as? HTTPURLResponse else {
-                respond(.json(502, ["error": "the browser did not answer"]))
+                respond(.json(502, ["error": "the browser did not answer: \(error?.localizedDescription ?? "no response")"]))
                 return
             }
             var body = data
@@ -161,6 +166,24 @@ final class BrowserAgentGateway: @unchecked Sendable {
             var out = BrowserAgentHTTP.Response(status: http.statusCode, body: body)
             if let type = http.value(forHTTPHeaderField: "Content-Type") { out.contentType = type }
             respond(out)
+        }
+    }
+
+    /// GET with a few retries: CEF's DevTools server comes up shortly after
+    /// the browser does, and can refuse the very first connection.
+    private func fetch(
+        _ request: URLRequest,
+        attemptsLeft: Int,
+        completion: @escaping @Sendable (Data?, URLResponse?, Error?) -> Void
+    ) {
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            if data == nil, attemptsLeft > 1, let self {
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
+                    self.fetch(request, attemptsLeft: attemptsLeft - 1, completion: completion)
+                }
+                return
+            }
+            completion(data, response, error)
         }.resume()
     }
 
