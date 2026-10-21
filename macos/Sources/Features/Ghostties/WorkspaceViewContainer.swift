@@ -2242,9 +2242,7 @@ class WorkspaceViewContainer: NSView {
         guard sidebarMode == .overlay else { return }
         updateTrackingAreas()
         if !pointerIsInOverlayZone {
-            // Not debounced: a drag can end within the guard's 0.25s of the
-            // overlay opening, and this close must not be dropped.
-            transitionTo(.closed, debounced: false)
+            transitionTo(.closed)
         }
     }
 
@@ -2451,13 +2449,15 @@ class WorkspaceViewContainer: NSView {
     private var lastTransitionTime: CFTimeInterval = 0
 
     /// Centralized state transition. All sidebar mode changes go through here.
-    /// `debounced: false` skips the oscillation guard, for a transition that
-    /// is a deliberate one-off rather than a hover flicker (the close at the
-    /// end of an overlay drag).
-    private func transitionTo(_ newMode: SidebarMode, debounced: Bool = true) {
+    /// The oscillation guard never drops leaving a peek out of closed (the
+    /// overlay, the hover reveal): the peek stamped the guard as it opened,
+    /// and the exit that closes it arrives on the peek's own tracking area,
+    /// so a dropped close is never retried and the peek sticks open. Only
+    /// what follows a transition too closely otherwise is dropped.
+    private func transitionTo(_ newMode: SidebarMode) {
         guard newMode != sidebarMode else { return }
         let now = CACurrentMediaTime()
-        guard !debounced || now - lastTransitionTime > 0.25 else { return }
+        guard sidebarMode.isClosedPeek || now - lastTransitionTime > 0.25 else { return }
         lastTransitionTime = now
         let endsClosedHoverReveal = sidebarMode == .hoverRevealed && newMode == .closed
         isMorphStepHeld = false
