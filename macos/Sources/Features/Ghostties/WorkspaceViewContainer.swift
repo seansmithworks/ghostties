@@ -2422,6 +2422,7 @@ class WorkspaceViewContainer: NSView {
         let now = CACurrentMediaTime()
         guard !debounced || now - lastTransitionTime > 0.25 else { return }
         lastTransitionTime = now
+        let endsClosedHoverReveal = isClosedHoverRevealed && newMode == .closed
         isClosedHoverRevealed = closedHoverReveal
         isMorphStepHeld = false
         let previousMode = sidebarMode
@@ -2494,6 +2495,16 @@ class WorkspaceViewContainer: NSView {
             applySidebarView()
         }
 
+        // A closed hover reveal's close: the card starts from where it is.
+        // `shadowHostLeadingToSuperview` still holds the closed inset from
+        // before the reveal, so the swap below would jump the card there in
+        // the first layout pass, over the sidebar still animating out — the
+        // close read as instant. (Cmd+Shift+S from pinned has the same jump;
+        // left as is in this spike.)
+        if endsClosedHoverReveal {
+            shadowHostLeadingToSuperview.constant = cardLeadingFromConstraints
+        }
+
         // 1. Swap leading constraints before animation.
         switch newMode {
         case .pinned, .collapsed:
@@ -2553,7 +2564,17 @@ class WorkspaceViewContainer: NSView {
         // doc comment) — retargeting the constraint itself is safe, but a
         // SUPERSEDED transition's own completion firing late is not.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
+        // A closed hover reveal opens and closes on its own dials ("Reveal
+        // open"/"Reveal close"), ease-in-out; every other transition keeps
+        // its row in the Flow 05 table.
+        let timing: WorkspaceLayout.SidebarTransitionTiming
+        if closedHoverReveal {
+            timing = .init(duration: SidebarDialTuning.hoverRevealOpenDuration(), curve: .legacyEaseInOut)
+        } else if endsClosedHoverReveal {
+            timing = .init(duration: SidebarDialTuning.hoverRevealCloseDuration(), curve: .legacyEaseInOut)
+        } else {
+            timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
+        }
         isSidebarTransitionAnimating = true
         sidebarTransitionGeneration += 1
         let generation = sidebarTransitionGeneration
