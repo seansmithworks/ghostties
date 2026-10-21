@@ -98,4 +98,15 @@ struct ClaudeHookRegistrarTests {
         #expect(!ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
         #expect(!FileManager.default.fileExists(atPath: path))
     }
+
+    @Test func rewriteDoesNotEscapeSlashes() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"statusLine":{"type":"command","command":"/usr/local/bin/line"}}"#, to: path)
+
+        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+
+        let text = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(!text.contains(#"\/"#))
+        #expect(text.contains("/usr/local/bin/line"))
+    }
 }

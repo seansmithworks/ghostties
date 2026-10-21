@@ -74,7 +74,7 @@ struct ClaudeHookRegistrar {
         guard changed else { return true }
         root["hooks"] = hooks
 
-        guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else {
+        guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) else {
             logger.error("Failed to serialize settings.json")
             return false
         }
