@@ -129,6 +129,56 @@ struct BrowserAgentGatewayTests {
         #expect(!stub.received.contains { $0.contains("Target.createTarget") })
     }
 
+    @Test func nestedAndBrowserScopedBypassesNeverReachTheBrowser() async throws {
+        let stub = try StubCDPServer()
+        defer { stub.stop() }
+        let gateway = BrowserAgentGateway(upstreamPort: { stub.port })
+        defer { gateway.stop() }
+        let port = try #require(gateway.routePort(forPath: "/devtools/page/xyz"))
+
+        let nested = #"{"id":3,"method":"Target.sendMessageToTarget","params":{"sessionId":"S","message":"{\"id\":1,\"method\":\"Browser.close\"}"}}"#
+        let nestedReply = await roundTrip(port: port, path: "/devtools/page/xyz", command: nested)
+        #expect(try #require(nestedReply, "no answer to sendMessageToTarget").contains("not allowed"))
+
+        let attachReply = await roundTrip(
+            port: port, path: "/devtools/page/xyz",
+            command: #"{"id":4,"method":"Target.attachToBrowserTarget"}"#
+        )
+        #expect(try #require(attachReply, "no answer to attachToBrowserTarget").contains("not allowed"))
+
+        #expect(stub.received.isEmpty, "a bypass reached the browser: \(stub.received)")
+    }
+
+    /// CDP is text. A binary frame has no method to check, so it is never
+    /// forwarded and the connection is closed.
+    @Test func aBinaryFrameIsNeverForwardedAndClosesTheConnection() async throws {
+        let stub = try StubCDPServer()
+        defer { stub.stop() }
+        let gateway = BrowserAgentGateway(upstreamPort: { stub.port })
+        defer { gateway.stop() }
+        let port = try #require(gateway.routePort(forPath: "/devtools/page/xyz"))
+
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let task = session.webSocketTask(with: URL(string: "ws://127.0.0.1:\(port)/devtools/page/xyz")!)
+        task.resume()
+        try await task.send(.data(Data(#"{"id":1,"method":"Browser.close"}"#.utf8)))
+        try await _Concurrency.Task.sleep(for: .seconds(1))
+
+        #expect(stub.received.isEmpty, "a binary frame reached the browser: \(stub.received)")
+        // If the gateway leaves the connection open, nothing ever arrives;
+        // give up after 3s (cancelling the task unblocks `receive`).
+        final class Timeout: @unchecked Sendable { var fired = false }
+        let timeout = Timeout()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { timeout.fired = true; task.cancel() }
+        let closed: Bool = await withCheckedContinuation { continuation in
+            task.receive { result in
+                if case .failure = result { continuation.resume(returning: !timeout.fired) } else { continuation.resume(returning: false) }
+            }
+        }
+        #expect(closed, "the connection stayed open after a binary frame")
+    }
+
     @Test func aWebPageCannotConnectBecauseItsUpgradeCarriesAnOrigin() async throws {
         let stub = try StubCDPServer()
         defer { stub.stop() }

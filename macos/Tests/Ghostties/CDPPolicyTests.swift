@@ -9,6 +9,11 @@ struct CDPPolicyTests {
         "Browser.crashGpuProcess",
         "Browser.setWindowBounds",
         "Browser.executeBrowserCommand",
+        // Both smuggle other commands past the policy: sendMessageToTarget
+        // carries a nested JSON string, attachToBrowserTarget hands a page
+        // client a browser-level session.
+        "Target.sendMessageToTarget",
+        "Target.attachToBrowserTarget",
     ])
     func deniesBrowserLevelCommandsThatCanEndTheApp(method: String) {
         #expect(CDPPolicy.decide(method: method) == .deny(message: "Ghostties: \(method) is not allowed"))
@@ -69,6 +74,23 @@ struct CDPPolicyTests {
         #expect(action == .reply(
             #"{"error":{"code":-32000,"message":"Ghostties: Target.createTarget is not allowed; use `gt browser open`"},"id":1}"#
         ))
+    }
+
+    @Test func nestedMessageToATargetIsRefusedNotForwarded() {
+        let nested = #"{"id":5,"method":"Target.sendMessageToTarget","params":{"sessionId":"S","message":"{\"id\":1,\"method\":\"Browser.close\"}"}}"#
+        guard case .reply(let text) = CDPPolicy.action(forClientFrame: nested) else {
+            Issue.record("sendMessageToTarget must be answered with an error, not forwarded")
+            return
+        }
+        #expect(text.contains("Target.sendMessageToTarget is not allowed"))
+    }
+
+    @Test func attachToBrowserTargetIsRefusedNotForwarded() {
+        let action = CDPPolicy.action(forClientFrame: #"{"id":6,"method":"Target.attachToBrowserTarget"}"#)
+        guard case .reply = action else {
+            Issue.record("attachToBrowserTarget must be answered with an error, got \(action)")
+            return
+        }
     }
 
     @Test func deniedCommandWithoutAnIdIsDroppedNotForwarded() {
