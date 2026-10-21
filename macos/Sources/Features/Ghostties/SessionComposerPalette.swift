@@ -947,6 +947,12 @@ struct SessionComposerPalette: View {
         return Array(options.prefix(restStateLaneCap))
     }
 
+    /// Rest-state default selection (see the fix commit): stub, identity.
+    static func restStateSelectionIndex(in options: [ComposerOption]) -> Int { 0 }
+
+    /// Rest-state lane-2 ordering (see the fix commit): stub, identity.
+    static func shellFirst(_ options: [ComposerOption]) -> [ComposerOption] { options }
+
     /// Lane 2 (board 11.2): remaining templates minus anything already
     /// surfaced in lane 1 (recent OR pinned) — `filteredTemplateOptions`
     /// already excludes recents; this additionally excludes pins so a
