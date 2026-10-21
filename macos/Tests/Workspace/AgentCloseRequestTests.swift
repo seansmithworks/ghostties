@@ -22,8 +22,12 @@ struct AgentCloseRequestTests {
     private final class Recorder: NSObject, CEFBrowserViewDelegate {
         var created = false
         var closeRequests = 0
+        var onCloseRequest: ((CEFBrowserView) -> Void)?
         func browserViewDidCreate(_ view: CEFBrowserView) { created = true }
-        func browserViewDidRequestClose(_ view: CEFBrowserView) { closeRequests += 1 }
+        func browserViewDidRequestClose(_ view: CEFBrowserView) {
+            closeRequests += 1
+            onCloseRequest?(view)
+        }
     }
 
     /// Yields the main actor between polls so `dispatch_async(main)` work runs.
@@ -68,6 +72,47 @@ struct AgentCloseRequestTests {
 
         view.closeBrowser()
         await pump(until: { false }, timeout: 0.5)
+        window.contentView = nil
+        window.orderOut(nil)
+    }
+
+    /// What the coordinator does with a close request: close the browser. CEF
+    /// has already accepted the outside close (`DoClose` returned true), so
+    /// this must still finish destroying the browser, or the DevTools target
+    /// lingers and the page stays alive with no UI.
+    @Test func closingTheBrowserAfterAnOutsideCloseDestroysIt() async {
+        CEFBridgeManager.initializeIfNeeded()
+        guard CEFBridgeManager.isInitialized else {
+            Issue.record("CEF did not initialize; cannot exercise the close path (this must fail, not skip)")
+            return
+        }
+
+        let window = CountingWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        let recorder = Recorder()
+        recorder.onCloseRequest = { $0.closeBrowser() }
+        let view = CEFBrowserView(frame: NSRect(x: 0, y: 0, width: 640, height: 480), url: "about:blank")
+        view.delegate = recorder
+        window.contentView = view
+        window.orderBack(nil)
+
+        await pump(until: { recorder.created }, timeout: 20)
+        guard recorder.created else {
+            Issue.record("CEF browser was never created; cannot exercise the close path")
+            window.orderOut(nil)
+            return
+        }
+
+        #expect(view.executeDevToolsMethod(forTesting: "Page.close"))
+        // OnBeforeClose removes the view from its window once CEF has really
+        // destroyed the browser.
+        await pump(until: { view.window == nil }, timeout: 5)
+
+        #expect(view.window == nil, "the browser was never destroyed after an outside close")
         window.contentView = nil
         window.orderOut(nil)
     }
