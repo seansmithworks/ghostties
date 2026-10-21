@@ -178,8 +178,9 @@ final class SidebarRetiredDialsTests: XCTestCase {
                 + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
         let x = chipCentre - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4
         let px = Int(x * scale)
-        let cardAlpha = RailProjectColumn.columnFillOpacity(.light)
-        let cardSum = base * (1 - cardAlpha) + 3 * cardAlpha
+        // The glass card at its top stop (`ProjectGroupCardGlass.representative`).
+        guard let card = ProjectGroupCardGlass.representative(.light).usingColorSpace(.sRGB) else { return 0 }
+        let cardSum = card.redComponent + card.greenComponent + card.blueComponent
         let floor = ((base - cardSum) + (base - cardSum * (1 - RailProjectColumn.selectedChipTintOpacity))) / 2
         var longest = 0, run = 0
         for y in 0..<rep.pixelsHigh {

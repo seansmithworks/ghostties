@@ -30,7 +30,6 @@ struct ColorLiteralLintTests {
         "Features/Ghostties/SessionDetailView.swift": 1,
         "Features/Ghostties/SessionPopoverCard.swift": 6,
         "Features/Ghostties/SidebarColorDialKit.swift": 2,
-        "Features/Ghostties/SidebarProjectColumn.swift": 4,
         "Features/Ghostties/SidebarProjectGroups.swift": 5,
         "Features/Ghostties/SidebarRedlines.swift": 4,  // DEBUG-only
         "Features/Ghostties/SidebarTrayItems.swift": 12,

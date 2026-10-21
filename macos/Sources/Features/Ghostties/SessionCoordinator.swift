@@ -43,7 +43,32 @@ final class SessionCoordinator: ObservableObject {
     weak var sessionDraftStore: SessionDraftStore?
 
     /// The currently displayed session. Nil before any session is created.
-    @Published private(set) var activeSessionId: UUID?
+    @Published private(set) var activeSessionId: UUID? {
+        didSet {
+            // A cause belongs to the one change it tagged.
+            if let cause = selectionCause, cause.id != activeSessionId {
+                selectionCause = nil
+            }
+        }
+    }
+
+    /// What made the latest selection change, tagged with its target, so
+    /// every list's `SelectedRowMixDriver` reads the same input: a new
+    /// session taking the canvas. Every other change (a click,
+    /// Cmd+Shift+] / [, Cmd+1-9, a session closing) is untagged and plays
+    /// the same hand-off.
+    struct SelectionCause: Equatable {
+        enum Kind: Equatable { case newTab }
+        let id: UUID
+        let kind: Kind
+    }
+
+    private(set) var selectionCause: SelectionCause?
+
+    /// Call before the change it causes (a row's tap, before `onTap`).
+    func noteSelectionCause(_ kind: SelectionCause.Kind, for id: UUID) {
+        selectionCause = SelectionCause(id: id, kind: kind)
+    }
 
     /// True while the sidebar's History row is selected and the canvas shows
     /// the history browser (mock I3). `activeSessionId` is left untouched
@@ -397,6 +422,7 @@ final class SessionCoordinator: ObservableObject {
         sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
         subscribeToOutput(surface: newView, sessionId: session.id)
+        noteSelectionCause(.newTab, for: session.id)
         activeSessionId = session.id
         isHistoryPresented = false
         lastActiveSessionPerProject[session.projectId] = session.id
@@ -552,6 +578,7 @@ final class SessionCoordinator: ObservableObject {
         browserManagers[session.id] = manager
         sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
+        noteSelectionCause(.newTab, for: session.id)
         activeSessionId = session.id
         isHistoryPresented = false
         lastActiveSessionPerProject[session.projectId] = session.id
@@ -1935,6 +1962,20 @@ final class SessionCoordinator: ObservableObject {
         activeSessionId = target.id
         sidebarItemActivated.send()
         return target
+    }
+
+    /// `GHOSTTIES_CAPTURE_NEW_TAB`: a new session in `project` takes the
+    /// canvas the way `createSession` makes one (running, started this
+    /// launch, tagged a new tab), minus the surface.
+    func insertSessionForCapture(in project: Project, store: WorkspaceStore) {
+        guard CaptureFixture.isActive else { return }
+        let session = store.addSession(name: "New session", templateId: AgentTemplate.shell.id, projectId: project.id)
+        sessionIdsStartedThisLaunch.insert(session.id)
+        setStatus(.running, for: session.id)
+        noteSelectionCause(.newTab, for: session.id)
+        isHistoryPresented = false
+        activeSessionId = session.id
+        sidebarItemActivated.send()
     }
 
     /// Each live fixture session runs its own transcript in a real surface

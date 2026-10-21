@@ -40,7 +40,7 @@ final class SidebarColorDialsTests: XCTestCase {
             XCTAssertEqual(SidebarColors.tileFill(scheme, defaults: d),
                            dark ? theme.ink(.tile) : Color(theme.tileFillBase).opacity(0.10))
             XCTAssertEqual(RailProjectTile.ink(scheme), Color(theme.ink))
-            XCTAssertEqual(SidebarColors.selectedRowTint(scheme, defaults: d), Color(theme.ink).opacity(0.10))
+            XCTAssertEqual(SidebarColors.selectedRowTint(scheme, defaults: d), dark ? Color.black.opacity(0.10) : Color(theme.ink).opacity(0.10))
             XCTAssertEqual(SidebarColors.dimmedProject(scheme, defaults: d), WorkspaceLayout.emptyProjectForeground)
             for role in SidebarColors.Role.allCases {
                 XCTAssertNil(SidebarColorTuning.override(role, scheme, defaults: d), "\(role) \(scheme)")
@@ -65,7 +65,7 @@ final class SidebarColorDialsTests: XCTestCase {
         XCTAssertEqual(model.dark.tileFill, "#FFFFFF")
         XCTAssertEqual(model.dark.tileFillOpacity, 0.07, accuracy: 1e-9)
         XCTAssertEqual(model.light.selectedRowTint, "#000000")
-        XCTAssertEqual(model.dark.selectedRowTint, "#FFFFFF")
+        XCTAssertEqual(model.dark.selectedRowTint, "#000000")
         XCTAssertEqual(model.light.selectedRowTintOpacity, 0.10, accuracy: 1e-9)
         XCTAssertEqual(model.dark.selectedRowTintOpacity, 0.10, accuracy: 1e-9)
         // Reading the panel writes nothing.

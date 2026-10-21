@@ -684,6 +684,24 @@ enum CaptureFixture {
     }
 
     static var selectSequence: SelectSequence? { parseSelectSequence(env("GHOSTTIES_CAPTURE_SELECT_SEQUENCE")) }
+    /// `GHOSTTIES_CAPTURE_MIX_FREEZE_MS=<ms>`: the selected-row mix's clock
+    /// (`SelectedRowMixDriver`) stops that many ms into each selection
+    /// event, so a capture holds one mid-event frame.
+    static let mixFreezeMs: Double? = env("GHOSTTIES_CAPTURE_MIX_FREEZE_MS").flatMap(Double.init)
+
+    /// `GHOSTTIES_CAPTURE_NEW_TAB=<project>:<seconds>`: after `seconds`, a
+    /// new session in that project takes the canvas the way a new tab does
+    /// (`SessionCoordinator.insertSessionForCapture`), without a terminal.
+    struct NewTab: Equatable {
+        let projectName: String
+        let delay: TimeInterval
+    }
+
+    static var newTab: NewTab? {
+        guard let parts = env("GHOSTTIES_CAPTURE_NEW_TAB")?.split(separator: ":", omittingEmptySubsequences: false), parts.count == 2,
+              let delay = parsePositiveSeconds(String(parts[1])) else { return nil }
+        return NewTab(projectName: String(parts[0]), delay: delay)
+    }
 
     /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE=<project>:<seconds>`: every `interval`
     /// seconds (`foldToggleCycles` times), toggle that project's accordion

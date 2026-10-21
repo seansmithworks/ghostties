@@ -109,14 +109,14 @@ struct SidebarBeta26FeedbackGateTests {
     // MARK: B. Empty projects
 
     /// Header name, count and chevron ink (`emptyProjectForeground`) over the
-    /// chrome and over the group card on it.
+    /// chrome.
     @Test(arguments: [ColorScheme.light, .dark])
     func emptyProjectHeaderTextClearsAA(_ scheme: ColorScheme) throws {
         try withDials {
             let ink = try resolved(NSColor(WorkspaceLayout.emptyProjectForeground), scheme)
             let chromeRGB = try rgba(chrome(scheme)).rgb
-            let card = over(try rgba(NSColor(RailProjectColumn.columnFill(scheme))), chromeRGB)
-            for (name, base) in [("chrome", chromeRGB), ("group card", card)] {
+            // No on-card case: an empty project never holds the active-group card.
+            for (name, base) in [("chrome", chromeRGB)] {
                 // Text alpha is composited over its surface before measuring.
                 let text = over(ink, base)
                 let ratio = contrast(text, base)
@@ -126,13 +126,13 @@ struct SidebarBeta26FeedbackGateTests {
     }
 
     /// The tile's letter (`emptyProjectForeground`) against the tile's own
-    /// tint fill, which sits on the chrome or the group card.
+    /// tint fill, which sits on the chrome.
     @Test(arguments: [ColorScheme.light, .dark])
     func emptyProjectTileGlyphClearsAA(_ scheme: ColorScheme) throws {
         try withDials {
             let ink = try resolved(NSColor(WorkspaceLayout.emptyProjectForeground), scheme)
             let chromeRGB = try rgba(chrome(scheme)).rgb
-            let card = over(try rgba(NSColor(RailProjectColumn.columnFill(scheme))), chromeRGB)
+            // No on-card case: an empty project never holds the active-group card.
             // `ProjectMonogramTileFace.tint`, unselected: white 7% dark,
             // (40,34,30) at `RailProjectTile.emptyTintOpacity` light: an empty
             // project's tile is lighter than a live one's.
@@ -143,7 +143,7 @@ struct SidebarBeta26FeedbackGateTests {
                 ? Color.white.opacity(0.07)
                 : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.emptyTintOpacity)
             let tint = try rgba(NSColor(tintColor))
-            for (name, base) in [("chrome", chromeRGB), ("group card", card)] {
+            for (name, base) in [("chrome", chromeRGB)] {
                 let tile = over(tint, base)
                 let glyph = over(ink, tile)
                 let ratio = contrast(glyph, tile)
