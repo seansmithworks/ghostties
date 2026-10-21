@@ -924,6 +924,26 @@ final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Stop from the sidebar. A browser session asks first, using the same
+    /// sheet as the terminal's close confirmation; terminal sessions stop
+    /// immediately, as before. Closing one tab inside the browser never
+    /// comes through here, so it never prompts.
+    func stopSessionWithConfirmation(id: UUID) {
+        guard let manager = browserManagers[id], let controller = terminalController else {
+            closeSession(id: id)
+            return
+        }
+        let count = manager.tabs.count
+        let noun = count == 1 ? "tab" : "tabs"
+        controller.confirmClose(
+            messageText: "Close browser?",
+            informativeText: "Its \(count) \(noun) will close. Your terminal sessions stay open.",
+            confirmButtonTitle: "Close Browser"
+        ) { [weak self] in
+            self?.closeSession(id: id)
+        }
+    }
+
     /// Clean up runtime state for a session (after removing from the store).
     func clearRuntime(id: UUID) {
         sessionTrees.removeValue(forKey: id)

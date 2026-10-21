@@ -237,7 +237,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
             }
             if coordinator.isRunning(id: session.id) {
                 Button("Stop") {
-                    coordinator.closeSession(id: session.id)
+                    coordinator.stopSessionWithConfirmation(id: session.id)
                 }
             } else {
                 if session.resume != nil {
