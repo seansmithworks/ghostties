@@ -182,7 +182,27 @@ final class SessionCoordinator: ObservableObject {
     /// `.shared` (which reads/writes the real `~/.ghostties/state/`, where
     /// live sessions are writing right now). nil in production.
     var claudeStateStoreForTesting: ClaudeStateStore?
+
+    /// Test-only: stands in for the close-confirmation sheet, which needs a
+    /// live window. Receives (message, informative text, proceed); a test
+    /// calls `proceed` to confirm and drops it to cancel. nil in production.
+    var confirmCloseOverrideForTesting: ((String, String, @escaping () -> Void) -> Void)?
+
+    /// Test-only: stands in for closing the workspace window, so tests can
+    /// count window-close requests without a live window. nil in production.
+    var closeWindowOverrideForTesting: (() -> Void)?
 #endif
+
+    /// Closes this coordinator's workspace window.
+    private func closeWindow() {
+#if DEBUG
+        if let closeWindowOverrideForTesting {
+            closeWindowOverrideForTesting()
+            return
+        }
+#endif
+        terminalController?.window?.close()
+    }
 
     /// The `ClaudeStateStore` this coordinator reads/writes. Always
     /// `.shared` in production; overridable in DEBUG builds via
@@ -896,7 +916,7 @@ final class SessionCoordinator: ObservableObject {
             // convention: ⌘W then closes the window. If live sessions DO exist but
             // none is active, stay a no-op rather than closing out from under them.
             if sessionTrees.isEmpty && browserManagers.isEmpty {
-                terminalController?.window?.close()
+                closeWindow()
             }
             return
         }
@@ -907,7 +927,7 @@ final class SessionCoordinator: ObservableObject {
         func performClose() {
             closeSession(id: id)
             if sessionTrees.isEmpty && browserManagers.isEmpty {
-                terminalController?.window?.close()
+                closeWindow()
             }
         }
 
@@ -929,19 +949,33 @@ final class SessionCoordinator: ObservableObject {
     /// immediately, as before. Closing one tab inside the browser never
     /// comes through here, so it never prompts.
     func stopSessionWithConfirmation(id: UUID) {
-        guard let manager = browserManagers[id], let controller = terminalController else {
+        guard let manager = browserManagers[id] else {
             closeSession(id: id)
             return
         }
         let count = manager.tabs.count
         let noun = count == 1 ? "tab" : "tabs"
-        controller.confirmClose(
-            messageText: "Close browser?",
-            informativeText: "Its \(count) \(noun) will close. Your terminal sessions stay open.",
-            confirmButtonTitle: "Close Browser"
-        ) { [weak self] in
+        let messageText = "Close browser?"
+        let informativeText = "Its \(count) \(noun) will close. Your terminal sessions stay open."
+        let proceed: () -> Void = { [weak self] in
             self?.closeSession(id: id)
         }
+#if DEBUG
+        if let confirmCloseOverrideForTesting {
+            confirmCloseOverrideForTesting(messageText, informativeText, proceed)
+            return
+        }
+#endif
+        guard let controller = terminalController else {
+            closeSession(id: id)
+            return
+        }
+        controller.confirmClose(
+            messageText: messageText,
+            informativeText: informativeText,
+            confirmButtonTitle: "Close Browser",
+            completion: proceed
+        )
     }
 
     /// Clean up runtime state for a session (after removing from the store).
@@ -1989,6 +2023,16 @@ final class SessionCoordinator: ObservableObject {
     /// surface. Never used in production.
     func setStatusForTesting(_ status: SessionStatus, for id: UUID) {
         setStatus(status, for: id)
+    }
+
+    /// Test-only: registers a browser session with one tab and no CEF view,
+    /// running. Never used in production.
+    func seedBrowserSessionForTesting(id: UUID) {
+        let manager = BrowserTabManager()
+        manager.createTab(url: "about:blank")
+        browserManagers[id] = manager
+        sessionIdsStartedThisLaunch.insert(id)
+        statuses[id] = .running
     }
 
     /// Test-only: seed a "live" session (running + producing recent output)
