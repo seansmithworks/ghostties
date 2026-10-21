@@ -39,7 +39,7 @@ Decisions (locked by Sean):
 3. Funnel counted on-device only, nothing sent.
 
 Frames:
-- A1 first launch · A2 explore while the live agent works · A3 the agent needs you · A4 open it and answer · A5 it finishes · A6 bridge to your own project · A7 own project on top, example collapses · A8 offer to remove the example once (recommended; alternative auto-archive after 7 days, rejected as silent)
+- A1 first launch · A2 explore while the live agent works · A3 the agent needs you · A4 open it and answer · A5 it finishes · A6 bridge to your own project · A7 own project on top, example collapses · A8 offer to remove the example once (recommended; alternative auto-archive after 7 days, rejected as silent). The restore path, Settings › General › Show example project, is a proposed new setting; it does not exist yet
 - B1 mild (glyph only) · B2 question forward · B3 bolder (one-time coach mark + terracotta)
 - C funnel: `onb.demo_shown`, `onb.needs_you_shown`, `onb.needs_you_opened`, `onb.needs_you_answered`, `onb.demo_finished`, `onb.add_project_clicked`, `onb.own_project_added`, `onb.demo_dismissed` / `onb.demo_kept`
 
