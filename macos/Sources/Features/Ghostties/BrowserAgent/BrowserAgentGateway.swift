@@ -376,7 +376,10 @@ final class BrowserAgentGateway: @unchecked Sendable {
                 case .text:
                     self.handleClientText(String(decoding: data ?? Data(), as: UTF8.self))
                 case .binary:
-                    self.upstream.send(.data(data ?? Data())) { _ in }
+                    // CDP is text. A binary frame has no method the policy
+                    // can check, so it is never forwarded.
+                    self.close()
+                    return
                 default:
                     break
                 }

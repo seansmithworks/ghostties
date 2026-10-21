@@ -36,6 +36,12 @@ enum CDPPolicy {
         "Browser.crashGpuProcess",
         "Browser.setWindowBounds",
         "Browser.executeBrowserCommand",
+        // Bypasses: sendMessageToTarget carries another command as a nested
+        // JSON string the policy cannot see (deprecated; Playwright and
+        // Puppeteer use flattened sessions), and attachToBrowserTarget hands a
+        // page-scoped client a browser-level session.
+        "Target.sendMessageToTarget",
+        "Target.attachToBrowserTarget",
     ]
 
     static func decide(method: String) -> Verdict {
