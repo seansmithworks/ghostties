@@ -446,11 +446,17 @@ struct ClosedSidebarEdgeStripTests {
         }
     }
 
-    private func makeWindow(mode: SidebarMode) -> (WorkspaceViewContainer, NSWindow) {
-        let store = WorkspaceStore(
+    /// A persistence-disabled store: nothing it holds reaches a
+    /// `workspace.json`.
+    private func makeStore() -> WorkspaceStore {
+        WorkspaceStore(
             testingProjects: [], testingSessions: [],
             hasShownPinMigrationNotice: true, hasDismissedPinMigrationNotice: true
         )
+    }
+
+    private func makeWindow(mode: SidebarMode, store: WorkspaceStore? = nil) -> (WorkspaceViewContainer, NSWindow) {
+        let store = store ?? makeStore()
         store.updateSidebarMode(mode)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         let window = NSWindow(
@@ -579,6 +585,56 @@ struct ClosedSidebarEdgeStripTests {
             #expect(midCardX > closedCardX && midCardX < openCardX)
             #expect(endWidth == 0)
             #expect(endCardX == closedCardX)
+        }
+    }
+
+    /// Opens the closed strip's reveal with the "Hover shows full sidebar"
+    /// dial as set by the caller, and returns the reveal's own tracking area.
+    private func revealFromStrip(_ container: WorkspaceViewContainer, in window: NSWindow) throws -> NSTrackingArea {
+        spin(0.5)
+        container.updateTrackingAreas()
+        let strip = try #require(container.trackingAreas.first)
+        container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+        #expect(container.sidebarModeForTesting != .closed)
+        return try #require(container.trackingAreas.first)
+    }
+
+    // MARK: Defect 1 — a deliberate close is never debounced
+
+    /// Leaving the reveal straight after it opens closes it. The reveal
+    /// stamps the 0.25s oscillation guard, and the exit arrives inside it;
+    /// the exit's tracking area is already the reveal's, so no second exit
+    /// ever comes to retry the close.
+    @Test func hoverRevealClosesWhenThePointerLeavesRightAway() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            let area = try revealFromStrip(container, in: window)
+            container.mouseExited(with: enterEvent(.mouseExited, area: area, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    /// The window losing key straight after the reveal opens closes it.
+    @Test func hoverRevealClosesWhenTheWindowResignsKeyRightAway() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    /// The dial's OFF path, the overlay, closes the same way.
+    @Test func overlayClosesWhenThePointerLeavesRightAway() throws {
+        try withDials({ $0.set(false, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            let area = try revealFromStrip(container, in: window)
+            #expect(container.sidebarModeForTesting == .overlay)
+            container.mouseExited(with: enterEvent(.mouseExited, area: area, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
         }
     }
 
