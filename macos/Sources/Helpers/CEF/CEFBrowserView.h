@@ -87,6 +87,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// (e.g. `Page.close`), standing in for an agent's CDP call. Returns NO if the
 /// browser does not exist yet or CEF rejected the message.
 - (BOOL)executeDevToolsMethodForTesting:(NSString *)method;
+
+/// TEST-ONLY. Delivers the life-span callbacks (created, DoClose,
+/// OnBeforeClose) for `other`'s browser to THIS view's handler, exactly what
+/// happens when inline DevTools, which shares this view's CEF client, opens
+/// and closes. Real DevTools cannot be used in the test host (ShowDevTools
+/// crashes it), so this stands in for it.
+- (void)simulateSharedClientEventsForTesting:(CEFBrowserView *)other;
 #endif
 
 /// Moves the CEF profile directory aside (never deletes — cookies/logins

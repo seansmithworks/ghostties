@@ -118,9 +118,12 @@ struct AgentCloseRequestTests {
     }
 
     /// Inline DevTools is a second CEF browser that shares the view's client
-    /// and so its life-span handler. Closing it is not the page closing: the
-    /// session and its tab must survive.
-    @Test func closingInlineDevToolsLeavesTheBrowserAlone() async {
+    /// and so its life-span handler. Opening and closing it is not the page
+    /// being replaced or closed: the page stays, no close is requested (the
+    /// coordinator would otherwise kill the whole browser session), and the
+    /// view stays in its window. The second view's browser stands in for
+    /// DevTools, which cannot run in the test host (ShowDevTools crashes it).
+    @Test func aSecondBrowserOnTheSameClientNeverClosesThePage() async {
         CEFBridgeManager.initializeIfNeeded()
         guard CEFBridgeManager.isInitialized else {
             Issue.record("CEF did not initialize; cannot exercise the close path (this must fail, not skip)")
@@ -135,30 +138,40 @@ struct AgentCloseRequestTests {
         )
         let host = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         window.contentView = host
-        let recorder = Recorder()
-        let view = CEFBrowserView(frame: NSRect(x: 0, y: 0, width: 800, height: 300), url: "about:blank")
-        view.delegate = recorder
-        host.addSubview(view)
-        let devToolsHost = NSView(frame: NSRect(x: 0, y: 300, width: 800, height: 300))
-        host.addSubview(devToolsHost)
+        let pageRecorder = Recorder()
+        let page = CEFBrowserView(frame: NSRect(x: 0, y: 0, width: 800, height: 300), url: "about:blank")
+        page.delegate = pageRecorder
+        host.addSubview(page)
+        let otherRecorder = Recorder()
+        let other = CEFBrowserView(frame: NSRect(x: 0, y: 300, width: 800, height: 300), url: "about:blank")
+        other.delegate = otherRecorder
+        host.addSubview(other)
         window.orderBack(nil)
 
-        await pump(until: { recorder.created }, timeout: 20)
-        guard recorder.created else {
-            Issue.record("CEF browser was never created; cannot exercise the close path")
+        await pump(until: { pageRecorder.created && otherRecorder.created }, timeout: 20)
+        guard pageRecorder.created, otherRecorder.created else {
+            Issue.record("CEF browsers were never created; cannot exercise the close path")
             window.orderOut(nil)
             return
         }
 
-        view.showInlineDevTools(devToolsHost)
-        await pump(until: { false }, timeout: 2)
-        view.closeDevTools()
-        await pump(until: { recorder.closeRequests > 0 || view.window == nil }, timeout: 3)
+        let idBefore: String? = await withCheckedContinuation { c in
+            page.fetchDevToolsTargetId(withTimeout: 5) { c.resume(returning: $0) }
+        }
+        #expect(idBefore != nil)
 
-        #expect(recorder.closeRequests == 0, "closing DevTools was reported as the page closing")
-        #expect(view.window != nil, "closing DevTools tore down the main browser view")
-        #expect(view.executeDevToolsMethod(forTesting: "Runtime.enable"), "the main browser is no longer there")
-        view.closeBrowser()
+        page.simulateSharedClientEvents(forTesting: other)
+        await pump(until: { pageRecorder.closeRequests > 0 || page.window == nil }, timeout: 2)
+
+        #expect(pageRecorder.closeRequests == 0, "another browser closing was reported as the page closing")
+        #expect(page.window != nil, "another browser closing tore down the page's view")
+        let idAfter: String? = await withCheckedContinuation { c in
+            page.fetchDevToolsTargetId(withTimeout: 5) { c.resume(returning: $0) }
+        }
+        #expect(idAfter == idBefore, "the page's browser was replaced by the other browser")
+
+        page.closeBrowser()
+        other.closeBrowser()
         await pump(until: { false }, timeout: 0.5)
         window.contentView = nil
         window.orderOut(nil)

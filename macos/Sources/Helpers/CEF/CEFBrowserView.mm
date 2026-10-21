@@ -567,6 +567,16 @@ private:
 }
 
 #if DEBUG
+- (void)simulateSharedClientEventsForTesting:(CEFBrowserView *)other {
+#if GHOSTTIES_CEF_AVAILABLE
+    if (!_client || !other->_browser) return;
+    CefRefPtr<CefLifeSpanHandler> handler = _client->GetLifeSpanHandler();
+    handler->OnAfterCreated(other->_browser);
+    handler->DoClose(other->_browser);
+    handler->OnBeforeClose(other->_browser);
+#endif
+}
+
 - (BOOL)executeDevToolsMethodForTesting:(NSString *)method {
 #if GHOSTTIES_CEF_AVAILABLE
     if (!_browser) return NO;
