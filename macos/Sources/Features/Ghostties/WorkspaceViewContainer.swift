@@ -1277,6 +1277,24 @@ class WorkspaceViewContainer: NSView {
                 }
             }
         }
+        if let start = CaptureFixture.hoverRevealLoopStart, CaptureFixture.claimHook("hoverRevealLoop") {
+            // The closed edge strip's hover, without a pointer: its
+            // mouseEntered reveal, a hold, its mouseExited close, a hold.
+            let hold = CaptureFixture.hoverRevealLoopHold
+            func cycle(_ remaining: Int, after delay: TimeInterval) {
+                guard remaining > 0 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self, self.sidebarMode == .closed else { return }
+                    self.revealFromClosedStrip()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
+                        guard let self, self.sidebarMode == .overlay || self.isClosedHoverRevealed else { return }
+                        self.closeRevealFromClosedStrip()
+                        cycle(remaining - 1, after: hold)
+                    }
+                }
+            }
+            cycle(CaptureFixture.hoverRevealLoopCycles, after: start)
+        }
         if let sequence = CaptureFixture.selectSequence, CaptureFixture.claimHook("selectSequence") {
             // Cmd+Shift+] / [ order over the rows the mounted sidebar lists
             // (`railSessions`), repeating, so it works pinned and on the rail.
@@ -3211,6 +3229,12 @@ class WorkspaceViewContainer: NSView {
         guard sidebarMode == .closed,
               let area = activeTrackingArea, event.trackingArea === area
         else { return }
+        revealFromClosedStrip()
+    }
+
+    /// The closed strip's reveal: what `mouseEntered` runs once the pointer
+    /// is in the strip's own tracking area.
+    private func revealFromClosedStrip() {
         // "Hover shows full sidebar": the real pinned layout, not a pin.
         if SidebarDialTuning.hoverBarPushesCanvas() {
             transitionTo(.pinned, closedHoverReveal: true)
@@ -3227,6 +3251,12 @@ class WorkspaceViewContainer: NSView {
               let area = activeTrackingArea, event.trackingArea === area,
               sidebarDragPointerWidth == nil
         else { return }
+        closeRevealFromClosedStrip()
+    }
+
+    /// The reveal's close: what `mouseExited` runs once the pointer leaves
+    /// the overlay's (or the hover reveal's) own tracking area.
+    private func closeRevealFromClosedStrip() {
         transitionTo(.closed)
     }
 

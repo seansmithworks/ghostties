@@ -104,6 +104,11 @@ enum CaptureFixture {
         // `GHOSTTIES_CAPTURE_REVEAL_STYLE`: seed the reveal style dial so the
         // rail reveal uses it from the first frame.
         if let suite { seedRevealStyle(revealStyle, into: suite) }
+        // `GHOSTTIES_CAPTURE_HOVER_REVEAL_LOOP`: the loop shows the
+        // "Hover shows full sidebar" reveal, so the dial is ON for it.
+        if let suite, hoverRevealLoopStart != nil {
+            suite.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey)
+        }
         return suite
     }()
 
@@ -665,6 +670,19 @@ enum CaptureFixture {
     static func parseRailRevealCollapseAfter(_ raw: String?) -> TimeInterval? {
         raw.flatMap(parsePositiveSeconds)
     }
+
+    /// `GHOSTTIES_CAPTURE_HOVER_REVEAL_LOOP=<seconds>`: with the sidebar
+    /// closed (`GHOSTTIES_CAPTURE_SIDEBAR_MODE=closed`) and the "Hover shows
+    /// full sidebar" dial seeded ON, that long after launch the closed edge
+    /// strip's reveal runs (its `mouseEntered` path), then after
+    /// `hoverRevealLoopHold` its close (its `mouseExited` path), then another
+    /// hold; `hoverRevealLoopCycles` times.
+    static var hoverRevealLoopStart: TimeInterval? {
+        env("GHOSTTIES_CAPTURE_HOVER_REVEAL_LOOP").flatMap(parsePositiveSeconds)
+    }
+    /// Each hold, open or closed: the 300ms animation plus ~1s at rest.
+    static let hoverRevealLoopHold: TimeInterval = 1.3
+    static let hoverRevealLoopCycles = 3
 
     /// `GHOSTTIES_CAPTURE_SELECT_SEQUENCE=<seconds>:<steps>`: every
     /// `interval` seconds, focus the session `steps` places along the
