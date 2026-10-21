@@ -195,6 +195,12 @@ enum SidebarDialTuning {
     static let hoverRevealDwellKey = "ghostties.sidebarDial.hoverReveal.dwell"
     static let hoverRevealExitGraceKey = "ghostties.sidebarDial.hoverReveal.exitGrace"
     static let hoverRevealStyleKey = "ghostties.sidebarDial.hoverReveal.style"
+    /// Spike (`spike/hover-pushes-canvas`): the closed-mode hover strip
+    /// reveals the real pinned layout (not a pin) instead of the hover bar.
+    static let hoverBarPushesCanvasKey = "ghostties.sidebarDial.hoverBar.pushesCanvas"
+    /// The closed hover reveal's open and close durations, in ms.
+    static let hoverRevealOpenMsKey = "ghostties.sidebarDial.hoverBar.revealOpenMs"
+    static let hoverRevealCloseMsKey = "ghostties.sidebarDial.hoverBar.revealCloseMs"
 
     // MARK: UI springs: the sidebar's small motion (`SidebarUISpring`).
     // Bounce 0 is critically damped: no overshoot.
@@ -569,6 +575,19 @@ enum SidebarDialTuning {
         double(motionCollapseBounceKey, default: WorkspaceLayout.sidebarMorphCollapseSpring.bounce, defaults: defaults)
     }
 
+    /// See `hoverBarPushesCanvasKey`. On by default in the spike branch.
+    static func hoverBarPushesCanvas(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
+        bool(hoverBarPushesCanvasKey, default: true, defaults: defaults)
+    }
+    /// The closed hover reveal's open, in seconds (the dial is in ms).
+    static func hoverRevealOpenDuration(defaults: UserDefaults = SidebarDialTuning.store) -> TimeInterval {
+        double(hoverRevealOpenMsKey, default: 300, defaults: defaults) / 1000
+    }
+    /// The closed hover reveal's close, in seconds (the dial is in ms).
+    static func hoverRevealCloseDuration(defaults: UserDefaults = SidebarDialTuning.store) -> TimeInterval {
+        double(hoverRevealCloseMsKey, default: 300, defaults: defaults) / 1000
+    }
+
     /// See `RailRevealStyle`. Push by default.
     static func hoverRevealStyle(defaults: UserDefaults = SidebarDialTuning.store) -> RailRevealStyle {
         choice(hoverRevealStyleKey, default: .push, defaults: defaults)
@@ -645,6 +664,7 @@ enum SidebarDialTuning {
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         historyInSidebarKey, projectsLayoutKey,
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
+        hoverBarPushesCanvasKey, hoverRevealOpenMsKey, hoverRevealCloseMsKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
         uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
     ] + railKeys + trayShadowStateKeys + colorKeys + canvasKeys
@@ -688,6 +708,7 @@ enum SidebarDialTuning {
         contentPaddingLeadingKey, contentPaddingTrailingKey, groupCardInsetKey,
         sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
+        hoverBarPushesCanvasKey, hoverRevealOpenMsKey, hoverRevealCloseMsKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
         uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
     ]
@@ -867,6 +888,9 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var hoverRevealDwell: Double
     var hoverRevealExitGrace: Double
     var hoverRevealStyle: String
+    var hoverBarPushesCanvas: Bool
+    var hoverRevealOpenMs: Double
+    var hoverRevealCloseMs: Double
     var motionOpenResponse: Double
     var motionOpenBounce: Double
     var motionCollapseResponse: Double
@@ -1459,6 +1483,9 @@ enum SidebarListDialPanel: FocusedDialPanel {
             hoverRevealDwell: SidebarDialTuning.hoverRevealDwell(defaults: defaults),
             hoverRevealExitGrace: SidebarDialTuning.hoverRevealExitGrace(defaults: defaults),
             hoverRevealStyle: SidebarDialTuning.hoverRevealStyle(defaults: defaults).rawValue,
+            hoverBarPushesCanvas: SidebarDialTuning.hoverBarPushesCanvas(defaults: defaults),
+            hoverRevealOpenMs: SidebarDialTuning.hoverRevealOpenDuration(defaults: defaults) * 1000,
+            hoverRevealCloseMs: SidebarDialTuning.hoverRevealCloseDuration(defaults: defaults) * 1000,
             motionOpenResponse: SidebarDialTuning.motionOpenResponse(defaults: defaults),
             motionOpenBounce: SidebarDialTuning.motionOpenBounce(defaults: defaults),
             motionCollapseResponse: SidebarDialTuning.motionCollapseResponse(defaults: defaults),
@@ -1487,6 +1514,9 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.hoverRevealDwellKey, previous.hoverRevealDwell, model.hoverRevealDwell)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealExitGraceKey, previous.hoverRevealExitGrace, model.hoverRevealExitGrace)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealStyleKey, previous.hoverRevealStyle, model.hoverRevealStyle)
+        setIfChanged(defaults, SidebarDialTuning.hoverBarPushesCanvasKey, previous.hoverBarPushesCanvas, model.hoverBarPushesCanvas)
+        setIfChanged(defaults, SidebarDialTuning.hoverRevealOpenMsKey, previous.hoverRevealOpenMs, model.hoverRevealOpenMs)
+        setIfChanged(defaults, SidebarDialTuning.hoverRevealCloseMsKey, previous.hoverRevealCloseMs, model.hoverRevealCloseMs)
         setIfChanged(defaults, SidebarDialTuning.motionOpenResponseKey, previous.motionOpenResponse, model.motionOpenResponse)
         setIfChanged(defaults, SidebarDialTuning.motionOpenBounceKey, previous.motionOpenBounce, model.motionOpenBounce)
         setIfChanged(defaults, SidebarDialTuning.motionCollapseResponseKey, previous.motionCollapseResponse, model.motionCollapseResponse)
@@ -1538,6 +1568,14 @@ enum SidebarListDialPanel: FocusedDialPanel {
                         options: RailRevealStyle.allCases.map(\.rawValue)),
                 .slider("hoverRevealDwell", keyPath: \.hoverRevealDwell, label: "Dwell", range: 0.3...3.0, step: 0.1, unit: "s"),
                 .slider("hoverRevealExitGrace", keyPath: \.hoverRevealExitGrace, label: "Exit grace", range: 0...1.0, step: 0.05, unit: "s"),
+            ]),
+            // Closed mode: the left-edge hover strip shows the pinned sidebar
+            // and canvas layout (not a pin) instead of the floating hover
+            // bar. Off = the overlay as before.
+            .group("hoverBar", label: "Hover bar", children: [
+                .toggle("hoverBarPushesCanvas", keyPath: \.hoverBarPushesCanvas, label: "Hover shows full sidebar"),
+                .slider("hoverRevealOpenMs", keyPath: \.hoverRevealOpenMs, label: "Reveal open", range: 100...800, step: 10, unit: "ms"),
+                .slider("hoverRevealCloseMs", keyPath: \.hoverRevealCloseMs, label: "Reveal close", range: 100...800, step: 10, unit: "ms"),
             ]),
             // The sidebar ⇄ rail morph's springs (toggle and hover reveal).
             // Bounce 0 = no overshoot (critically damped).

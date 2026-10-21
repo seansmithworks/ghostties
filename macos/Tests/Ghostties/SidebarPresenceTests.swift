@@ -517,20 +517,69 @@ struct ClosedSidebarEdgeStripTests {
 
     /// Entering the strip's own tracking area reveals the hover bar
     /// (`.overlay`); an enter forwarded from any other area (a subview's,
-    /// such as the terminal surface's) does not.
+    /// such as the terminal surface's) does not. The hover bar is the
+    /// "Hover shows full sidebar" dial's OFF path.
     @Test func edgeStripRevealsTheOverlayOnlyFromItsOwnArea() throws {
-        let (container, window) = makeWindow(mode: .closed)
-        defer { close(window) }
-        spin(0.5)
-        container.updateTrackingAreas()
-        let strip = try #require(container.trackingAreas.first)
+        try withDials({ $0.set(false, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            spin(0.5)
+            container.updateTrackingAreas()
+            let strip = try #require(container.trackingAreas.first)
 
-        let foreign = NSTrackingArea(rect: container.bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: nil, userInfo: nil)
-        container.mouseEntered(with: enterEvent(.mouseEntered, area: foreign, in: window))
-        #expect(container.sidebarModeForTesting == .closed)
+            let foreign = NSTrackingArea(rect: container.bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: nil, userInfo: nil)
+            container.mouseEntered(with: enterEvent(.mouseEntered, area: foreign, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
 
-        container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
-        #expect(container.sidebarModeForTesting == .overlay)
+            container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+            #expect(container.sidebarModeForTesting == .overlay)
+        }
+    }
+
+    /// Spike: the closed hover reveal's close animates. Halfway through a
+    /// 300ms close, the sidebar's width and the card's leading edge are
+    /// both strictly between their pinned and closed values — the card
+    /// does not jump to the closed inset at the start.
+    @Test func hoverRevealCloseAnimatesSidebarAndCardTogether() throws {
+        try withDials({
+            $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey)
+            $0.set(300.0, forKey: SidebarDialTuning.hoverRevealOpenMsKey)
+            $0.set(300.0, forKey: SidebarDialTuning.hoverRevealCloseMsKey)
+        }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            spin(0.5)
+            container.updateTrackingAreas()
+            let strip = try #require(container.trackingAreas.first)
+            container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+            #expect(container.sidebarModeForTesting == .pinned)
+            // Past the open and the 0.25s transition debounce.
+            spin(0.6)
+            let openWidth = container.sidebarFrameForTesting.width
+            let openCardX = container.cardFrameForTesting.minX
+            let closedCardX = SidebarDialTuning.windowMargin()
+            print("[hover-reveal-close] open: sidebarWidth=\(openWidth) cardX=\(openCardX)")
+
+            let exitArea = try #require(container.trackingAreas.first)
+            container.mouseExited(with: enterEvent(.mouseExited, area: exitArea, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
+            spin(0.02)
+            print("[hover-reveal-close] t~20ms: sidebarWidth=\(container.sidebarFrameForTesting.width) cardX=\(container.cardFrameForTesting.minX)")
+            spin(0.13)
+            let midWidth = container.sidebarFrameForTesting.width
+            let midCardX = container.cardFrameForTesting.minX
+            print("[hover-reveal-close] t~150ms: sidebarWidth=\(midWidth) cardX=\(midCardX)")
+            spin(0.4)
+            let endWidth = container.sidebarFrameForTesting.width
+            let endCardX = container.cardFrameForTesting.minX
+            print("[hover-reveal-close] end: sidebarWidth=\(endWidth) cardX=\(endCardX)")
+
+            #expect(openWidth > 100)
+            #expect(midWidth > 0 && midWidth < openWidth)
+            #expect(midCardX > closedCardX && midCardX < openCardX)
+            #expect(endWidth == 0)
+            #expect(endCardX == closedCardX)
+        }
     }
 
     /// The rail never gets the strip: its hover reveal has its own gate.
