@@ -8,15 +8,42 @@ import SwiftUI
 /// - `closed`: Sidebar hidden, terminal fills window flush.
 /// - `overlay`: Sidebar floats on top of full-width terminal (hover-to-reveal).
 /// - `collapsed`: Sidebar shown as a narrow icon-only rail (Flow 01, sidebar-presence).
+/// - `hoverRevealed`: the closed strip's hover reveal of the real pinned
+///   layout (the "Hover shows full sidebar" dial). A peek, not a pin.
 ///
 /// `Codable` by `Int` raw value and persisted in `WorkspaceStore` — new cases
 /// must always be APPENDED, never renumbered, or an old `workspace.json`
-/// decodes into the wrong mode.
+/// decodes into the wrong mode. The two peeks out of `.closed` save as
+/// `.closed` (`persisted`).
 enum SidebarMode: Int, Codable {
     case pinned
     case closed
     case overlay
     case collapsed
+    case hoverRevealed
+}
+
+extension SidebarMode {
+    /// The mode saved for this one: a peek out of `.closed` (the overlay,
+    /// the hover reveal) is never a mode the user chose.
+    var persisted: SidebarMode {
+        switch self {
+        case .overlay, .hoverRevealed: return .closed
+        case .pinned, .closed, .collapsed: return self
+        }
+    }
+
+    /// The mode the sidebar's geometry is laid out as: the hover reveal is
+    /// the pinned layout.
+    var layoutMode: SidebarMode {
+        self == .hoverRevealed ? .pinned : self
+    }
+
+    /// A peek out of `.closed` that the pointer leaving (or the window
+    /// losing key) ends.
+    var isClosedPeek: Bool {
+        self == .overlay || self == .hoverRevealed
+    }
 }
 
 /// Shared layout constants for the workspace sidebar.
@@ -419,7 +446,7 @@ enum WorkspaceLayout {
 
     /// `sidebarTrailingGutter(for:)` at an explicit window margin.
     static func sidebarTrailingGutter(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
-        mode == .pinned || mode == .overlay ? margin : 0
+        mode.layoutMode == .pinned || mode == .overlay ? margin : 0
     }
 
     /// Hit width of the sidebar drag handle on the rail: a strip over the
@@ -436,7 +463,7 @@ enum WorkspaceLayout {
     /// Closed: 0 (the handle is hidden there).
     static func sidebarDragHandleWidth(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
         switch mode {
-        case .pinned, .overlay: return sidebarTrailingGutter(for: mode, margin: margin)
+        case .pinned, .overlay, .hoverRevealed: return sidebarTrailingGutter(for: mode, margin: margin)
         case .collapsed: return railDragHandleHitWidth
         case .closed: return 0
         }

@@ -558,7 +558,7 @@ struct ClosedSidebarEdgeStripTests {
             container.updateTrackingAreas()
             let strip = try #require(container.trackingAreas.first)
             container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
-            #expect(container.sidebarModeForTesting == .pinned)
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
             // Past the open and the 0.25s transition debounce.
             spin(0.6)
             let openWidth = container.sidebarFrameForTesting.width
