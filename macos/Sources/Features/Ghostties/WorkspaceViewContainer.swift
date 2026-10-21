@@ -602,6 +602,18 @@ class WorkspaceViewContainer: NSView {
     /// never splits a reveal from its collapse.
     private var railRevealStyle: RailRevealStyle = .push
 
+    /// Spike: whether the open hover bar (`.overlay`) pushes the card
+    /// beside it ("Hover bar pushes canvas" dial). Read once as the overlay
+    /// opens, so a dial change never splits an overlay from its close.
+    private var overlayPushesCanvas = false
+
+    /// The card's leading x while a pushing hover bar is open: past the
+    /// overlay's hover zone (window margin, column, gutter) by one more
+    /// window margin, the same gap the pinned sidebar leaves.
+    private func overlayPushedCardX(inset: CGFloat, sidebarWidth: CGFloat) -> CGFloat {
+        inset + sidebarWidth + WorkspaceLayout.sidebarTrailingGutter(for: .overlay, margin: inset) + inset
+    }
+
     /// True while an overlay-style reveal is presented: the card holds its x
     /// and the sidebar is drawn over it on `railRevealBacking`.
     private var railRevealOverlays: Bool { isRailRevealPresented && railRevealStyle == .overlay }
@@ -971,7 +983,9 @@ class WorkspaceViewContainer: NSView {
         shadowHostLeadingToSidebar.constant = WorkspaceLayout.sidebarTrailingGutter(for: geometryMode, margin: inset)
         sidebarDragHandleWidthConstraint.constant = WorkspaceLayout.sidebarDragHandleWidth(for: geometryMode, margin: inset)
         // Overlay-revealed, the card holds the x it had on the rail.
-        if !railRevealOverlays {
+        if sidebarMode == .overlay && overlayPushesCanvas {
+            shadowHostLeadingToSuperview.constant = overlayPushedCardX(inset: inset, sidebarWidth: sidebarWidthConstraint.constant)
+        } else if !railRevealOverlays {
             shadowHostLeadingToSuperview.constant = inset
         }
         if railRevealTarget {
@@ -2178,6 +2192,10 @@ class WorkspaceViewContainer: NSView {
         currentSidebarWidth = width
         widthModel.expandedWidth = width
         widthModel.width = width
+        // A pushing hover bar's card follows the dragged edge.
+        if sidebarMode == .overlay && overlayPushesCanvas {
+            shadowHostLeadingToSuperview.constant = overlayPushedCardX(inset: SidebarDialTuning.windowMargin(), sidebarWidth: width)
+        }
     }
 
     private func endSidebarDrag() {
@@ -2403,6 +2421,9 @@ class WorkspaceViewContainer: NSView {
         isMorphStepHeld = false
         let previousMode = sidebarMode
         sidebarMode = newMode
+        if newMode == .overlay {
+            overlayPushesCanvas = SidebarDialTuning.hoverBarPushesCanvas()
+        }
         // An overlay drag ends with the overlay: a later overlay must never
         // inherit a drag whose mouse-up was lost (`mouseExited` holds an
         // overlay open while one is in progress).
@@ -2530,7 +2551,11 @@ class WorkspaceViewContainer: NSView {
         // doc comment) — retargeting the constraint itself is safe, but a
         // SUPERSEDED transition's own completion firing late is not.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
+        // A pushing hover bar opens on the sidebar's own closed -> open row
+        // (240ms drawer), so the card moves as it does for Cmd+S. Its close
+        // already shares the sidebar's 180ms close row.
+        let pushesOpen = previousMode == .closed && newMode == .overlay && overlayPushesCanvas
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: pushesOpen ? .pinned : newMode)
         isSidebarTransitionAnimating = true
         sidebarTransitionGeneration += 1
         let generation = sidebarTransitionGeneration
@@ -2814,9 +2839,11 @@ class WorkspaceViewContainer: NSView {
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .overlay, margin: inset))
             // Terminal floats as a carded, inset canvas — same outer inset
             // as pinned/closed. The sidebar (z-order above the card) floats
-            // over its left edge rather than sharing space with it.
+            // over its left edge rather than sharing space with it — or,
+            // pushing, the card's leading edge moves off it, on the same
+            // clock as the bar's width, so the two never drift apart.
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSuperview, inset)
+            set(shadowHostLeadingToSuperview, overlayPushesCanvas ? overlayPushedCardX(inset: inset, sidebarWidth: currentSidebarWidth) : inset)
             set(shadowHostTrailingConstraint, -inset)
             set(shadowHostBottomConstraint, -inset)
             set(terminalTopConstraint, 0)
