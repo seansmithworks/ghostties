@@ -38,10 +38,8 @@ final class AgentBrowserPairingTests: XCTestCase {
     }
 
     override func tearDown() {
-        for id in seeded + store.sessions.map(\.id) {
-            WorkspaceStore.shared.removeSessionStatus(id: id)
-            WorkspaceStore.shared.removeIndicatorState(id: id)
-        }
+        // Everything lives in the injected store; nothing here touches
+        // `WorkspaceStore.shared`, whose init can write the real workspace.json.
         coordinator = nil
     }
 
@@ -105,8 +103,11 @@ final class AgentBrowserPairingTests: XCTestCase {
         _ = await open()
         let browser = try XCTUnwrap(browserSessions().first)
 
+        XCTAssertEqual(store.globalStatuses[browser.id], .running, "status must land in the injected store, not .shared")
+
         coordinator.closeSession(id: browser.id)
 
+        XCTAssertEqual(store.globalStatuses[browser.id], .killed, "status must land in the injected store, not .shared")
         XCTAssertEqual(coordinator.activeSessionId, terminal)
         XCTAssertNil(coordinator.shownBrowserSessionId)
         XCTAssertNil(coordinator.pairedBrowserByTerminal[terminal])

@@ -109,6 +109,18 @@ struct BrowserAgentGatewayHTTPTests {
         #expect(try await post(token: gateway.token) == 200)
     }
 
+    /// A hosted test run launches the real app, whose coordinators would start
+    /// the shared gateway and publish cdp.json into the real state directory
+    /// (overwriting, and on stop deleting, a running Dev's). Under XCTest the
+    /// gateway only runs when a test starts one explicitly.
+    @Test func theAppDoesNotAutoStartTheGatewayUnderXCTest() {
+        #expect(!BrowserAgentGateway.shouldAutoStart(environment: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"], xctestLoaded: false))
+        #expect(!BrowserAgentGateway.shouldAutoStart(environment: [:], xctestLoaded: true))
+        #expect(BrowserAgentGateway.shouldAutoStart(environment: [:], xctestLoaded: false))
+        #expect(!BrowserAgentGateway.shouldAutoStart(), "this hosted run is under XCTest")
+        #expect(BrowserAgentGateway.shared.endpoint == nil, "something started the shared gateway during a test run")
+    }
+
     @Test func startPublishesAndStopRemovesCdpJson() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("gateway-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: dir) }

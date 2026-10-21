@@ -33,6 +33,15 @@ final class BrowserAgentGateway: @unchecked Sendable {
     /// The process-wide gateway. Started by the first `SessionCoordinator`.
     static let shared = BrowserAgentGateway(upstreamPort: { Int(CEFBridgeManager.remoteDebuggingPort) })
 
+    /// Whether the app should start the process-wide gateway by itself.
+    /// (Skeleton: the XCTest check lands with the fix.)
+    static func shouldAutoStart(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        xctestLoaded: Bool = NSClassFromString("XCTestCase") != nil
+    ) -> Bool {
+        true
+    }
+
     /// Bearer token the `gt` control route requires. Handed to terminals as
     /// `GHOSTTIES_BROWSER_TOKEN` and to tools through `cdp.json`.
     let token: String = {

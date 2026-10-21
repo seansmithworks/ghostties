@@ -14,25 +14,23 @@ import GhosttiesCore
 @MainActor
 final class CloseBrowserTabTests: XCTestCase {
     private var coordinator: SessionCoordinator!
-    private var seeded: [UUID] = []
+    /// Injected so nothing here touches `WorkspaceStore.shared`, whose init
+    /// can write the real workspace.json.
+    private var store: WorkspaceStore!
 
     override func setUp() {
+        store = WorkspaceStore(testingProjects: [], testingSessions: [])
         coordinator = SessionCoordinator()
-        seeded = []
+        coordinator.agentKindLookupStoreForTesting = store
     }
 
     override func tearDown() {
-        for id in seeded {
-            WorkspaceStore.shared.removeSessionStatus(id: id)
-            WorkspaceStore.shared.removeIndicatorState(id: id)
-        }
         coordinator = nil
     }
 
     private func browser() -> UUID {
         let id = UUID()
         coordinator.seedBrowserSessionForTesting(id: id)
-        seeded.append(id)
         return id
     }
 
@@ -40,7 +38,6 @@ final class CloseBrowserTabTests: XCTestCase {
         let id = UUID()
         coordinator.seedEmptySessionTreeForTesting(id: id)
         coordinator.seedRunningSessionForTesting(id: id)
-        seeded.append(id)
         return id
     }
 
@@ -73,6 +70,7 @@ final class CloseBrowserTabTests: XCTestCase {
 
         XCTAssertFalse(coordinator.isSessionBrowser(b), "the last tab takes the session with it")
         XCTAssertEqual(coordinator.statuses[b], .killed)
+        XCTAssertEqual(store.globalStatuses[b], .killed, "status must land in the injected store, not .shared")
         XCTAssertEqual(asked, 0, "an outside close never shows the confirmation")
         XCTAssertEqual(windowCloses, 0, "closing a browser never closes the window")
         XCTAssertNotNil(coordinator.sessionTrees[t], "terminal sessions stay")
