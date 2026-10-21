@@ -416,8 +416,9 @@ class BaseTerminalController: NSWindowController,
         completion: @escaping () -> Void
     ) {
         Task {
+            // nil means a confirmation is already showing. Drop this duplicate
+            // request; completing here would close without the user's consent.
             guard let response = await confirmCloseAsync(messageText: messageText, informativeText: informativeText, confirmButtonTitle: confirmButtonTitle) else {
-                completion()
                 return
             }
             if [.alertFirstButtonReturn, .OK].contains(response) {
