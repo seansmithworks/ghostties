@@ -18,6 +18,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// Lets UI that showed an inline failure state (including after a retry)
 /// know it can dismiss it.
 - (void)browserViewDidCreate:(CEFBrowserView *)view;
+/// Fired when the page asks to close itself or is closed from outside the
+/// app (DevTools `Target.closeTarget`, `Page.close`, `window.close()`).
+/// Never fired for closes the app started via `-closeBrowser` or dealloc.
+/// The delegate decides what closing means; CEF is told the close is handled
+/// either way (see `DoClose` in CEFBrowserView.mm).
+- (void)browserViewDidRequestClose:(CEFBrowserView *)view;
 @end
 
 /// Hosts a single CEF browser instance as an NSView.
@@ -72,6 +78,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// same uncleared sentinel and fail again without risking another crash,
 /// but it will not recover. Use `-resetProfileDataAndRetry:` in that case.
 - (void)retryCreateBrowser;
+
+#if DEBUG
+/// TEST-ONLY. Runs a parameterless DevTools method on this browser in-process
+/// (e.g. `Page.close`), standing in for an agent's CDP call. Returns NO if the
+/// browser does not exist yet or CEF rejected the message.
+- (BOOL)executeDevToolsMethodForTesting:(NSString *)method;
+#endif
 
 /// Moves the CEF profile directory aside (never deletes — cookies/logins
 /// are preserved at the new path), clears the crash sentinel, then retries

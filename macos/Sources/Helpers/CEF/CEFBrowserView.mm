@@ -222,6 +222,13 @@ private:
 
 #pragma mark - GhosttiesTargetIdObserver
 
+/// Message ids for in-process DevTools calls. Explicit ids must keep
+/// increasing per browser, so every caller draws from one counter.
+static int GhosttiesNextDevToolsMessageId() {
+    static int next = 1000000;
+    return next++;
+}
+
 /// One-shot observer for a single `Target.getTargetInfo` call. Reads
 /// `targetInfo.targetId` out of the method result and hands it to the
 /// completion on the main queue.
@@ -502,9 +509,8 @@ private:
         strongSelf->_devToolsRegistrations.push_back(registration);
         // CEF can deliver the result before ExecuteDevToolsMethod returns, so
         // the id must be chosen up front rather than read from the return
-        // value. Explicit ids must keep increasing per browser.
-        static int nextMessageId = 1000000;
-        int messageId = nextMessageId++;
+        // value.
+        int messageId = GhosttiesNextDevToolsMessageId();
         observer->SetMessageId(messageId);
         int rc = strongSelf->_browser->GetHost()->ExecuteDevToolsMethod(
                 messageId, "Target.getTargetInfo", nullptr);
@@ -521,6 +527,18 @@ private:
     dispatch_async(dispatch_get_main_queue(), ^{ finish(nil); });
 #endif
 }
+
+#if DEBUG
+- (BOOL)executeDevToolsMethodForTesting:(NSString *)method {
+#if GHOSTTIES_CEF_AVAILABLE
+    if (!_browser) return NO;
+    return _browser->GetHost()->ExecuteDevToolsMethod(
+        GhosttiesNextDevToolsMessageId(), CefString([method UTF8String]), nullptr) != 0;
+#else
+    return NO;
+#endif
+}
+#endif
 
 #pragma mark - Layout
 
