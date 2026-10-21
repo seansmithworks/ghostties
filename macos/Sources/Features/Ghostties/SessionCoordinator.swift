@@ -867,12 +867,13 @@ final class SessionCoordinator: ObservableObject {
     func closeSession(id: UUID) {
         // Browser session path.
         if let manager = browserManagers[id] {
+            let closingProjectId = sessionRecordStore.sessions.first { $0.id == id }?.projectId
             manager.closeAllTabs()
             browserManagers.removeValue(forKey: id)
             browserBridges.removeValue(forKey: id)
             setStatus(.killed, for: id)
             if activeSessionId == id {
-                switchToNextSession()
+                switchAfterClosingActiveBrowser(projectId: closingProjectId)
             }
             return
         }
@@ -918,6 +919,13 @@ final class SessionCoordinator: ObservableObject {
             if sessionTrees.isEmpty && browserManagers.isEmpty {
                 closeWindow()
             }
+            return
+        }
+
+        // A browser asks first and closes only itself: the window and every
+        // terminal session stay, even when it was the last session.
+        if browserManagers[id] != nil {
+            stopSessionWithConfirmation(id: id)
             return
         }
 
@@ -1046,6 +1054,52 @@ final class SessionCoordinator: ObservableObject {
             return
         }
         activeSessionId = nil
+    }
+
+    /// Where the closed browser's focus goes. Browser-only: terminals keep
+    /// `switchToNextSession()`. A running terminal in the same project wins;
+    /// otherwise the most recently active running session anywhere; otherwise
+    /// nothing.
+    private func switchAfterClosingActiveBrowser(projectId: UUID?) {
+        let records = sessionRecordStore.sessions
+        func isRunning(_ id: UUID) -> Bool {
+            statuses[id] == .running && (sessionTrees[id] != nil || browserManagers[id] != nil)
+        }
+        func lastActive(_ id: UUID) -> Date {
+            records.first { $0.id == id }?.lastActiveAt ?? .distantPast
+        }
+        func project(_ id: UUID) -> UUID? {
+            records.first { $0.id == id }?.projectId
+        }
+
+        let sameProjectTerminal = sessionTrees.keys
+            .filter { isRunning($0) && project($0) == projectId && projectId != nil }
+            .max { lastActive($0) < lastActive($1) }
+        let nextId = sameProjectTerminal
+            ?? Set(sessionTrees.keys).union(browserManagers.keys)
+                .filter(isRunning)
+                .max { lastActive($0) < lastActive($1) }
+
+        guard let nextId else {
+            activeSessionId = nil
+            return
+        }
+        activeSessionId = nextId
+        if let nextTree = sessionTrees[nextId] {
+            showTerminalInContainer()
+            showSession(nextTree, focusView: nextTree.first)
+        } else if let nextManager = browserManagers[nextId] {
+            showBrowserInContainer(nextManager)
+        }
+    }
+
+    /// The store session records are read from. `.shared` in production.
+    private var sessionRecordStore: WorkspaceStore {
+#if DEBUG
+        agentKindLookupStoreForTesting ?? WorkspaceStore.shared
+#else
+        WorkspaceStore.shared
+#endif
     }
 
     /// Close all sessions belonging to a project. Called before the project is
