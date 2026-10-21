@@ -14,6 +14,9 @@ struct CDPPolicyTests {
         // client a browser-level session.
         "Target.sendMessageToTarget",
         "Target.attachToBrowserTarget",
+        // Injects a binding that lets page JavaScript send commands to the
+        // browser target, Browser.close included.
+        "Target.exposeDevToolsProtocol",
     ])
     func deniesBrowserLevelCommandsThatCanEndTheApp(method: String) {
         #expect(CDPPolicy.decide(method: method) == .deny(message: "Ghostties: \(method) is not allowed"))
@@ -101,6 +104,8 @@ struct CDPPolicyTests {
         #expect(CDPPolicy.action(forClientFrame: #"{"id":1,"method":"Page.navigate","params":{"url":"about:blank"}}"#) == .forward)
     }
 
+    /// Anything the policy cannot read with certainty is refused: Chromium's
+    /// parser may read it differently, so forwarding is how bypasses happen.
     @Test(arguments: [
         "not json at all",
         "",
@@ -108,8 +113,45 @@ struct CDPPolicyTests {
         #"{"id":1}"#,
         #"{"id":1,"method":42}"#,
         #"{"id":1,"method":"Browser.close""#,
+        // trailing garbage, comments, a lone surrogate, runaway nesting
+        #"{"id":1,"method":"Page.enable"} x"#,
+        #"{"id":1,/*c*/"method":"Page.enable"}"#,
+        "{\"id\":1,\"method\":\"Page.enable\",\"params\":{\"s\":\"\\ud800\"}}",
+        "{\"id\":1,\"method\":\"Page.enable\",\"params\":{\"s\":\"\\udc00\"}}",
+        "{\"id\":1,\"method\":\"Page.enable\",\"params\":" + String(repeating: "[", count: 600) + String(repeating: "]", count: 600) + "}",
+        // no usable id: nothing to answer, nothing to forward
+        #"{"method":"Page.enable"}"#,
+        #"{"id":"1","method":"Page.enable"}"#,
+        #"{"id":true,"method":"Page.enable"}"#,
     ])
-    func malformedFramesAreForwardedUntouched(text: String) {
-        #expect(CDPPolicy.action(forClientFrame: text) == .forward)
+    func unreadableFramesAreNeverForwarded(text: String) {
+        #expect(CDPPolicy.action(forClientFrame: text) != .forward, "forwarded: \(text.prefix(80))")
+    }
+
+    /// JSONSerialization keeps one of two duplicate keys and hides the other;
+    /// Chromium may keep the other one.
+    @Test(arguments: [
+        #"{"id":7,"method":"Page.enable","method":"Browser.close"}"#,
+        #"{"id":7,"method":"Browser.close","method":"Page.enable"}"#,
+        #"{"id":7,"method":"Page.enable","m\u0065thod":"Browser.close"}"#,
+        #"{"id":7,"id":8,"method":"Page.enable"}"#,
+        #"{"id":7,"method":"Page.enable","params":{},"params":{"x":1}}"#,
+    ])
+    func duplicateTopLevelKeysAreRefusedAndAnsweredWithTheId(text: String) {
+        guard case .reply(let reply) = CDPPolicy.action(forClientFrame: text) else {
+            Issue.record("expected an error reply, got \(CDPPolicy.action(forClientFrame: text)) for \(text)")
+            return
+        }
+        #expect(reply.contains("\"id\":7") || reply.contains("\"id\":8"), "no id to answer to in \(reply)")
+        #expect(reply.contains("error"))
+    }
+
+    @Test func duplicateKeysInsideParamsAreNotTheTopLevelAndStillForward() {
+        #expect(CDPPolicy.action(forClientFrame: #"{"id":1,"method":"Page.enable","params":{"a":1,"a":2}}"#) == .forward)
+    }
+
+    @Test func aWellFormedFrameWithEscapesAndWhitespaceStillForwards() {
+        #expect(CDPPolicy.action(forClientFrame: " {\n \"id\" : 12 , \"method\" : \"Page.navigate\", \"params\": {\"url\": \"a\\u00e9\\ud83d\\ude00\"} } ") == .forward)
+        #expect(CDPPolicy.action(forClientFrame: #"{"id":2,"sessionId":"S","method":"Runtime.evaluate","params":{"expression":"1"}}"#) == .forward)
     }
 }

@@ -72,22 +72,17 @@ struct BrowserAgentGatewayTests {
 
     /// Sends one command to the gateway's route and returns the reply text,
     /// or nil if none arrives in time.
-    private func roundTrip(port: Int, path: String, command: String) async -> String? {
+    private func roundTrip(port: Int, path: String, command: String, timeout: TimeInterval = 5) async -> String? {
         let session = URLSession(configuration: .ephemeral)
         defer { session.invalidateAndCancel() }
         let task = session.webSocketTask(with: URL(string: "ws://127.0.0.1:\(port)\(path)")!)
         task.resume()
+        // No reply (a frame the gateway refuses to answer or forward) must not
+        // hang the test: cancelling the task makes `receive` throw.
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { task.cancel() }
         do {
             try await task.send(.string(command))
-            let message = try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in
-                group.addTask { try await task.receive() }
-                group.addTask {
-                    try await _Concurrency.Task.sleep(for: .seconds(5))
-                    throw CancellationError()
-                }
-                defer { group.cancelAll() }
-                return try await group.next()!
-            }
+            let message = try await task.receive()
             if case .string(let text) = message { return text }
             return nil
         } catch {
@@ -147,6 +142,29 @@ struct BrowserAgentGatewayTests {
         #expect(try #require(attachReply, "no answer to attachToBrowserTarget").contains("not allowed"))
 
         #expect(stub.received.isEmpty, "a bypass reached the browser: \(stub.received)")
+    }
+
+    @Test func ambiguousOrUnreadableFramesNeverReachTheBrowser() async throws {
+        let stub = try StubCDPServer()
+        defer { stub.stop() }
+        let gateway = BrowserAgentGateway(upstreamPort: { stub.port })
+        defer { gateway.stop() }
+        let port = try #require(gateway.routePort(forPath: "/devtools/page/xyz"))
+
+        let frames = [
+            #"{"id":1,"method":"Page.enable","method":"Browser.close"}"#,
+            #"{"id":2,"method":"Browser.close","method":"Page.enable"}"#,
+            #"{"id":3,"method":"Page.enable"} trailing"#,
+            #"{"id":4,/*c*/"method":"Browser.close"}"#,
+            "{\"id\":5,\"method\":\"Browser.close\",\"params\":{\"s\":\"\\ud800\"}}",
+            "garbage",
+            #"{"id":6,"method":"Target.exposeDevToolsProtocol","params":{"targetId":"T","bindingName":"b"}}"#,
+        ]
+        for frame in frames {
+            _ = await roundTrip(port: port, path: "/devtools/page/xyz", command: frame, timeout: 1)
+        }
+
+        #expect(stub.received.isEmpty, "an ambiguous frame reached the browser: \(stub.received)")
     }
 
     /// CDP is text. A binary frame has no method to check, so it is never
