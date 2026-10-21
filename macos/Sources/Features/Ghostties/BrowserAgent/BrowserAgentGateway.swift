@@ -34,12 +34,14 @@ final class BrowserAgentGateway: @unchecked Sendable {
     static let shared = BrowserAgentGateway(upstreamPort: { Int(CEFBridgeManager.remoteDebuggingPort) })
 
     /// Whether the app should start the process-wide gateway by itself.
-    /// (Skeleton: the XCTest check lands with the fix.)
+    /// Not under XCTest: the hosted test run launches the real app, and a
+    /// gateway started by its coordinators would publish `cdp.json` into the
+    /// real state directory. A test that wants a gateway starts its own.
     static func shouldAutoStart(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         xctestLoaded: Bool = NSClassFromString("XCTestCase") != nil
     ) -> Bool {
-        true
+        environment["XCTestConfigurationFilePath"] == nil && !xctestLoaded
     }
 
     /// Bearer token the `gt` control route requires. Handed to terminals as

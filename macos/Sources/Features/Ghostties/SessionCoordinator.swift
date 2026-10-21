@@ -291,9 +291,13 @@ final class SessionCoordinator: ObservableObject {
         self.ghostty = ghostty
         #if DEBUG
         // Before any session spawns, so restored terminals get the control
-        // endpoint in their environment. Idempotent across windows.
-        BrowserAgentGateway.shared.start(publishingTo: WorkspacePersistence.directory)
-        BrowserAgentControl.register(self)
+        // endpoint in their environment. Idempotent across windows. Never
+        // under XCTest: a hosted run would publish (and on stop delete)
+        // cdp.json in the real state directory.
+        if BrowserAgentGateway.shouldAutoStart() {
+            BrowserAgentGateway.shared.start(publishingTo: WorkspacePersistence.directory)
+            BrowserAgentControl.register(self)
+        }
         #endif
         observeLifecycle()
         observeProjectRemoval()
@@ -806,11 +810,11 @@ final class SessionCoordinator: ObservableObject {
             snapshotActiveTree()
             activeSessionId = id
             showBrowserInContainer(manager)
-            if let session = WorkspaceStore.shared.sessions.first(where: { $0.id == id }) {
+            if let session = sessionStore.sessions.first(where: { $0.id == id }) {
                 lastActiveSessionPerProject[session.projectId] = id
                 // Focus counts as a touch — refresh activity so the project
                 // stays in `.recent`/`.activeNow` instead of demoting to `.all`.
-                WorkspaceStore.shared.recordActivity(
+                sessionStore.recordActivity(
                     sessionId: id,
                     projectId: session.projectId
                 )
@@ -836,11 +840,11 @@ final class SessionCoordinator: ObservableObject {
         showSession(tree, focusView: tree.first)
 
         // Record this session as the last active one for its project.
-        if let session = WorkspaceStore.shared.sessions.first(where: { $0.id == id }) {
+        if let session = sessionStore.sessions.first(where: { $0.id == id }) {
             lastActiveSessionPerProject[session.projectId] = id
             // Focus counts as a touch — refresh activity so the project stays
             // in `.recent`/`.activeNow` instead of demoting to `.all`.
-            WorkspaceStore.shared.recordActivity(
+            sessionStore.recordActivity(
                 sessionId: id,
                 projectId: session.projectId
             )
@@ -2132,15 +2136,15 @@ final class SessionCoordinator: ObservableObject {
     /// running again.
     private func setStatus(_ status: SessionStatus, for id: UUID) {
         statuses[id] = status
-        WorkspaceStore.shared.updateSessionStatus(id: id, status: status)
+        sessionStore.updateSessionStatus(id: id, status: status)
         switch status {
         case .completed, .exited, .killed:
             cachedIndicatorStates?.removeValue(forKey: id)
-            WorkspaceStore.shared.removeIndicatorState(id: id)
+            sessionStore.removeIndicatorState(id: id)
             claudeStateStore.removeState(for: id)
         case .error:
             cachedIndicatorStates?[id] = .error
-            WorkspaceStore.shared.updateIndicatorState(id: id, state: .error)
+            sessionStore.updateIndicatorState(id: id, state: .error)
         case .running:
             break
         }
@@ -2154,8 +2158,8 @@ final class SessionCoordinator: ObservableObject {
         // so assumeIsolated is safe here.
         MainActor.assumeIsolated {
             for id in statuses.keys {
-                WorkspaceStore.shared.removeSessionStatus(id: id)
-                WorkspaceStore.shared.removeIndicatorState(id: id)
+                sessionStore.removeSessionStatus(id: id)
+                sessionStore.removeIndicatorState(id: id)
             }
         }
     }
