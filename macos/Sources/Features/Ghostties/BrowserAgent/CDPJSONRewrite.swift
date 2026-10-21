@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Rewrites the JSON that Chromium's `/json/*` endpoints return so every
@@ -34,3 +35,4 @@ enum CDPJSONRewrite {
         return Data(out.utf8)
     }
 }
+#endif

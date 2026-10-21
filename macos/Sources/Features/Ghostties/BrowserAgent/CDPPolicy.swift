@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Which Chrome DevTools Protocol commands an agent may send to the app's
@@ -75,3 +76,4 @@ enum CDPPolicy {
         return String(decoding: data, as: UTF8.self)
     }
 }
+#endif
