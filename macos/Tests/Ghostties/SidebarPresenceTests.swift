@@ -702,6 +702,34 @@ struct ClosedSidebarEdgeStripTests {
         }
     }
 
+    // MARK: Defect 3 — the reveal is a state the sidebar can read
+
+    /// While revealed, the store (and so the SwiftUI sidebar's
+    /// `\.sidebarMode`) reports the same state the container lays out —
+    /// not `.closed` under a pinned layout — so the tray toggle reads
+    /// "Open Sidebar", as it does on the overlay. It still saves as
+    /// `.closed`. Cmd+S pins it for real: then both report `.pinned` and the
+    /// toggle reads "Collapse Sidebar".
+    @Test func hoverRevealIsTheStoresSidebarModeAndSavesAsClosed() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let store = makeStore()
+            let (container, window) = makeWindow(mode: .closed, store: store)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            #expect(store.sidebarMode == container.sidebarModeForTesting)
+            #expect(WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode) == "Open Sidebar")
+
+            let data = try JSONEncoder().encode(WorkspacePersistence.State(sidebarMode: store.sidebarMode))
+            let saved = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+            #expect(saved.sidebarMode == .closed)
+
+            container.toggleSidebar()
+            #expect(container.sidebarModeForTesting == .pinned)
+            #expect(store.sidebarMode == .pinned)
+            #expect(WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode) == "Collapse Sidebar")
+        }
+    }
+
     /// The rail never gets the strip: its hover reveal has its own gate.
     @Test func railInstallsNoEdgeStrip() {
         let (container, window) = makeWindow(mode: .collapsed)

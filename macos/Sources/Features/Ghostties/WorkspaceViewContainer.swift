@@ -219,11 +219,17 @@ private struct SidebarHostRoot: View {
             .environment(\.sidebarMode, store.sidebarMode)
     }
 
-    /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
-    /// "Expand Sidebar" on the rail, "Open Sidebar" while overlaid — the
-    /// overlay's toggle promotes it to pinned.
     private var toggleLabel: String {
-        switch store.sidebarMode {
+        WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode)
+    }
+}
+
+extension WorkspaceViewContainer {
+    /// The tray toggle's label: "Collapse Sidebar" while pinned (the toggle
+    /// flips full width ↔ rail), "Expand Sidebar" on the rail, "Open
+    /// Sidebar" while overlaid — the overlay's toggle promotes it to pinned.
+    static func sidebarToggleLabel(for mode: SidebarMode) -> String {
+        switch mode {
         case .collapsed: return "Expand Sidebar"
         case .overlay: return "Open Sidebar"
         default: return "Collapse Sidebar"
