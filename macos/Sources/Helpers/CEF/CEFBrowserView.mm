@@ -61,6 +61,9 @@ static bool GhosttiesIsAllowedSchemeCef(const CefString &url) {
 - (void)_browserDidCreate:(CefRefPtr<CefBrowser>)browser;
 - (void)_browserDidClose;
 - (BOOL)_isAppInitiatedClose;
+- (BOOL)_isMainBrowser:(CefRefPtr<CefBrowser>)browser;
+- (BOOL)_hasMainBrowser;
+- (BOOL)_isPageBrowser:(CefRefPtr<CefBrowser>)browser;
 - (void)_noteOutsideCloseAccepted;
 - (void)_browserDidRequestClose;
 #endif
@@ -79,7 +82,7 @@ public:
                          const CefString &url) override {
         if (!frame->IsMain()) return;
         CEFBrowserView *v = view_;
-        if (!v) return;
+        if (!v || ![v _isPageBrowser:browser]) return;
         NSString *nsURL = [NSString stringWithUTF8String:url.ToString().c_str()];
         dispatch_async(dispatch_get_main_queue(), ^{
             [v _didChangeURL:nsURL];
@@ -89,7 +92,7 @@ public:
     void OnTitleChange(CefRefPtr<CefBrowser> browser,
                        const CefString &title) override {
         CEFBrowserView *v = view_;
-        if (!v) return;
+        if (!v || ![v _isPageBrowser:browser]) return;
         NSString *nsTitle = [NSString stringWithUTF8String:title.ToString().c_str()];
         dispatch_async(dispatch_get_main_queue(), ^{
             [v _didChangeTitle:nsTitle];
@@ -112,7 +115,7 @@ public:
                               bool canGoBack,
                               bool canGoForward) override {
         CEFBrowserView *v = view_;
-        if (!v) return;
+        if (!v || ![v _isPageBrowser:browser]) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             [v _didChangeLoadingState:isLoading
                             canGoBack:canGoBack
@@ -167,7 +170,9 @@ public:
         NSLog(@"[CEFDiag] OnAfterCreated fired — browser materialised.");
 #endif
         CEFBrowserView *v = view_;
-        if (v) {
+        // Inline DevTools shares this client, so it reports here too; only the
+        // first browser the view creates is the page.
+        if (v && ![v _hasMainBrowser]) {
             [v _browserDidCreate:browser];
         }
     }
@@ -185,7 +190,8 @@ public:
     bool DoClose(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
         CEFBrowserView *v = view_;
-        if (v && ![v _isAppInitiatedClose]) {
+        // DevTools (same client) closing is not the page closing.
+        if (v && [v _isMainBrowser:browser] && ![v _isAppInitiatedClose]) {
             [v _noteOutsideCloseAccepted];
             dispatch_async(dispatch_get_main_queue(), ^{
                 [v _browserDidRequestClose];
@@ -197,7 +203,7 @@ public:
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
         CEFBrowserView *v = view_;
-        if (v) {
+        if (v && [v _isMainBrowser:browser]) {
             [v _browserDidClose];
         }
     }
@@ -907,6 +913,21 @@ private:
     NSArray<void (^)(void)> *waiting = [self.afterCreateBlocks copy];
     [self.afterCreateBlocks removeAllObjects];
     for (void (^block)(void) in waiting) block();
+}
+
+- (BOOL)_hasMainBrowser {
+    return _browser != nullptr;
+}
+
+/// The page's browser, or any browser before the page's own exists (its
+/// loading events can precede OnAfterCreated). Excludes inline DevTools,
+/// which shares the client.
+- (BOOL)_isPageBrowser:(CefRefPtr<CefBrowser>)browser {
+    return !_browser || [self _isMainBrowser:browser];
+}
+
+- (BOOL)_isMainBrowser:(CefRefPtr<CefBrowser>)browser {
+    return _browser && browser && _browser->GetIdentifier() == browser->GetIdentifier();
 }
 
 - (BOOL)_isAppInitiatedClose {
