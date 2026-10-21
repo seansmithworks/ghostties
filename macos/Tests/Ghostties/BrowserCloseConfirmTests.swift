@@ -63,7 +63,7 @@ final class BrowserCloseConfirmTests: XCTestCase {
         XCTAssertEqual(asked.first?.0, "Close browser?")
         XCTAssertEqual(
             asked.first?.1,
-            "Its 1 tab will close. Your terminal sessions stay open."
+            "This tab will close. Your terminal sessions stay open."
         )
         XCTAssertTrue(coordinator.isSessionBrowser(b), "browser must stay until confirmed")
         XCTAssertEqual(windowCloses, 0)
@@ -73,6 +73,18 @@ final class BrowserCloseConfirmTests: XCTestCase {
         XCTAssertFalse(coordinator.isSessionBrowser(b), "confirm closes the browser")
         XCTAssertNotNil(coordinator.sessionTrees[t], "terminal sessions stay")
         XCTAssertEqual(windowCloses, 0, "closing a browser never closes the window")
+    }
+
+    func testConfirmationTextCountsManyTabs() {
+        let b = browser()
+        coordinator.browserManagers[b]?.createTab(url: "about:blank")
+        coordinator.browserManagers[b]?.createTab(url: "about:blank")
+        var info: String?
+        coordinator.confirmCloseOverrideForTesting = { _, text, _ in info = text }
+
+        coordinator.stopSessionWithConfirmation(id: b)
+
+        XCTAssertEqual(info, "Its 3 tabs will close. Your terminal sessions stay open.")
     }
 
     func testCmdWOnLastBrowserNeverClosesTheWindow() {

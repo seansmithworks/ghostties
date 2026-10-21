@@ -962,9 +962,9 @@ final class SessionCoordinator: ObservableObject {
             return
         }
         let count = manager.tabs.count
-        let noun = count == 1 ? "tab" : "tabs"
         let messageText = "Close browser?"
-        let informativeText = "Its \(count) \(noun) will close. Your terminal sessions stay open."
+        let tabsClause = count > 1 ? "Its \(count) tabs will close." : "This tab will close."
+        let informativeText = "\(tabsClause) Your terminal sessions stay open."
         let proceed: () -> Void = { [weak self] in
             self?.closeSession(id: id)
         }
