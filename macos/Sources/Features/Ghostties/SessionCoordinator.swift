@@ -423,7 +423,8 @@ final class SessionCoordinator: ObservableObject {
             taskFilePath: sourceTaskFilePath,
             taskId: sourceTaskId,
             extra: extraEnvironment,
-            sessionId: session.id
+            sessionId: session.id,
+            browserControl: Self.browserControlForSpawn()
         )
 
         #if DEBUG
@@ -1398,6 +1399,17 @@ final class SessionCoordinator: ObservableObject {
         return "#!/bin/zsh -l\n. ~/.zshrc 2>/dev/null\n\(bannerLines)\(command)\nexec /bin/zsh -l\n"
     }
 
+    /// The browser gateway's endpoint and token for a new terminal's
+    /// environment, or nil in Release builds (which have no gateway).
+    private static func browserControlForSpawn() -> (endpoint: String, token: String)? {
+        #if DEBUG
+        guard let endpoint = BrowserAgentGateway.shared.endpoint else { return nil }
+        return (endpoint, BrowserAgentGateway.shared.token)
+        #else
+        return nil
+        #endif
+    }
+
     /// Assemble the environment for a spawned session: the template's own
     /// vars, the task-context overlays, the `GHOSTTIES_SESSION_ID` stamp
     /// (every template, including plain shell), and finally any per-call
@@ -1407,7 +1419,8 @@ final class SessionCoordinator: ObservableObject {
         taskFilePath: String?,
         taskId: String?,
         extra: [String: String],
-        sessionId: UUID
+        sessionId: UUID,
+        browserControl: (endpoint: String, token: String)? = nil
     ) -> [String: String] {
         var result = template.environmentVariables
         if let taskFilePath {
@@ -1417,6 +1430,12 @@ final class SessionCoordinator: ObservableObject {
             result["GHOSTTIES_TASK_ID"] = taskId
         }
         result["GHOSTTIES_SESSION_ID"] = sessionId.uuidString
+        // Where `gt browser open` finds the app's browser gateway. Only
+        // present when the gateway is running (Debug builds).
+        if let browserControl {
+            result["GHOSTTIES_CDP_ENDPOINT"] = browserControl.endpoint
+            result["GHOSTTIES_BROWSER_TOKEN"] = browserControl.token
+        }
         // Overlay any per-call env vars (e.g. GHOSTTIES_TEMPLATE for review sessions).
         for (key, value) in extra {
             result[key] = value
