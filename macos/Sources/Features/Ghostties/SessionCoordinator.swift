@@ -591,6 +591,9 @@ final class SessionCoordinator: ObservableObject {
         )
         browserView.delegate = bridge
         bridge.activeTabId = tab.id
+        bridge.onCloseRequested = { [weak self] tabId in
+            self?.closeBrowserTab(sessionId: session.id, tabId: tabId)
+        }
         browserBridges[session.id] = bridge
 
         snapshotActiveTree()
@@ -623,6 +626,23 @@ final class SessionCoordinator: ObservableObject {
         // structural change too — release any held freeze snapshot.
         WorkspaceStore.shared.releaseSnapshot()
         return true
+    }
+
+    /// A browser tab closed from outside the app (an agent, or the page
+    /// itself). Closes just that tab; if it was the browser's last tab the
+    /// whole browser session goes, with no confirmation, since the app did not
+    /// start the close and there is nobody to ask. Terminals and the window
+    /// are untouched either way.
+    func closeBrowserTab(sessionId: UUID, tabId: UUID) {
+        guard let manager = browserManagers[sessionId] else { return }
+        guard manager.tabCount > 1 else {
+            closeSession(id: sessionId)
+            return
+        }
+        manager.closeTab(id: tabId)
+        if activeSessionId == sessionId {
+            showBrowserInContainer(manager)
+        }
     }
 
     /// Whether a session is a browser session (not a terminal session).

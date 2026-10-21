@@ -60,6 +60,8 @@ static bool GhosttiesIsAllowedSchemeCef(const CefString &url) {
 - (void)_startCreationWatchdog;
 - (void)_browserDidCreate:(CefRefPtr<CefBrowser>)browser;
 - (void)_browserDidClose;
+- (BOOL)_isAppInitiatedClose;
+- (void)_browserDidRequestClose;
 #endif
 @end
 
@@ -174,8 +176,19 @@ public:
     // (it raises "Close Window?" and, on a repeat, closes every terminal).
     // Returning true tells CEF we own the close: it proceeds to destroy the
     // browser and fires OnBeforeClose, where the view is removed.
+    //
+    // A close the app did not start (`Page.close`, `Target.closeTarget`,
+    // `window.close()`) is reported to the delegate so the UI can drop the
+    // tab. Always returns true: the delegate decides what closing means, and
+    // it must never fall through to the window.
     bool DoClose(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
+        CEFBrowserView *v = view_;
+        if (v && ![v _isAppInitiatedClose]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [v _browserDidRequestClose];
+            });
+        }
         return true;
     }
 
@@ -299,6 +312,10 @@ private:
 @property (nonatomic, readwrite) BOOL creationFailed;
 @property (nonatomic, readwrite) BOOL creationFailedDueToPreviousCrash;
 @property (nonatomic, readwrite) BOOL isDevToolsOpen;
+/// Set once the app itself asks the browser to close (-closeBrowser or
+/// dealloc), so `DoClose` can tell that apart from a close that came from
+/// the page or a DevTools client.
+@property (nonatomic) BOOL appInitiatedClose;
 /// Pending URL captured at init time; consumed the moment creation is
 /// actually attempted (deferred until the view is in a window).
 @property (nonatomic, copy, nullable) NSString *pendingURL;
@@ -367,6 +384,7 @@ private:
     _creationWatchdogTimer = nil;
 #if GHOSTTIES_CEF_AVAILABLE
     if (_browser) {
+        _appInitiatedClose = YES;
         // NOTE: this view does NOT own the browser-open-attempt sentinel —
         // see CEFBridgeManager. The sentinel is process-global (one CEF
         // process can host several CEFBrowserView tabs at once, via
@@ -477,6 +495,7 @@ private:
 - (void)closeBrowser {
 #if GHOSTTIES_CEF_AVAILABLE
     if (_browser) {
+        self.appInitiatedClose = YES;
         _browser->GetHost()->CloseBrowser(true);
         // _browser is nilled in OnBeforeClose callback
     }
@@ -859,6 +878,16 @@ private:
     NSArray<void (^)(void)> *waiting = [self.afterCreateBlocks copy];
     [self.afterCreateBlocks removeAllObjects];
     for (void (^block)(void) in waiting) block();
+}
+
+- (BOOL)_isAppInitiatedClose {
+    return self.appInitiatedClose;
+}
+
+- (void)_browserDidRequestClose {
+    if ([self.delegate respondsToSelector:@selector(browserViewDidRequestClose:)]) {
+        [self.delegate browserViewDidRequestClose:self];
+    }
 }
 
 - (void)_browserDidClose {
