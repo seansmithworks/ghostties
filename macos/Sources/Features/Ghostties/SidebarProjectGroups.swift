@@ -295,14 +295,23 @@ enum PairedBrowserRows {
         let beforeId: UUID?
     }
 
+    /// Every browser seated under its terminal in `sessions`. Compute once
+    /// per render, not per row; empty (and free) with no pairing.
+    static func seatedBrowserIds(in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> Set<UUID> {
+        guard !pairedBrowsers.isEmpty else { return [] }
+        let ids = Set(sessions.map(\.id))
+        return Set(pairedBrowsers.filter { ids.contains($0.key) && ids.contains($0.value) }.map(\.value))
+    }
+
     /// True for a browser seated under its terminal in `sessions`.
     static func isSeatedBrowser(_ id: UUID, in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> Bool {
-        let ids = Set(sessions.map(\.id))
-        return ids.contains(id) && pairedBrowsers.contains { ids.contains($0.key) && $0.value == id }
+        guard !pairedBrowsers.isEmpty else { return false }
+        return seatedBrowserIds(in: sessions, pairedBrowsers: pairedBrowsers).contains(id)
     }
 
     /// `id` and, when it is a terminal with a seated browser, that browser.
     static func unit(of id: UUID, in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> [UUID] {
+        guard !pairedBrowsers.isEmpty else { return [id] }
         let ids = Set(sessions.map(\.id))
         guard ids.contains(id), let browser = pairedBrowsers[id], ids.contains(browser) else { return [id] }
         return [id, browser]

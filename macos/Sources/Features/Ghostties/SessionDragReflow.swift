@@ -115,28 +115,34 @@ struct SessionRowDragModifier: ViewModifier {
     let session: AgentSession
     @Binding var dragState: SessionDragState
 
+    /// What a drag start does. Disabled: nothing is recorded and the
+    /// provider carries no data, so no drop delegate has an id to act on.
+    static func beginDrag(of session: AgentSession, isEnabled: Bool, dragState: inout SessionDragState) -> NSItemProvider {
+        guard isEnabled else { return NSItemProvider() }
+        // Old-API `onDrag`, not `.draggable` — its closure runs
+        // synchronously at drag start, so `dragState.draggingSessionId`
+        // is set the instant the drag begins, before any drop
+        // delegate's `dropEntered` can fire. Every delegate reads
+        // that id directly instead of decoding the `NSItemProvider`
+        // payload asynchronously, which is what makes the live
+        // reflow possible — there is no round trip to wait on.
+        dragState.draggingSessionId = session.id
+        return NSItemProvider(object: session.id.uuidString as NSString)
+    }
+
+    /// One structure whether or not the row can be dragged: a row that flips
+    /// (a browser pairing or unpairing) keeps its identity, so an inline
+    /// rename in progress survives it.
     func body(content: Content) -> some View {
-        if isEnabled {
-            content.onDrag {
-                // Old-API `onDrag`, not `.draggable` — its closure runs
-                // synchronously at drag start, so `dragState.draggingSessionId`
-                // is set the instant the drag begins, before any drop
-                // delegate's `dropEntered` can fire. Every delegate reads
-                // that id directly instead of decoding the `NSItemProvider`
-                // payload asynchronously, which is what makes the live
-                // reflow possible — there is no round trip to wait on.
-                dragState.draggingSessionId = session.id
-                return NSItemProvider(object: session.id.uuidString as NSString)
-            } preview: {
-                Text(session.name)
-                    .font(.system(size: 12))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-        } else {
-            content
+        content.onDrag {
+            Self.beginDrag(of: session, isEnabled: isEnabled, dragState: &dragState)
+        } preview: {
+            Text(session.name)
+                .font(.system(size: 12))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 }

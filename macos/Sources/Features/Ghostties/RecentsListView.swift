@@ -394,6 +394,9 @@ struct RecentsListView: View {
         // One cascade through every header and row, in reading order.
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
+        // Once per render, not per row.
+        let seatedBrowsers = PairedBrowserRows.seatedBrowserIds(in: active, pairedBrowsers: coordinator.pairedBrowserByTerminal)
+        let liftedRows = draggedUnit(dragState.draggingSessionId, in: active, section: .active)
         let projectGapBefore = projectGapTarget(groups)
         let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
         // Option D: each header leads with its project's monogram tile (the
@@ -424,7 +427,7 @@ struct RecentsListView: View {
                 .environment(\.selectedRowMixGroup, group.id)
                 .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
             case .row(let session, let group):
-                if !draggedUnit(dragState.draggingSessionId, in: active, section: .active).contains(session.id) {
+                if !liftedRows.contains(session.id) {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView()
                     }
@@ -433,6 +436,7 @@ struct RecentsListView: View {
                         subtitle: PairedBrowserRows.subtitle(for: session, in: group.sessions, pairedBrowsers: coordinator.pairedBrowserByTerminal)
                             ?? (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
+                        isSeatedBrowser: seatedBrowsers.contains(session.id),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
                     .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
@@ -823,7 +827,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
+        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, isSeatedBrowser: Bool = false, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
@@ -867,9 +871,7 @@ struct RecentsListView: View {
         }
         .modifier(SessionRowDragModifier(
             // A paired browser stays under its terminal: it moves only with it.
-            isEnabled: dragInteractionsEnabledForRendering
-                && !(seatsPairedBrowsers && section == .active
-                    && PairedBrowserRows.isSeatedBrowser(session.id, in: sectionList, pairedBrowsers: coordinator.pairedBrowserByTerminal)),
+            isEnabled: dragInteractionsEnabledForRendering && !isSeatedBrowser,
             session: session,
             dragState: $dragState
         ))
@@ -884,13 +886,17 @@ struct RecentsListView: View {
             liftedRows: { [self] id in draggedUnit(id, in: sectionList, section: section) },
             projectDrop: projectDrop
         ))
-        .accessibilityAction(named: Text("Move Up")) {
-            guard supportsReorder else { return }
-            moveWithinSection(session: session, section: section, indexInSection: indexInSection, direction: -1, sectionList: sectionList)
-        }
-        .accessibilityAction(named: Text("Move Down")) {
-            guard supportsReorder else { return }
-            moveWithinSection(session: session, section: section, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
+        // A paired browser cannot move on its own, so it offers no Move
+        // actions. `accessibilityActions` keeps one view structure either way.
+        .accessibilityActions {
+            if supportsReorder && !isSeatedBrowser {
+                Button("Move Up") {
+                    moveWithinSection(session: session, section: section, indexInSection: indexInSection, direction: -1, sectionList: sectionList)
+                }
+                Button("Move Down") {
+                    moveWithinSection(session: session, section: section, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
+                }
+            }
         }
     }
 

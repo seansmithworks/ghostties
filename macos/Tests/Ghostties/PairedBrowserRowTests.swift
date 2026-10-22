@@ -172,7 +172,7 @@ final class PairedBrowserRowTests: XCTestCase {
         let moveUp = PairedBrowserRows.move(up.x.id, direction: -1, in: up.active, pairedBrowsers: up.pairs)
         XCTAssertEqual(moveUp, PairedBrowserRows.Drop(ids: [up.x.id], beforeId: up.o.id))
         up.apply(try XCTUnwrap(moveUp))
-        XCTAssertEqual(up.displayed, ["T", "B", "X", "o"], "X stayed put: it stepped over a row the user cannot see there")
+        XCTAssertEqual(up.displayed, ["T", "B", "X", "o"], "X moves up one displayed row, over other, to sit under the pair")
 
         let down = scene()
         let moveDown = PairedBrowserRows.move(down.o.id, direction: 1, in: down.active, pairedBrowsers: down.pairs)
@@ -220,6 +220,20 @@ final class PairedBrowserRowTests: XCTestCase {
         XCTAssertFalse(PairedBrowserRows.isSeatedBrowser(s.b.id, in: list, pairedBrowsers: [:]), "unpaired, it is an ordinary row again")
         XCTAssertNil(PairedBrowserRows.move(s.b.id, direction: -1, in: s.active, pairedBrowsers: s.pairs))
         XCTAssertNil(PairedBrowserRows.move(s.b.id, direction: 1, in: s.active, pairedBrowsers: s.pairs))
+        XCTAssertEqual(PairedBrowserRows.seatedBrowserIds(in: s.active, pairedBrowsers: s.pairs), [s.b.id], "the row view offers no Move actions or drag to these")
+        XCTAssertTrue(PairedBrowserRows.seatedBrowserIds(in: s.active, pairedBrowsers: [:]).isEmpty)
+    }
+
+    func testADisabledRowStartsNoDrag() {
+        var state = SessionDragState()
+        let row = session("B", atlas)
+
+        let provider = SessionRowDragModifier.beginDrag(of: row, isEnabled: false, dragState: &state)
+        XCTAssertNil(state.draggingSessionId, "a disabled row must leave no id for a drop to act on")
+        XCTAssertTrue(provider.registeredTypeIdentifiers.isEmpty, "and carries no data")
+
+        _ = SessionRowDragModifier.beginDrag(of: row, isEnabled: true, dragState: &state)
+        XCTAssertEqual(state.draggingSessionId, row.id)
     }
 
     func testWithNoPairingReorderIsExactlyToday() {
