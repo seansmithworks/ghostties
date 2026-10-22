@@ -23,6 +23,8 @@ final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDeleg
     /// The toolbar the tab controller installs, kept while the projects
     /// pane is up (it has no toolbar) and put back for App Settings.
     private var tabsToolbar: NSToolbar?
+    /// Keeps the window title on the selected tab's name in App Settings.
+    private var tabSelection: NSKeyValueObservation?
     /// Off under XCTest by default, so a test never writes icon caches.
     private let refreshesIcons: Bool
 
@@ -35,7 +37,6 @@ final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDeleg
         projects = model
         projectsHost = NSHostingController(rootView: ProjectsSettingsPane(model: model, store: store))
         projectsHost.sizingOptions = .preferredContentSize
-        projectsHost.title = "Settings"
         self.refreshesIcons = refreshesIcons
 
         let window = NSWindow(
@@ -60,6 +61,9 @@ final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDeleg
             view: AppSettingsPane(onBack: back) { AppearanceSettingsView() }
         ))
         window.toolbarStyle = .preference
+        tabSelection = tabs.observe(\.selectedTabViewItemIndex) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.syncTitle() }
+        }
         setContent(projectsHost)
         window.center()
     }
@@ -139,7 +143,20 @@ final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDeleg
         if controller === tabs, window.toolbar == nil, let tabsToolbar {
             window.toolbar = tabsToolbar
         }
+        syncTitle()
         if let topLeft { window.setFrameTopLeftPoint(topLeft) }
+    }
+
+    /// "Settings" over the projects pane; the tab's name over App Settings.
+    private func syncTitle() {
+        guard let window else { return }
+        switch pane {
+        case .projects:
+            window.title = "Settings"
+        case .app:
+            let index = tabs.selectedTabViewItemIndex
+            window.title = tabs.tabViewItems.indices.contains(index) ? tabs.tabViewItems[index].label : "Settings"
+        }
     }
 
     private func present() {
