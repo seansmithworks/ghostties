@@ -48,6 +48,10 @@ struct RecentsListView: View {
     @Environment(\.morphProbe) private var morphProbe
     #endif
 
+    /// `SessionPinning.isAvailable`, except where a test renders the
+    /// Pinned section (`init(previewDragState:pinningAvailable:)`).
+    private var pinningAvailable = SessionPinning.isAvailable
+
     init() {
         #if DEBUG
         self.skipScrollViewForTesting = false
@@ -64,10 +68,15 @@ struct RecentsListView: View {
     /// control case). This branch must live inside `body` itself, not a
     /// separately-called method, so `@EnvironmentObject` resolves normally
     /// through SwiftUI's own view-graph processing. Never referenced by the
-    /// shipped app.
-    init(previewDragState: SessionDragState, previewProjectDragState: ProjectDragState = ProjectDragState()) {
+    /// shipped app. `pinningAvailable` lets a test render the Pinned
+    /// section, which the shipped app hides (`SessionPinning`).
+    init(
+        previewDragState: SessionDragState, previewProjectDragState: ProjectDragState = ProjectDragState(),
+        pinningAvailable: Bool = SessionPinning.isAvailable
+    ) {
         self._dragState = State(initialValue: previewDragState)
         self._projectDragState = State(initialValue: previewProjectDragState)
+        self.pinningAvailable = pinningAvailable
         self.skipScrollViewForTesting = true
     }
     #endif
@@ -121,7 +130,8 @@ struct RecentsListView: View {
         let sections = SidebarSessionSections.make(
             sessions: store.sessions,
             statuses: store.globalStatuses,
-            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch,
+            pinningAvailable: pinningAvailable
         )
 
         // Item 6: hold a just-relaunched session in Active's drop slot until
@@ -257,7 +267,7 @@ struct RecentsListView: View {
     private func slotContent(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
         switch slot {
         case .pinnedRows:
-            sectionRows(sections.pinned, section: .pinned, gapHeight: draggedRowHeight(active: sections.active))
+            sectionRows(sections.pinned, section: .pinned, gapHeight: draggedRowHeight)
         case .pinnedEnd:
             endDropZone(section: .pinned, sectionList: sections.pinned)
         case .activeRows:
@@ -280,7 +290,7 @@ struct RecentsListView: View {
             } else {
                 sectionRows(
                     sections.active, section: .active, cascadeStart: sections.pinned.count,
-                    gapHeight: draggedRowHeight(active: sections.active)
+                    gapHeight: draggedRowHeight
                 )
             }
         case .activeEnd:
@@ -407,13 +417,12 @@ struct RecentsListView: View {
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
         let projectGapBefore = projectGapTarget(groups)
-        // A row that needs you draws an action line (card 01): its question
-        // is the subtitle, and drag reflow measures it at its full height.
-        let prompts = rowPrompts(active)
+        // A row that needs you draws an action line (card 01), so drag
+        // reflow measures it at its full height.
         let dropSlots = ProjectDragReflow.slots(groups: groups, items: items) {
-            SidebarListRowHeight.row(hasActions: prompts[$0] != nil)
+            SidebarListRowHeight.row(hasActions: rowPrompt($0) != nil)
         }
-        let gapHeight = draggedRowHeight(active: active)
+        let gapHeight = draggedRowHeight
         // Option D: each header leads with its project's monogram tile (the
         // rail's), and the group holding the selected session sits on one
         // card (`ProjectGroupCard`), its rows marked by chips.
@@ -453,16 +462,14 @@ struct RecentsListView: View {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView(height: gapHeight)
                     }
-                    let prompt = prompts[session.id]
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        // A row that needs you says what it asks; any other
-                        // row says what the session is doing.
-                        subtitle: prompt?.subtitle ?? SessionNeedsYou.subtitle(
+                        // A row that isn't asking anything says what the
+                        // session is doing.
+                        subtitle: SessionNeedsYou.subtitle(
                             indicator: store.globalIndicatorStates[session.id] ?? .inactive,
                             state: coordinator.claudeStateStore.state(for: session.id)
                         ),
-                        prompt: prompt,
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
@@ -478,27 +485,22 @@ struct RecentsListView: View {
         }
     }
 
-    /// The inline prompt of every one-view Active row that genuinely needs
-    /// you (`SessionRowPrompt`): the only rows that draw an action line.
-    private func rowPrompts(_ active: [AgentSession]) -> [UUID: SessionRowPrompt] {
-        var prompts: [UUID: SessionRowPrompt] = [:]
-        for session in active {
-            prompts[session.id] = SessionRowPrompt.make(
-                indicator: store.globalIndicatorStates[session.id] ?? .inactive,
-                state: coordinator.claudeStateStore.state(for: session.id)
-            )
-        }
-        return prompts
+    /// The inline prompt of a row that genuinely needs you
+    /// (`SessionRowPrompt`), in every layout and section: the only rows
+    /// that draw an action line.
+    private func rowPrompt(_ id: UUID) -> SessionRowPrompt? {
+        SessionRowPrompt.make(
+            indicator: store.globalIndicatorStates[id] ?? .inactive,
+            state: coordinator.claudeStateStore.state(for: id)
+        )
     }
 
     /// The live session gap's height: the dragged row's own drawn height,
     /// whose slot collapses while it is in flight, so the list's total
     /// height never changes mid-drag.
-    private func draggedRowHeight(active: [AgentSession]) -> CGFloat {
-        guard let id = dragState.draggingSessionId,
-              SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView,
-              let session = active.first(where: { $0.id == id }) else { return SessionDragReflow.rowHeight }
-        return SidebarListRowHeight.row(hasActions: rowPrompts([session])[id] != nil)
+    private var draggedRowHeight: CGFloat {
+        guard let id = dragState.draggingSessionId else { return SessionDragReflow.rowHeight }
+        return SidebarListRowHeight.row(hasActions: rowPrompt(id) != nil)
     }
 
     /// The selected session's project group, or none (nothing selected,
@@ -866,10 +868,12 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, prompt: SessionRowPrompt? = nil,
-        projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
+        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
+        // A row that needs you says what it asks and draws its action line,
+        // wherever it sits (card 01).
+        let prompt = rowPrompt(session.id)
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
         // Archive has no manual order (always newest-first) — no reorder
@@ -885,7 +889,7 @@ struct RecentsListView: View {
             projectName: projectName,
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
-            subtitle: subtitle,
+            subtitle: prompt?.subtitle ?? subtitle,
             prompt: prompt,
             approvalsEnabled: approvalsEnabled,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
