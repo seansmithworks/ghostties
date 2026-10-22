@@ -1003,10 +1003,17 @@ final class WorkspaceStore: ObservableObject {
     /// removal, makes "drop on a row = insert before that row" true in both
     /// directions with no index arithmetic to get wrong.
     func moveSessionInSessionsView(id: UUID, before beforeId: UUID?, within sectionSessions: [AgentSession]) {
-        guard let session = sessions.first(where: { $0.id == id }) else { return }
-        var list = sectionSessions.filter { $0.id != id }
+        moveSessionsInSessionsView(ids: [id], before: beforeId, within: sectionSessions)
+    }
+
+    /// `moveSessionInSessionsView` for rows that travel together (a terminal
+    /// and its paired browser), kept in `ids` order.
+    func moveSessionsInSessionsView(ids: [UUID], before beforeId: UUID?, within sectionSessions: [AgentSession]) {
+        let moved = ids.compactMap { id in sessions.first(where: { $0.id == id }) }
+        guard !moved.isEmpty else { return }
+        var list = sectionSessions.filter { !ids.contains($0.id) }
         let insertIndex = beforeId.flatMap { target in list.firstIndex(where: { $0.id == target }) } ?? list.count
-        list.insert(session, at: insertIndex)
+        list.insert(contentsOf: moved, at: insertIndex)
 
         for (order, s) in list.enumerated() {
             if let globalIndex = sessions.firstIndex(where: { $0.id == s.id }) {

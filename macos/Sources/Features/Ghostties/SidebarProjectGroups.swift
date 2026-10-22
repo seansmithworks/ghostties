@@ -277,6 +277,78 @@ enum PairedBrowserRows {
         else { return nil }
         return "from \(terminal.name)"
     }
+
+    // MARK: Drag and keyboard reorder
+    //
+    // The user reorders what they SEE, so every position below is a position
+    // in the seated order (`seated`), whatever order the store holds. A
+    // paired browser is not a row of its own while paired: it cannot be
+    // dragged or moved (it always sits under its terminal), its terminal
+    // carries it as one unit, and no drop can land between the two (a gap
+    // aimed there lands after the browser).
+
+    /// A resolved reorder: move `ids` (the dragged row and, for a terminal,
+    /// its seated browser, in display order) to sit before `beforeId`, or at
+    /// the end when nil.
+    struct Drop: Equatable {
+        let ids: [UUID]
+        let beforeId: UUID?
+    }
+
+    /// True for a browser seated under its terminal in `sessions`.
+    static func isSeatedBrowser(_ id: UUID, in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> Bool {
+        let ids = Set(sessions.map(\.id))
+        return ids.contains(id) && pairedBrowsers.contains { ids.contains($0.key) && $0.value == id }
+    }
+
+    /// `id` and, when it is a terminal with a seated browser, that browser.
+    static func unit(of id: UUID, in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> [UUID] {
+        let ids = Set(sessions.map(\.id))
+        guard ids.contains(id), let browser = pairedBrowsers[id], ids.contains(browser) else { return [id] }
+        return [id, browser]
+    }
+
+    /// The drop for dragging `id` with the gap at `gapIndex` (nil: the end).
+    /// The index counts the displayed rows with the dragged unit left out,
+    /// the same rule the list's live gap uses. `sessions` may be in store
+    /// order; it is seated here.
+    static func drop(dragged id: UUID, gapIndex: Int?, in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> Drop {
+        let list = seated(sessions, pairedBrowsers: pairedBrowsers)
+        let ids = unit(of: id, in: list, pairedBrowsers: pairedBrowsers)
+        let working = list.filter { !ids.contains($0.id) }
+        var before = gapIndex.flatMap { working.indices.contains($0) ? working[$0].id : nil }
+        if let target = before,
+           isSeatedBrowser(target, in: working, pairedBrowsers: pairedBrowsers),
+           let at = working.firstIndex(where: { $0.id == target }) {
+            before = at + 1 < working.count ? working[at + 1].id : nil
+        }
+        return Drop(ids: ids, beforeId: before)
+    }
+
+    /// The Move Up (-1) or Move Down (+1) for `id`: one displayed unit, so a
+    /// pair is hopped whole. Nil for a seated browser and past either end.
+    static func move(_ id: UUID, direction: Int, in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> Drop? {
+        let list = seated(sessions, pairedBrowsers: pairedBrowsers)
+        guard let index = list.firstIndex(where: { $0.id == id }),
+              !isSeatedBrowser(id, in: list, pairedBrowsers: pairedBrowsers)
+        else { return nil }
+        let ids = unit(of: id, in: list, pairedBrowsers: pairedBrowsers)
+        let rest = list.filter { !ids.contains($0.id) }
+        let position = index
+        if direction < 0 {
+            guard position > 0 else { return nil }
+            let previous = rest[position - 1].id
+            let before = isSeatedBrowser(previous, in: rest, pairedBrowsers: pairedBrowsers)
+                ? pairedBrowsers.first { $0.value == previous }?.key
+                : previous
+            return Drop(ids: ids, beforeId: before)
+        }
+        guard position < rest.count else { return nil }
+        let next = rest[position].id
+        let hop = unit(of: next, in: rest, pairedBrowsers: pairedBrowsers).count
+        let after = position + hop
+        return Drop(ids: ids, beforeId: after < rest.count ? rest[after].id : nil)
+    }
 }
 
 // MARK: - Row subtitle

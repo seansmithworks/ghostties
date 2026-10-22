@@ -154,6 +154,9 @@ struct SessionRowDropModifier: ViewModifier {
     @Binding var dragState: SessionDragState
     let draggedContext: (UUID) -> (section: SessionSection, isOpen: Bool)?
     let performDrop: (UUID, SessionDragReflow.GapPosition) -> Bool
+    /// The rows a drag of an id lifts out of the list (the row itself, plus
+    /// a terminal's paired browser).
+    var liftedRows: (UUID) -> Set<UUID> = { [$0] }
     /// Set only for one-view rows, which also take a dragged project group
     /// (`ProjectSlotDropDelegate`).
     var projectDrop: ProjectDropTarget? = nil
@@ -166,7 +169,8 @@ struct SessionRowDropModifier: ViewModifier {
                 hoveredSession: hoveredSession,
                 dragState: $dragState,
                 draggedContext: draggedContext,
-                performDrop: performDrop
+                performDrop: performDrop,
+                liftedRows: liftedRows
             )
             if let projectDrop {
                 content.onDrop(of: [.text], delegate: ProjectSlotDropDelegate(target: projectDrop, session: sessionDelegate))
@@ -191,6 +195,7 @@ struct SessionRowDropDelegate: DropDelegate {
     @Binding var dragState: SessionDragState
     let draggedContext: (UUID) -> (section: SessionSection, isOpen: Bool)?
     let performDrop: (UUID, SessionDragReflow.GapPosition) -> Bool
+    var liftedRows: (UUID) -> Set<UUID> = { [$0] }
 
     func dropEntered(info: DropInfo) {
         updateGap(info: info)
@@ -224,7 +229,8 @@ struct SessionRowDropDelegate: DropDelegate {
     private func currentGap(location: CGPoint) -> SessionDragReflow.GapPosition? {
         guard let draggedId = dragState.draggingSessionId,
               let context = draggedContext(draggedId) else { return nil }
-        let working = sectionList.filter { $0.id != draggedId }
+        let lifted = liftedRows(draggedId)
+        let working = sectionList.filter { !lifted.contains($0.id) }
         guard let hoveredIndex = working.firstIndex(where: { $0.id == hoveredSession.id }) else { return nil }
         let fraction = min(max(location.y / SessionDragReflow.rowHeight, 0), 1)
         return SessionDragReflow.insertionPoint(

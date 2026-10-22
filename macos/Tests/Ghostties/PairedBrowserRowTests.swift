@@ -106,4 +106,139 @@ final class PairedBrowserRowTests: XCTestCase {
             ["reconnect race", "Browser 3", "other"]
         )
     }
+
+    // MARK: - Reorder resolves against the displayed order
+
+    /// Store order T, other, B, extra; displayed T, B, other, extra.
+    @MainActor private struct Scene {
+        let store: WorkspaceStore
+        let project: Project
+        let t: AgentSession, o: AgentSession, b: AgentSession, x: AgentSession
+        var pairs: [UUID: UUID] { [t.id: b.id] }
+        var active: [AgentSession] {
+            RecentsListView.activeSessions(from: store.sessions, statuses: store.globalStatuses, pinningAvailable: true)
+        }
+        var displayed: [String] {
+            let groups = SidebarProjectGroup.make(active: active, projects: [project], pairedBrowsers: pairs)
+            return groups[0].sessions.map(\.name)
+        }
+        /// What the view hands the store: the displayed (seated) list.
+        func apply(_ drop: PairedBrowserRows.Drop) {
+            store.moveSessionsInSessionsView(
+                ids: drop.ids, before: drop.beforeId,
+                within: PairedBrowserRows.seated(active, pairedBrowsers: pairs)
+            )
+        }
+    }
+
+    private func scene() -> Scene {
+        let t = session("T", atlas)
+        let o = session("o", atlas)
+        let b = session("B", atlas, template: AgentTemplate.browser.id)
+        let x = session("X", atlas)
+        let store = WorkspaceStore(testingProjects: [atlas], testingSessions: [t, o, b, x])
+        for s in [t, o, b, x] { store.updateSessionStatus(id: s.id, status: .running) }
+        return Scene(store: store, project: atlas, t: t, o: o, b: b, x: x)
+    }
+
+    func testADropBetweenTerminalAndBrowserLandsAfterThePairWhereTheGapShows() {
+        let s = scene()
+        XCTAssertEqual(s.displayed, ["T", "B", "o", "X"])
+
+        // Displayed rows without X: T, B, o. The gap between T and B is index 1.
+        let drop = PairedBrowserRows.drop(dragged: s.x.id, gapIndex: 1, in: s.active, pairedBrowsers: s.pairs)
+
+        XCTAssertEqual(drop, PairedBrowserRows.Drop(ids: [s.x.id], beforeId: s.o.id), "a gap inside a pair is shown, and lands, after the pair")
+        let fromDisplayed = PairedBrowserRows.drop(
+            dragged: s.x.id, gapIndex: 1, in: PairedBrowserRows.seated(s.active, pairedBrowsers: s.pairs), pairedBrowsers: s.pairs
+        )
+        XCTAssertEqual(fromDisplayed, drop, "the same drop whichever order the list arrives in")
+        s.apply(drop)
+        XCTAssertEqual(s.displayed, ["T", "B", "X", "o"])
+    }
+
+    func testADropJustAfterTheBrowserLandsThere() {
+        let s = scene()
+
+        let drop = PairedBrowserRows.drop(dragged: s.x.id, gapIndex: 2, in: s.active, pairedBrowsers: s.pairs)
+
+        XCTAssertEqual(drop, PairedBrowserRows.Drop(ids: [s.x.id], beforeId: s.o.id))
+        s.apply(drop)
+        XCTAssertEqual(s.displayed, ["T", "B", "X", "o"])
+    }
+
+    func testMoveUpAndDownStepThroughDisplayedNeighbours() throws {
+        let up = scene()
+        let moveUp = PairedBrowserRows.move(up.x.id, direction: -1, in: up.active, pairedBrowsers: up.pairs)
+        XCTAssertEqual(moveUp, PairedBrowserRows.Drop(ids: [up.x.id], beforeId: up.o.id))
+        up.apply(try XCTUnwrap(moveUp))
+        XCTAssertEqual(up.displayed, ["T", "B", "X", "o"], "X stayed put: it stepped over a row the user cannot see there")
+
+        let down = scene()
+        let moveDown = PairedBrowserRows.move(down.o.id, direction: 1, in: down.active, pairedBrowsers: down.pairs)
+        XCTAssertEqual(moveDown, PairedBrowserRows.Drop(ids: [down.o.id], beforeId: nil))
+        down.apply(try XCTUnwrap(moveDown))
+        XCTAssertEqual(down.displayed, ["T", "B", "X", "o"])
+    }
+
+    func testMoveHopsAWholePairAndNeverSplitsIt() {
+        let t = session("T", atlas), p = session("P", atlas), o = session("o", atlas)
+        let b = session("B", atlas, template: AgentTemplate.browser.id)
+        let pairs = [t.id: b.id]
+        let list = [p, t, o, b]   // displayed: P, T, B, o
+
+        let down = PairedBrowserRows.move(p.id, direction: 1, in: list, pairedBrowsers: pairs)
+        XCTAssertEqual(down, PairedBrowserRows.Drop(ids: [p.id], beforeId: o.id), "Move Down from above a pair lands below it")
+
+        let up = PairedBrowserRows.move(o.id, direction: -1, in: list, pairedBrowsers: pairs)
+        XCTAssertEqual(up, PairedBrowserRows.Drop(ids: [o.id], beforeId: t.id), "Move Up from below a pair lands above it")
+
+        XCTAssertEqual(
+            PairedBrowserRows.move(t.id, direction: 1, in: list, pairedBrowsers: pairs),
+            PairedBrowserRows.Drop(ids: [t.id, b.id], beforeId: nil),
+            "the terminal carries its browser"
+        )
+    }
+
+    func testDraggingTheTerminalCarriesItsBrowser() {
+        let s = scene()
+
+        // Displayed rows without T and B: o, X. A gap at index 1 is before X.
+        let drop = PairedBrowserRows.drop(dragged: s.t.id, gapIndex: 1, in: s.active, pairedBrowsers: s.pairs)
+
+        XCTAssertEqual(drop, PairedBrowserRows.Drop(ids: [s.t.id, s.b.id], beforeId: s.x.id))
+        s.apply(drop)
+        XCTAssertEqual(s.displayed, ["o", "T", "B", "X"])
+    }
+
+    func testAPairedBrowserCannotBeDraggedOrMovedOnItsOwn() {
+        let s = scene()
+        let list = PairedBrowserRows.seated(s.active, pairedBrowsers: s.pairs)
+
+        XCTAssertTrue(PairedBrowserRows.isSeatedBrowser(s.b.id, in: list, pairedBrowsers: s.pairs))
+        XCTAssertFalse(PairedBrowserRows.isSeatedBrowser(s.t.id, in: list, pairedBrowsers: s.pairs))
+        XCTAssertFalse(PairedBrowserRows.isSeatedBrowser(s.b.id, in: list, pairedBrowsers: [:]), "unpaired, it is an ordinary row again")
+        XCTAssertNil(PairedBrowserRows.move(s.b.id, direction: -1, in: s.active, pairedBrowsers: s.pairs))
+        XCTAssertNil(PairedBrowserRows.move(s.b.id, direction: 1, in: s.active, pairedBrowsers: s.pairs))
+    }
+
+    func testWithNoPairingReorderIsExactlyToday() {
+        let a = session("a", atlas), b = session("b", atlas), c = session("c", atlas), d = session("d", atlas)
+        let list = [a, b, c, d]
+
+        XCTAssertEqual(PairedBrowserRows.drop(dragged: a.id, gapIndex: 1, in: list, pairedBrowsers: [:]),
+                       PairedBrowserRows.Drop(ids: [a.id], beforeId: c.id))
+        XCTAssertEqual(PairedBrowserRows.drop(dragged: a.id, gapIndex: nil, in: list, pairedBrowsers: [:]),
+                       PairedBrowserRows.Drop(ids: [a.id], beforeId: nil))
+        XCTAssertEqual(PairedBrowserRows.drop(dragged: d.id, gapIndex: 0, in: list, pairedBrowsers: [:]),
+                       PairedBrowserRows.Drop(ids: [d.id], beforeId: a.id))
+        XCTAssertEqual(PairedBrowserRows.move(b.id, direction: -1, in: list, pairedBrowsers: [:]),
+                       PairedBrowserRows.Drop(ids: [b.id], beforeId: a.id))
+        XCTAssertEqual(PairedBrowserRows.move(b.id, direction: 1, in: list, pairedBrowsers: [:]),
+                       PairedBrowserRows.Drop(ids: [b.id], beforeId: d.id))
+        XCTAssertEqual(PairedBrowserRows.move(c.id, direction: 1, in: list, pairedBrowsers: [:]),
+                       PairedBrowserRows.Drop(ids: [c.id], beforeId: nil))
+        XCTAssertNil(PairedBrowserRows.move(a.id, direction: -1, in: list, pairedBrowsers: [:]))
+        XCTAssertNil(PairedBrowserRows.move(d.id, direction: 1, in: list, pairedBrowsers: [:]))
+    }
 }
