@@ -25,9 +25,12 @@ final class SessionPopoverModel: ObservableObject {
         answered[sessionId] = prompt
     }
 
-    /// Forgets `sessionId`'s answer once it shows another prompt, or none.
+    /// Forgets `sessionId`'s answer once it shows a different prompt. A
+    /// moment with no prompt keeps it, so the same prompt coming back is
+    /// still answered and can't be sent twice; `forget` clears it on
+    /// teardown.
     func prune(_ sessionId: UUID, showing prompt: SessionPopoverContent.ApprovalPrompt?) {
-        guard let recorded = answered[sessionId], recorded != prompt else { return }
+        guard let prompt, let recorded = answered[sessionId], recorded != prompt else { return }
         answered[sessionId] = nil
     }
 

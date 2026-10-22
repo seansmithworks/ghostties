@@ -41,4 +41,26 @@ final class RowRenameHeightTests: XCTestCase {
         XCTAssertEqual(height(prompt: prompt, editing: true), showing, accuracy: 0.5, "renaming keeps the action line's room")
         XCTAssertEqual(height(prompt: nil, editing: true), SidebarListRowHeight.row(hasActions: false), accuracy: 0.5, "control: a plain row being renamed")
     }
+
+    /// While a needs-you row is renamed its hidden action line takes no
+    /// input (clicks, Full Keyboard Access, VoiceOver), and the row offers
+    /// none of its approval actions.
+    func testRenamingANeedsYouRowSilencesItsActions() {
+        let approval = SessionPopoverContent.ApprovalPrompt(updatedAt: Date(), fingerprint: "Bash")
+        let prompt = SessionRowPrompt(question: "Run npm test?", approvalPrompt: approval)
+        typealias A11y = SessionRowPromptAccessibility
+        XCTAssertEqual(A11y.actions(prompt: prompt, approval: approval, isEditing: false), [.approve(approval), .deny(approval)],
+                       "control: a needs-you row offers Approve and Deny")
+        XCTAssertEqual(A11y.actions(prompt: prompt, approval: nil, isEditing: false), [.answerInTerminal],
+                       "control: or Answer in terminal")
+        XCTAssertEqual(A11y.actions(prompt: prompt, approval: approval, isEditing: true), [], "renaming: no approval actions")
+        XCTAssertEqual(A11y.actions(prompt: prompt, approval: nil, isEditing: true), [], "renaming: no Answer in terminal")
+
+        func line(hidden: Bool) -> SessionRowActionLine {
+            SessionRowActionLine(sessionId: UUID(), approval: approval, isHidden: hidden,
+                                 answers: SessionPopoverModel(), onApprovalDecision: { _, _ in }, onAnswerInTerminal: {})
+        }
+        XCTAssertTrue(line(hidden: false).acceptsInput, "control: a showing line takes input")
+        XCTAssertFalse(line(hidden: true).acceptsInput, "renaming: the hidden line's controls are disabled")
+    }
 }

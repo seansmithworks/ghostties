@@ -145,12 +145,12 @@ struct RecentsRowView: View, Equatable {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
         .modifier(SessionRowPromptAccessibility(
-            prompt: prompt, approval: liveApproval,
+            actions: SessionRowPromptAccessibility.actions(prompt: prompt, approval: liveApproval, isEditing: isEditing),
             onAnswerInTerminal: onAnswerInTerminal, onApprovalDecision: onApprovalDecision
         ))
         .task(id: prompt?.approvalPrompt) { await expireWhenStale(prompt?.approvalPrompt) }
-        // An answer recorded for a prompt this row no longer shows (a new
-        // prompt, or none) is forgotten.
+        // An answer recorded for an earlier prompt is forgotten once the
+        // row shows a different one.
         .onAppear { coordinator.sessionPopover.model.prune(session.id, showing: prompt?.approvalPrompt) }
         .onChange(of: prompt?.approvalPrompt) { coordinator.sessionPopover.model.prune(session.id, showing: $0) }
     }
@@ -278,23 +278,46 @@ enum SidebarListRowHeight {
 
 /// The action line's controls as VoiceOver actions: the row is one combined
 /// element, so its buttons are offered as named actions on it.
-private struct SessionRowPromptAccessibility: ViewModifier {
-    let prompt: SessionRowPrompt?
-    let approval: SessionPopoverContent.ApprovalPrompt?
+struct SessionRowPromptAccessibility: ViewModifier {
+    enum Action: Equatable {
+        case approve(SessionPopoverContent.ApprovalPrompt)
+        case deny(SessionPopoverContent.ApprovalPrompt)
+        case answerInTerminal
+
+        var title: String {
+            switch self {
+            case .approve: return "Approve"
+            case .deny: return "Deny"
+            case .answerInTerminal: return "Answer in terminal"
+            }
+        }
+    }
+
+    let actions: [Action]
     let onAnswerInTerminal: () -> Void
     let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
 
+    /// The named actions a needs-you row offers: none while it is being
+    /// renamed, when its action line is hidden.
+    static func actions(prompt: SessionRowPrompt?, approval: SessionPopoverContent.ApprovalPrompt?, isEditing: Bool) -> [Action] {
+        guard prompt != nil, !isEditing else { return [] }
+        if let approval { return [.approve(approval), .deny(approval)] }
+        return [.answerInTerminal]
+    }
+
     func body(content: Content) -> some View {
-        if prompt != nil {
-            if let approval {
-                content
-                    .accessibilityAction(named: Text("Approve")) { onApprovalDecision(.approve, approval) }
-                    .accessibilityAction(named: Text("Deny")) { onApprovalDecision(.deny, approval) }
-            } else {
-                content.accessibilityAction(named: Text("Answer in terminal"), onAnswerInTerminal)
+        content.accessibilityActions {
+            ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                Button(action.title) { perform(action) }
             }
-        } else {
-            content
+        }
+    }
+
+    private func perform(_ action: Action) {
+        switch action {
+        case .approve(let approval): onApprovalDecision(.approve, approval)
+        case .deny(let approval): onApprovalDecision(.deny, approval)
+        case .answerInTerminal: onAnswerInTerminal()
         }
     }
 }
@@ -309,6 +332,10 @@ struct SessionRowActionLine: View {
     /// Drawn invisible and inert (the row is being renamed); the row keeps
     /// the line's room either way.
     var isHidden: Bool = false
+
+    /// Whether the line's controls take clicks, keyboard focus (Full
+    /// Keyboard Access) or VoiceOver: never while hidden.
+    var acceptsInput: Bool { !isHidden }
     /// Which prompts a tap (here or on the hover card) already answered.
     @ObservedObject var answers: SessionPopoverModel
     let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
@@ -361,8 +388,11 @@ struct SessionRowActionLine: View {
         .lineLimit(1)
         .fixedSize()
         .opacity(isHidden ? 0 : 1)
-        .allowsHitTesting(!isHidden)
-        .accessibilityHidden(isHidden)
+        // Disabled controls take no keyboard focus; this combines with the
+        // chips' own `.disabled(answered)`.
+        .disabled(!acceptsInput)
+        .allowsHitTesting(acceptsInput)
+        .accessibilityHidden(!acceptsInput)
     }
 
     private func chip(_ title: String, size: CGFloat, fill: Color, text: Color, action: @escaping () -> Void) -> some View {

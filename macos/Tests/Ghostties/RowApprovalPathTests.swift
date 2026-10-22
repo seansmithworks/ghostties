@@ -66,8 +66,9 @@ final class RowApprovalPathTests: XCTestCase {
         _ = coordinator
     }
 
-    /// The record forgets a session once it shows another prompt or none,
-    /// and when the session goes away.
+    /// The record survives a row briefly showing no prompt: the same prompt
+    /// coming back is still answered and can't be re-sent. It clears only
+    /// when a different prompt shows, or the session goes away.
     func testTheAnsweredRecordIsPruned() {
         let (coordinator, popover) = controller(live: { self.state(updatedAt: self.shownAt) }, sends: {})
         let shown = SessionPopoverContent.ApprovalPrompt(updatedAt: shownAt, fingerprint: fp)
@@ -75,11 +76,13 @@ final class RowApprovalPathTests: XCTestCase {
         popover.model.prune(sid, showing: shown)
         XCTAssertNotNil(popover.model.answered[sid], "still showing the answered prompt: kept")
         popover.model.prune(sid, showing: nil)
-        XCTAssertNil(popover.model.answered[sid], "stops needing you: forgotten")
+        XCTAssertNotNil(popover.model.answered[sid], "a transient nil: kept")
+        popover.model.prune(sid, showing: shown)
+        XCTAssertTrue(popover.model.isAnswered(shown, for: sid), "the same prompt back: still answered")
+        XCTAssertNil(popover.respond(.approve, sessionId: sid, prompt: shown), "and can't be re-sent")
 
-        XCTAssertEqual(popover.respond(.approve, sessionId: sid, prompt: shown), .sent)
         popover.model.prune(sid, showing: .init(updatedAt: shownAt + 60, fingerprint: fp))
-        XCTAssertNil(popover.model.answered[sid], "a new prompt: forgotten")
+        XCTAssertNil(popover.model.answered[sid], "a different prompt: forgotten")
 
         XCTAssertEqual(popover.respond(.approve, sessionId: sid, prompt: shown), .sent)
         coordinator.clearRuntime(id: sid)
