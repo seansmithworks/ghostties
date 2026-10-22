@@ -1780,6 +1780,17 @@ final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Pure mapping from a hook-derived kind to the indicator; nil for `.ended`
+    /// (fall through to heuristics). Static so tests exercise the real mapping.
+    nonisolated static func claudeIndicator(kind: ClaudeState.Kind, isLongRunning: Bool) -> SessionIndicatorState? {
+        switch kind {
+        case .busy: return isLongRunning ? .longRunning : .processing
+        case .idle: return .idle
+        case .needsInput, .needsPermission: return .needsAttention
+        case .ended: return nil
+        }
+    }
+
     /// Compute the view-layer indicator state for a session.
     ///
     /// Combines lifecycle status, output recency, and shell prompt signals into
@@ -1812,19 +1823,11 @@ final class SessionCoordinator: ObservableObject {
             // filters out `.ended` and stale entries, so `.ended` never
             // reaches this switch; the case exists only for exhaustiveness.
             if let claudeState = claudeStateStore.state(for: sessionId) {
-                switch claudeState.state {
-                case .busy:
-                    if let start = processingStartTimes[sessionId],
-                       ContinuousClock.now - start > Self.longRunningThreshold {
-                        return .longRunning
-                    }
-                    return .processing
-                case .idle:
-                    return .idle
-                case .needsInput, .needsPermission:
-                    return .needsAttention
-                case .ended:
-                    break
+                let isLongRunning = processingStartTimes[sessionId].map {
+                    ContinuousClock.now - $0 > Self.longRunningThreshold
+                } ?? false
+                if let mapped = Self.claudeIndicator(kind: claudeState.state, isLongRunning: isLongRunning) {
+                    return mapped
                 }
             }
             // Check if the session has produced output recently.

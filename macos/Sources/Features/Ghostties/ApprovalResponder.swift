@@ -23,6 +23,21 @@ struct ApprovalTarget: Equatable {
     let updatedAt: Date
     /// The surface the UI intends to type into.
     let surfaceId: UUID
+    /// `ApprovalFingerprint` of the prompt shown. `updatedAt` is whole seconds
+    /// and PermissionRequest has no tool_use_id, so two prompts in one second
+    /// are told apart by what they ask to run.
+    let fingerprint: String
+}
+
+enum ApprovalFingerprint {
+    static func make(toolName: String, input: ToolInputSummary?) -> String {
+        let detail = input?.command ?? input?.filePath ?? input?.firstArgument ?? input?.description ?? ""
+        return "\(toolName)\u{1F}\(detail)"
+    }
+
+    static func make(_ state: ClaudeState) -> String {
+        make(toolName: state.structuredPrompt?.toolName ?? "", input: state.structuredPrompt?.toolInput)
+    }
 }
 
 enum ApprovalOutcome: Equatable {
@@ -63,7 +78,9 @@ struct GuardedApprovalResponder: ApprovalResponder {
         guard isEnabled() else { return .disabled }
         guard let live = currentState(target.sessionId),
               live.state == .needsPermission,
-              live.updatedAt == target.updatedAt else { return .stale }
+              live.updatedAt == target.updatedAt,
+              ApprovalFingerprint.make(live) == target.fingerprint,
+              live.structuredPrompt?.toolName != "AskUserQuestion" else { return .stale }
         guard ownSurface(target.sessionId) == target.surfaceId else { return .wrongSurface }
         send(decision, target.surfaceId)
         return .sent
