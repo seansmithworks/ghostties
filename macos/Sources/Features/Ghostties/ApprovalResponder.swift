@@ -30,13 +30,14 @@ struct ApprovalTarget: Equatable {
 }
 
 enum ApprovalFingerprint {
-    static func make(toolName: String, input: ToolInputSummary?) -> String {
+    static func make(toolName: String, input: ToolInputSummary?, message: String? = nil) -> String {
         let detail = input?.command ?? input?.filePath ?? input?.firstArgument ?? input?.description ?? ""
-        return "\(toolName)\u{1F}\(detail)"
+        return [toolName, detail, input?.digest ?? "", message ?? ""].joined(separator: "\u{1F}")
     }
 
     static func make(_ state: ClaudeState) -> String {
-        make(toolName: state.structuredPrompt?.toolName ?? "", input: state.structuredPrompt?.toolInput)
+        make(toolName: state.structuredPrompt?.toolName ?? "", input: state.structuredPrompt?.toolInput,
+             message: state.structuredPrompt?.message)
     }
 }
 

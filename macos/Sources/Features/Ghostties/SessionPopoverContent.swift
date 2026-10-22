@@ -38,7 +38,9 @@ struct SessionPopoverContent: Equatable {
         summary: SessionSummary? = nil,
         now: Date = Date()
     ) -> SessionPopoverContent? {
-        if let approval, isFreshApproval(approval, now: now) {
+        // AskUserQuestion is a freeform question, never a tool approval.
+        if let approval, isFreshApproval(approval, now: now),
+           approval.structuredPrompt?.toolName != "AskUserQuestion" {
             guard let prompt = approval.structuredPrompt,
                   let block = approvalBlock(toolName: prompt.toolName, input: prompt.toolInput) else { return nil }
             return SessionPopoverContent(sessionId: sessionId, block: block)
