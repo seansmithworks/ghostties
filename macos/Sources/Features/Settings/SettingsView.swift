@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The Settings window's General tab: today's notes, unchanged.
+/// App Settings' General tab: where settings live, the update channel, and
+/// the config file one click away.
 struct SettingsView: View {
     var body: some View {
         HStack {
@@ -22,20 +23,13 @@ struct SettingsView: View {
                 Text("defaults write com.seansmithdesign.ghostties ghostties.autoUpdateChannel stable")
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
-                Text("(\"tip\" is the beta feed.)")
+                Text("(\"tip\" is the beta feed. Debug builds use com.seansmithdesign.ghostties.dev instead.)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("New Session (Cmd+T) — composer (default) or instant:")
-                    .padding(.top, 6)
-                Text("defaults write com.seansmithdesign.ghostties ghostties.newSessionOpensComposer -bool false")
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                Text("defaults write com.seansmithdesign.ghostties ghostties.newSessionOpensComposer -bool true")
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                Text("(\"false\" makes Cmd+T create instantly instead of opening the composer — Cmd+Shift+T is always instant either way. Debug builds use com.seansmithdesign.ghostties.dev instead.)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Button("Open Config File") {
+                    (NSApp.delegate as? AppDelegate)?.ghostty.openConfig()
+                }
+                .padding(.top, 8)
             }
         }
         .padding()

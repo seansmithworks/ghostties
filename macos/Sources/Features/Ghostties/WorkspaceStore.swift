@@ -1059,6 +1059,20 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
+    func setIconStyle(_ style: ProjectIconStyle?, for projectId: UUID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
+        projects[index].iconStyle = style
+        persist()
+    }
+
+    func setNewSessionDefault(_ value: NewSessionDefault, for projectId: UUID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
+        projects[index].newSessionDefault = value
+        persist()
+    }
+
+    func recordSessionCreated(template: AgentTemplate, projectId: UUID) {}
+
     /// Clear a project's default template (user picked "None" / "Always ask").
     func clearDefaultTemplate(for projectId: UUID) {
         guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
