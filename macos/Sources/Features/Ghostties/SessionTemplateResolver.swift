@@ -94,4 +94,16 @@ enum SessionTemplateResolver {
         result.append(contentsOf: users)
         return result
     }
+
+    static func newSessionDefault(for project: Project) -> NewSessionDefault {
+        project.newSessionDefault ?? .shell
+    }
+
+    static func newSessionTemplate(for project: Project, store: WorkspaceStore) -> AgentTemplate {
+        if let defaultId = project.defaultTemplateId,
+           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
+            return defaultTemplate
+        }
+        return AgentTemplate.shell
+    }
 }

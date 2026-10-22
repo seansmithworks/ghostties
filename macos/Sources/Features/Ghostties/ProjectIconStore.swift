@@ -92,12 +92,15 @@ final class ProjectIconStore {
     // MARK: - Refresh
 
     /// Fire-and-forget refresh for launch, project add, and Settings open.
-    func refreshInBackground(_ project: Project) {
-        _Concurrency.Task { await refresh(project) }
+    func refreshInBackground(_ project: Project, force: Bool = false) {
+        _Concurrency.Task { await refresh(project, force: force) }
     }
 
     /// Recomputes the effective image for `project` off the main thread.
-    func refresh(_ project: Project) async {
+    /// `force` skips the negative cache, which otherwise hides an icon
+    /// added under the root for up to `negativeCacheTTL` (Settings open,
+    /// and its Auto button, force).
+    func refresh(_ project: Project, force: Bool = false) async {
         let id = project.id
         let generation = bump(id)
         let cacheDir = cacheDirectory
@@ -123,7 +126,7 @@ final class ProjectIconStore {
         }
 
         let outcome = await Self.onQueue {
-            Self.resolveOnDisk(root: root, id: id, dir: cacheDir, now: clock, limits: limits)
+            Self.resolveOnDisk(root: root, id: id, dir: cacheDir, now: clock, limits: limits, force: force)
         }
         if outcome.ranResolver { resolverRuns += 1 }
         guard isCurrent(id, generation) else { return }
@@ -239,7 +242,7 @@ final class ProjectIconStore {
     /// the resolver. Runs on the utility queue and only reads; it returns the
     /// cache writes for the main actor to apply if still current.
     private nonisolated static func resolveOnDisk(
-        root: URL, id: UUID, dir: URL, now: Date, limits: ProjectIconResolver.Limits
+        root: URL, id: UUID, dir: URL, now: Date, limits: ProjectIconResolver.Limits, force: Bool
     ) -> Outcome {
         let rootMtime = mtime(of: root)
         let noneURL = file(dir, id, "none")
@@ -247,7 +250,7 @@ final class ProjectIconStore {
         let keyURL = file(dir, id, "key")
 
         // Negative cache: same root mtime, checked within the TTL.
-        if let rootMtime,
+        if !force, let rootMtime,
            let text = try? String(contentsOf: noneURL, encoding: .utf8) {
             let parts = text.split(separator: "\n").compactMap { Double($0) }
             if parts.count == 2, parts[0] == rootMtime, now.timeIntervalSince1970 - parts[1] < negativeCacheTTL {

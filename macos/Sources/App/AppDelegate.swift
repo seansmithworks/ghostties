@@ -274,9 +274,26 @@ class AppDelegate: NSObject,
 
         #if DEBUG
         CaptureFixture.applySidebarTabOverride()
-        if CaptureFixture.opensSettings {
+        if let hook = CaptureFixture.projectIconHook {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                let settings = GhosttiesSettingsWindowController.shared.projects
+                guard let project = settings.store.projects.first(where: { $0.name == hook.projectName }) else { return }
+                _Concurrency.Task { try? await settings.chooseImage(from: URL(fileURLWithPath: hook.path), for: project.id) }
+            }
+        }
+        if let hook = CaptureFixture.settingsHook {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                GhosttiesSettingsWindowController.shared.show(tab: .appearance)
+                let settings = GhosttiesSettingsWindowController.shared
+                switch hook {
+                case .app(let tab):
+                    settings.show(tab: tab)
+                case .projects(let name):
+                    if let name, let project = settings.projects.store.projects.first(where: { $0.name == name }) {
+                        settings.show(projectId: project.id)
+                    } else {
+                        settings.show()
+                    }
+                }
             }
         }
         // A background capture never activates, so the first window can't
@@ -1686,7 +1703,8 @@ class AppDelegate: NSObject,
 
     // MARK: - IB Actions
 
-    /// App menu "Settings…" (Cmd+,): the Settings window.
+    /// App menu "Settings…" (Cmd+,): the Settings window, on the projects
+    /// pane. The `open_config` keybind lands here too (`Ghostty.App`).
     @IBAction func openSettings(_ sender: Any?) {
         GhosttiesSettingsWindowController.shared.show()
     }
