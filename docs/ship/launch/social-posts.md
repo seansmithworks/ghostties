@@ -34,7 +34,7 @@ Attach: theme grid capture (needs the Mac).
 
 ## 4. Still Ghostty
 
-Ghostties is a fork of Ghostty, not a rewrite. Your config, themes and keybindings load unchanged, and the terminal underneath is upstream's.
+Ghostties is a fork of Ghostty, not a rewrite. Your config, themes and keybindings load as is, and the terminal underneath is upstream's.
 
 What it adds is a sidebar for running Claude Code and Codex side by side.
 
