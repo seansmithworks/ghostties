@@ -16,7 +16,7 @@ Attach: README demo GIF.
 
 Every session row in Ghostties says what its agent is doing: a spinner while it works, a ? when it needs you, a check when it's done, a cross on an error.
 
-Hover a row to see what it wants to run. Codex needs no setup; Claude Code needs a one time hook setup.
+Hover a Claude Code row to see what it wants to run. Claude Code status takes a one time hook setup.
 
 ghostties.org
 

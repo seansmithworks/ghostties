@@ -2,7 +2,7 @@
 
 ## Title
 
-Show HN: Ghostties, a Ghostty fork for running several coding agents in one window
+Show HN: Ghostties, a Ghostty fork for running coding agents in one window
 
 ## URL
 

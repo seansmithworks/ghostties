@@ -28,7 +28,9 @@ CI runs these jobs in order:
 5. `homebrew-cask` opens a cask bump PR on the Homebrew tap. It runs only when the `HOMEBREW_TAP_REPO` variable is set.
 6. `verify-release` checks every surface and writes a table to the run summary.
 
-## After CI completes (~40 min)
+Steps 5 and 6 run in parallel once `release` finishes.
+
+## After CI completes
 
 - [ ] Read the `verify-release` summary. Anything not marked verified is yours to check by hand.
 - [ ] Merge the cask bump PR on the Homebrew tap

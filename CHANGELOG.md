@@ -21,7 +21,7 @@ Ghostties gets a Settings window and a theme picker, and the whole window now fo
 
 - **The whole window follows your terminal theme.** With a theme other than the Ghostties theme, the sidebar, canvas and toolbar pills take their colors from it, and sidebar text is kept readable against them. A few themes can't reach that contrast and fall back to plain white or black text.
 - **Ghostties Light and Ghostties Dark are the default theme.** The terminal background matches its card: a warm off-white in light, near-black in dark. A `theme =` in your config still wins.
-- **Dark mode is darker.** The canvas behind the terminal is near-black, the card shadow is softer in both appearances, and the tray shadow is lighter in light. History and the triage card follow the darker canvas.
+- **Dark mode is darker.** The canvas behind the terminal is near-black, and the card shadow is retuned for both appearances: a faint dark shadow in light, a faint light glow in dark. The tray shadow in light sits a little tighter. History and the triage card follow the darker canvas.
 - **The selected session is a thin outline over a tint.** It crossfades from the old row to the new one whether you click or use the keyboard, and the project holding the active session sits on a glass card. With Reduce Motion on, it only fades.
 - **Project tile monograms use the main text color**, a little more contrast in every theme.
 - **Resting on the edge of a closed sidebar slides the full sidebar out and moves the terminal over**, instead of floating a separate bar over it. It closes when the pointer leaves, Cmd+S keeps it open, and it never changes whether the sidebar stays closed next time.

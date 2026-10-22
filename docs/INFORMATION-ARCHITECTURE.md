@@ -65,6 +65,10 @@ Documentation goes wrong when nobody knows which parts are supposed to be true. 
 
 If you cannot say which of the three a new document is, it is not ready to add.
 
+### Working documents are the exception, and say so
+
+`docs/plans/`, `docs/audits/` and `docs/ship/` hold working documents for the maintainer and the agents working with them, not for any reader in the table above: build contracts that code comments cite, audits, and per-release ship maps and launch drafts. Their decay model is a fourth one, **dated snapshot**: the date is in the filename or the first lines, the document is true as of that date and no later, and it is deleted or superseded once the thing it was for has shipped. Each one states its reader, its date and what supersedes it at the top, and is linked from the document that uses it (the release checklist links `docs/ship/`). Nothing on the public reader path links to them.
+
 ## Deletion is most of the work
 
 The refresh that produced this structure changed 39 files: **1,340 lines added, 5,028 removed.** Close to four lines deleted for every one written, and a fifth of what was added was the plan describing the deletions.

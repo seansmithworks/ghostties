@@ -19,7 +19,7 @@ Ghostties puts them in one window, grouped by project, and shows you what each o
 Ghostty's terminal, with a workspace layer on top.
 
 - **A project sidebar.** Sessions and tasks grouped by project, so a window full of agents stays readable.
-- **Status at a glance.** Every task shows whether it's running, waiting on you, in review, or parked.
+- **Status at a glance.** Every session shows whether its agent is working, waiting on you, done, or stopped on an error.
 - **`gt`, a CLI.** Create and move tasks from inside any agent session, so an agent can file its own work.
 - **An MCP server.** Agents read and update the task list directly.
 - **An embedded browser.** The thing you're building, next to the thing building it.

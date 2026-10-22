@@ -12,7 +12,7 @@ Built from the `## [Unreleased]` draft in `CHANGELOG.md`. Update both together.
 
 **The whole window follows your theme.** Pick something other than the Ghostties theme and the sidebar, canvas and toolbar pills take their colors from it, with sidebar text kept readable.
 
-**A new default look.** Ghostties Light and Ghostties Dark are now the default terminal theme, and dark mode is darker, with a softer card shadow.
+**A new default look.** Ghostties Light and Ghostties Dark are now the default terminal theme, and dark mode is darker, with a retuned card shadow.
 
 **A quieter selected row.** The selected session is a thin outline over a tint that crossfades between rows, and the project you're working in sits on a glass card.
 

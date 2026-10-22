@@ -209,8 +209,8 @@
     <ol class="first-launch">
       <li>Open Ghostties from Applications. Your existing Ghostty config, themes and keybindings load unchanged.</li>
       <li>macOS may ask for access to Desktop, Documents or iCloud Drive. Those prompts come from commands running inside the terminal, as with any new terminal app. Deny anything you don&rsquo;t need. The dialogs say &ldquo;Ghostty&rdquo; because Ghostties keeps upstream&rsquo;s bundle identifier.</li>
-      <li>Press <kbd>Cmd</kbd>+<kbd>T</kbd> to open the composer. Add a project folder, then start a Shell, Claude Code, Codex or Browser session in it. Ghostties runs the agent CLIs you already have installed; it doesn&rsquo;t install them for you.</li>
-      <li>For Claude Code status (working, <span aria-hidden="true">?</span> needs you, done), add Ghostties&rsquo; status hook to <code>~/.claude/settings.json</code> once. The script ships in <code>~/.ghostties/hooks/ghostties-status.sh</code>. Codex sessions need no setup.</li>
+      <li>Add a project folder with the folder button at the bottom of the sidebar, then press <kbd>Cmd</kbd>+<kbd>T</kbd> to start a Shell, Claude Code, Codex or Browser session in it. Ghostties runs the agent CLIs you already have installed; it doesn&rsquo;t install them for you.</li>
+      <li>For Claude Code status (working, <span aria-hidden="true">?</span> needs you, done), paste the snippet from the top of <code>~/.ghostties/hooks/ghostties-status.sh</code> into <code>~/.claude/settings.json</code>, once. Codex asks you once, in Codex, to trust Ghostties&rsquo; hook.</li>
     </ol>
 
     <a class="all-releases" href="https://github.com/SeanSmithWorks/ghostties/releases" target="_blank" rel="noopener">View all releases on GitHub &rarr;</a>
