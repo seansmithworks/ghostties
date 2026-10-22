@@ -8,7 +8,7 @@ import Testing
 /// injected temp dirs; nothing touches the real Caches or Application Support.
 @MainActor
 struct ProjectIconStoreTests {
-    private struct Rig {
+    @MainActor private struct Rig {
         let base: URL
         let cache: URL
         let support: URL
