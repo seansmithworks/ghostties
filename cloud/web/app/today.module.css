@@ -1,0 +1,11 @@
+.asks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--s2));
+}

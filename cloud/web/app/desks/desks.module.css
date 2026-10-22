@@ -1,0 +1,83 @@
+.desk {
+  padding: var(--s4) 0;
+  border-top: 1px solid var(--border);
+}
+
+.desk:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.deskHeader {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+
+.presence {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--ink-secondary);
+  align-self: center;
+}
+
+.online {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.deskName {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.deskMeta {
+  font-size: 11px;
+  color: var(--ink-secondary);
+}
+
+.agents {
+  margin: 0 calc(-1 * var(--s2));
+}
+
+.empty {
+  margin: 0;
+  color: var(--ink-secondary);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.lanes {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.lanes th,
+.lanes td {
+  padding: var(--s2);
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.lanes thead th {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-secondary);
+}
+
+.lanes tbody th {
+  text-align: left;
+  font-weight: 500;
+}
+
+.zero {
+  color: var(--ink-secondary);
+}

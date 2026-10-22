@@ -34,6 +34,7 @@ shipped, or tested here.
 - **DialKit inspector** (live-tunes Dev; start it before Dev): `bash scripts/open-dialkit.sh` (starts detached, returns at once; `--foreground` for humans)
 - **Browser (CEF)**: `bash scripts/download-cef.sh` — ~300MB, only needed for
   the embedded browser
+- **Web app (cloud)**: `cd cloud/web && npm install && npm run dev` (stub data until Supabase env is set); `npm run build && npm run lint` to check
 - **Formatting**: `zig fmt .` · `swiftlint lint --strict --fix` · `prettier -w .`
 
 Blocked on the Zig toolchain, kept for when it works again:
@@ -53,6 +54,7 @@ document without answering the questions in it.
 - `src/` — shared Zig core (upstream's terminal)
 - `macos/` — the macOS app
 - `cli/` — Swift package: `gt` CLI, `ghostties-mcp` server, `GhosttiesCore`
+- `cloud/` — web and mobile backend prep: `contract/` (shared TS types), `supabase/`, `web/` (Next.js app)
 - `macos/Sources/Features/Ghostties/` — workspace sidebar (the fork's main addition)
 - `macos/Sources/Features/Terminal/` — upstream terminal, integration points
 - `macos/Tests/Workspace/` — sidebar unit tests

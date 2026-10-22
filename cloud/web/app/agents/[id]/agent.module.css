@@ -1,0 +1,40 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+
+.back {
+  font-size: 22px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  margin-left: calc(-1 * var(--s2));
+  border-radius: 8px;
+}
+
+.ghost {
+  display: inline-flex;
+  color: var(--ink-primary);
+}
+
+.titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-secondary);
+}
