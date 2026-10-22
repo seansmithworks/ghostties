@@ -171,8 +171,6 @@ enum SidebarDialTuning {
     // with its status glyph inside.
     /// The expanded tile's monogram font size (one letter; two letters draw 2pt smaller).
     static let sidebarProjectTileTextKey = "ghostties.sidebarDial.sidebarTile.text"
-    /// A grouped expanded row's chip side.
-    static let sidebarThreadTileSizeKey = "ghostties.sidebarDial.sidebarTile.threadSize"
     /// A grouped expanded row's status glyph size.
     static let sidebarThreadTileIconKey = "ghostties.sidebarDial.sidebarTile.threadIcon"
 
@@ -273,8 +271,11 @@ enum SidebarDialTuning {
     /// The expanded group card's inset: the card hugs the rail's tile
     /// column in both states, at the rail's "Column inset" (rail stays put).
     static let retiredGroupCardInsetKey = "ghostties.sidebarDial.groupCardInset"
+    /// The expanded sidebar's own thread tile (chip) size: a chip is one
+    /// size in both states, the rail's "Thread tile size" (rail stays put).
+    static let retiredSidebarThreadTileSizeKey = "ghostties.sidebarDial.sidebarTile.threadSize"
     static let retiredKeys: [String] = [
-        retiredSidebarProjectTileSizeKey, retiredGroupCardInsetKey,
+        retiredSidebarProjectTileSizeKey, retiredGroupCardInsetKey, retiredSidebarThreadTileSizeKey,
         retiredSelectedRowStyleKey, retiredLegacySelectedStyleKey, retiredTrayStyleKey, retiredHistoryPlacementKey,
         retiredHairlineWidthKey, retiredTrayVerticalButtonSizeKey, retiredTrayCornerRadiusKey, retiredRailChipSizeOffsetKey,
         retiredTintShimmerDarkIntensityKey,
@@ -472,10 +473,6 @@ enum SidebarDialTuning {
     static func sidebarProjectTileText(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(sidebarProjectTileTextKey, default: RailProjectTile.defaultTextSize, defaults: defaults)
     }
-    /// See `sidebarThreadTileSizeKey`. Defaults to `RailProjectColumn.defaultThreadTileSize`.
-    static func sidebarThreadTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(sidebarThreadTileSizeKey, default: RailProjectColumn.defaultThreadTileSize, defaults: defaults)
-    }
     /// See `sidebarThreadTileIconKey`. Defaults to `RailProjectColumn.defaultSidebarThreadTileIcon`.
     static func sidebarThreadTileIcon(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(sidebarThreadTileIconKey, default: RailProjectColumn.defaultSidebarThreadTileIcon, defaults: defaults)
@@ -655,7 +652,7 @@ enum SidebarDialTuning {
         selectedTitleWeightKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
-        sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
+        sidebarProjectTileTextKey, sidebarThreadTileIconKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         historyInSidebarKey, projectsLayoutKey,
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
@@ -701,7 +698,7 @@ enum SidebarDialTuning {
         rowHeightKey, rowGapKey, selectedTitleWeightKey,
         trayHorizontalButtonSizeKey, trayGroupGapKey, trayWidthKey,
         contentPaddingLeadingKey, contentPaddingTrailingKey,
-        sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
+        sidebarProjectTileTextKey, sidebarThreadTileIconKey,
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
         hoverBarPushesCanvasKey, hoverRevealOpenMsKey, hoverRevealCloseMsKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
@@ -875,7 +872,6 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var contentPaddingLeading: Double
     var contentPaddingTrailing: Double
     var sidebarProjectTileText: Double
-    var sidebarThreadTileSize: Double
     var sidebarThreadTileIcon: Double
     var hoverRevealEnabled: Bool
     var hoverRevealDwell: Double
@@ -1468,7 +1464,6 @@ enum SidebarListDialPanel: FocusedDialPanel {
             contentPaddingLeading: Double(SidebarDialTuning.contentPaddingLeading(defaults: defaults)),
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
             sidebarProjectTileText: Double(SidebarDialTuning.sidebarProjectTileText(defaults: defaults)),
-            sidebarThreadTileSize: Double(SidebarDialTuning.sidebarThreadTileSize(defaults: defaults)),
             sidebarThreadTileIcon: Double(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults)),
             hoverRevealEnabled: SidebarDialTuning.hoverRevealEnabled(defaults: defaults),
             hoverRevealDwell: SidebarDialTuning.hoverRevealDwell(defaults: defaults),
@@ -1497,7 +1492,6 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.contentPaddingLeadingKey, previous.contentPaddingLeading, model.contentPaddingLeading)
         setIfChanged(defaults, SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
         setIfChanged(defaults, SidebarDialTuning.sidebarProjectTileTextKey, previous.sidebarProjectTileText, model.sidebarProjectTileText)
-        setIfChanged(defaults, SidebarDialTuning.sidebarThreadTileSizeKey, previous.sidebarThreadTileSize, model.sidebarThreadTileSize)
         setIfChanged(defaults, SidebarDialTuning.sidebarThreadTileIconKey, previous.sidebarThreadTileIcon, model.sidebarThreadTileIcon)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealEnabledKey, previous.hoverRevealEnabled, model.hoverRevealEnabled)
         setIfChanged(defaults, SidebarDialTuning.hoverRevealDwellKey, previous.hoverRevealDwell, model.hoverRevealDwell)
@@ -1537,7 +1531,6 @@ enum SidebarListDialPanel: FocusedDialPanel {
             // The tile's size is the Rail panel's: one size in both states.
             .group("tiles", label: "Tiles", children: [
                 .slider("sidebarProjectTileText", keyPath: \.sidebarProjectTileText, label: "Project tile text", range: 8...20, step: 0.5, unit: "pt"),
-                .slider("sidebarThreadTileSize", keyPath: \.sidebarThreadTileSize, label: "Thread tile size", range: 20...44, step: 1, unit: "pt"),
                 .slider("sidebarThreadTileIcon", keyPath: \.sidebarThreadTileIcon, label: "Thread tile icon", range: 8...24, step: 0.5, unit: "pt"),
             ]),
             // Inner side margins of the list column, inside the window margin.

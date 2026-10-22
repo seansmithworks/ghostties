@@ -275,7 +275,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     progress: progress,
                     slotWidth: dials.railTileSize,
                     glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
-                    chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                    chipSizes: (dials.railChipSize, dials.railChipSize),
                     // The chip is hover only; selection is the row's outline.
                     isHovered: isHovered && !isActive,
                     chipID: redlineID + ".chip",
@@ -316,7 +316,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     look: look,
                     progress: progress,
                     chipCenterX: dials.rowLeadingPadding + dials.railTileSize / 2,
-                    chipSizes: (dials.sidebarChipSize, dials.railChipSize)
+                    chipSizes: (dials.railChipSize, dials.railChipSize)
                 )
             }
             .padding(.top, look.height == 1 ? 0 : SidebarDialTuning.rowGap() * (look.height - 1))

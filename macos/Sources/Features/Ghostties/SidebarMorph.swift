@@ -29,7 +29,6 @@ struct SidebarMorphMetrics: Equatable {
         /// The project tile, one size in both states (rail stays put): the
         /// rail's "Project tile size" dial.
         var railTileSize: CGFloat
-        var sidebarChipSize: CGFloat
         var railChipSize: CGFloat
         var sidebarGlyphSize: CGFloat
         var railGlyphSize: CGFloat
@@ -65,7 +64,6 @@ struct SidebarMorphMetrics: Equatable {
                 columnInset: max(SidebarDialTuning.railColumnInset(defaults: defaults), 0),
                 chipCornerRadius: max(SidebarDialTuning.railChipCornerRadius(defaults: defaults), 0),
                 railTileSize: max(SidebarDialTuning.railProjectTileSize(defaults: defaults), 0),
-                sidebarChipSize: chip(SidebarDialTuning.sidebarThreadTileSize(defaults: defaults)),
                 railChipSize: chip(SidebarDialTuning.railThreadTileSize(defaults: defaults)),
                 sidebarGlyphSize: max(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults), 0),
                 railGlyphSize: max(SidebarDialTuning.railThreadTileIcon(defaults: defaults), 0),
@@ -185,7 +183,8 @@ struct SidebarMorphMetrics: Equatable {
     /// beneath it: the same at every step.
     var tileCenterX: CGFloat { lerp(sidebarTileCenterX, railTileCenterX) }
     var tileSize: CGFloat { dials.railTileSize }
-    var chipSize: CGFloat { lerp(dials.sidebarChipSize, dials.railChipSize) }
+    /// One chip size in both states, like the tile.
+    var chipSize: CGFloat { dials.railChipSize }
     var glyphSize: CGFloat { lerp(dials.sidebarGlyphSize, dials.railGlyphSize) }
 
     /// Row title, subtitle, header name, chevron and count: fully visible

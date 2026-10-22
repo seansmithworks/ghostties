@@ -52,14 +52,11 @@ enum RailProjectColumn {
     /// A hovered, unselected chip's fill: subordinate to the selected tint.
     static let hoverChipTintOpacity: Double = 0.04
 
-    /// `context`'s "Thread tile size", clamped to the row height so the
-    /// chip never spills out of its row.
-    static func chipSize(_ context: SidebarTileContext) -> CGFloat {
-        let size = switch context {
-        case .sidebar: SidebarDialTuning.sidebarThreadTileSize()
-        case .rail: SidebarDialTuning.railThreadTileSize()
-        }
-        return min(max(size, 0), SidebarDialTuning.rowHeight())
+    /// The chip's side, one size in both contexts (rail stays put, so a chip
+    /// never resizes across the morph): the rail's "Thread tile size",
+    /// clamped to the row height so the chip never spills out of its row.
+    static func chipSize(_: SidebarTileContext) -> CGFloat {
+        min(max(SidebarDialTuning.railThreadTileSize(), 0), SidebarDialTuning.rowHeight())
     }
     /// The status glyph inside a chip: `context`'s "Thread tile icon".
     static func chipGlyphSize(_ context: SidebarTileContext) -> CGFloat {

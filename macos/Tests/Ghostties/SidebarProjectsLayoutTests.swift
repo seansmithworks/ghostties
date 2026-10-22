@@ -239,7 +239,6 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             XCTAssertEqual(RailProjectColumn.selectedChipTintOpacity, 0.10)
         }
         withDials({ d in
-            d.set(34.0, forKey: SidebarDialTuning.sidebarThreadTileSizeKey)
             d.set(34.0, forKey: SidebarDialTuning.railThreadTileSizeKey)
             d.set(30.0, forKey: SidebarDialTuning.railProjectTileSizeKey)
         }) {
@@ -343,7 +342,6 @@ final class SidebarProjectsLayoutTests: XCTestCase {
     func testTileDialsDefaultToTodayAndMoveIndependently() {
         let probes: [(key: String, read: () -> CGFloat)] = [
             (SidebarDialTuning.sidebarProjectTileTextKey, { RailProjectTile.textSize(.sidebar, letters: 1) }),
-            (SidebarDialTuning.sidebarThreadTileSizeKey, { RailProjectColumn.chipSize(.sidebar) }),
             (SidebarDialTuning.sidebarThreadTileIconKey, { RailProjectColumn.chipGlyphSize(.sidebar) }),
             (SidebarDialTuning.railProjectTileSizeKey, { RailProjectTile.size }),
             (SidebarDialTuning.railProjectTileTextKey, { RailProjectTile.textSize(.rail, letters: 1) }),
@@ -357,7 +355,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             XCTAssertEqual(RailProjectColumn.columnWidth(anchorCount: 5, inset: RailProjectColumn.columnInset), 48)
             return probes.map { $0.read() }
         }
-        XCTAssertEqual(defaults, [13, 40, 16, 40, 13, 40, 16])
+        XCTAssertEqual(defaults, [13, 16, 40, 13, 40, 16])
 
         for (index, probe) in probes.enumerated() {
             let written: CGFloat = 23

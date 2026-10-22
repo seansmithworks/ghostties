@@ -82,7 +82,6 @@ struct SidebarMorphMetricsTests {
         withDials({ d in
             d.set(6.0, forKey: SidebarDialTuning.railColumnInsetKey)
             d.set(36.0, forKey: SidebarDialTuning.railThreadTileSizeKey)
-            d.set(34.0, forKey: SidebarDialTuning.sidebarThreadTileSizeKey)
             d.set(18.0, forKey: SidebarDialTuning.railThreadTileIconKey)
         }) {
             let expanded = SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: 0)
@@ -95,6 +94,18 @@ struct SidebarMorphMetricsTests {
             #expect(rail.card(hasRows: false).width == RailProjectColumn.columnWidth(anchorCount: 1, inset: RailProjectColumn.columnInset))
             #expect(rail.chipSize == RailProjectColumn.chipSize(.rail))
             #expect(rail.glyphSize == RailProjectColumn.chipGlyphSize(.rail))
+        }
+    }
+
+    /// A thread tile size saved under the retired sidebar key (34, against
+    /// the rail's 40) never makes a chip resize across the morph: chips read
+    /// the rail's dial in both states.
+    @Test func aSavedSidebarThreadTileSizeNeverResizesTheChip() {
+        withDials({ $0.set(34.0, forKey: "ghostties.sidebarDial.sidebarTile.threadSize") }) {
+            let expanded = SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: 0)
+            let rail = SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: 1)
+            #expect(expanded.chipSize == rail.chipSize, "chip \(expanded.chipSize) expanded vs \(rail.chipSize) rail")
+            #expect(RailProjectColumn.chipSize(.sidebar) == RailProjectColumn.chipSize(.rail))
         }
     }
 

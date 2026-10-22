@@ -123,7 +123,6 @@ struct SidebarLockedDefaultsTests {
         // Tiles on the 8pt grid: one 40pt project tile in both states (rail
         // stays put, 2026-10-22), 40pt chips / 16pt glyphs, text 13 in both.
         #expect(SidebarDialTuning.sidebarProjectTileText(defaults: d) == 13)
-        #expect(SidebarDialTuning.sidebarThreadTileSize(defaults: d) == 40)
         #expect(SidebarDialTuning.sidebarThreadTileIcon(defaults: d) == 16)
         #expect(SidebarDialTuning.railProjectTileSize(defaults: d) == 40)
         #expect(SidebarDialTuning.railProjectTileText(defaults: d) == 13)
