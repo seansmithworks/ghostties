@@ -6,7 +6,7 @@ runtime runs here yet.
 
 | Path | What |
 |---|---|
-| `contract/` | `@ghostties/contract`: row types, RPC signatures, realtime channels, fixtures. No runtime deps. |
+| `contract/` | `@ghostties/contract` (TS, for web) and `GhosttiesCloud` (Swift package, for the native iOS app and the Mac desk): row types, RPC signatures, realtime channels. No dependencies. |
 | `supabase/migrations/` | Postgres schema, RLS, RPCs, realtime publication. Types mirror `contract/`; change both together. |
 | `supabase/tests/` | Smoke test on plain Postgres: `PGHOST=… PGPORT=… bash cloud/supabase/tests/run-local.sh` |
 
@@ -16,7 +16,7 @@ runtime runs here yet.
 - **Desk**: a machine that hosts agents (the Mac app today, a cloud runner later). It connects outbound, so nothing needs an inbound port.
 - **Agent**: `chief_of_staff` (one per workspace, no project) → `general_manager` (one per project) → `worker` (a session on a branch). Status uses the sidebar's vocabulary.
 - **Conversation / Message**: a human talking to one agent. Messages are append-only; `client_id` makes sends idempotent.
-- **Ask**: an agent waiting on a human. Open asks are the "needs you" list and drive push.
+- **Ask**: an agent waiting on a human. Open asks are the "needs you" list and drive push, sent straight to APNs.
 - **Task**: the sidebar's lanes (`inbox … done`).
 
 ## Talking to it

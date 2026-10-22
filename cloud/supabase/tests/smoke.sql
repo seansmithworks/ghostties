@@ -46,7 +46,7 @@ select pg_temp.check(body = 'Merge it' and kind = 'answer', 'answer posted as me
 
 select public.mark_conversation_read((select id from public.conversations));
 select pg_temp.check(count(*) = 1, 'mark_conversation_read') from public.conversation_reads;
-select pg_temp.check((public.register_push_token('ios', 'ExponentPushToken[abc]')).platform = 'ios', 'register_push_token');
+select pg_temp.check((public.register_push_token('ios', 'a1b2c3d4e5f60718293a4b5c6d7e8f90')).platform = 'ios', 'register_push_token');
 insert into public.desks (workspace_id, name) select id, 'Sean''s MacBook' from public.workspaces;
 select pg_temp.check((public.desk_heartbeat((select id from public.desks), '1.4.0')).last_seen_at is not null, 'desk_heartbeat');
 
