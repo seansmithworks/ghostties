@@ -19,7 +19,7 @@ struct ProjectsSettingsPane: View {
     static let listWidth: CGFloat = 184
     static let rowHeight: CGFloat = 36
     static let listTileSize: CGFloat = 24
-    static let paneSize = CGSize(width: 568, height: 400)
+    static let paneSize = CGSize(width: 568, height: 600)
 
     var body: some View {
         let projects = model.projects
@@ -238,6 +238,7 @@ private struct ProjectNameField: View {
 
     var body: some View {
         TextField("Project name", text: $draft)
+            .textFieldStyle(.roundedBorder)
             .focused($focused)
             .onChange(of: draft) { value in model.rename(project.id, to: value) }
             .onChange(of: focused) { isFocused in

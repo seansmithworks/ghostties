@@ -34,11 +34,18 @@ final class ProjectContextMenuTests: XCTestCase {
             .filter { $0.hasSuffix(".swift") }
             .sorted()
         var menuDefs: [String] = []
-        var legacy: [String] = []
         for file in files {
             let text = try source(file)
             if text.contains("\"Settings\\u{2026}\"") { menuDefs.append(file) }
-            if text.contains("\"Name & Templates") { legacy.append(file) }
+        }
+        // Anywhere under macos/Sources, not just this folder.
+        let root = Self.sourcesDir.deletingLastPathComponent().deletingLastPathComponent()
+        var legacy: [String] = []
+        let walker = try XCTUnwrap(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
+        for case let url as URL in walker where url.pathExtension == "swift" {
+            if try String(contentsOf: url, encoding: .utf8).contains("Name & Templates") {
+                legacy.append(url.lastPathComponent)
+            }
         }
         XCTAssertEqual(menuDefs, ["ProjectContextMenu.swift"])
         XCTAssertEqual(legacy, [], "the menu's Name & Templates… item is gone; Settings… covers it")
