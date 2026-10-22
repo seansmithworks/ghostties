@@ -86,6 +86,32 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
         XCTAssertEqual(store.projectsInDisplayOrder(layout: .tabs).map(\.id), store.flatProjectsInVisualOrder.map(\.id))
     }
 
+    /// Cmd+Shift+[ / ] walks live sessions in the order the one-view list
+    /// draws them, across the pinned/alphabetical boundary.
+    func testSessionCyclingCrossesThePinnedBoundaryInDisplayOrder() {
+        let kiln = project("kiln")
+        let harbor = project("harbor", pinned: true)
+        let beacon = project("beacon")
+        let store = WorkspaceStore(testingProjects: [kiln, harbor, beacon])
+        let coordinator = SessionCoordinator()
+        for p in [kiln, harbor, beacon] {
+            let s = store.addSession(name: "s-\(p.name)", templateId: UUID(), projectId: p.id)
+            store.updateSessionStatus(id: s.id, status: .running)
+            coordinator.seedEmptySessionTreeForTesting(id: s.id)
+        }
+        let expected = ["s-harbor", "s-beacon", "s-kiln"]
+        for mode in [SidebarMode.pinned, .collapsed] {
+            let order = WorkspaceViewContainer.shortcutSessions(
+                sidebarMode: mode, sidebarViewMode: "projectFirst", sidebarTab: .projects,
+                projectsLayout: .oneView, store: store, coordinator: coordinator
+            )
+            XCTAssertEqual(order.map(\.name), expected, "\(mode)")
+        }
+        XCTAssertEqual(
+            store.sessionsInVisualOrder(coordinator: coordinator, layout: .oneView).map(\.name), expected
+        )
+    }
+
     // MARK: - Gap
 
     private func spacerHeights(_ items: [SidebarProjectGroupItem]) -> [CGFloat] {
