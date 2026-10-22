@@ -14,7 +14,7 @@ Hi HN, I'm Sean. I run a handful of Claude Code and Codex sessions at once, and 
 
 Ghostties is a fork of Ghostty that adds a workspace sidebar. Sessions are grouped by project. Each row shows a status glyph: a spinner while the agent works, a ? when it needs you, a check when it's done, a cross on an error. For Claude Code, status can come from its own hooks rather than guesses from terminal output, after a one time hook setup. Hover a row to see what an agent wants to run and why, or your last prompt and its current step.
 
-Cmd+T opens one composer for everything: start a Shell, Claude Code, Codex or Browser session in any project, or resume a past one. The sidebar collapses to a rail of icons with Cmd+S. There's also gt, a small CLI, and an MCP server, so agents can read the task list and file their own work. And an embedded browser, so the thing you're building sits next to the thing building it.
+Cmd+T opens one composer for everything: start a Shell, Claude Code, Codex or Browser session in any project, or resume a past one. The sidebar collapses to a rail of icons with Cmd+S. And there's an embedded browser, so the thing you're building sits next to the thing building it.
 
 The newest beta adds a Settings window and a theme picker with a live preview, and the whole window now follows your terminal theme.
 

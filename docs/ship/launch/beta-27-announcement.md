@@ -18,6 +18,6 @@ Built from the `## [Unreleased]` draft in `CHANGELOG.md`. Update both together.
 
 **A closed sidebar slides out.** Rest on the window's left edge and the full sidebar slides in and moves the terminal over. Move away and it closes again.
 
-**Fixes.** Closing the in app browser no longer closes the window; it asks first and closes only the browser. Cmd+T then Return opens a Shell. The terminal card keeps its shadow after a light or dark switch.
+**Fixes.** Closing the embedded browser no longer closes the window; it asks first and closes only the browser. Cmd+T then Return opens a Shell, even when Browser is the project's default. The terminal card keeps its shadow after a light or dark switch.
 
 Already installed? Ghostties updates itself. New here? Get it at ghostties.org.

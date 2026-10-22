@@ -16,7 +16,7 @@ Attach: README demo GIF.
 
 Every session row in Ghostties says what its agent is doing: a spinner while it works, a ? when it needs you, a check when it's done, a cross on an error.
 
-Hover a row to see what it wants to run and why.
+Hover a row to see what it wants to run. Codex needs no setup; Claude Code needs a one time hook setup.
 
 ghostties.org
 
@@ -40,10 +40,12 @@ What it adds is a sidebar for running Claude Code and Codex side by side.
 
 ghostties.org
 
-## 5. Agents that file their own work
+## 5. The sidebar gets out of the way (beta 27)
 
-Ghostties ships gt, a small CLI, and an MCP server. An agent inside a session can read the task list and file its own work, and you watch it land in the sidebar.
+Ghostties beta 27: with the sidebar closed, rest on the window's left edge and the full sidebar slides back in, moving the terminal over. Move away and it closes.
 
 Free and open source, macOS 13 or later on Apple Silicon.
 
 github.com/SeanSmithWorks/ghostties
+
+Attach: hover reveal clip (needs the Mac).

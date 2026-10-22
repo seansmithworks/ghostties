@@ -1,5 +1,7 @@
 # Beta 27 ship map, 2026-10-21
 
+> **Reader:** Sean, and any agent working toward the beta 27 tag. **Decay:** a dated snapshot. It is right as of 2026-10-21, a newer map in `docs/ship/` supersedes it, and it can be deleted once beta 27 is tagged. **Linked from:** `docs/release-checklist.md`. **Upstream boundary:** everything here is fork work; nothing goes to ghostty-org.
+
 Every open item between `main` today (after #258) and tagging `v0.5.0-beta.27`, sorted by who can do it.
 
 - **Cloud**: safe and checkable from a Linux sandbox (docs, `web/`, release copy). Done on `claude/beta-ship-push` unless marked otherwise.
@@ -8,11 +10,11 @@ Every open item between `main` today (after #258) and tagging `v0.5.0-beta.27`, 
 
 ## Where the evidence comes from
 
-`BACKLOG.md` left this repository on 2026-10-13 (#238) and now lives in a private notes repo. This file is public, so it doesn't quote the backlog. Each evidence line below is a quote from a public PR description, `CHANGELOG.md`, `AGENTS.md`, the release workflow or the site itself. A run with access to the notes should reconcile this map against the backlog's 2026-10-05 to 2026-10-21 entries before the tag.
+`BACKLOG.md` left this repository on 2026-10-13 (#238) and now lives in a private notes repo. This file is public, so it doesn't quote the backlog, and **no backlog line was checked against this map**. Each evidence line below is a quote from a public PR description, `CHANGELOG.md`, `AGENTS.md`, the release workflow or the site itself. Before the tag, someone with the notes should reconcile this map against the backlog's 2026-10-05 to 2026-10-21 entries. The last tracked copy (`git show cbd4783^:BACKLOG.md`, which has "beta.27 carry-overs" from 2026-10-12) is still in public history, but Sean untracked the file on purpose, so whether to use it is his call.
 
 ## State of `main`
 
-Beta 26 shipped 2026-10-12. Since then, 21 PRs merged (#237 to #258). Fourteen change what users see. `CHANGELOG.md` `## [Unreleased]` was empty. Two PRs are open, both docs-only drafts: #209 and #230.
+Beta 26 shipped 2026-10-12. Since then, 21 PRs merged (#237 to #258). Fourteen change what users see. `CHANGELOG.md` `## [Unreleased]` was empty. Three PRs are open, all drafts: #209 and #230 (docs only) and #259 (Swift, opened 2026-10-21 23:58 UTC, fixes the onboarding gaps #209 found).
 
 ## The ship map
 
@@ -38,15 +40,17 @@ Beta 26 shipped 2026-10-12. Since then, 21 PRs merged (#237 to #258). Fourteen c
 | 18 | Log a missing bundled theme file | Mac (Swift) | #245: "If the bundled theme file were missing, the canvas silently falls back to the system window colour (follow-up: log it)." | Open |
 | 19 | Re-check `zig build` now that upstream is on Zig 0.16 | Mac | `AGENTS.md`: "Build through Xcode until Zig 0.16 ships, then re-check." `CHANGELOG.md` beta 26: "Ghostties now builds on the latest upstream Ghostty (Zig 0.16)" | Open. If it works, `AGENTS.md` Commands changes |
 | 20 | Homepage hero film | Mac | `web/index.html`: `src: '/assets/hero-dark.mp4', // not recorded yet` | Open. Not a tag blocker |
-| 21 | Onboarding gaps found in #209 | Mac (Swift) | #209: "The onboarding 'Install gt' button only works from a repo checkout (`OnboardingSheet.swift:176`)"; "Claude Code status hooks are never registered automatically, so 'needs you' stays silent until the user pastes JSON by hand" | Open. The second one undercuts the headline feature for every new user |
+| 21 | Onboarding gaps found in #209, fixed in draft #259 | Mac | #259: "I could not run them" (`ClaudeHookRegistrarTests`); "A local test run … plus a first-launch check of the sheet in task-first mode" | Open. Run the tests and the first-launch check, then merge. Until it ships, Claude Code status needs a manual hook setup, which `/download` now says |
 | 22 | Light theme cyan contrast | Sean | #244: "light −~6%, only cyan (p6) crosses below 3:1 (2.83)" | Decide: accept, or tune Ghostties Light's p6 |
 | 23 | Which onboarding concept | Sean | #209: "three clickable concepts (mild / wild / wilder)"; PR is a draft since 2026-10-10 | Decide, then merge or close #209 |
 | 24 | Harness positioning | Sean | #230: "the business-vs-maker call, prioritized action items, and open questions" | Decide, then merge or close #230. Shapes the launch copy's angle, not the tag |
 | 25 | Changelog wording for beta 27 | Sean | Item 1's draft was written from PR descriptions, not from using the build | Edit, then date the section |
-| 26 | Tag `v0.5.0-beta.27` | Sean (one-way door) | `ghostties-release.yml`: "TEMPORARY RULE (until v1.0): betas go to the stable feed too"; a tag offers the update to every install | After items 10 to 16 and 25 |
+| 26 | Tag `v0.5.0-beta.27` | Sean (one-way door) | `ghostties-release.yml`: "TEMPORARY RULE (until v1.0): betas go to the stable feed too"; a tag offers the update to every install | After items 10 to 12, 15, 16, 25 and 30, and whichever of 13, 14 and 21 Sean marks as blocking |
 | 27 | Merge the Homebrew cask PR | Sean | `ghostties-release.yml`: "homebrew-cask job only ever opens a PR against the tap — it never merges" | After the tag |
 | 28 | Post the launch kit | Sean (one-way door) | Drafts only in `docs/ship/launch/`; nothing was posted | After the tag and the captures |
 | 29 | Bundle identifier is still upstream's | Sean (one-way door, pre-1.0) | README: "The dialogs say 'Ghostty' rather than 'Ghostties' because they use the bundle identifier inherited from upstream." | Not for beta 27. Changing it later resets permissions and needs a Sparkle migration plan |
+| 30 | Silent write to `~/.claude/settings.json` | Sean | #259: "if someone removes the hook, it comes back on the next launch. The options are: ship as is, add an opt-out flag, or gate it behind the onboarding 'Connect' step." | Decide before #259 merges. Also decides whether #259 rides beta 27 |
+| 31 | Keep promoting `gt` and the MCP server? | Sean | `OnboardingSheet.swift:176`: the in-app install runs `scripts/install-gt.sh` from a repo checkout; #259 removes that button; #209's gt audit recommends a keep or stop-promoting call | Decide. This branch already dropped them from the homepage and launch kit, since an app install doesn't get them. README still lists them |
 
 ## Not in this map
 
@@ -57,7 +61,7 @@ Beta 26 shipped 2026-10-12. Since then, 21 PRs merged (#237 to #258). Fourteen c
 ## Checks run on this branch
 
 - Lighthouse 12.6.1, local `python3 -m http.server` (no production CSP), mobile defaults:
-  - `index.html`: accessibility 96 → **100**, best practices 100, SEO 100, performance 94 to 96 across runs (same range as before the change)
+  - `index.html`: accessibility 96 → **100**, best practices 100, SEO 100, performance 73 to 96 across six runs, swinging on total blocking time from `ghost-field.js`, which this branch doesn't touch (87 and 96 on `main`)
   - `download.html`: 100 in all four categories, before and after
 - No horizontal overflow at 1280, 600 or 375 px on either page.
 - `scripts/update-web-version.py v0.5.0-beta.27` against a copy of the edited pages: all 7 patterns match.
