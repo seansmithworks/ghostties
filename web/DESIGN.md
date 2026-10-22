@@ -426,3 +426,26 @@ sharing hairlines. **No rounded corners or drop shadows on chrome** — the one
 named exception is the amber `box-shadow` glow on `.cab-btn.primary`, which
 reads as arcade CRT bloom, not a drop shadow. Uppercase micro-labels at
 0.2em tracking (`.micro`, `.mono-tag`).
+
+---
+
+## 9. The live homepage runs on `web/v3.css`
+
+`index.html` links `/v3.css` only, not `/style.css`. v3 uses the same tokens
+and house vocabulary as the v2 set in §8 (`--bg #06060e`, `--amber`, the three
+self-hosted fonts, square corners, hairline-shared blocks), so §8's tables
+describe the homepage today, and §1 and §3–§5 describe the document pages
+(`/download`, `/changelog`, `/support`, `/privacy`, `/licenses`, `/404`).
+
+Two v3 components added 2026-10-22:
+
+- **`.feature-grid` / `.feature-cell`** — the "What it adds" section. Same
+  bordered grid as `.install-grid` (hairlines shared, no radius, no shadow),
+  with an `h3` in `--font-display` and a sentence in `--font-prose` at
+  `--ink-dim`. Unlike `.install-grid` it is **opaque** (`background: var(--bg)`):
+  its cells hold running sentences, and the ghost field drifting behind
+  `main` would otherwise cross them. Every claim in it must already be in
+  `README.md` "What it adds" or a shipped `CHANGELOG.md` entry.
+- **`.text-link`** — an underline for links inside running text, so they
+  don't rely on amber alone (WCAG 1.4.1, Lighthouse `link-in-text-block`).
+  Buttons and footer links don't take it.
