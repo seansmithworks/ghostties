@@ -5,7 +5,7 @@ import GhosttiesCore
 @testable import Ghostty
 
 /// Template management moved from the deleted composer popover's results
-/// table into `ProjectSettingsView`'s Templates section. These cover every
+/// table into the Settings projects pane's Templates section. These cover every
 /// action the table had: create, edit, duplicate, pin/unpin, delete.
 @MainActor
 struct ProjectTemplatesSectionTests {
@@ -115,27 +115,6 @@ struct ProjectTemplatesSectionTests {
         #expect(!composerStore.pinnedTemplateIds.contains(id))
     }
 
-    // MARK: - The section is mounted in the settings popover
-
-    private func fittingHeight<V: View>(_ view: V, store: WorkspaceStore) -> CGFloat {
-        let hosting = NSHostingView(rootView: view.environmentObject(store))
-        return hosting.fittingSize.height
-    }
-
-    /// Fails if `ProjectSettingsView` stops mounting the Templates section:
-    /// the section's list hugs its rows (up to a cap), so adding templates
-    /// to the store must make the popover taller. Without the section the
-    /// popover height is independent of the template count.
-    @Test func settingsPopoverMountsTheTemplatesSection() {
-        let store = makeStore()
-        let project = store.projects[0]
-        let before = fittingHeight(ProjectSettingsView(project: project, onDismiss: {}), store: store)
-        _ = TemplateManagement.addTemplate(named: "One", store: store)
-        _ = TemplateManagement.addTemplate(named: "Two", store: store)
-        let after = fittingHeight(ProjectSettingsView(project: project, onDismiss: {}), store: store)
-        #expect(after > before, "popover should grow with the template list: \(before) -> \(after)")
-    }
-
     // MARK: - Evidence renders (light + dark) under .captures/
 
     private func capturesDirectory() -> URL {
@@ -145,13 +124,18 @@ struct ProjectTemplatesSectionTests {
     }
 
     @Test(arguments: ["aqua", "darkAqua"])
-    func rendersSettingsPopoverWithTemplatesSection(appearance: String) {
+    func rendersSettingsPaneWithTemplatesSection(appearance: String) {
         let store = makeStore()
         _ = TemplateManagement.addTemplate(named: "Review pass", store: store)
-        let project = store.projects[0]
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("templates-pane-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let model = ProjectsSettingsModel(store: store, iconStore: ProjectIconStore(
+            cacheDirectory: scratch.appendingPathComponent("cache"),
+            supportDirectory: scratch.appendingPathComponent("support")
+        ))
         let name: NSAppearance.Name = appearance == "darkAqua" ? .darkAqua : .aqua
-        let view = ProjectSettingsView(project: project, onDismiss: {})
-            .environmentObject(store)
+        let view = ProjectsSettingsPane(model: model, store: store)
             .background(Color(nsColor: .windowBackgroundColor))
         let hosting = NSHostingView(rootView: view)
         let size = hosting.fittingSize
@@ -172,7 +156,7 @@ struct ProjectTemplatesSectionTests {
         }
         let dir = capturesDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? png.write(to: dir.appendingPathComponent("project-settings-templates-\(appearance).png"))
-        #expect(size.height > 300)
+        try? png.write(to: dir.appendingPathComponent("settings-pane-templates-\(appearance).png"))
+        #expect(size.height >= ProjectsSettingsPane.paneSize.height)
     }
 }

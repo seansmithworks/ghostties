@@ -6,8 +6,9 @@ import UniformTypeIdentifiers
 
 /// Settings' default pane, "Settings is your sidebar" (settings-general
 /// card 05): a copy of the sidebar's project list on the chrome at left;
-/// click a project to edit it at right. Everything app-wide is one link
-/// away in App Settings.
+/// click a project to edit it at right (name, icon, new-session default,
+/// and the shared templates). Everything app-wide is one link away in
+/// App Settings.
 struct ProjectsSettingsPane: View {
     @ObservedObject var model: ProjectsSettingsModel
     /// Observed so the list and detail follow every project change.
@@ -102,7 +103,8 @@ struct ProjectsSettingsPane: View {
             VStack(alignment: .leading, spacing: 0) {
                 Form {
                     Section {
-                        iconEditor(project, monogram: monograms[project.id] ?? "?")
+                        ProjectNameField(project: project, model: model)
+                            .id(project.id)
                     } header: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(project.name)
@@ -112,17 +114,27 @@ struct ProjectsSettingsPane: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                                 .padding(.bottom, 16)
-                            Text("Icon")
+                            Text("Name")
                         }
+                    }
+                    Section("Icon") {
+                        iconEditor(project, monogram: monograms[project.id] ?? "?")
                     }
                     Section("New Session") {
                         newSessionPicker(project)
                     }
+                    Section {
+                        ProjectTemplatesSection()
+                            .environmentObject(store)
+                    }
                 }
                 .formStyle(.grouped)
-                .scrollDisabled(true)
-                Spacer(minLength: 0)
+                .frame(maxHeight: .infinity)
+                .clipped()
                 appSettingsLink
+                    .padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .windowBackgroundColor))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
@@ -208,6 +220,33 @@ struct ProjectsSettingsPane: View {
     }
 }
 
+/// The project's name. Each edit that leaves a non-blank name lands in the
+/// store at once (the sidebar follows); a blank draft is never stored, and
+/// leaving the field puts the stored name back.
+private struct ProjectNameField: View {
+    let project: Project
+    @ObservedObject var model: ProjectsSettingsModel
+
+    @State private var draft: String
+    @FocusState private var focused: Bool
+
+    init(project: Project, model: ProjectsSettingsModel) {
+        self.project = project
+        self.model = model
+        _draft = State(initialValue: project.name)
+    }
+
+    var body: some View {
+        TextField("Project name", text: $draft)
+            .focused($focused)
+            .onChange(of: draft) { value in model.rename(project.id, to: value) }
+            .onChange(of: focused) { isFocused in
+                if !isFocused { draft = project.name }
+            }
+            .onSubmit { draft = project.name }
+    }
+}
+
 // MARK: - Model
 
 /// The projects pane's state and actions, injectable with its stores so it
@@ -249,6 +288,16 @@ final class ProjectsSettingsModel: ObservableObject {
     }
 
     func openAppSettings() { onOpenAppSettings() }
+
+    // MARK: Name
+
+    /// Renames a project; the sidebar and workspace.json follow. A blank
+    /// name is ignored (a project always has one).
+    func rename(_ projectId: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        store.updateProject(id: projectId, name: trimmed)
+    }
 
     // MARK: Icon
 

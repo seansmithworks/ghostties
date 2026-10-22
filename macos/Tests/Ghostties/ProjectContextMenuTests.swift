@@ -2,11 +2,9 @@ import XCTest
 import GhosttiesCore
 @testable import Ghostty
 
-/// The project context menu (Settings…, Pin, Remove) and the Settings popover
-/// that hosts Templates are defined once, in `ProjectContextMenu.swift`, and
-/// applied to every project header. One-view's accordion header lost them
-/// because the menu lived inside `ProjectDisclosureRow` alone, so on the
-/// default layout nobody could reach Templates.
+/// The project context menu (Settings…, Pin, Remove) is defined once, in
+/// `ProjectContextMenu.swift`, and applied to every project header. Name and
+/// Templates are edited in Settings, so the menu has no "Name & Templates…".
 final class ProjectContextMenuTests: XCTestCase {
     private static var sourcesDir: URL {
         URL(fileURLWithPath: #filePath)
@@ -29,20 +27,20 @@ final class ProjectContextMenuTests: XCTestCase {
         }
     }
 
-    /// No second copy of the menu or the settings popover anywhere else.
+    /// No second copy of the menu anywhere else, and no "Name & Templates…" item.
     func testMenuAndSettingsPresentationAreDefinedOnce() throws {
         let files = try FileManager.default
             .contentsOfDirectory(atPath: Self.sourcesDir.path)
             .filter { $0.hasSuffix(".swift") }
             .sorted()
         var menuDefs: [String] = []
-        var popovers: [String] = []
+        var legacy: [String] = []
         for file in files {
             let text = try source(file)
             if text.contains("\"Settings\\u{2026}\"") { menuDefs.append(file) }
-            if text.contains("ProjectSettingsView(project:") { popovers.append(file) }
+            if text.contains("\"Name & Templates") { legacy.append(file) }
         }
         XCTAssertEqual(menuDefs, ["ProjectContextMenu.swift"])
-        XCTAssertEqual(popovers, ["ProjectContextMenu.swift"])
+        XCTAssertEqual(legacy, [], "the menu's Name & Templates… item is gone; Settings… covers it")
     }
 }
