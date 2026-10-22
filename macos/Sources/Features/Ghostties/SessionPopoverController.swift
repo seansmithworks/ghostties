@@ -8,11 +8,9 @@ final class SessionPopoverModel: ObservableObject {
     @Published var content: SessionPopoverContent?
     /// "Answer in terminal →": focus the card's session.
     var onAnswerInTerminal: (() -> Void)?
-    /// Approve/Deny on a bounded prompt (shown only while `ApprovalFlag` is on).
-    var onApprovalDecision: ((ApprovalDecision) -> Void)?
     /// The prompt each session's Approve/Deny last sent an answer to, from
-    /// the card or a sidebar row. Both disable their Approve/Deny while it
-    /// is still the prompt showing, so one prompt is never answered twice;
+    /// its sidebar row. The row disables its Approve/Deny while it is still
+    /// the prompt showing, so one prompt is never answered twice;
     /// a new prompt (another `updatedAt` or fingerprint) enables them
     /// again. A tap the responder turned away records nothing.
     @Published private(set) var answered: [UUID: SessionPopoverContent.ApprovalPrompt] = [:]
@@ -109,7 +107,6 @@ final class SessionPopoverController {
         self.workspace = workspace
         self.claudeState = claudeState
         model.onAnswerInTerminal = { [weak self] in self?.answerInTerminal() }
-        model.onApprovalDecision = { [weak self] in self?.respond($0) }
     }
 
     /// Answers Approve/Deny. The shipped default sends nothing; C3 supplies
@@ -210,17 +207,8 @@ final class SessionPopoverController {
         coordinator?.focusSession(id: id)
     }
 
-    /// Approve/Deny: hands the prompt the card showed to the responder, whose
-    /// guard re-reads the live state before anything is sent, then
-    /// re-derives the card.
-    private func respond(_ decision: ApprovalDecision) {
-        guard let id = currentSessionId, let prompt = model.content?.approvalPrompt else { return }
-        respond(decision, sessionId: id, prompt: prompt)
-        refresh()
-    }
-
-    /// Approve/Deny from the card or a sidebar row's inline action line:
-    /// one path into the responder for both.
+    /// Approve/Deny from a sidebar row's inline action line: the one path
+    /// into the responder.
     /// Nothing reaches the responder once a prompt has been answered (nil,
     /// as with the flag off or no surface); the responder's own guard then
     /// checks the prompt is still live. Only a sent answer marks the prompt

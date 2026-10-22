@@ -336,18 +336,19 @@ struct SessionRowActionLine: View {
     /// Whether the line's controls take clicks, keyboard focus (Full
     /// Keyboard Access) or VoiceOver: never while hidden.
     var acceptsInput: Bool { !isHidden }
-    /// Which prompts a tap (here or on the hover card) already answered.
+    /// Which prompts a tap already answered.
     @ObservedObject var answers: SessionPopoverModel
     let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
     let onAnswerInTerminal: () -> Void
 
-    /// The hover card's chip height and corner (one control, one size; on
-    /// the 4pt scale, where card 01's 20pt is not), with card 01's 8pt side
-    /// padding and 4pt gap.
-    static let controlHeight: CGFloat = SessionPopoverLayout.actionHeight
+    /// One control height and corner (on the 4pt scale, where card 01's
+    /// 20pt is not), with card 01's 8pt side padding and 4pt gap.
+    static let controlHeight: CGFloat = 24
     static let controlHorizontalPadding: CGFloat = 8
-    static let controlCornerRadius: CGFloat = SessionPopoverLayout.actionCornerRadius
+    static let controlCornerRadius: CGFloat = 6
     static let controlSpacing: CGFloat = 4
+    /// Approve/Deny once a tap has answered the prompt they show.
+    static let answeredOpacity: Double = 0.4
     /// Room the line adds under the row's title band: the controls, then
     /// the band's own bottom inset again, so the row keeps its margins.
     static let bottomInset: CGFloat = 8
@@ -371,7 +372,7 @@ struct SessionRowActionLine: View {
                 }
                 // Answered once: off until the prompt changes.
                 .disabled(answered)
-                .opacity(answered ? SessionPopoverLayout.answeredOpacity : 1)
+                .opacity(answered ? Self.answeredOpacity : 1)
             } else {
                 Button(action: onAnswerInTerminal) {
                     Text("Answer in terminal →")

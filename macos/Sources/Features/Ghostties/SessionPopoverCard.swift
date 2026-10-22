@@ -28,25 +28,17 @@ enum SessionPopoverLayout {
     static let maxCommandLines = 3
     static let maxPromptLines = 2
 
-    /// A needs-you card's actions (hover-approvals card 01): the gap above
-    /// them, the gap between them, and the Approve/Deny chips' size. The
-    /// chips sit well inside the card, not at its corner, so their radius
-    /// is card 01's chip radius rather than a concentric one.
+    /// The gap above a needs-you card's "Answer in terminal →".
     static let actionsTopGap: CGFloat = 8
-    static let actionSpacing: CGFloat = 8
-    static let actionHeight: CGFloat = 24
-    static let actionHorizontalPadding: CGFloat = 12
-    static let actionCornerRadius: CGFloat = 6
-    /// Approve/Deny once a tap has answered the prompt they show.
-    static let answeredOpacity: Double = 0.4
 }
 
 /// The popover card: the card shell around one content block (a Bash command,
 /// a tool approval, or what a running session is doing), set directly on the
 /// white card — no inner block (Sean, 2026-10-04: one card). Clicking the row
 /// opens the session, moving off it dismisses the card. A session that needs
-/// the user leads with its question and ends with "Answer in terminal →";
-/// a bounded prompt adds Approve/Deny while `ApprovalFlag` is on.
+/// the user leads with its question and ends with "Answer in terminal →".
+/// Approve/Deny live on the sidebar row only (`SessionRowActionLine`), never
+/// here.
 struct SessionPopoverCard: View {
     @ObservedObject var model: SessionPopoverModel
     let onHover: (Bool) -> Void
@@ -124,7 +116,7 @@ struct SessionPopoverCard: View {
                 EmptyView()
             }
             if content.needsYou {
-                actions(content)
+                answerInTerminal
                     .padding(.top, SessionPopoverLayout.actionsTopGap)
             }
         }
@@ -134,47 +126,18 @@ struct SessionPopoverCard: View {
         .padding(WorkspaceLayout.sessionPopoverContentPadding)
     }
 
-    /// Approve/Deny (bounded prompts, only while `ApprovalFlag` is on), then
-    /// the hand-off every needs-you card carries.
-    private func actions(_ content: SessionPopoverContent) -> some View {
-        let theme = ChromeTheme.active(colorScheme)
-        return VStack(alignment: .leading, spacing: SessionPopoverLayout.actionSpacing) {
-            if content.approvalPrompt != nil, ApprovalFlag.isEnabled {
-                HStack(spacing: SessionPopoverLayout.actionSpacing) {
-                    actionChip("Approve", fill: Color(theme.ink), text: Color(theme.canvas)) {
-                        model.onApprovalDecision?(.approve)
-                    }
-                    actionChip("Deny", fill: theme.ink(.composerRow), text: primaryText) {
-                        model.onApprovalDecision?(.deny)
-                    }
-                }
-                // Answered once: off until the prompt changes.
-                .disabled(model.isAnswered(content.approvalPrompt, for: content.sessionId))
-                .opacity(model.isAnswered(content.approvalPrompt, for: content.sessionId) ? SessionPopoverLayout.answeredOpacity : 1)
-            }
-            Button {
-                model.onAnswerInTerminal?()
-            } label: {
-                Text("Answer in terminal →")
-                    .font(.system(size: 11, weight: .medium))
-                    .underline()
-                    .foregroundStyle(primaryText)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Shows this session's terminal")
-        }
-    }
-
-    private func actionChip(_ title: String, fill: Color, text: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(text)
-                .padding(.horizontal, SessionPopoverLayout.actionHorizontalPadding)
-                .frame(height: SessionPopoverLayout.actionHeight)
-                .background(fill, in: RoundedRectangle(cornerRadius: SessionPopoverLayout.actionCornerRadius, style: .continuous))
+    /// The hand-off every needs-you card carries.
+    private var answerInTerminal: some View {
+        Button {
+            model.onAnswerInTerminal?()
+        } label: {
+            Text("Answer in terminal →")
+                .font(.system(size: 11, weight: .medium))
+                .underline()
+                .foregroundStyle(primaryText)
         }
         .buttonStyle(.plain)
+        .accessibilityHint("Shows this session's terminal")
     }
 
     @ViewBuilder

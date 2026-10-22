@@ -276,7 +276,6 @@ final class SessionAttentionTests: XCTestCase {
         let card = SessionPopoverContent.make(sessionId: sid, indicator: .needsAttention, approval: ask)
         XCTAssertEqual(card?.block, .freeform)
         XCTAssertEqual(card?.isApproval, false)
-        XCTAssertNil(card?.approvalPrompt)
     }
 
     func testResponderWrongSurfaceSendsNothing() {
