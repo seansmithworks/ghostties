@@ -1024,6 +1024,7 @@ final class SessionCoordinator: ObservableObject {
 
     /// Clean up runtime state for a session (after removing from the store).
     func clearRuntime(id: UUID) {
+        sessionPopover.model.forget(id)
         sessionTrees.removeValue(forKey: id)
         browserManagers.removeValue(forKey: id)
         browserBridges.removeValue(forKey: id)

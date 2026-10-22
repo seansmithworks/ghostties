@@ -10,10 +10,11 @@ final class SessionPopoverModel: ObservableObject {
     var onAnswerInTerminal: (() -> Void)?
     /// Approve/Deny on a bounded prompt (shown only while `ApprovalFlag` is on).
     var onApprovalDecision: ((ApprovalDecision) -> Void)?
-    /// The prompt each session's Approve/Deny last answered, from the card
-    /// or a sidebar row. Both disable their Approve/Deny while it is still
-    /// the prompt showing, so one prompt is never answered twice; a new
-    /// prompt (another `updatedAt` or fingerprint) enables them again.
+    /// The prompt each session's Approve/Deny last sent an answer to, from
+    /// the card or a sidebar row. Both disable their Approve/Deny while it
+    /// is still the prompt showing, so one prompt is never answered twice;
+    /// a new prompt (another `updatedAt` or fingerprint) enables them
+    /// again. A tap the responder turned away records nothing.
     @Published private(set) var answered: [UUID: SessionPopoverContent.ApprovalPrompt] = [:]
 
     func isAnswered(_ prompt: SessionPopoverContent.ApprovalPrompt?, for sessionId: UUID) -> Bool {
@@ -22,6 +23,17 @@ final class SessionPopoverModel: ObservableObject {
 
     fileprivate func markAnswered(_ prompt: SessionPopoverContent.ApprovalPrompt, for sessionId: UUID) {
         answered[sessionId] = prompt
+    }
+
+    /// Forgets `sessionId`'s answer once it shows another prompt, or none.
+    func prune(_ sessionId: UUID, showing prompt: SessionPopoverContent.ApprovalPrompt?) {
+        guard let recorded = answered[sessionId], recorded != prompt else { return }
+        answered[sessionId] = nil
+    }
+
+    /// Forgets a removed session.
+    func forget(_ sessionId: UUID) {
+        if answered[sessionId] != nil { answered[sessionId] = nil }
     }
 }
 
@@ -206,17 +218,19 @@ final class SessionPopoverController {
 
     /// Approve/Deny from the card or a sidebar row's inline action line:
     /// one path into the responder for both.
-    /// The first tap on a prompt is the only one that reaches the
-    /// responder (nil for any later tap, or with the flag off or no
-    /// surface); the responder's own guard then checks it is still live.
+    /// Nothing reaches the responder once a prompt has been answered (nil,
+    /// as with the flag off or no surface); the responder's own guard then
+    /// checks the prompt is still live. Only a sent answer marks the prompt
+    /// answered, so a stale or misdirected tap leaves Approve/Deny enabled.
     @discardableResult
     func respond(_ decision: ApprovalDecision, sessionId id: UUID, prompt: SessionPopoverContent.ApprovalPrompt) -> ApprovalOutcome? {
         guard ApprovalFlag.isEnabled, !model.isAnswered(prompt, for: id),
               let surfaceId = approvalSurfaceId(forSession: id) else { return nil }
-        model.markAnswered(prompt, for: id)
-        return approvalResponder.respond(decision, to: ApprovalTarget(
+        let outcome = approvalResponder.respond(decision, to: ApprovalTarget(
             sessionId: id, updatedAt: prompt.updatedAt, surfaceId: surfaceId, fingerprint: prompt.fingerprint
         ))
+        if outcome == .sent { model.markAnswered(prompt, for: id) }
+        return outcome
     }
 
     private func approvalSurfaceId(forSession id: UUID) -> UUID? {

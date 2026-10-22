@@ -66,6 +66,26 @@ final class RowApprovalPathTests: XCTestCase {
         _ = coordinator
     }
 
+    /// The record forgets a session once it shows another prompt or none,
+    /// and when the session goes away.
+    func testTheAnsweredRecordIsPruned() {
+        let (coordinator, popover) = controller(live: { self.state(updatedAt: self.shownAt) }, sends: {})
+        let shown = SessionPopoverContent.ApprovalPrompt(updatedAt: shownAt, fingerprint: fp)
+        XCTAssertEqual(popover.respond(.approve, sessionId: sid, prompt: shown), .sent)
+        popover.model.prune(sid, showing: shown)
+        XCTAssertNotNil(popover.model.answered[sid], "still showing the answered prompt: kept")
+        popover.model.prune(sid, showing: nil)
+        XCTAssertNil(popover.model.answered[sid], "stops needing you: forgotten")
+
+        XCTAssertEqual(popover.respond(.approve, sessionId: sid, prompt: shown), .sent)
+        popover.model.prune(sid, showing: .init(updatedAt: shownAt + 60, fingerprint: fp))
+        XCTAssertNil(popover.model.answered[sid], "a new prompt: forgotten")
+
+        XCTAssertEqual(popover.respond(.approve, sessionId: sid, prompt: shown), .sent)
+        coordinator.clearRuntime(id: sid)
+        XCTAssertNil(popover.model.answered[sid], "session removed: forgotten")
+    }
+
     /// A second tap on the same prompt never reaches the responder, from
     /// the row or the card; a new prompt is answerable again.
     func testOnePromptIsAnsweredOnce() {

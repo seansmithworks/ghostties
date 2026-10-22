@@ -149,6 +149,10 @@ struct RecentsRowView: View, Equatable {
             onAnswerInTerminal: onAnswerInTerminal, onApprovalDecision: onApprovalDecision
         ))
         .task(id: prompt?.approvalPrompt) { await expireWhenStale(prompt?.approvalPrompt) }
+        // An answer recorded for a prompt this row no longer shows (a new
+        // prompt, or none) is forgotten.
+        .onAppear { coordinator.sessionPopover.model.prune(session.id, showing: prompt?.approvalPrompt) }
+        .onChange(of: prompt?.approvalPrompt) { coordinator.sessionPopover.model.prune(session.id, showing: $0) }
     }
 
     /// The prompt Approve/Deny answer: a fresh bounded prompt, while the
@@ -170,12 +174,15 @@ struct RecentsRowView: View, Equatable {
     }
 
     /// A needs-you row's action line: Approve/Deny for a live bounded
-    /// prompt, else "Answer in terminal →".
+    /// prompt, else "Answer in terminal →". Every needs-you row has one, the
+    /// rule drag reflow measures by (`SidebarListRowHeight`); while the row
+    /// is being renamed it keeps its room but hides, so nothing below moves.
     private var actionLine: SessionRowActionLine? {
-        guard prompt != nil, !isEditing else { return nil }
+        guard prompt != nil else { return nil }
         return SessionRowActionLine(
             sessionId: session.id,
             approval: liveApproval,
+            isHidden: isEditing,
             answers: coordinator.sessionPopover.model,
             onApprovalDecision: onApprovalDecision,
             onAnswerInTerminal: onAnswerInTerminal
@@ -299,6 +306,9 @@ struct SessionRowActionLine: View {
     let sessionId: UUID
     /// The prompt Approve/Deny answer; nil shows "Answer in terminal →".
     let approval: SessionPopoverContent.ApprovalPrompt?
+    /// Drawn invisible and inert (the row is being renamed); the row keeps
+    /// the line's room either way.
+    var isHidden: Bool = false
     /// Which prompts a tap (here or on the hover card) already answered.
     @ObservedObject var answers: SessionPopoverModel
     let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
@@ -350,6 +360,9 @@ struct SessionRowActionLine: View {
         }
         .lineLimit(1)
         .fixedSize()
+        .opacity(isHidden ? 0 : 1)
+        .allowsHitTesting(!isHidden)
+        .accessibilityHidden(isHidden)
     }
 
     private func chip(_ title: String, size: CGFloat, fill: Color, text: Color, action: @escaping () -> Void) -> some View {
