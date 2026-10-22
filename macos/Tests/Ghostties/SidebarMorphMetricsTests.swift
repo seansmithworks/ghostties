@@ -109,6 +109,25 @@ struct SidebarMorphMetricsTests {
         }
     }
 
+    /// Glyph and monogram sizes saved under the retired sidebar keys (12
+    /// and 10, against the rail's 16 and 13) never resize the row glyph or
+    /// the tile's monogram across the morph: one dial drives both states.
+    @Test func savedSidebarGlyphAndTextSizesNeverResizeAcrossTheMorph() {
+        withDials({ d in
+            d.set(12.0, forKey: "ghostties.sidebarDial.sidebarTile.threadIcon")
+            d.set(10.0, forKey: "ghostties.sidebarDial.sidebarTile.text")
+        }) {
+            let expanded = SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: 0)
+            let rail = SidebarMorphMetrics(expandedWidth: expandedWidth, railWidth: railWidth, progress: 1)
+            #expect(expanded.glyphSize == rail.glyphSize, "glyph \(expanded.glyphSize) expanded vs \(rail.glyphSize) rail")
+            #expect(RailProjectColumn.chipGlyphSize(.sidebar) == RailProjectColumn.chipGlyphSize(.rail))
+            for letters in [1, 2] {
+                #expect(RailProjectTile.textSize(.sidebar, letters: letters) == RailProjectTile.textSize(.rail, letters: letters),
+                        "monogram text, \(letters) letters")
+            }
+        }
+    }
+
     @Test func collapsedPresentationFollowsMorph() {
         let model = SidebarWidthModel(width: expandedWidth)
         #expect(!model.isCollapsedPresentation)

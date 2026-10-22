@@ -513,10 +513,7 @@ struct ProjectAccordionHeader: View {
         MorphTileFace(
             progress: progress,
             size: dials.railTileSize,
-            textSizes: (
-                dials.tileTextSize(rail: false, letters: monogram.count),
-                dials.tileTextSize(rail: true, letters: monogram.count)
-            ),
+            textSize: dials.tileTextSize(letters: monogram.count),
             projectId: projectId,
             iconStyle: iconStyle,
             monogram: monogram,
@@ -575,13 +572,13 @@ enum SidebarTileContext {
 }
 
 /// The header's tile at one step of the morph: one square, the same in
-/// both states, the monogram at this step's text size, and, on the rail, a
+/// both states, the monogram at one text size, and, on the rail, a
 /// folded project's session count on its corner. The face itself is
 /// `ProjectTileView`.
 struct MorphTileFace: View, Animatable {
     var progress: CGFloat
     let size: CGFloat
-    let textSizes: (from: CGFloat, to: CGFloat)
+    let textSize: CGFloat
     let projectId: UUID?
     let iconStyle: ProjectIconStyle?
     let monogram: String
@@ -604,7 +601,7 @@ struct MorphTileFace: View, Animatable {
             iconStyle: iconStyle,
             monogram: monogram,
             size: size,
-            textSize: SidebarMorphMetrics.lerp(textSizes.from, textSizes.to, progress),
+            textSize: textSize,
             isEmpty: isEmpty,
             isSelectedProject: isSelectedProject,
             redlineID: redlineID
@@ -688,21 +685,14 @@ enum RailProjectTile {
     static let defaultSize: CGFloat = 40
     /// The tile's side in both states: the rail's "Project tile size" dial.
     static var size: CGFloat { max(SidebarDialTuning.railProjectTileSize(), 0) }
-    /// A one-letter monogram's font size: what the sidebar's "Project tile
-    /// text" dial reads unset.
-    static let defaultTextSize: CGFloat = 13
-    /// The rail's monogram, unset: the sidebar's size, so the rail's larger
-    /// tile holds the same text (Sean, 2026-10-10).
+    /// A one-letter monogram's font size, unset, in both states (Sean,
+    /// 2026-10-10).
     static let defaultRailTextSize: CGFloat = 13
-    /// The monogram's font size in `context` ("Project tile text"); a
-    /// two-letter monogram draws 2pt smaller (13 / 11 in the sidebar and on
-    /// the rail, at the defaults).
-    static func textSize(_ context: SidebarTileContext, letters: Int) -> CGFloat {
-        let text = switch context {
-        case .sidebar: SidebarDialTuning.sidebarProjectTileText()
-        case .rail: SidebarDialTuning.railProjectTileText()
-        }
-        return max(text - (letters > 1 ? 2 : 0), 1)
+    /// The monogram's font size, one size in both contexts (rail stays
+    /// put): the rail's "Project tile text"; a two-letter monogram draws 2pt
+    /// smaller (13 / 11 at the defaults).
+    static func textSize(_: SidebarTileContext, letters: Int) -> CGFloat {
+        max(SidebarDialTuning.railProjectTileText() - (letters > 1 ? 2 : 0), 1)
     }
     /// Option D: 8 (was 9).
     static let cornerRadius: CGFloat = 8

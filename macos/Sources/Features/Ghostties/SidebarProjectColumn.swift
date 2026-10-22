@@ -21,11 +21,9 @@ enum RailProjectColumn {
     static let defaultThreadTileSize: CGFloat = RailProjectTile.defaultSize
     /// The rail's chip, unset: the same tile side.
     static let defaultRailThreadTileSize: CGFloat = RailProjectTile.defaultSize
-    /// The sidebar's status glyph inside its chip, unset (Sean, 2026-10-10:
-    /// the 8pt grid). Not "Row ghost size", which the Sessions rows keep.
-    static let defaultSidebarThreadTileIcon: CGFloat = 16
-    /// The rail's status glyph inside its chip, unset: the sidebar's 16pt
-    /// glyph in the rail's larger chip (Sean, 2026-10-10).
+    /// The status glyph inside a chip, unset, in both states (Sean,
+    /// 2026-10-10: the 8pt grid). Not "Row ghost size", which the Sessions
+    /// rows keep.
     static let defaultRailThreadTileIcon: CGFloat = 16
     static let defaultChipCornerRadius: CGFloat = RailProjectTile.cornerRadius
     /// The rail column: the tile plus this margin on every side (option D:
@@ -58,12 +56,10 @@ enum RailProjectColumn {
     static func chipSize(_: SidebarTileContext) -> CGFloat {
         min(max(SidebarDialTuning.railThreadTileSize(), 0), SidebarDialTuning.rowHeight())
     }
-    /// The status glyph inside a chip: `context`'s "Thread tile icon".
-    static func chipGlyphSize(_ context: SidebarTileContext) -> CGFloat {
-        switch context {
-        case .sidebar: max(SidebarDialTuning.sidebarThreadTileIcon(), 0)
-        case .rail: max(SidebarDialTuning.railThreadTileIcon(), 0)
-        }
+    /// The status glyph inside a chip, one size in both contexts (rail
+    /// stays put): the rail's "Thread tile icon".
+    static func chipGlyphSize(_: SidebarTileContext) -> CGFloat {
+        max(SidebarDialTuning.railThreadTileIcon(), 0)
     }
     static var chipCornerRadius: CGFloat { max(SidebarDialTuning.railChipCornerRadius(), 0) }
     static var columnInset: CGFloat { max(SidebarDialTuning.railColumnInset(), 0) }

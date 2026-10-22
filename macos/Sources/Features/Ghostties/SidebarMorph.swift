@@ -30,16 +30,15 @@ struct SidebarMorphMetrics: Equatable {
         /// rail's "Project tile size" dial.
         var railTileSize: CGFloat
         var railChipSize: CGFloat
-        var sidebarGlyphSize: CGFloat
+        /// The row's status glyph, one size in both states.
         var railGlyphSize: CGFloat
-        /// "Project tile text": a one-letter monogram's size in each context.
-        var sidebarTileText: CGFloat
+        /// "Project tile text": a one-letter monogram's size, in both states.
         var railTileText: CGFloat
 
         /// The monogram's font size; two letters draw 2pt smaller
         /// (`RailProjectTile.textSize`).
-        func tileTextSize(rail: Bool, letters: Int) -> CGFloat {
-            max((rail ? railTileText : sidebarTileText) - (letters > 1 ? 2 : 0), 1)
+        func tileTextSize(letters: Int) -> CGFloat {
+            max(railTileText - (letters > 1 ? 2 : 0), 1)
         }
 
         /// The project header's height, the same in both states: 40 (keyframe
@@ -65,9 +64,7 @@ struct SidebarMorphMetrics: Equatable {
                 chipCornerRadius: max(SidebarDialTuning.railChipCornerRadius(defaults: defaults), 0),
                 railTileSize: max(SidebarDialTuning.railProjectTileSize(defaults: defaults), 0),
                 railChipSize: chip(SidebarDialTuning.railThreadTileSize(defaults: defaults)),
-                sidebarGlyphSize: max(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults), 0),
                 railGlyphSize: max(SidebarDialTuning.railThreadTileIcon(defaults: defaults), 0),
-                sidebarTileText: SidebarDialTuning.sidebarProjectTileText(defaults: defaults),
                 railTileText: SidebarDialTuning.railProjectTileText(defaults: defaults)
             )
         }
@@ -185,7 +182,7 @@ struct SidebarMorphMetrics: Equatable {
     var tileSize: CGFloat { dials.railTileSize }
     /// One chip size in both states, like the tile.
     var chipSize: CGFloat { dials.railChipSize }
-    var glyphSize: CGFloat { lerp(dials.sidebarGlyphSize, dials.railGlyphSize) }
+    var glyphSize: CGFloat { dials.railGlyphSize }
 
     /// Row title, subtitle, header name, chevron and count: fully visible
     /// expanded, gone by the midpoint, where `isCollapsedPresentation`

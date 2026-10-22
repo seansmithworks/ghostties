@@ -274,7 +274,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 MorphGlyphSlot(
                     progress: progress,
                     slotWidth: dials.railTileSize,
-                    glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
+                    glyphSizes: (dials.railGlyphSize, dials.railGlyphSize),
                     chipSizes: (dials.railChipSize, dials.railChipSize),
                     // The chip is hover only; selection is the row's outline.
                     isHovered: isHovered && !isActive,

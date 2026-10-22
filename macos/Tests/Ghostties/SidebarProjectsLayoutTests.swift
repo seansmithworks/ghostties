@@ -341,8 +341,6 @@ final class SidebarProjectsLayoutTests: XCTestCase {
     /// nothing in the other context or the other tile.
     func testTileDialsDefaultToTodayAndMoveIndependently() {
         let probes: [(key: String, read: () -> CGFloat)] = [
-            (SidebarDialTuning.sidebarProjectTileTextKey, { RailProjectTile.textSize(.sidebar, letters: 1) }),
-            (SidebarDialTuning.sidebarThreadTileIconKey, { RailProjectColumn.chipGlyphSize(.sidebar) }),
             (SidebarDialTuning.railProjectTileSizeKey, { RailProjectTile.size }),
             (SidebarDialTuning.railProjectTileTextKey, { RailProjectTile.textSize(.rail, letters: 1) }),
             (SidebarDialTuning.railThreadTileSizeKey, { RailProjectColumn.chipSize(.rail) }),
@@ -355,7 +353,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             XCTAssertEqual(RailProjectColumn.columnWidth(anchorCount: 5, inset: RailProjectColumn.columnInset), 48)
             return probes.map { $0.read() }
         }
-        XCTAssertEqual(defaults, [13, 16, 40, 13, 40, 16])
+        XCTAssertEqual(defaults, [40, 13, 40, 16])
 
         for (index, probe) in probes.enumerated() {
             let written: CGFloat = 23
