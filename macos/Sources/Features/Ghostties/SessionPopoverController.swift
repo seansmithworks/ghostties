@@ -185,13 +185,18 @@ final class SessionPopoverController {
     /// guard re-reads the live state before anything is sent, then
     /// re-derives the card.
     private func respond(_ decision: ApprovalDecision) {
-        guard ApprovalFlag.isEnabled, let id = currentSessionId,
-              let prompt = model.content?.approvalPrompt,
-              let surfaceId = coordinator?.approvalSurfaceId(forSession: id) else { return }
+        guard let id = currentSessionId, let prompt = model.content?.approvalPrompt else { return }
+        respond(decision, sessionId: id, prompt: prompt)
+        refresh()
+    }
+
+    /// Approve/Deny from the card or a sidebar row's inline action line:
+    /// one path into the responder for both.
+    func respond(_ decision: ApprovalDecision, sessionId id: UUID, prompt: SessionPopoverContent.ApprovalPrompt) {
+        guard ApprovalFlag.isEnabled, let surfaceId = coordinator?.approvalSurfaceId(forSession: id) else { return }
         _ = approvalResponder.respond(decision, to: ApprovalTarget(
             sessionId: id, updatedAt: prompt.updatedAt, surfaceId: surfaceId, fingerprint: prompt.fingerprint
         ))
-        refresh()
     }
 
     func dismiss() {

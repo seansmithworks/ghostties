@@ -328,6 +328,42 @@ enum SessionNeedsYou {
     }
 }
 
+/// What a row that genuinely needs the user (`SessionNeedsYou`) shows
+/// inline (hover-approvals card 01): its question as the subtitle ("Run npm
+/// test?", "Which env name?", or "needs you" when the hook carried none),
+/// then an action line. Approve/Deny answer only a fresh bounded prompt
+/// (`approvalPrompt`) and draw only while `ApprovalFlag` is on; every other
+/// needs-you row hands off with "Answer in terminal →". Nil for a row that
+/// doesn't need the user, which gets no action line.
+struct SessionRowPrompt: Equatable {
+    let question: String?
+    /// The prompt Approve/Deny would answer, for the responder's stale guard.
+    let approvalPrompt: SessionPopoverContent.ApprovalPrompt?
+
+    var subtitle: String { question ?? SessionStatusGlyphKind.needsInput.groupedRowSubtitle }
+
+    static func make(indicator: SessionIndicatorState, state: ClaudeState?, now: Date = Date()) -> SessionRowPrompt? {
+        guard SessionNeedsYou.isGenuine(indicator: indicator, state: state) else { return nil }
+        guard let state, let attention = SessionAttention.make(indicator: indicator, state: state) else {
+            return SessionRowPrompt(question: nil, approvalPrompt: nil)
+        }
+        switch attention {
+        case let .freeform(question):
+            let text = question?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return SessionRowPrompt(question: text?.isEmpty == false ? text : nil, approvalPrompt: nil)
+        case let .bounded(prompt, command):
+            let toolName = state.structuredPrompt?.toolName ?? ""
+            let answerable = SessionPopoverContent.isFreshApproval(state, now: now) && state.structuredPrompt != nil
+            return SessionRowPrompt(
+                question: SessionPopoverContent.boundedQuestion(prompt: prompt, toolName: toolName, command: command),
+                approvalPrompt: answerable
+                    ? SessionPopoverContent.ApprovalPrompt(updatedAt: state.updatedAt, fingerprint: ApprovalFingerprint.make(state))
+                    : nil
+            )
+        }
+    }
+}
+
 // MARK: - Monograms
 
 enum ProjectMonogram {
