@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 /// Seeds the `ghostties-status.sh` Claude Code hook script to
-/// `~/.ghostties/hooks/` so Sean can register it in `~/.claude/settings.json`.
+/// `~/.ghostties/hooks/`; `ClaudeHookRegistrar` registers it in `~/.claude/settings.json`.
 ///
 /// Modeled on `PresetLoader.seedIfNeeded()`, with one deliberate divergence:
 /// `PresetLoader` never overwrites files that already exist, because preset

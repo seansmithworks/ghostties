@@ -36,7 +36,6 @@ struct WorkspaceSidebarView: View {
     /// Tracks which projects are expanded (per-window, not persisted).
     @State private var expandedProjectIds: Set<UUID> = []
 
-    @AppStorage("ghostties.hasSeenOnboarding") private var hasSeenOnboarding = false
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
     #if DEBUG
     /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE` in One view: the fold the accordion reads.
@@ -186,14 +185,6 @@ struct WorkspaceSidebarView: View {
             if notification.userInfo?["selectProject"] as? Bool == true, let id = ids.first { selectedProjectId = id }
         }
         #endif
-        .sheet(isPresented: Binding(
-            get: { !hasSeenOnboarding },
-            set: { _ in }
-        )) {
-            OnboardingSheet {
-                hasSeenOnboarding = true
-            }
-        }
     }
 
     // MARK: - Titlebar Toolbar
