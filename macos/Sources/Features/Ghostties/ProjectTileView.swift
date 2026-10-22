@@ -3,9 +3,8 @@ import Combine
 import GhosttiesCore
 import SwiftUI
 
-/// A project's tile face, the one used everywhere a project is drawn as a
-/// tile: the sidebar's group header and the rail (one view tree), and
-/// Settings' project list.
+/// A project's tile face: the sidebar's group header and the rail (one view
+/// tree). Built to be reused wherever else a project shows as a tile.
 ///
 /// It draws the project's icon (`ProjectIconStore`, resolved off the main
 /// thread; the body only does an in-memory lookup) when the project has one
@@ -127,8 +126,18 @@ struct ProjectIconRefresh: ViewModifier {
 
     @State private var refreshed: Set<Key> = []
 
+    static func key(_ project: Project) -> Key {
+        Key(id: project.id, rootPath: project.rootPath, iconStyle: project.iconStyle)
+    }
+
+    /// The projects to refresh: those whose key (id, root, style) is not
+    /// among the keys already refreshed.
+    static func stale(_ projects: [Project], refreshed: Set<Key>) -> [Project] {
+        projects.filter { !refreshed.contains(key($0)) }
+    }
+
     func body(content: Content) -> some View {
-        let keys = Set(projects.map { Key(id: $0.id, rootPath: $0.rootPath, iconStyle: $0.iconStyle) })
+        let keys = Set(projects.map(Self.key))
         content
             .onAppear { refresh(keys) }
             .onChange(of: keys) { refresh($0) }
@@ -137,9 +146,9 @@ struct ProjectIconRefresh: ViewModifier {
     /// Refreshes only the projects whose key is new.
     private func refresh(_ keys: Set<Key>) {
         guard !QuietTestHost.isActive else { return }
-        let stale = keys.subtracting(refreshed)
+        let stale = Self.stale(projects, refreshed: refreshed)
         refreshed = keys
-        for project in projects where stale.contains(Key(id: project.id, rootPath: project.rootPath, iconStyle: project.iconStyle)) {
+        for project in stale {
             iconStore.refreshInBackground(project)
         }
     }
