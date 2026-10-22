@@ -411,14 +411,23 @@ struct RecentsListView: View {
         let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
         // Every group whose card is lit or fading carries its card's anchors.
         let cardGroups = mix.cardGroups(selected: selectedGroupId)
+        // A project gap opens above the spacer before its group, so a drop
+        // at the end of Pinned parts the list above the pinned break, where
+        // it lands, not below it among the alphabetical projects.
+        let spacedGroupIds = Set(items.compactMap { item -> String? in
+            if case .spacer(let groupId, _) = item { groupId } else { nil }
+        })
         ForEach(items) { item in
             switch item {
-            case .spacer(_, let height):
+            case .spacer(let groupId, let height):
+                if projectGapBefore == .some(groupId) {
+                    ProjectDragGapView()
+                }
                 Color.clear
                     .frame(height: height)
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
-                if projectGapBefore == .some(group.id) {
+                if projectGapBefore == .some(group.id), !spacedGroupIds.contains(group.id) {
                     ProjectDragGapView()
                 }
                 projectHeader(
