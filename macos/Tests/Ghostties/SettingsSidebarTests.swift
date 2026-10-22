@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 import GhosttyKit
 import GhosttiesCore
@@ -393,6 +394,33 @@ final class SettingsSidebarTests: XCTestCase {
         XCTAssertNotNil(model.iconError)
     }
 
+    /// Two chooses overlapping, the later one unreadable: the failure puts
+    /// back the style from before the first choose (Auto), not the `.file`
+    /// the first choose set, which would leave a `.file` tile with no file.
+    func testOverlappingChoosesWithAFailureRestoreTheStyleFromBeforeBoth() async throws {
+        let good = try ProjectIconFixtures.writePNG(try tempDir("picked"), "mine.png", pixels: 512)
+        let junk = try ProjectIconFixtures.write(try tempDir("junk"), "junk.png", data: Data("not an image".utf8))
+        let support = try tempDir("support")
+        let iconStore = ProjectIconStore(cacheDirectory: try tempDir("cache"), supportDirectory: support)
+        let p = Project(name: "fieldwork", rootPath: try tempDir("root").path)
+        let store = WorkspaceStore(testingProjects: [p])
+        let model = ProjectsSettingsModel(store: store, iconStore: iconStore)
+
+        let first = _Concurrency.Task { try await model.chooseImage(from: good, for: p.id) }
+        await _Concurrency.Task.yield()
+        let second = _Concurrency.Task { try await model.chooseImage(from: junk, for: p.id) }
+        try? await first.value
+        do {
+            try await second.value
+            XCTFail("an unreadable image was accepted")
+        } catch {}
+
+        let copied = FileManager.default.fileExists(atPath: support.appendingPathComponent("\(p.id.uuidString).png").path)
+        XCTAssertFalse(copied, "the superseded first image was copied anyway")
+        XCTAssertNil(store.projects.first?.iconStyle, "left at \(String(describing: store.projects.first?.iconStyle)) with no file behind it")
+        XCTAssertNotNil(model.iconError)
+    }
+
     // MARK: - Command palette
 
     /// The palette's config entries run `open_config`, which opens Settings,
@@ -402,6 +430,13 @@ final class SettingsSidebarTests: XCTestCase {
         let entries = app.config.commandPaletteEntries.filter { $0.actionKey == "open_config" }
         XCTAssertEqual(entries.map(\.title), ["Open Settings"])
         XCTAssertEqual(entries.first?.action, "open_config")
+        // The palette's shortcut hint looks the entry up by its action.
+        let shortcut = try XCTUnwrap(
+            app.config.keyboardShortcut(for: try XCTUnwrap(entries.first).action),
+            "Open Settings shows no shortcut hint"
+        )
+        XCTAssertEqual(shortcut.key, KeyEquivalent(","))
+        XCTAssertEqual(shortcut.modifiers, .command)
     }
 
     // MARK: - Helpers
