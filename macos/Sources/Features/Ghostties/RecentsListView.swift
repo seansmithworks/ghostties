@@ -386,9 +386,15 @@ struct RecentsListView: View {
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
-        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let allGroups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let groups = allGroups
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
-        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        // The pinned break comes from the whole list, so a pinned drag
+        // never moves it (`pinnedBreakGroupId`).
+        let items = SidebarProjectGroupItem.items(
+            groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw),
+            pinnedBreakBefore: SidebarProjectGroupItem.pinnedBreakGroupId(allGroups)
+        )
         // One cascade through every header and row, in reading order.
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
@@ -406,9 +412,9 @@ struct RecentsListView: View {
         let cardGroups = mix.cardGroups(selected: selectedGroupId)
         ForEach(items) { item in
             switch item {
-            case .spacer(_, let isPinnedBreak):
+            case .spacer(_, let height):
                 Color.clear
-                    .frame(height: SidebarProjectGroupItem.spacerHeight(isPinnedBreak: isPinnedBreak))
+                    .frame(height: height)
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
                 if projectGapBefore == .some(group.id) {

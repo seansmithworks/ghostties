@@ -114,9 +114,10 @@ struct SidebarProjectGroup: Equatable, Identifiable {
 /// rail tile sits at its header's y, every rail glyph at its row's y.
 enum SidebarProjectGroupItem: Identifiable {
     /// Clear space before every group but the first (`spacerHeight`). The
-    /// one before the first unpinned project after a pinned one is also the
-    /// pinned block's break (`isPinnedBreak`, `pinnedBreakHeight` taller).
-    case spacer(groupId: String, isPinnedBreak: Bool = false)
+    /// one before the first unpinned project is also the pinned block's
+    /// break (`pinnedBreakHeight` taller); while the only pinned project is
+    /// dragged that group leads the list, and its spacer is the break alone.
+    case spacer(groupId: String, height: CGFloat)
     case header(SidebarProjectGroup, isCollapsed: Bool)
     case row(AgentSession, group: SidebarProjectGroup)
 
@@ -130,9 +131,13 @@ enum SidebarProjectGroupItem: Identifiable {
     /// height in both widths and no tile moves between them.
     static let pinnedBreakHeight: CGFloat = WorkspaceLayout.projectPinnedBreak
 
-    /// A spacer's height: the usual break, plus the pinned block's break.
-    static func spacerHeight(isPinnedBreak: Bool) -> CGFloat {
-        spacerHeight + (isPinnedBreak ? pinnedBreakHeight : 0)
+    /// The group the pinned break sits before: the first unpinned project,
+    /// when a pinned project leads it. Read from the whole list, never the
+    /// rendered one, so a pinned drag (which drops its group from the
+    /// render) leaves the break where it was.
+    static func pinnedBreakGroupId(_ groups: [SidebarProjectGroup]) -> String? {
+        guard groups.contains(where: \.isPinned) else { return nil }
+        return groups.first { $0.projectId != nil && !$0.isPinned }?.id
     }
 
     var id: String {
@@ -144,11 +149,18 @@ enum SidebarProjectGroupItem: Identifiable {
     }
 
     static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>) -> [SidebarProjectGroupItem] {
+        items(groups, collapsed: collapsed, pinnedBreakBefore: pinnedBreakGroupId(groups))
+    }
+
+    /// `pinnedBreakBefore` is `pinnedBreakGroupId` of the whole list when
+    /// `groups` is the rendered one with a dragged group removed.
+    static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>, pinnedBreakBefore: String?) -> [SidebarProjectGroupItem] {
         var items: [SidebarProjectGroupItem] = []
         for (index, group) in groups.enumerated() {
-            if index > 0 {
-                let isPinnedBreak = groups[index - 1].isPinned && !group.isPinned && group.projectId != nil
-                items.append(.spacer(groupId: group.id, isPinnedBreak: isPinnedBreak))
+            let breakHeight = group.id == pinnedBreakBefore ? pinnedBreakHeight : 0
+            let height = (index > 0 ? spacerHeight : 0) + breakHeight
+            if height > 0 {
+                items.append(.spacer(groupId: group.id, height: height))
             }
             let isCollapsed = !group.isEmpty && (group.projectId.map(collapsed.contains) ?? false)
             items.append(.header(group, isCollapsed: isCollapsed))
