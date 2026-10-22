@@ -33,6 +33,11 @@ struct RecentsRowView: View, Equatable {
     /// project is the header above the row (`SidebarProjectsLayout.oneView`).
     /// Nil keeps the project name.
     var subtitle: String? = nil
+    /// Set while the session genuinely needs the user: the row draws an
+    /// action line under its question (`SessionRowPrompt`).
+    var prompt: SessionRowPrompt? = nil
+    /// `ApprovalFlag` as the list read it: Approve/Deny draw only while on.
+    var approvalsEnabled: Bool = false
     let isActive: Bool
     var isEditing: Bool = false
     @Binding var editingName: String
@@ -40,6 +45,10 @@ struct RecentsRowView: View, Equatable {
     let onTap: () -> Void
     var onCommitRename: () -> Void = {}
     var onCancelRename: () -> Void = {}
+    /// "Answer in terminal →": focus this session.
+    var onAnswerInTerminal: () -> Void = {}
+    /// Approve/Deny on the bounded prompt `prompt` names.
+    var onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void = { _, _ in }
 
     /// This row's place in the expand cascade: one index through every
     /// section and project header in reading order (`SidebarLabelCascade`)
@@ -71,6 +80,8 @@ struct RecentsRowView: View, Equatable {
             && lhs.indicatorState == rhs.indicatorState
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.subtitle == rhs.subtitle
+            && lhs.prompt == rhs.prompt
+            && lhs.approvalsEnabled == rhs.approvalsEnabled
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
@@ -88,7 +99,8 @@ struct RecentsRowView: View, Equatable {
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id),
             mixID: session.id,
-            popover: (session.id, coordinator.sessionPopover)
+            popover: (session.id, coordinator.sessionPopover),
+            actions: actionLine
         ) {
             if isEditing {
                 TextField("Session name", text: $editingName)
@@ -128,6 +140,23 @@ struct RecentsRowView: View, Equatable {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
+        .modifier(SessionRowPromptAccessibility(
+            prompt: prompt, approvalsEnabled: approvalsEnabled,
+            onAnswerInTerminal: onAnswerInTerminal, onApprovalDecision: onApprovalDecision
+        ))
+    }
+
+    /// A needs-you row's action line: Approve/Deny for a bounded prompt
+    /// while the flag is on, else "Answer in terminal →".
+    private var actionLine: SessionRowActionLine? {
+        guard let prompt, !isEditing else { return nil }
+        let approval = approvalsEnabled ? prompt.approvalPrompt : nil
+        return SessionRowActionLine(
+            showsApproveDeny: approval != nil,
+            onApprove: { if let approval { onApprovalDecision(.approve, approval) } },
+            onDeny: { if let approval { onApprovalDecision(.deny, approval) } },
+            onAnswerInTerminal: onAnswerInTerminal
+        )
     }
 
     // MARK: - Accessibility
@@ -135,6 +164,7 @@ struct RecentsRowView: View, Equatable {
     private var accessibilityLabel: String {
         Self.accessibilityLabel(
             name: session.name, projectName: projectName, kind: indicatorState.statusGlyphKind,
+            question: prompt?.question,
             hookUnconfirmed: hookUnconfirmed, lastOutput: session.displayTimestamp, isActive: isActive
         )
     }
@@ -144,11 +174,13 @@ struct RecentsRowView: View, Equatable {
     /// project, spoken status, the hook hint, last output, active.
     static func accessibilityLabel(
         name: String, projectName: String, kind: SessionStatusGlyphKind,
+        question: String? = nil,
         hookUnconfirmed: Bool = false, lastOutput: Date? = nil, isActive: Bool
     ) -> String {
         // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
         // renders from — this row previously stated no status at all.
         var parts = [name, "in \(projectName)", kind.spokenStatus]
+        if let question { parts.append(question) }
         if hookUnconfirmed {
             parts.append("Approve the Ghostties hook in Codex")
         }
@@ -194,6 +226,91 @@ struct RecentsRowView: View, Equatable {
         f.dateFormat = "MMM d"
         return f
     }()
+}
+
+// MARK: - Inline action line
+
+/// The action line's controls as VoiceOver actions: the row is one combined
+/// element, so its buttons are offered as named actions on it.
+private struct SessionRowPromptAccessibility: ViewModifier {
+    let prompt: SessionRowPrompt?
+    let approvalsEnabled: Bool
+    let onAnswerInTerminal: () -> Void
+    let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
+
+    func body(content: Content) -> some View {
+        if let prompt {
+            if approvalsEnabled, let approval = prompt.approvalPrompt {
+                content
+                    .accessibilityAction(named: Text("Approve")) { onApprovalDecision(.approve, approval) }
+                    .accessibilityAction(named: Text("Deny")) { onApprovalDecision(.deny, approval) }
+            } else {
+                content.accessibilityAction(named: Text("Answer in terminal"), onAnswerInTerminal)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// A needs-you row's action line, under its question (hover-approvals card
+/// 01): Approve (ink fill) and Deny (quiet) for a bounded prompt while
+/// `ApprovalFlag` is on, otherwise "Answer in terminal →".
+struct SessionRowActionLine: View {
+    let showsApproveDeny: Bool
+    let onApprove: () -> Void
+    let onDeny: () -> Void
+    let onAnswerInTerminal: () -> Void
+
+    /// The hover card's chip height and corner (one control, one size; on
+    /// the 4pt scale, where card 01's 20pt is not), with card 01's 8pt side
+    /// padding and 4pt gap.
+    static let controlHeight: CGFloat = SessionPopoverLayout.actionHeight
+    static let controlHorizontalPadding: CGFloat = 8
+    static let controlCornerRadius: CGFloat = SessionPopoverLayout.actionCornerRadius
+    static let controlSpacing: CGFloat = 4
+    /// Room the line adds under the row's title band: the controls, then
+    /// the band's own bottom inset again, so the row keeps its margins.
+    static let bottomInset: CGFloat = 8
+    static var addedHeight: CGFloat { controlHeight + bottomInset }
+
+    @ChromeScheme private var colorScheme
+
+    var body: some View {
+        let theme = ChromeTheme.active(colorScheme)
+        let size = SidebarDialTuning.rowSubtitleSize()
+        HStack(spacing: Self.controlSpacing) {
+            if showsApproveDeny {
+                chip("Approve", size: size, fill: Color(theme.ink), text: Color(theme.canvas), action: onApprove)
+                chip("Deny", size: size, fill: theme.ink(.composerRow), text: SidebarColors.primaryText(colorScheme), action: onDeny)
+            } else {
+                Button(action: onAnswerInTerminal) {
+                    Text("Answer in terminal →")
+                        .font(.system(size: size, weight: .medium))
+                        .underline()
+                        .foregroundStyle(SidebarColors.primaryText(colorScheme))
+                        .frame(height: Self.controlHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Shows this session's terminal")
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+    }
+
+    private func chip(_ title: String, size: CGFloat, fill: Color, text: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(text)
+                .padding(.horizontal, Self.controlHorizontalPadding)
+                .frame(height: Self.controlHeight)
+                .background(fill, in: RoundedRectangle(cornerRadius: Self.controlCornerRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 // MARK: - Shared Row Chrome
@@ -245,6 +362,10 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     var popover: (sessionId: UUID, controller: SessionPopoverController)? = nil
     /// The tooltip the row shows on the rail, where its labels are gone.
     var railHelp: String? = nil
+    /// A needs-you row's action line, under the labels. The row grows by
+    /// its height in the sidebar and loses it on the rail, where only the
+    /// glyph shows; the glyph never moves off the title band.
+    var actions: SessionRowActionLine? = nil
     @ViewBuilder let title: () -> Title
     /// The status glyph at a given side (the morph's size for this frame).
     @ViewBuilder let glyph: (CGFloat) -> Glyph
@@ -264,47 +385,68 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         let progress = morphOverride ?? widthModel.morph
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
+        let bandHeight = SidebarDialTuning.rowHeight()
+        // The labels' leading edge in the row's content: the glyph slot,
+        // then the stack spacing (same sum the HStack lays out), so the
+        // action line starts under the title.
+        let labelLeading = dials.sidebarTileSize + WorkspaceLayout.sidebarIconLabelSpacing
+        // The action line's room shrinks to nothing on the rail.
+        let actionsHeight = actions == nil ? 0 : SessionRowActionLine.addedHeight * (1 - min(max(progress, 0), 1))
         // The selection (`SelectedRowMix`): this instant's outline, tint,
         // and, for a new row, its growing slot and fading-in content.
         SelectedRowMixRowReader(id: mixID, isActive: isActive) { look in
-            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-                // Hover is a tile-sized chip behind the glyph in every list
-                // (option D); the group card is drawn only around a project
-                // group.
-                MorphGlyphSlot(
-                    progress: progress,
-                    slotWidth: dials.sidebarTileSize,
-                    glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
-                    chipSizes: (dials.sidebarChipSize, dials.railChipSize),
-                    // The chip is hover only; selection is the row's outline.
-                    isHovered: isHovered && !isActive,
-                    chipID: redlineID + ".chip",
-                    glyph: glyph
-                )
-                .redlineFrame(redlineID + ".glyph")
-                .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+                    // Hover is a tile-sized chip behind the glyph in every list
+                    // (option D); the group card is drawn only around a project
+                    // group.
+                    MorphGlyphSlot(
+                        progress: progress,
+                        slotWidth: dials.sidebarTileSize,
+                        glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
+                        chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                        // The chip is hover only; selection is the row's outline.
+                        isHovered: isHovered && !isActive,
+                        chipID: redlineID + ".chip",
+                        glyph: glyph
+                    )
+                    .redlineFrame(redlineID + ".glyph")
+                    .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
 
-                // Title + subtitle stacked
-                VStack(alignment: .leading, spacing: 1) {
-                    title()
+                    // Title + subtitle stacked
+                    VStack(alignment: .leading, spacing: 1) {
+                        title()
 
-                    Text(subtitle)
-                        .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
-                        .foregroundStyle(SidebarColors.secondaryText(colorScheme))
-                        .lineLimit(1)
+                        Text(subtitle)
+                            .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
+                            .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+                            .lineLimit(1)
+                    }
+                    .redlineFrame(redlineID + ".label")
+                    .modifier(MorphLabelFade(staggerIndex: staggerIndex))
+
+                    Spacer(minLength: 4)
                 }
-                .redlineFrame(redlineID + ".label")
-                .modifier(MorphLabelFade(staggerIndex: staggerIndex))
-
-                Spacer(minLength: 4)
+                // The title band: the glyph and labels centre in it whether or
+                // not an action line follows.
+                .frame(height: bandHeight)
+                if let actions, actionsHeight > 0 {
+                    actions
+                        .padding(.leading, labelLeading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: actionsHeight, alignment: .top)
+                        .clipped()
+                        .modifier(MorphLabelFade(staggerIndex: staggerIndex))
+                }
             }
             .opacity(look.content)
             .redlineFrame(redlineID + ".content")
             .padding(.leading, SidebarDialTuning.rowLeadingPadding())
             .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-            // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch. A new
-            // row's slot, gap included, grows from nothing (N4).
-            .frame(height: SidebarDialTuning.rowHeight() * look.height)
+            // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch, plus
+            // a needs-you row's action line. A new row's slot, gap included,
+            // grows from nothing (N4).
+            .frame(height: (bandHeight + actionsHeight) * look.height)
             .redlineFrame(redlineID)
             // The row-wide tint and its outline, drawn round the chip on the rail.
             .background {
@@ -313,7 +455,10 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     progress: progress,
                     chipCenterX: dials.rowLeadingPadding + dials.sidebarTileSize / 2,
                     chipTravel: metrics.tileTravel,
-                    chipSizes: (dials.sidebarChipSize, dials.railChipSize)
+                    chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                    // The content centres in the row, so the band's centre
+                    // sits half the action line above the row's.
+                    chipCenterYOffset: -actionsHeight / 2
                 )
             }
             .padding(.top, look.height == 1 ? 0 : SidebarDialTuning.rowGap() * (look.height - 1))

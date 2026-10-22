@@ -44,6 +44,8 @@ struct RecentsListView: View {
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
+    @AppStorage(ApprovalFlag.defaultsKey) private var approvalsEnabled = false
 
     #if DEBUG
     /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).
@@ -454,12 +456,15 @@ struct RecentsListView: View {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView()
                     }
+                    let indicator = store.globalIndicatorStates[session.id] ?? .inactive
+                    let claudeState = coordinator.claudeStateStore.state(for: session.id)
+                    // A row that needs you says what it asks and how to answer
+                    // (card 01); any other row says what the session is doing.
+                    let prompt = SessionRowPrompt.make(indicator: indicator, state: claudeState)
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: SessionNeedsYou.subtitle(
-                            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
-                            state: coordinator.claudeStateStore.state(for: session.id)
-                        ),
+                        subtitle: prompt?.subtitle ?? SessionNeedsYou.subtitle(indicator: indicator, state: claudeState),
+                        prompt: prompt,
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
@@ -840,7 +845,8 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
+        subtitle: String? = nil, prompt: SessionRowPrompt? = nil,
+        projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
@@ -859,6 +865,8 @@ struct RecentsListView: View {
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
             subtitle: subtitle,
+            prompt: prompt,
+            approvalsEnabled: approvalsEnabled,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),
@@ -866,6 +874,10 @@ struct RecentsListView: View {
             onTap: { coordinator.focusSession(id: session.id) },
             onCommitRename: { commitRename(session: session) },
             onCancelRename: { cancelRename() },
+            onAnswerInTerminal: { coordinator.focusSession(id: session.id) },
+            onApprovalDecision: { decision, approval in
+                coordinator.sessionPopover.respond(decision, sessionId: session.id, prompt: approval)
+            },
             staggerIndex: staggerIndex,
             dialEpoch: SidebarDialTuning.epoch()
         )
