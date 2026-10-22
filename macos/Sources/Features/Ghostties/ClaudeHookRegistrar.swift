@@ -61,7 +61,17 @@ struct ClaudeHookRegistrar {
             return false
         }
 
+        // A key that exists with an unexpected shape is the user's, not ours
+        // to replace: leave the whole file untouched rather than overwrite it.
+        if root["hooks"] != nil, !(root["hooks"] is [String: Any]) {
+            logger.error("settings.json \"hooks\" is not an object — leaving untouched")
+            return false
+        }
         var hooks = root["hooks"] as? [String: Any] ?? [:]
+        for (event, _) in events where hooks[event] != nil && !(hooks[event] is [[String: Any]]) {
+            logger.error("settings.json hooks.\(event, privacy: .public) is not an array of objects — leaving untouched")
+            return false
+        }
         var changed = false
         for (event, matcher) in events {
             var entries = hooks[event] as? [[String: Any]] ?? []

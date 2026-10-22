@@ -109,4 +109,33 @@ struct ClaudeHookRegistrarTests {
         #expect(!text.contains(#"\/"#))
         #expect(text.contains("/usr/local/bin/line"))
     }
+
+    @Test func wrongShapedHooksLeaveTheFileUntouched() throws {
+        for original in [
+            #"{"hooks":"oops"}"#,
+            #"{"hooks":{"Stop":"not-an-array"}}"#,
+            #"{"hooks":{"Stop":[1,2]}}"#,
+        ] {
+            let path = tempPath(); defer { cleanup(path) }
+            try write(original, to: path)
+
+            #expect(!ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+            #expect(try String(contentsOfFile: path, encoding: .utf8) == original)
+        }
+    }
+
+    @Test func writesThroughASymlinkedSettingsFile() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        let target = (path as NSString).deletingLastPathComponent + "/real-settings.json"
+        try write(#"{"model":"opus"}"#, to: target)
+        try FileManager.default.createSymbolicLink(atPath: path, withDestinationPath: target)
+
+        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: path)
+        #expect(attrs[.type] as? FileAttributeType == .typeSymbolicLink)
+        let root = try #require(readJSON(target))
+        #expect(root["model"] as? String == "opus")
+        #expect(root["hooks"] != nil)
+    }
 }

@@ -112,9 +112,9 @@ struct OnboardingSheet: View {
 extension View {
     /// Presents `OnboardingSheet` until `ghostties.hasSeenOnboarding` is set.
     /// Applied to the sidebar in every mode (project-first and task-first), so
-    /// first run never depends on which mode the sidebar is in. The demo and
-    /// capture builds suppress it by launching with
-    /// `-ghostties.hasSeenOnboarding YES`.
+    /// first run never depends on which mode the sidebar is in. Builds that
+    /// must not show it set `ghostties.hasSeenOnboarding` first: the demo seed
+    /// via `defaults write`, UI tests via `-ghostties.hasSeenOnboarding YES`.
     func onboardingSheet() -> some View {
         modifier(OnboardingSheetModifier())
     }
