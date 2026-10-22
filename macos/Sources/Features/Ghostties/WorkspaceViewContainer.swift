@@ -3518,7 +3518,7 @@ class WorkspaceViewContainer: NSView {
             return store.railSessions(layout: .oneView).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
-            return store.sessionsInVisualOrder(coordinator: coordinator)
+            return store.sessionsInVisualOrder(coordinator: coordinator, layout: projectsLayout)
         }
         return WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: store.sessions,
