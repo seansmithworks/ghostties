@@ -20,10 +20,15 @@ import UniformTypeIdentifiers
 /// refresh, or from before a `forget`, is dropped. `forget` keeps the
 /// bumped token as a tombstone.
 ///
-/// A chosen image (`setOverride`) has its own token, bumped only by a newer
-/// choice and by `forget`: the caller sets `iconStyle = .file` first, and
-/// the refresh that style change sets off runs while the image is still
-/// being normalized, so a refresh must not cancel it.
+/// A chosen image (`setOverride`) has its own token, bumped by a newer
+/// choice, by any other style change (`styleDidChange`) and by `forget`:
+/// the caller sets `iconStyle = .file` first, and the refresh that style
+/// change sets off runs while the image is still being normalized, so a
+/// refresh alone must not cancel it, but picking Auto or Monogram must.
+///
+/// A forced refresh (past the negative cache) stays forced until a refresh
+/// lands: a refresh that supersedes it is forced too, so the sidebar's
+/// own refresh for the same change can't drop the re-check.
 ///
 /// On disk:
 /// - `<caches>/project-icons/<id>.png`  resolved icon (a cache; safe to delete)
@@ -56,6 +61,8 @@ final class ProjectIconStore {
     private var memory: [UUID: NSImage] = [:]
     private var generations: [UUID: Int] = [:]
     private var overrideTokens: [UUID: Int] = [:]
+    /// Projects with a forced refresh that hasn't landed yet.
+    private var pendingForce: Set<UUID> = []
     private static let queue = DispatchQueue(label: "ghostties.project-icons", qos: .utility)
 
     /// Directories are the final `project-icons` folders. Defaults:
@@ -109,6 +116,8 @@ final class ProjectIconStore {
     /// and its Auto button, force).
     func refresh(_ project: Project, force: Bool = false) async {
         let id = project.id
+        let force = force || pendingForce.contains(id)
+        if force { pendingForce.insert(id) }
         let generation = bump(id)
         let cacheDir = cacheDirectory
         let supportDir = supportDirectory
@@ -118,12 +127,14 @@ final class ProjectIconStore {
 
         switch project.iconStyle ?? .auto {
         case .monogram:
+            pendingForce.remove(id)
             setImage(nil, for: id)
             return
         case .file:
             let override = await Self.onQueue { Self.loadPNG(Self.file(supportDir, id, "png")) }
             guard isCurrent(id, generation) else { return }
             if let override {
+                pendingForce.remove(id)
                 setImage(override.image, for: id)
                 return
             }
@@ -137,8 +148,25 @@ final class ProjectIconStore {
         }
         if outcome.ranResolver { resolverRuns += 1 }
         guard isCurrent(id, generation) else { return }
+        pendingForce.remove(id)
         apply(outcome.plan, in: cacheDir)
         setImage(outcome.image?.image, for: id)
+    }
+
+    // MARK: - Style change
+
+    /// `project.iconStyle` just changed (Settings). Cancels a chosen image
+    /// still being copied, deletes the copy unless the style is `.file`,
+    /// and refreshes. The cancel and delete happen now, before this
+    /// returns; the task is the refresh.
+    @discardableResult
+    func styleDidChange(_ project: Project, force: Bool = false) -> _Concurrency.Task<Void, Never> {
+        let id = project.id
+        overrideTokens[id] = (overrideTokens[id] ?? 0) + 1
+        if project.iconStyle != .file {
+            try? FileManager.default.removeItem(at: Self.file(supportDirectory, id, "png"))
+        }
+        return _Concurrency.Task { await refresh(project, force: force) }
     }
 
     // MARK: - Override
@@ -146,8 +174,9 @@ final class ProjectIconStore {
     /// Normalizes the chosen image to <=128px PNG and copies it into
     /// Application Support. Set `iconStyle = .file` before calling: a
     /// refresh while this runs doesn't cancel it (see the type's doc), and
-    /// landing supersedes any refresh still in flight. A newer choice, or
-    /// the project's removal, drops this one.
+    /// landing supersedes any refresh still in flight. A newer choice, any
+    /// other style change (`styleDidChange`), or the project's removal
+    /// drops this one.
     func setOverride(projectId: UUID, from source: URL) async throws {
         let token = (overrideTokens[projectId] ?? 0) + 1
         overrideTokens[projectId] = token
@@ -171,6 +200,7 @@ final class ProjectIconStore {
     func forget(projectId id: UUID) {
         _ = bump(id) // tombstone: late results from before this call are dropped
         overrideTokens[id] = (overrideTokens[id] ?? 0) + 1
+        pendingForce.remove(id)
         for ext in ["png", "key", "none"] {
             try? FileManager.default.removeItem(at: Self.file(cacheDirectory, id, ext))
         }

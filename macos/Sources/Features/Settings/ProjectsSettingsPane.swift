@@ -267,16 +267,35 @@ final class ProjectsSettingsModel: ObservableObject {
     }
 
     /// Back to detection, re-checked now (past the negative cache).
-    func useAutoIcon(for projectId: UUID) {
-        iconError = nil
-        store.setIconStyle(nil, for: projectId)
-        refreshIcon(projectId, force: true)
+    /// The task is the refresh; the style, and cancelling a chosen image
+    /// still being copied, take effect before this returns.
+    @discardableResult
+    func useAutoIcon(for projectId: UUID) -> _Concurrency.Task<Void, Never> {
+        setIconStyle(nil, for: projectId, force: true)
     }
 
-    func useMonogram(for projectId: UUID) {
+    @discardableResult
+    func useMonogram(for projectId: UUID) -> _Concurrency.Task<Void, Never> {
+        setIconStyle(.monogram, for: projectId, force: false)
+    }
+
+    /// Every icon edit for a project (a style picked, an image chosen)
+    /// bumps this; a choose that fails only undoes itself if it is still
+    /// the latest edit.
+    private var iconEdits: [UUID: Int] = [:]
+
+    private func beginIconEdit(_ projectId: UUID) -> Int {
+        let edit = (iconEdits[projectId] ?? 0) + 1
+        iconEdits[projectId] = edit
+        return edit
+    }
+
+    private func setIconStyle(_ style: ProjectIconStyle?, for projectId: UUID, force: Bool) -> _Concurrency.Task<Void, Never> {
+        _ = beginIconEdit(projectId)
         iconError = nil
-        store.setIconStyle(.monogram, for: projectId)
-        refreshIcon(projectId, force: false)
+        store.setIconStyle(style, for: projectId)
+        guard let project = store.projects.first(where: { $0.id == projectId }) else { return _Concurrency.Task {} }
+        return iconStore.styleDidChange(project, force: force)
     }
 
     /// Choose Image…: an open panel, then `chooseImage(from:for:)`.
@@ -301,16 +320,20 @@ final class ProjectsSettingsModel: ObservableObject {
     /// Copies `url`, normalized, in as the project's tile. `iconStyle` is
     /// `.file` BEFORE the copy lands, so nothing reads a half-made choice;
     /// the refresh that sets off can't drop the copy (`setOverride`). An
-    /// unreadable image puts the old style back.
+    /// unreadable image puts the old style back, unless the icon was
+    /// changed again while it was being read.
     func chooseImage(from url: URL, for projectId: UUID) async throws {
+        let edit = beginIconEdit(projectId)
         let previous = store.projects.first(where: { $0.id == projectId })?.iconStyle
         iconError = nil
         store.setIconStyle(.file, for: projectId)
         do {
             try await iconStore.setOverride(projectId: projectId, from: url)
         } catch {
-            store.setIconStyle(previous, for: projectId)
-            iconError = "That image couldn't be read. Try a PNG or JPEG."
+            if iconEdits[projectId] == edit {
+                _ = setIconStyle(previous, for: projectId, force: false)
+                iconError = "That image couldn't be read. Try a PNG or JPEG."
+            }
             throw error
         }
     }
@@ -360,10 +383,5 @@ final class ProjectsSettingsModel: ObservableObject {
         guard let id = project.lastTemplateId,
               let template = store.templates.first(where: { $0.id == id }) else { return "Last used" }
         return "Last used (\(template.name))"
-    }
-
-    private func refreshIcon(_ projectId: UUID, force: Bool) {
-        guard let project = store.projects.first(where: { $0.id == projectId }) else { return }
-        iconStore.refreshInBackground(project, force: force)
     }
 }
