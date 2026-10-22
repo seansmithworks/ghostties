@@ -22,13 +22,9 @@ final class SessionAttentionTests: XCTestCase {
         return ClaudeStateStore.derive(from: w)
     }
 
-    /// Mirrors `SessionCoordinator.indicatorState(for:)`'s Claude branch.
+    /// The real mapping the sidebar uses (`SessionCoordinator.claudeIndicator`).
     private func indicator(for state: ClaudeState?) -> SessionIndicatorState {
-        switch state?.state {
-        case .needsInput, .needsPermission: return .needsAttention
-        case .busy: return .processing
-        case .idle, .ended, nil: return .idle
-        }
+        state.flatMap { SessionCoordinator.claudeIndicator(kind: $0.state, isLongRunning: false) } ?? .idle
     }
 
     // MARK: - derive: the structural fix
@@ -92,6 +88,34 @@ final class SessionAttentionTests: XCTestCase {
         }
     }
 
+    // Hooks docs: Stop does not fire on user interrupt; PostToolUseFailure /
+    // PermissionDenied / elicitation_complete|response are the events that DO
+    // arrive after a blocked prompt resolves, so each must clear attention.
+    func testResolutionEventsClearAttention() {
+        let events = [
+            #"{"cwd":"/tmp","hook_event_name":"PostToolUseFailure","session_id":"d1","tool_name":"AskUserQuestion","tool_use_id":"t","error":"x","is_interrupt":true}"#,
+            #"{"cwd":"/tmp","hook_event_name":"PostToolUseFailure","session_id":"d1","tool_name":"Bash","tool_use_id":"t","error":"x"}"#,
+            #"{"cwd":"/tmp","hook_event_name":"PermissionDenied","session_id":"d1","tool_name":"Bash","tool_use_id":"t","reason":"x"}"#,
+            #"{"cwd":"/tmp","hook_event_name":"Notification","notification_type":"elicitation_complete","session_id":"d1"}"#,
+            #"{"cwd":"/tmp","hook_event_name":"Notification","notification_type":"elicitation_response","session_id":"d1"}"#,
+        ]
+        for hook in events {
+            let state = derive(hook)
+            XCTAssertEqual(state?.state, .busy, hook)
+            XCTAssertNil(SessionAttention.make(indicator: indicator(for: state), state: state), hook)
+        }
+    }
+
+    func testPermissionRequestForAskUserQuestionIsNeverBounded() {
+        let state = derive(#"""
+        {"cwd":"/tmp","hook_event_name":"PermissionRequest","session_id":"d2","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which one?"}]}}
+        """#)
+        XCTAssertEqual(
+            SessionAttention.make(indicator: indicator(for: state), state: state),
+            .freeform(question: "Which one?")
+        )
+    }
+
     func testMakeRequiresAttentionIndicator() {
         let state = derive(#"""
         {"cwd":"/tmp","hook_event_name":"PermissionRequest","session_id":"c7","tool_name":"Bash","tool_input":{"command":"ls"}}
@@ -124,9 +148,27 @@ final class SessionAttentionTests: XCTestCase {
 
     private let at = Date(timeIntervalSince1970: 1_700_000_000)
 
-    private func claudeState(_ kind: ClaudeState.Kind, updatedAt: Date) -> ClaudeState {
+    private let fp = ApprovalFingerprint.make(toolName: "Bash", input: ToolInputSummary(command: "npm test"))
+
+    private func claudeState(_ kind: ClaudeState.Kind, updatedAt: Date, command: String = "npm test") -> ClaudeState {
         ClaudeState(ghosttiesSessionId: sid, claudeSessionId: "c", cwd: "/tmp", state: kind,
-                    structuredPrompt: nil, updatedAt: updatedAt)
+                    structuredPrompt: StructuredPrompt(toolName: "Bash", toolUseId: nil,
+                                                       toolInput: ToolInputSummary(command: command)),
+                    updatedAt: updatedAt)
+    }
+
+    /// updatedAt is whole seconds: a different command in the same second is a different prompt.
+    func testResponderDifferentPromptSameSecondSendsNothing() {
+        let surface = UUID()
+        var sent = 0
+        let responder = GuardedApprovalResponder(
+            isEnabled: { true },
+            currentState: { _ in self.claudeState(.needsPermission, updatedAt: self.at, command: "rm -rf build") },
+            ownSurface: { _ in surface }, send: { _, _ in sent += 1 }
+        )
+        let target = ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface, fingerprint: fp)
+        XCTAssertEqual(responder.respond(.approve, to: target), .stale)
+        XCTAssertEqual(sent, 0)
     }
 
     func testResponderSendsWhenFreshAndOwnSurface() {
@@ -138,7 +180,7 @@ final class SessionAttentionTests: XCTestCase {
             ownSurface: { _ in surface },
             send: { sent.append(($0, $1)) }
         )
-        let outcome = responder.respond(.approve, to: ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface))
+        let outcome = responder.respond(.approve, to: ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface, fingerprint: fp))
         XCTAssertEqual(outcome, .sent)
         XCTAssertEqual(sent.count, 1)
     }
@@ -150,7 +192,7 @@ final class SessionAttentionTests: XCTestCase {
             GuardedApprovalResponder(isEnabled: { true }, currentState: { _ in state },
                                      ownSurface: { _ in surface }, send: { _, _ in sent += 1 })
         }
-        let target = ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface)
+        let target = ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface, fingerprint: fp)
         // Moved on (busy), gone (nil), or a newer prompt (different updatedAt).
         XCTAssertEqual(responder(claudeState(.busy, updatedAt: at)).respond(.approve, to: target), .stale)
         XCTAssertEqual(responder(nil).respond(.deny, to: target), .stale)
@@ -166,7 +208,7 @@ final class SessionAttentionTests: XCTestCase {
             ownSurface: { _ in UUID() },
             send: { _, _ in sent += 1 }
         )
-        let outcome = responder.respond(.approve, to: ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: UUID()))
+        let outcome = responder.respond(.approve, to: ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: UUID(), fingerprint: fp))
         XCTAssertEqual(outcome, .wrongSurface)
         XCTAssertEqual(sent, 0)
     }
@@ -179,7 +221,7 @@ final class SessionAttentionTests: XCTestCase {
             currentState: { _ in self.claudeState(.needsPermission, updatedAt: self.at) },
             ownSurface: { _ in surface }, send: { _, _ in sent += 1 }
         )
-        let target = ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface)
+        let target = ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface, fingerprint: fp)
         XCTAssertEqual(off.respond(.approve, to: target), .disabled)
         XCTAssertEqual(NoOpApprovalResponder().respond(.deny, to: target), .disabled)
         XCTAssertEqual(sent, 0)
