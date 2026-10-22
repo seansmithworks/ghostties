@@ -93,15 +93,22 @@ struct ToolInputSummary: Decodable, Equatable {
     /// `file_path` (Glob/Grep `pattern`, Notebook `notebook_path`, `path`,
     /// WebFetch `url`), for the "first arg" of a non-Bash tool line.
     let firstArgument: String?
+    /// `AskUserQuestion`'s `questions[].question` strings, in order. Empty for
+    /// every other tool.
+    let questions: [String]
+
+    private struct Question: Decodable { let question: String? }
 
     private enum Keys: String, CodingKey {
-        case command, description
+        case command, description, questions
         case filePath = "file_path"
         case path, pattern, url
         case notebookPath = "notebook_path"
     }
 
-    init(command: String? = nil, description: String? = nil, filePath: String? = nil, firstArgument: String? = nil) {
+    init(command: String? = nil, description: String? = nil, filePath: String? = nil, firstArgument: String? = nil,
+         questions: [String] = []) {
+        self.questions = questions
         self.command = command
         self.description = description
         self.filePath = filePath
@@ -121,7 +128,9 @@ struct ToolInputSummary: Decodable, Equatable {
             command: string(.command),
             description: string(.description),
             filePath: string(.filePath),
-            firstArgument: string(.notebookPath) ?? string(.path) ?? string(.pattern) ?? string(.url)
+            firstArgument: string(.notebookPath) ?? string(.path) ?? string(.pattern) ?? string(.url),
+            questions: (try? c.decodeIfPresent([Question].self, forKey: .questions))?
+                .compactMap { $0.question }.filter { !$0.isEmpty } ?? []
         )
     }
 }
@@ -533,6 +542,12 @@ final class ClaudeStateStore {
         var structuredPrompt: StructuredPrompt?
 
         switch hook.hookEventName {
+        case "PreToolUse" where hook.toolName == "AskUserQuestion":
+            // A pending AskUserQuestion blocks on the user's answer: the
+            // session needs them, it is not "working". The question text rides
+            // in `structuredPrompt.toolInput` (hooks docs: tool_input.questions).
+            kind = .needsInput
+            structuredPrompt = StructuredPrompt(toolName: "AskUserQuestion", toolUseId: hook.toolUseId, toolInput: hook.toolInput)
         case "UserPromptSubmit", "PreToolUse", "PostToolUse":
             kind = .busy
         case "Stop":
@@ -545,7 +560,11 @@ final class ClaudeStateStore {
             switch hook.notificationType {
             case "permission_prompt":
                 kind = .needsPermission
-            case "idle_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
+            case "idle_prompt":
+                // "Claude finished responding ~60s ago": a finished session,
+                // not one waiting on the user. Never attention.
+                kind = .idle
+            case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
                 kind = .needsInput
             default:
                 return nil
