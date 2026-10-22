@@ -243,7 +243,7 @@ final class HoverApprovalsGateTests: XCTestCase {
     // (e) the row subtitle says "needs you" only for genuine attention.
     func testRowSubtitleSaysNeedsYouOnlyForGenuineAttention() {
         let genuine = listText(sessions: [.bash])
-        XCTAssertTrue(genuine.contains("needs you"), "control: a genuine prompt's row says \"needs you\"; list shows \(genuine.debugDescription)")
+        XCTAssertTrue(genuine.contains("run npm test?"), "control: a genuine prompt's row subtitle is its question (card 01); list shows \(genuine.debugDescription)")
 
         let stale = listText(sessions: [.staleIndicator])
         XCTAssertFalse(stale.contains("needs you"), "a session whose hook state is idle (idle_prompt) must not say \"needs you\"; list shows \(stale.debugDescription)")
