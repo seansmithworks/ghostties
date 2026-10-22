@@ -518,7 +518,20 @@ class WorkspaceViewContainer: NSView {
     private weak var observedSurface: Ghostty.SurfaceView?
 
     /// Current sidebar state — always kept in sync with `store.sidebarMode`.
-    private var sidebarMode: SidebarMode = .pinned
+    /// A drag belongs to the mode it runs in: any change of mode by any
+    /// path (Cmd+S, a close, a peek ending) ends it, except the drag's own
+    /// snap between pinned and the rail (`isDragSnapping`).
+    private var sidebarMode: SidebarMode = .pinned {
+        didSet {
+            if sidebarMode != oldValue && !isDragSnapping {
+                sidebarDragPointerWidth = nil
+            }
+        }
+    }
+
+    /// True while the drag itself moves the mode across the rail's snap
+    /// point, the one mode change a drag survives.
+    private var isDragSnapping = false
 
     /// Last published value of `store.toolbarRowTopAnchorConstant`.
     /// Updated in layout() from the live close-button frame so the SwiftUI
@@ -2201,6 +2214,8 @@ class WorkspaceViewContainer: NSView {
         // re-cross; the next drag tick re-evaluates and catches up.
         if target.mode != sidebarMode {
             currentSidebarWidth = target.mode == .pinned ? target.width : sidebarWidthBeforeDrag
+            isDragSnapping = true
+            defer { isDragSnapping = false }
             transitionTo(target.mode)
             return
         }
@@ -2463,12 +2478,6 @@ class WorkspaceViewContainer: NSView {
         isMorphStepHeld = false
         let previousMode = sidebarMode
         sidebarMode = newMode
-        // A peek's drag ends with the peek: a later peek must never inherit
-        // a drag whose mouse-up was lost (`mouseExited` holds a peek open
-        // while one is in progress).
-        if previousMode.isClosedPeek {
-            sidebarDragPointerWidth = nil
-        }
 
         // Leaving the rail ends any hover reveal. Cmd+S while revealed pins
         // it: the sidebar is already out at the pinned width, so it stays
