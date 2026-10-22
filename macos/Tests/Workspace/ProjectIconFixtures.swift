@@ -61,4 +61,17 @@ enum ProjectIconFixtures {
         let json = try JSONSerialization.data(withJSONObject: ["images": images, "info": ["version": 1]])
         try write(root, "\(relative)/Contents.json", data: json)
     }
+
+    /// A single-image ICO wrapping a PNG.
+    static func icoData(pixels: Int) -> Data {
+        let png = pngData(pixels: pixels)
+        var d = Data([0, 0, 1, 0, 1, 0])
+        d.append(contentsOf: [UInt8(pixels), UInt8(pixels), 0, 0, 1, 0, 32, 0])
+        var size = UInt32(png.count).littleEndian
+        d.append(Data(bytes: &size, count: 4))
+        var offset = UInt32(22).littleEndian
+        d.append(Data(bytes: &offset, count: 4))
+        d.append(png)
+        return d
+    }
 }

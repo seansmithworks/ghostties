@@ -139,4 +139,65 @@ struct ProjectIconResolverTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("nope-\(UUID().uuidString)")
         #expect(ProjectIconResolver.resolve(root: url) == nil)
     }
+
+    @Test func imageOverPixelCapIsRejectedBeforeThumbnailing() throws {
+        let root = try ProjectIconFixtures.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // 4200x4200 = 17.6M px, a solid colour so the file stays under 1 MB.
+        let data = ProjectIconFixtures.pngData(pixels: 4200)
+        try #require(data.count < 1_048_576)
+        try ProjectIconFixtures.write(root, "public/apple-touch-icon.png", data: data)
+        try ProjectIconFixtures.writePNG(root, "icon.png")
+        #expect(winner(root) == "icon.png")
+    }
+
+    @Test func truncatedWalkReportsTruncatedNotNone() throws {
+        let root = try ProjectIconFixtures.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for i in 0..<20 {
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent("dir\(i)"), withIntermediateDirectories: true
+            )
+        }
+        var limits = ProjectIconResolver.Limits()
+        limits.maxEntries = 3
+        guard case .truncated = ProjectIconResolver.resolveDetailed(root: root, limits: limits) else {
+            Issue.record("expected .truncated")
+            return
+        }
+        guard case .none = ProjectIconResolver.resolveDetailed(root: root) else {
+            Issue.record("expected .none with default limits")
+            return
+        }
+    }
+
+    @Test func fifoCandidateIsRejectedWithoutHanging() throws {
+        let root = try ProjectIconFixtures.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("public"), withIntermediateDirectories: true
+        )
+        #expect(mkfifo(root.appendingPathComponent("public/apple-touch-icon.png").path, 0o600) == 0)
+        try ProjectIconFixtures.writePNG(root, "icon.png")
+        #expect(winner(root) == "icon.png")
+    }
+
+    @Test func icoFaviconDecodes() throws {
+        let root = try ProjectIconFixtures.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ProjectIconFixtures.write(root, "public/favicon.ico", data: ProjectIconFixtures.icoData(pixels: 48))
+        let hit = try #require(ProjectIconResolver.resolve(root: root))
+        #expect(hit.source.url.lastPathComponent == "favicon.ico")
+        #expect(hit.image.width > 0)
+    }
+
+    @Test func rootGivenWithDifferentCaseStillResolvesOnCaseInsensitiveVolume() throws {
+        let root = try ProjectIconFixtures.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ProjectIconFixtures.writePNG(root, "icon.png")
+        let altered = URL(fileURLWithPath: root.path.lowercased(), isDirectory: true)
+        // Only meaningful where the volume ignores case.
+        guard FileManager.default.fileExists(atPath: altered.path), altered.path != root.path else { return }
+        #expect(ProjectIconResolver.resolve(root: altered) != nil)
+    }
 }

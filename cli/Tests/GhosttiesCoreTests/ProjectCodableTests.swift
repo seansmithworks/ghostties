@@ -45,4 +45,15 @@ import Testing
             #expect(again.newSessionDefault == value)
         }
     }
+
+    @Test func unknownFutureNewSessionDefaultDecodesAsNil() throws {
+        let json = """
+        {"id":"11111111-1111-1111-1111-111111111111","name":"atlas","rootPath":"/tmp/atlas","isPinned":false,\
+        "iconStyle":"holographic","newSessionDefault":{"somethingNew":{"_0":1}}}
+        """
+        let project = try JSONDecoder().decode(Project.self, from: Data(json.utf8))
+        #expect(project.name == "atlas")
+        #expect(project.newSessionDefault == nil)
+        #expect(project.iconStyle == nil)
+    }
 }
