@@ -300,6 +300,110 @@ final class SettingsSidebarTests: XCTestCase {
         XCTAssertEqual(iconStore.image(for: p.id)?.size.width, 128)
     }
 
+    /// Choose Image…, then Auto or Monogram before the image lands: the
+    /// later choice wins. The late image is neither copied nor shown.
+    func testLateChosenImageNeverOverwritesALaterAutoOrMonogram() async throws {
+        for later in [ProjectIconStyle?.none, .monogram] {
+            let root = try tempDir("root")
+            let picked = try ProjectIconFixtures.writePNG(try tempDir("picked"), "mine.png", pixels: 512)
+            let support = try tempDir("support")
+            let iconStore = ProjectIconStore(cacheDirectory: try tempDir("cache"), supportDirectory: support)
+            let p = Project(name: "fieldwork", rootPath: root.path)
+            let store = WorkspaceStore(testingProjects: [p])
+            let model = ProjectsSettingsModel(store: store, iconStore: iconStore)
+
+            let choosing = _Concurrency.Task { try await model.chooseImage(from: picked, for: p.id) }
+            await _Concurrency.Task.yield()
+            let switching = later == .monogram ? model.useMonogram(for: p.id) : model.useAutoIcon(for: p.id)
+            try await choosing.value
+            await switching.value
+
+            let name = later == nil ? "Auto" : "Monogram"
+            XCTAssertEqual(store.projects.first?.iconStyle, later, "\(name): the style changed back")
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: support.appendingPathComponent("\(p.id.uuidString).png").path),
+                "\(name): the late image was copied into Application Support"
+            )
+            XCTAssertNil(iconStore.image(for: p.id), "\(name): the late image is showing")
+        }
+    }
+
+    /// Leaving `.file` deletes the copied image, so it isn't orphaned.
+    func testLeavingChosenImageDeletesTheCopy() async throws {
+        let picked = try ProjectIconFixtures.writePNG(try tempDir("picked"), "mine.png", pixels: 512)
+        let support = try tempDir("support")
+        let iconStore = ProjectIconStore(cacheDirectory: try tempDir("cache"), supportDirectory: support)
+        let p = Project(name: "fieldwork", rootPath: try tempDir("root").path)
+        let store = WorkspaceStore(testingProjects: [p])
+        let model = ProjectsSettingsModel(store: store, iconStore: iconStore)
+        let copy = support.appendingPathComponent("\(p.id.uuidString).png")
+
+        try await model.chooseImage(from: picked, for: p.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: copy.path))
+        await model.useMonogram(for: p.id).value
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path), "the copied image was orphaned")
+    }
+
+    /// Auto re-checks past the negative cache. The sidebar's own refresh
+    /// for the same style change (not forced) starts right after; it must
+    /// not cancel the re-check and leave the icon hidden by the cache.
+    func testForcedRecheckSurvivesASupersedingRefresh() async throws {
+        let root = try tempDir("root")
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("public"), withIntermediateDirectories: true)
+        let iconStore = ProjectIconStore(cacheDirectory: try tempDir("cache"), supportDirectory: try tempDir("support"))
+        let p = Project(name: "fieldwork", rootPath: root.path)
+
+        await iconStore.refresh(p) // no icon yet: the negative cache records it
+        try ProjectIconFixtures.writePNG(root, "public/apple-touch-icon.png", pixels: 64)
+        await iconStore.refresh(p)
+        XCTAssertNil(iconStore.image(for: p.id), "precondition: the negative cache hides the new icon")
+
+        let forced = _Concurrency.Task { await iconStore.refresh(p, force: true) }
+        await _Concurrency.Task.yield()
+        await iconStore.refresh(p) // ProjectIconRefresh, for the same change
+        await forced.value
+        XCTAssertNotNil(iconStore.image(for: p.id), "the forced re-check was dropped; the negative cache won")
+    }
+
+    /// A chosen image that turns out unreadable puts the old style back,
+    /// but not over a style picked while it was being read.
+    func testFailedChooseDoesNotUndoALaterStyleChange() async throws {
+        let junk = try ProjectIconFixtures.write(try tempDir("picked"), "junk.png", data: Data("not an image".utf8))
+        let iconStore = ProjectIconStore(cacheDirectory: try tempDir("cache"), supportDirectory: try tempDir("support"))
+        let p = Project(name: "fieldwork", rootPath: try tempDir("root").path)
+        let store = WorkspaceStore(testingProjects: [p])
+        let model = ProjectsSettingsModel(store: store, iconStore: iconStore)
+
+        let choosing = _Concurrency.Task { try await model.chooseImage(from: junk, for: p.id) }
+        await _Concurrency.Task.yield()
+        model.useMonogram(for: p.id)
+        do {
+            try await choosing.value
+            XCTFail("an unreadable image was accepted")
+        } catch {}
+        XCTAssertEqual(store.projects.first?.iconStyle, .monogram, "the failed choose undid Monogram")
+        XCTAssertNil(model.iconError, "an abandoned choose reported its error")
+
+        // With nothing in between, a failure does put the old style back.
+        do {
+            try await model.chooseImage(from: junk, for: p.id)
+            XCTFail("an unreadable image was accepted")
+        } catch {}
+        XCTAssertEqual(store.projects.first?.iconStyle, .monogram)
+        XCTAssertNotNil(model.iconError)
+    }
+
+    // MARK: - Command palette
+
+    /// The palette's config entries run `open_config`, which opens Settings,
+    /// so on macOS they are one entry that says so.
+    func testCommandPaletteHasOneOpenSettingsEntry() throws {
+        let app = try makeApp()
+        let entries = app.config.commandPaletteEntries.filter { $0.actionKey == "open_config" }
+        XCTAssertEqual(entries.map(\.title), ["Open Settings"])
+        XCTAssertEqual(entries.first?.action, "open_config")
+    }
+
     // MARK: - Helpers
 
     private static func menuItems(_ menu: NSMenu?) -> [NSMenuItem] {
