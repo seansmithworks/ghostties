@@ -6,6 +6,7 @@ runtime runs here yet.
 
 | Path | What |
 |---|---|
+| `web/` | Next.js web app on Vercel. See `web/README.md`. |
 | `contract/` | `@ghostties/contract` (TS, for web) and `GhosttiesCloud` (Swift package, for the native iOS app and the Mac desk): row types, RPC signatures, realtime channels. No dependencies. |
 | `supabase/migrations/` | Postgres schema, RLS, RPCs, realtime publication. Types mirror `contract/`; change both together. |
 | `supabase/tests/` | Smoke test on plain Postgres: `PGHOST=… PGPORT=… bash cloud/supabase/tests/run-local.sh` |

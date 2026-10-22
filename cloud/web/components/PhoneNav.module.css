@@ -1,0 +1,27 @@
+.nav {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .nav {
+    display: flex;
+    gap: var(--s1);
+    margin-bottom: var(--s4);
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--row);
+    width: fit-content;
+  }
+
+  .nav a {
+    padding: 6px var(--s3);
+    border-radius: 6px;
+    color: var(--ink-secondary);
+  }
+
+  .nav a[aria-current="page"] {
+    background: var(--container);
+    color: var(--ink-primary);
+    font-weight: 500;
+  }
+}

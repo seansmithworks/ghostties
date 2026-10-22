@@ -1,0 +1,51 @@
+.line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: var(--s2);
+  border-radius: 8px;
+}
+
+.link:hover {
+  background: var(--row);
+}
+
+.line > :first-child,
+.ghost {
+  margin-top: 2px;
+}
+
+.ghost {
+  color: var(--ink-secondary);
+  display: inline-flex;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 500;
+}
+
+.meta {
+  font-weight: 400;
+  color: var(--ink-secondary);
+  margin-left: var(--s2);
+  font-size: 11px;
+}
+
+.summary {
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.age {
+  font-size: 11px;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}

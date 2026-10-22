@@ -1,0 +1,16 @@
+.glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-secondary);
+}
+
+.emphasis {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
