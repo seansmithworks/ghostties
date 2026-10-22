@@ -2142,13 +2142,13 @@ class WorkspaceViewContainer: NSView {
     }
 
     /// Whether the sidebar's edge drags in `mode`: pinned and the rail snap
-    /// between each other, the overlay only resizes. Closed has no edge;
-    /// the hover reveal is a peek, which never saves a mode or a width —
-    /// Cmd+S pins it, and then it drags.
+    /// between each other; the closed peeks (overlay, hover reveal) only
+    /// resize — the pinned width, saved as pinned saves it — and never
+    /// change the mode. Closed has no edge.
     static func sidebarEdgeDrags(in mode: SidebarMode) -> Bool {
         switch mode {
-        case .pinned, .collapsed, .overlay: return true
-        case .closed, .hoverRevealed: return false
+        case .pinned, .collapsed, .overlay, .hoverRevealed: return true
+        case .closed: return false
         }
     }
 
@@ -2180,9 +2180,9 @@ class WorkspaceViewContainer: NSView {
         let inset = SidebarDialTuning.windowMargin()
         let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
         let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
-        // Overlay only resizes: no snapping to the rail, no pinning. It
-        // writes the same width pinned uses.
-        if sidebarMode == .overlay {
+        // A closed peek only resizes: no snapping to the rail, no pinning.
+        // It writes the same width pinned uses.
+        if sidebarMode.isClosedPeek {
             guard !isSidebarTransitionAnimating else { return }
             applyDraggedSidebarWidth(min(max(pointer, WorkspaceLayout.sidebarMinWidth), upperBound))
             return
@@ -2235,11 +2235,11 @@ class WorkspaceViewContainer: NSView {
         guard sidebarDragPointerWidth != nil else { return }
         sidebarDragPointerWidth = nil
         persistSidebarWidth()
-        // The overlay held open through the drag (`mouseExited`). Its hover
-        // zone follows the new width, and a drag that ended outside it
-        // closes the overlay as any exit does: the exit AppKit may still
+        // A closed peek held open through the drag (`mouseExited`). Its
+        // hover zone follows the new width, and a drag that ended outside it
+        // closes the peek as any exit does: the exit AppKit may still
         // deliver belongs to the replaced tracking area, so it's ignored.
-        guard sidebarMode == .overlay else { return }
+        guard sidebarMode.isClosedPeek else { return }
         updateTrackingAreas()
         if !pointerIsInOverlayZone {
             transitionTo(.closed)
@@ -2463,10 +2463,10 @@ class WorkspaceViewContainer: NSView {
         isMorphStepHeld = false
         let previousMode = sidebarMode
         sidebarMode = newMode
-        // An overlay drag ends with the overlay: a later overlay must never
-        // inherit a drag whose mouse-up was lost (`mouseExited` holds an
-        // overlay open while one is in progress).
-        if previousMode == .overlay {
+        // A peek's drag ends with the peek: a later peek must never inherit
+        // a drag whose mouse-up was lost (`mouseExited` holds a peek open
+        // while one is in progress).
+        if previousMode.isClosedPeek {
             sidebarDragPointerWidth = nil
         }
 
