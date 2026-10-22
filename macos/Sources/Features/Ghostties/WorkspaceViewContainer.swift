@@ -1306,7 +1306,7 @@ class WorkspaceViewContainer: NSView {
                 DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
                     guard let self else { return }
                     let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
-                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab))
+                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab), pairedBrowsers: self.coordinator.pairedBrowserByTerminal)
                     self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
                     tick(remaining - 1)
                 }
@@ -3490,12 +3490,12 @@ class WorkspaceViewContainer: NSView {
         coordinator: SessionCoordinator
     ) -> [AgentSession] {
         if sidebarMode == .collapsed {
-            return store.railSessions(layout: projectsLayout).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: projectsLayout, pairedBrowsers: coordinator.pairedBrowserByTerminal).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         // One view lists exactly the rail's sessions: Pinned, then Active
         // project by project.
         if sidebarViewMode != "taskFirst" && projectsLayout == .oneView {
-            return store.railSessions(layout: .oneView).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: .oneView, pairedBrowsers: coordinator.pairedBrowserByTerminal).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
             return store.sessionsInVisualOrder(coordinator: coordinator)

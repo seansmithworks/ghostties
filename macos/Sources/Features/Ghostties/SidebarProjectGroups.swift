@@ -73,10 +73,17 @@ struct SidebarProjectGroup: Equatable, Identifiable {
     /// mock B5's hidden). Sessions whose project is gone trail in one
     /// "Unknown" group, the name rows already use for them, so no live
     /// session ever drops off the list.
-    static func make(active: [AgentSession], projects: [Project]) -> [SidebarProjectGroup] {
+    ///
+    /// `pairedBrowsers` (terminal id to the browser an agent opened for it,
+    /// `SessionCoordinator.pairedBrowserByTerminal`) seats each paired
+    /// browser directly under its terminal (`PairedBrowserRows`).
+    static func make(active: [AgentSession], projects: [Project], pairedBrowsers: [UUID: UUID] = [:]) -> [SidebarProjectGroup] {
         var byProject: [UUID: [AgentSession]] = [:]
         for session in active {
             byProject[session.projectId, default: []].append(session)
+        }
+        for (projectId, sessions) in byProject {
+            byProject[projectId] = PairedBrowserRows.seated(sessions, pairedBrowsers: pairedBrowsers)
         }
         var groups: [SidebarProjectGroup] = ProjectListOrder.pinnedFirst(projects).map { project in
             SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [])
@@ -232,6 +239,43 @@ enum ProjectSelection {
             object: window,
             userInfo: ["projectId": projectId]
         )
+    }
+}
+
+// MARK: - Paired browser rows
+
+/// A browser an agent opened with `gt browser open` is paired with that
+/// terminal at runtime only (`SessionCoordinator.pairedBrowserByTerminal`).
+/// In the one-view list its row sits directly under the terminal's and its
+/// subtitle names the terminal. Ending the pairing needs no cleanup here:
+/// the row is plain again the next time the list is built.
+enum PairedBrowserRows {
+    /// `sessions` (one project's rows, in render order) with each paired
+    /// browser moved to directly after its terminal. A pair is seated only
+    /// when both rows are in `sessions`; any other browser keeps its place.
+    static func seated(_ sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> [AgentSession] {
+        guard !pairedBrowsers.isEmpty else { return sessions }
+        let ids = Set(sessions.map(\.id))
+        let seatedBrowsers = Set(pairedBrowsers.filter { ids.contains($0.key) && ids.contains($0.value) }.map(\.value))
+        guard !seatedBrowsers.isEmpty else { return sessions }
+        let byId = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var result: [AgentSession] = []
+        for session in sessions where !seatedBrowsers.contains(session.id) {
+            result.append(session)
+            if let browserId = pairedBrowsers[session.id], seatedBrowsers.contains(browserId), let browser = byId[browserId] {
+                result.append(browser)
+            }
+        }
+        return result
+    }
+
+    /// `from <terminal name>` for a browser paired with a terminal in
+    /// `sessions`; nil for every other row.
+    static func subtitle(for session: AgentSession, in sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> String? {
+        guard let terminalId = pairedBrowsers.first(where: { $0.value == session.id })?.key,
+              let terminal = sessions.first(where: { $0.id == terminalId })
+        else { return nil }
+        return "from \(terminal.name)"
     }
 }
 

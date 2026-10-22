@@ -293,7 +293,7 @@ struct RecentsListView: View {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else {
             return sections.pinned.count + sections.active.count
         }
-        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects)
+        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects, pairedBrowsers: coordinator.pairedBrowserByTerminal)
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
         return SidebarProjectGroupItem.cascade(items, start: sections.pinned.count).end
     }
@@ -386,7 +386,7 @@ struct RecentsListView: View {
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
-        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects, pairedBrowsers: coordinator.pairedBrowserByTerminal)
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
         // One cascade through every header and row, in reading order.
@@ -428,7 +428,8 @@ struct RecentsListView: View {
                     }
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        subtitle: PairedBrowserRows.subtitle(for: session, in: group.sessions, pairedBrowsers: coordinator.pairedBrowserByTerminal)
+                            ?? (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
@@ -449,7 +450,7 @@ struct RecentsListView: View {
     private func selectedGroupId(_ active: [AgentSession]) -> SidebarProjectGroup.ID? {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else { return nil }
         return RailProjectColumn.selectedGroupId(
-            SidebarProjectGroup.make(active: active, projects: store.projects),
+            SidebarProjectGroup.make(active: active, projects: store.projects, pairedBrowsers: coordinator.pairedBrowserByTerminal),
             selectedSessionId: coordinator.sidebarSelectedSessionId
         )
     }
