@@ -83,7 +83,8 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Current sidebar mode. Persisted across launches.
-    /// `.overlay` is transient — always saved as `.closed`.
+    /// `.overlay` and `.hoverRevealed` are transient — always saved as
+    /// `.closed` (`SidebarMode.persisted`).
     /// Only `WorkspaceViewContainer.transitionTo(_:)` should mutate this
     /// (via `updateSidebarMode`) to keep the UI and store in sync.
     private(set) var sidebarMode: SidebarMode = .pinned {
@@ -1512,13 +1513,13 @@ final class WorkspaceStore: ObservableObject {
             try? await _Concurrency.Task.sleep(for: .milliseconds(100))
             guard !_Concurrency.Task.isCancelled else { return }
             let customTemplates = templates.filter { !$0.isDefault }
-            // Overlay is transient — persist as closed so next launch starts closed.
-            let persistedMode: SidebarMode = sidebarMode == .overlay ? .closed : sidebarMode
+            // A peek out of closed (overlay, hover reveal) persists as closed
+            // so next launch starts closed.
             let state = WorkspacePersistence.State(
                 projects: projects,
                 sessions: sessions,
                 templates: customTemplates,
-                sidebarMode: persistedMode,
+                sidebarMode: sidebarMode.persisted,
                 lastSelectedProjectId: lastSelectedProjectId,
                 hasShownPinMigrationNotice: hasShownPinMigrationNotice,
                 hasDismissedPinMigrationNotice: hasDismissedPinMigrationNotice

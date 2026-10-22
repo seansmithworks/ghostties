@@ -227,7 +227,7 @@ enum SidebarDialTuning {
         /// on screen; it takes the sidebar's.
         init(_ mode: SidebarMode) {
             switch mode {
-            case .pinned, .closed: self = .sidebar
+            case .pinned, .closed, .hoverRevealed: self = .sidebar
             case .collapsed: self = .rail
             case .overlay: self = .hoverBar
             }

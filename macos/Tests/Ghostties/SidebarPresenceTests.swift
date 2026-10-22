@@ -446,11 +446,17 @@ struct ClosedSidebarEdgeStripTests {
         }
     }
 
-    private func makeWindow(mode: SidebarMode) -> (WorkspaceViewContainer, NSWindow) {
-        let store = WorkspaceStore(
+    /// A persistence-disabled store: nothing it holds reaches a
+    /// `workspace.json`.
+    private func makeStore() -> WorkspaceStore {
+        WorkspaceStore(
             testingProjects: [], testingSessions: [],
             hasShownPinMigrationNotice: true, hasDismissedPinMigrationNotice: true
         )
+    }
+
+    private func makeWindow(mode: SidebarMode, store: WorkspaceStore? = nil) -> (WorkspaceViewContainer, NSWindow) {
+        let store = store ?? makeStore()
         store.updateSidebarMode(mode)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         let window = NSWindow(
@@ -552,7 +558,7 @@ struct ClosedSidebarEdgeStripTests {
             container.updateTrackingAreas()
             let strip = try #require(container.trackingAreas.first)
             container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
-            #expect(container.sidebarModeForTesting == .pinned)
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
             // Past the open and the 0.25s transition debounce.
             spin(0.6)
             let openWidth = container.sidebarFrameForTesting.width
@@ -579,6 +585,148 @@ struct ClosedSidebarEdgeStripTests {
             #expect(midCardX > closedCardX && midCardX < openCardX)
             #expect(endWidth == 0)
             #expect(endCardX == closedCardX)
+        }
+    }
+
+    /// Opens the closed strip's reveal with the "Hover shows full sidebar"
+    /// dial as set by the caller, and returns the reveal's own tracking area.
+    private func revealFromStrip(_ container: WorkspaceViewContainer, in window: NSWindow) throws -> NSTrackingArea {
+        spin(0.5)
+        container.updateTrackingAreas()
+        let strip = try #require(container.trackingAreas.first)
+        container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+        #expect(container.sidebarModeForTesting != .closed)
+        return try #require(container.trackingAreas.first)
+    }
+
+    // MARK: Defect 1 — a deliberate close is never debounced
+
+    /// Leaving the reveal straight after it opens closes it. The reveal
+    /// stamps the 0.25s oscillation guard, and the exit arrives inside it;
+    /// the exit's tracking area is already the reveal's, so no second exit
+    /// ever comes to retry the close.
+    @Test func hoverRevealClosesWhenThePointerLeavesRightAway() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            let area = try revealFromStrip(container, in: window)
+            container.mouseExited(with: enterEvent(.mouseExited, area: area, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    /// The window losing key straight after the reveal opens closes it.
+    @Test func hoverRevealClosesWhenTheWindowResignsKeyRightAway() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    /// The dial's OFF path, the overlay, closes the same way.
+    @Test func overlayClosesWhenThePointerLeavesRightAway() throws {
+        try withDials({ $0.set(false, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            let area = try revealFromStrip(container, in: window)
+            #expect(container.sidebarModeForTesting == .overlay)
+            container.mouseExited(with: enterEvent(.mouseExited, area: area, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    // MARK: Defect 2 — a reveal never saves a mode or width
+
+    private static let widthKeys = ["ghostties.sidebarWidth.projectFirst", "ghostties.sidebarWidth.taskFirst"]
+
+    /// Drags the sidebar's own drag handle by `dx` points, mouse-down to
+    /// mouse-up, by sending the events to the handle directly (whether or
+    /// not it is shown).
+    private func dragSidebarEdge(_ container: WorkspaceViewContainer, in window: NSWindow, by dx: CGFloat) throws {
+        let handle = try #require(container.subviews.first {
+            String(describing: type(of: $0)) == "PanelDragHandleView"
+                && $0.frame == container.sidebarDragHandleFrameForTesting
+        })
+        let start = handle.convert(NSPoint(x: handle.bounds.midX, y: handle.bounds.midY), to: nil)
+        func mouse(_ type: NSEvent.EventType, x: CGFloat) -> NSEvent {
+            NSEvent.mouseEvent(
+                with: type, location: NSPoint(x: x, y: start.y), modifierFlags: [],
+                timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1
+            )!
+        }
+        handle.mouseDown(with: mouse(.leftMouseDown, x: start.x))
+        handle.mouseDragged(with: mouse(.leftMouseDragged, x: start.x + dx))
+        handle.mouseUp(with: mouse(.leftMouseUp, x: start.x + dx))
+    }
+
+    /// Dragging the edge past the snap point during a reveal must not
+    /// collapse to the rail — which would save `.collapsed` as the user's
+    /// mode.
+    @Test func dragPastTheSnapPointDuringHoverRevealDoesNotCollapse() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let store = makeStore()
+            let (container, window) = makeWindow(mode: .closed, store: store)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            spin(0.6)  // past the open and the 0.25s transition debounce
+            try dragSidebarEdge(container, in: window, by: -400)
+            #expect(container.sidebarModeForTesting != .collapsed)
+            #expect(store.sidebarMode != .collapsed)
+            #expect(store.sidebarMode != .pinned)
+        }
+    }
+
+    /// A drag during a reveal must not save a width: with no width saved
+    /// yet, none is saved after the drag's mouse-up. (The test host's own
+    /// defaults hold the keys; they are put back afterwards.)
+    @Test func dragDuringHoverRevealDoesNotSaveAWidth() throws {
+        let defaults = UserDefaults.standard
+        let saved = Self.widthKeys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(Self.widthKeys, saved) {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+            }
+        }
+        Self.widthKeys.forEach { defaults.removeObject(forKey: $0) }
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            spin(0.6)
+            try dragSidebarEdge(container, in: window, by: 40)
+            #expect(Self.widthKeys.allSatisfy { defaults.object(forKey: $0) == nil })
+        }
+    }
+
+    // MARK: Defect 3 — the reveal is a state the sidebar can read
+
+    /// While revealed, the store (and so the SwiftUI sidebar's
+    /// `\.sidebarMode`) reports the same state the container lays out —
+    /// not `.closed` under a pinned layout — so the tray toggle reads
+    /// "Open Sidebar", as it does on the overlay. It still saves as
+    /// `.closed`. Cmd+S pins it for real: then both report `.pinned` and the
+    /// toggle reads "Collapse Sidebar".
+    @Test func hoverRevealIsTheStoresSidebarModeAndSavesAsClosed() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let store = makeStore()
+            let (container, window) = makeWindow(mode: .closed, store: store)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            #expect(store.sidebarMode == container.sidebarModeForTesting)
+            #expect(WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode) == "Open Sidebar")
+
+            let data = try JSONEncoder().encode(WorkspacePersistence.State(sidebarMode: store.sidebarMode))
+            let saved = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+            #expect(saved.sidebarMode == .closed)
+
+            container.toggleSidebar()
+            #expect(container.sidebarModeForTesting == .pinned)
+            #expect(store.sidebarMode == .pinned)
+            #expect(WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode) == "Collapse Sidebar")
         }
     }
 
