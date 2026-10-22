@@ -113,7 +113,6 @@ struct ProjectTemplatesSection: View {
     }
 
     private static let rowHeight: CGFloat = 28
-    private static let listMaxHeight: CGFloat = 196
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -122,16 +121,10 @@ struct ProjectTemplatesSection: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 0) {
-                // Hugs up to `listMaxHeight`, then scrolls — the template
-                // list can run to a dozen rows and the popover must not.
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(store.templates) { template in
-                            row(for: template)
-                        }
-                    }
+                // No scroll view of its own: the Settings form owns scrolling.
+                ForEach(store.templates) { template in
+                    row(for: template)
                 }
-                .frame(height: min(CGFloat(store.templates.count) * Self.rowHeight, Self.listMaxHeight))
                 if isAddingTemplate {
                     newTemplateField
                 } else {

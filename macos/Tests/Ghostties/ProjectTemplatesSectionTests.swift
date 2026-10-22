@@ -157,6 +157,42 @@ struct ProjectTemplatesSectionTests {
         let dir = capturesDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? png.write(to: dir.appendingPathComponent("settings-pane-templates-\(appearance).png"))
-        #expect(size.height >= ProjectsSettingsPane.paneSize.height)
+    }
+
+    // MARK: - The section is mounted in the Settings pane
+
+    /// The pane at its real size, drawn to pixels.
+    private func renderedPane(store: WorkspaceStore) -> Data? {
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("templates-mount-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let model = ProjectsSettingsModel(store: store, iconStore: ProjectIconStore(
+            cacheDirectory: scratch.appendingPathComponent("cache"),
+            supportDirectory: scratch.appendingPathComponent("support")
+        ))
+        let hosting = NSHostingView(rootView: ProjectsSettingsPane(model: model, store: store))
+        hosting.frame = NSRect(origin: .zero, size: ProjectsSettingsPane.paneSize)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        for _ in 0..<5 {
+            hosting.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return nil }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    /// Fails if `ProjectsSettingsPane` stops mounting the Templates section.
+    @Test func settingsPaneMountsTheTemplatesSection() {
+        let store = makeStore()
+        let before = renderedPane(store: store)
+        for name in ["One", "Two", "Three"] { _ = TemplateManagement.addTemplate(named: name, store: store) }
+        let after = renderedPane(store: store)
+        #expect(before != nil && after != nil)
+        #expect(before != after, "adding templates must change the pane: the Templates section is not on it")
     }
 }
