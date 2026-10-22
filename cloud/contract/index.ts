@@ -43,7 +43,7 @@ export type TaskLane = (typeof TASK_LANES)[number];
 export const TASK_PRIORITIES = ["high", "medium", "low", "none"] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
-export const PUSH_PLATFORMS = ["ios", "android", "web"] as const;
+export const PUSH_PLATFORMS = ["ios", "macos", "web"] as const;
 export type PushPlatform = (typeof PUSH_PLATFORMS)[number];
 
 export const MEMBER_ROLES = ["owner", "member"] as const;
@@ -237,7 +237,7 @@ export interface Rpcs {
     args: { p_conversation_id: UUID };
     returns: null;
   };
-  /** Upserts the caller's Expo/APNs/web push token. */
+  /** Upserts the caller's APNs device token (hex) or web push endpoint. */
   register_push_token: {
     args: { p_platform: PushPlatform; p_token: string };
     returns: PushToken;

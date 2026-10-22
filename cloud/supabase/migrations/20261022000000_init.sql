@@ -19,7 +19,7 @@ create type public.ask_kind      as enum ('question', 'permission', 'decision');
 create type public.ask_status    as enum ('open', 'answered', 'expired', 'cancelled');
 create type public.task_lane     as enum ('inbox', 'backlog', 'running', 'needs-you', 'review', 'done');
 create type public.task_priority as enum ('high', 'medium', 'low', 'none');
-create type public.push_platform as enum ('ios', 'android', 'web');
+create type public.push_platform as enum ('ios', 'macos', 'web');
 
 -- MARK: - Tables
 
