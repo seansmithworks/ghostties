@@ -95,15 +95,30 @@ enum SessionTemplateResolver {
         return result
     }
 
+    // MARK: - Instant new session
+
+    /// What an instant new session (Cmd+Shift+T, and Cmd+T with the
+    /// composer off) creates in `project`, as set in Settings. A project
+    /// saved before the setting existed keeps its default template, so its
+    /// behaviour doesn't change.
     static func newSessionDefault(for project: Project) -> NewSessionDefault {
-        project.newSessionDefault ?? .shell
+        if let value = project.newSessionDefault { return value }
+        if let templateId = project.defaultTemplateId, templateId != AgentTemplate.shell.id {
+            return .template(templateId)
+        }
+        return .shell
     }
 
+    /// The template `newSessionDefault(for:)` resolves to. Last used before
+    /// anything was used, or a template since deleted, is Shell.
     static func newSessionTemplate(for project: Project, store: WorkspaceStore) -> AgentTemplate {
-        if let defaultId = project.defaultTemplateId,
-           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
-            return defaultTemplate
+        func template(_ id: UUID?) -> AgentTemplate? {
+            id.flatMap { id in store.templates.first { $0.id == id } }
         }
-        return AgentTemplate.shell
+        switch newSessionDefault(for: project) {
+        case .shell: return AgentTemplate.shell
+        case .lastUsed: return template(project.lastTemplateId) ?? AgentTemplate.shell
+        case .template(let id): return template(id) ?? AgentTemplate.shell
+        }
     }
 }

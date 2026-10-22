@@ -115,6 +115,9 @@ struct ProjectsSettingsPane: View {
                             Text("Icon")
                         }
                     }
+                    Section("New Session") {
+                        newSessionPicker(project)
+                    }
                 }
                 .formStyle(.grouped)
                 .scrollDisabled(true)
@@ -169,6 +172,27 @@ struct ProjectsSettingsPane: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// What an instant new session creates in this project. Labelled with
+    /// the shortcut that actually reads it: Cmd+Shift+T always, and Cmd+T
+    /// only when Cmd+T creates instantly instead of opening the composer.
+    private func newSessionPicker(_ project: Project) -> some View {
+        Picker(model.newSessionTriggerLabel, selection: Binding(
+            get: { model.newSessionSelection(for: project) },
+            set: { model.setNewSessionDefault($0, for: project.id) }
+        )) {
+            Text("Shell").tag(NewSessionDefault.shell)
+            Text(model.lastUsedTitle(for: project)).tag(NewSessionDefault.lastUsed)
+            let templates = model.templateChoices(for: project)
+            if !templates.isEmpty {
+                Divider()
+                ForEach(templates) { template in
+                    Text(template.name).tag(NewSessionDefault.template(template.id))
+                }
+            }
+        }
+        .pickerStyle(.menu)
     }
 
     private var appSettingsLink: some View {
@@ -289,6 +313,53 @@ final class ProjectsSettingsModel: ObservableObject {
             iconError = "That image couldn't be read. Try a PNG or JPEG."
             throw error
         }
+    }
+
+    // MARK: New session
+
+    /// The shortcut(s) the new-session default applies to.
+    var newSessionTriggerLabel: String {
+        #if DEBUG
+        let defaults = WorkspaceViewContainer.composerPreferenceDefaults(fixtureActive: CaptureFixture.isActive)
+        #else
+        let defaults = UserDefaults.standard
+        #endif
+        return Self.newSessionTriggerLabel(
+            composerOpensOnCmdT: WorkspaceViewContainer.newSessionOpensComposer(in: defaults)
+        )
+    }
+
+    static func newSessionTriggerLabel(composerOpensOnCmdT: Bool) -> String {
+        composerOpensOnCmdT ? "\u{21E7}\u{2318}T starts" : "\u{2318}T and \u{21E7}\u{2318}T start"
+    }
+
+    /// The templates offered besides Shell and Last used: the ones this
+    /// project can use, Shell itself excluded (it has its own row).
+    func templateChoices(for project: Project) -> [AgentTemplate] {
+        store.templates.filter {
+            ($0.isGlobal || $0.projectId == project.id) && $0.id != AgentTemplate.shell.id
+        }
+    }
+
+    /// The popup's selection: the project's default, with a template since
+    /// deleted shown as Shell (what it resolves to).
+    func newSessionSelection(for project: Project) -> NewSessionDefault {
+        let value = SessionTemplateResolver.newSessionDefault(for: project)
+        if case .template(let id) = value, !templateChoices(for: project).contains(where: { $0.id == id }) {
+            return .shell
+        }
+        return value
+    }
+
+    func setNewSessionDefault(_ value: NewSessionDefault, for projectId: UUID) {
+        store.setNewSessionDefault(value, for: projectId)
+    }
+
+    /// "Last used", naming the template when there is one.
+    func lastUsedTitle(for project: Project) -> String {
+        guard let id = project.lastTemplateId,
+              let template = store.templates.first(where: { $0.id == id }) else { return "Last used" }
+        return "Last used (\(template.name))"
     }
 
     private func refreshIcon(_ projectId: UUID, force: Bool) {

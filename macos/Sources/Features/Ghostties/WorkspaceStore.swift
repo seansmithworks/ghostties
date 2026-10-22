@@ -1057,24 +1057,36 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
+    /// Settings' icon choice. Nil is Auto.
     func setIconStyle(_ style: ProjectIconStyle?, for projectId: UUID) {
         guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
         projects[index].iconStyle = style
         persist()
     }
 
+    /// Settings' new-session control. Keeps `defaultTemplateId` (the task
+    /// cascade, Option+"+", the composer's template order) in step: a
+    /// specific template is also the project's default template; Shell and
+    /// Last used leave it unset.
     func setNewSessionDefault(_ value: NewSessionDefault, for projectId: UUID) {
         guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
         projects[index].newSessionDefault = value
+        if case .template(let templateId) = value {
+            projects[index].defaultTemplateId = templateId
+        } else {
+            projects[index].defaultTemplateId = nil
+        }
         persist()
     }
 
-    func recordSessionCreated(template: AgentTemplate, projectId: UUID) {}
-
-    /// Clear a project's default template (user picked "None" / "Always ask").
-    func clearDefaultTemplate(for projectId: UUID) {
-        guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
-        projects[index].defaultTemplateId = nil
+    /// A session was created from `template` in this project: it becomes
+    /// the project's Last used, unless it's a browser session (#256: the
+    /// browser never becomes a default by accident).
+    func recordSessionCreated(template: AgentTemplate, projectId: UUID) {
+        guard template.kind != .browser,
+              let index = projects.firstIndex(where: { $0.id == projectId }),
+              projects[index].lastTemplateId != template.id else { return }
+        projects[index].lastTemplateId = template.id
         persist()
     }
 

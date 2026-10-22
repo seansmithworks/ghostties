@@ -496,7 +496,7 @@ final class SessionCoordinator: ObservableObject {
         let count = store.sessions(for: project.id).count
         let name = "\(template.name) \(count + 1)"
         let session = store.addSession(name: name, templateId: template.id, projectId: project.id)
-        return await createSession(
+        let created = await createSession(
             session: session,
             template: template,
             project: project,
@@ -504,6 +504,9 @@ final class SessionCoordinator: ObservableObject {
             sourceTaskFilePath: sourceTaskFilePath,
             extraEnvironment: extraEnvironment
         )
+        // Settings' "Last used" new-session default (browser excluded there).
+        if created { store.recordSessionCreated(template: template, projectId: project.id) }
+        return created
     }
 
     // MARK: - Relaunch
