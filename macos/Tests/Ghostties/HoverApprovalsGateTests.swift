@@ -178,8 +178,11 @@ final class HoverApprovalsGateTests: XCTestCase {
     func testApproveDenyRenderForABoundedPromptWhenFlagOn() {
         UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
         let card = cardText(hook: bashPermission, id: bashId)
-        XCTAssertTrue(card.text.contains("approve"), "flag on: Approve renders; card shows \(card.text.debugDescription)")
-        XCTAssertTrue(card.text.contains("deny"), "flag on: Deny renders; card shows \(card.text.debugDescription)")
+        // Sean decision 2026-10-22: actions live in the row only
+        XCTAssertTrue(card.text.contains("run npm test?"), "flag on: the card still shows the question; card shows \(card.text.debugDescription)")
+        XCTAssertTrue(card.text.contains("answer in terminal"), "flag on: \"Answer in terminal →\" stays; card shows \(card.text.debugDescription)")
+        XCTAssertFalse(card.text.contains("approve"), "flag on: the card never shows Approve; card shows \(card.text.debugDescription)")
+        XCTAssertFalse(card.text.contains("deny"), "flag on: the card never shows Deny; card shows \(card.text.debugDescription)")
         // A freeform question is never approvable, flag or not.
         let freeform = cardText(hook: askQuestion, id: askId)
         XCTAssertFalse(freeform.text.contains("approve"), "freeform: never an Approve")
