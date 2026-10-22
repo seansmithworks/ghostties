@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 /// Raw on-disk shape written by `ghostties-status.sh` to
@@ -48,8 +49,14 @@ struct ClaudeHookPayload: Decodable {
     /// `PreToolUse`/`PostToolUse`'s `tool_use_id`, used only to count each
     /// edit once when `refresh()` re-reads an unchanged file.
     let toolUseId: String?
+    /// `PostToolUseFailure`'s `is_interrupt`: the failure was a user abort.
+    let isInterrupt: Bool?
+    /// `Notification`'s `message` text (identifies a notification-origin prompt).
+    let message: String?
 
     enum CodingKeys: String, CodingKey {
+        case isInterrupt = "is_interrupt"
+        case message
         case hookEventName = "hook_event_name"
         case toolName = "tool_name"
         case toolInput = "tool_input"
@@ -77,6 +84,8 @@ struct ClaudeHookPayload: Decodable {
         toolInput = try? c.decodeIfPresent(ToolInputSummary.self, forKey: .toolInput)
         prompt = try? c.decodeIfPresent(String.self, forKey: .prompt)
         toolUseId = try? c.decodeIfPresent(String.self, forKey: .toolUseId)
+        isInterrupt = try? c.decodeIfPresent(Bool.self, forKey: .isInterrupt)
+        message = try? c.decodeIfPresent(String.self, forKey: .message)
     }
 }
 
@@ -96,6 +105,10 @@ struct ToolInputSummary: Decodable, Equatable {
     /// `AskUserQuestion`'s `questions[].question` strings, in order. Empty for
     /// every other tool.
     let questions: [String]
+    /// Stable SHA-256 of the whole `tool_input` (sorted keys), so two prompts
+    /// that differ only in fields the summary drops (an Edit's new_string)
+    /// still fingerprint differently. Empty when there was no object.
+    let digest: String
 
     private struct Question: Decodable { let question: String? }
 
@@ -107,8 +120,9 @@ struct ToolInputSummary: Decodable, Equatable {
     }
 
     init(command: String? = nil, description: String? = nil, filePath: String? = nil, firstArgument: String? = nil,
-         questions: [String] = []) {
+         questions: [String] = [], digest: String = "") {
         self.questions = questions
+        self.digest = digest
         self.command = command
         self.description = description
         self.filePath = filePath
@@ -120,6 +134,8 @@ struct ToolInputSummary: Decodable, Equatable {
             self.init()
             return
         }
+        let digest = (try? decoder.singleValueContainer().decode(CanonicalJSON.self))
+            .map { SHA256.hash(data: Data($0.canonical.utf8)).map { String(format: "%02x", $0) }.joined() } ?? ""
         func string(_ key: Keys) -> String? {
             guard let value = try? c.decodeIfPresent(String.self, forKey: key), !value.isEmpty else { return nil }
             return value
@@ -130,8 +146,37 @@ struct ToolInputSummary: Decodable, Equatable {
             filePath: string(.filePath),
             firstArgument: string(.notebookPath) ?? string(.path) ?? string(.pattern) ?? string(.url),
             questions: (try? c.decodeIfPresent([Question].self, forKey: .questions))?
-                .compactMap { $0.question }.filter { !$0.isEmpty } ?? []
+                .compactMap { $0.question }.filter { !$0.isEmpty } ?? [],
+            digest: digest
         )
+    }
+}
+
+/// Minimal JSON value with a canonical (sorted-key) serialization, used only
+/// to digest a hook's `tool_input`.
+private enum CanonicalJSON: Decodable {
+    case null, bool(Bool), number(Double), string(String), array([CanonicalJSON]), object([String: CanonicalJSON])
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
+        else if let v = try? c.decode(Double.self) { self = .number(v) }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
+        else if let v = try? c.decode([CanonicalJSON].self) { self = .array(v) }
+        else { self = .object(try c.decode([String: CanonicalJSON].self)) }
+    }
+
+    var canonical: String {
+        switch self {
+        case .null: return "null"
+        case .bool(let v): return v ? "true" : "false"
+        case .number(let v): return String(v)
+        case .string(let v): return "\(v.count):\(v)"
+        case .array(let v): return "[" + v.map(\.canonical).joined(separator: ",") + "]"
+        case .object(let v):
+            return "{" + v.keys.sorted().map { "\($0.count):\($0)=" + v[$0]!.canonical }.joined(separator: ",") + "}"
+        }
     }
 }
 
@@ -243,6 +288,8 @@ struct StructuredPrompt: Equatable {
     /// What the tool is about to do — carried here and nowhere else, so it
     /// exists only while the state is `.needsPermission`.
     var toolInput: ToolInputSummary? = nil
+    /// A `Notification`-origin prompt's message text (no tool fields exist).
+    var message: String? = nil
 }
 
 /// Decoded, derived state for one Ghostties session, keyed by
@@ -462,7 +509,8 @@ final class ClaudeStateStore {
                 summaries[ghosttiesSessionId] = summary
             }
 
-            guard let state = Self.derive(from: wrapper) else { continue }
+            guard let derived = Self.derive(from: wrapper) else { continue }
+            let state = Self.resolve(derived, previous: states[derived.ghosttiesSessionId], wrapper: wrapper)
             newStates[state.ghosttiesSessionId] = state
         }
         states = newStates
@@ -548,6 +596,10 @@ final class ClaudeStateStore {
             // in `structuredPrompt.toolInput` (hooks docs: tool_input.questions).
             kind = .needsInput
             structuredPrompt = StructuredPrompt(toolName: "AskUserQuestion", toolUseId: hook.toolUseId, toolInput: hook.toolInput)
+        case "PostToolUseFailure" where hook.isInterrupt == true:
+            // `Stop` is skipped on user interrupt (hooks docs), so nothing
+            // else would end "working": an aborted tool call lands on idle.
+            kind = .idle
         case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied":
             // PostToolUseFailure / PermissionDenied: the blocked tool call
             // resolved and Claude carries on (hooks docs, "PostToolUseFailure"
@@ -565,6 +617,7 @@ final class ClaudeStateStore {
             switch hook.notificationType {
             case "permission_prompt":
                 kind = .needsPermission
+                structuredPrompt = StructuredPrompt(toolName: "", toolUseId: nil, message: hook.message)
             case "idle_prompt":
                 // "Claude finished responding ~60s ago": a finished session,
                 // not one waiting on the user. Never attention.
@@ -593,6 +646,17 @@ final class ClaudeStateStore {
             structuredPrompt: structuredPrompt,
             updatedAt: Date(timeIntervalSince1970: wrapper.updatedAt)
         )
+    }
+
+    /// The state file is last-event-wins, so an `idle_prompt` (Claude "finished
+    /// ~60s ago") can overwrite the record of a still-pending prompt. It must
+    /// not erase one: keep the previous genuine attention state. A real `Stop`
+    /// or any other event still replaces it.
+    static func resolve(_ derived: ClaudeState, previous: ClaudeState?, wrapper: ClaudeHookWrapper) -> ClaudeState {
+        guard wrapper.hook.hookEventName == "Notification",
+              wrapper.hook.notificationType == "idle_prompt",
+              let previous, previous.state == .needsPermission || previous.state == .needsInput else { return derived }
+        return previous
     }
 
     /// Test-only override for where `refresh()` persists a resume record,
