@@ -88,6 +88,38 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
 
     // MARK: - Gap
 
+    private func spacerHeights(_ items: [SidebarProjectGroupItem]) -> [CGFloat] {
+        items.compactMap { if case .spacer(_, let height) = $0 { height } else { nil } }
+    }
+
+    /// The break is decided from the whole list, so it stays put while a
+    /// pinned project is in flight (the list renders without the dragged
+    /// group). Dragging the only pinned project leaves the break leading the
+    /// list, without the usual break that only sits between two groups.
+    func testPinnedBreakStaysWhileAPinnedProjectIsDragged() {
+        let pinned = project("zeta", pinned: true)
+        let otherPinned = project("omega", pinned: true)
+        let rest = [project("alpha"), project("beta")]
+        let normal = SidebarProjectGroupItem.spacerHeight
+        let pinnedBreak = WorkspaceLayout.projectPinnedBreak
+
+        let all = SidebarProjectGroup.make(active: [], projects: [pinned] + rest)
+        let breakId = SidebarProjectGroupItem.pinnedBreakGroupId(all)
+        XCTAssertEqual(spacerHeights(SidebarProjectGroupItem.items(all, collapsed: [])), [normal + pinnedBreak, normal])
+        let inFlight = all.filter { $0.projectId != pinned.id }
+        XCTAssertEqual(
+            spacerHeights(SidebarProjectGroupItem.items(inFlight, collapsed: [], pinnedBreakBefore: breakId)),
+            [pinnedBreak, normal]
+        )
+
+        let two = SidebarProjectGroup.make(active: [], projects: [otherPinned, pinned] + rest)
+        let lastInFlight = two.filter { $0.projectId != pinned.id }
+        XCTAssertEqual(
+            spacerHeights(SidebarProjectGroupItem.items(lastInFlight, collapsed: [], pinnedBreakBefore: SidebarProjectGroupItem.pinnedBreakGroupId(two))),
+            [normal + pinnedBreak, normal]
+        )
+    }
+
     /// The list's laid-out height at the pinned width and on the rail.
     private func height(_ projects: [Project], rail: Bool) -> CGFloat {
         let sessions = projects.map { AgentSession(name: "s-\($0.name)", templateId: UUID(), projectId: $0.id) }
