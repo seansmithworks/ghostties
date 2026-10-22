@@ -138,4 +138,17 @@ struct ClaudeHookRegistrarTests {
         #expect(root["model"] as? String == "opus")
         #expect(root["hooks"] != nil)
     }
+
+    @Test func emptyHooksObjectAndEmptyEventArrayStillMerge() throws {
+        for original in [#"{"hooks":{}}"#, #"{"hooks":{"Stop":[]}}"#] {
+            let path = tempPath(); defer { cleanup(path) }
+            try write(original, to: path)
+
+            #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+
+            let hooks = try #require(readJSON(path)?["hooks"] as? [String: Any])
+            let stop = try #require(hooks["Stop"] as? [[String: Any]])
+            #expect(ghosttiesCount(stop) == 1)
+        }
+    }
 }

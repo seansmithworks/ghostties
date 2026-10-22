@@ -74,6 +74,8 @@ struct ClaudeHookRegistrar {
         }
         var changed = false
         for (event, matcher) in events {
+            // `?? []` only ever covers a missing key: the shape check above
+            // has already refused any present-but-wrong value.
             var entries = hooks[event] as? [[String: Any]] ?? []
             if !containsGhosttiesEntry(entries) {
                 entries.append(ghosttiesEntry(matcher: matcher, scriptPath: scriptPath))
