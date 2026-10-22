@@ -14,7 +14,7 @@ import Testing
 @Suite(.serialized)
 struct ProjectTileViewTests {
     private let size: CGFloat = 40
-    /// The frame round the tile: room for the ring (2pt gap + 2pt ring).
+    /// The frame round the tile: room for the ring (1.5pt gap + 1.5pt ring).
     private let frame: CGFloat = 56
     private var tileMinX: CGFloat { (frame - size) / 2 }
 

@@ -12,8 +12,8 @@ import SwiftUI
 /// at `textSize`.
 ///
 /// Selected (the project holding the selected session): a monogram fills
-/// with ink; an icon can't turn ink, so it gets an ink ring instead, 2pt
-/// out from the tile with a 2pt gap (project-icon-tile card 05).
+/// with ink; an icon can't turn ink, so it gets an ink ring instead, 1.5pt
+/// wide with a 1.5pt gap from the tile (project-icon-tile card 05).
 struct ProjectTileView: View {
     /// Nil for the "Unknown" group, which has no project and so no icon.
     let projectId: UUID?
@@ -29,8 +29,10 @@ struct ProjectTileView: View {
     var iconStore: ProjectIconStore = .shared
 
     /// The selected icon tile's ring: its width and its gap from the tile.
-    static let ringWidth: CGFloat = 2
-    static let ringGap: CGFloat = 2
+    /// 1.5 + 1.5 = 3pt out, inside the card's 4pt inset with 1pt to spare;
+    /// both are whole pixels (3px) at 2x.
+    static let ringWidth: CGFloat = 1.5
+    static let ringGap: CGFloat = 1.5
 
     /// Re-renders on every dial write; the fill reads "Selected tile fill".
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
