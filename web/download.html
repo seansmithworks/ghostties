@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Download — ghostties</title>
+  <title>Download Ghostties for macOS</title>
   <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
@@ -20,15 +20,22 @@
       link.href = 'data:image/svg+xml;base64,' + btoa(svg);
     })();
   </script>
-  <meta name="description" content="Download Ghostties — a multi-agent workspace terminal for macOS.">
-  <meta property="og:title" content="Download — ghostties">
-  <meta property="og:description" content="Download Ghostties — a multi-agent workspace terminal for macOS.">
+  <meta name="description" content="Download Ghostties, a free macOS terminal for running several AI coding agents in one window. Install with Homebrew, npx or a signed and notarized DMG. macOS 13 or later, Apple Silicon.">
+  <link rel="canonical" href="https://ghostties.org/download">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta property="og:site_name" content="Ghostties">
+  <meta property="og:title" content="Download Ghostties for macOS">
+  <meta property="og:description" content="A free macOS terminal for running several coding agents in one window. Homebrew, npx or a signed DMG.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ghostties.org/download">
   <meta property="og:image" content="https://ghostties.org/assets/social-card.png">
   <meta property="og:image:width" content="2560">
   <meta property="og:image:height" content="1280">
+  <meta property="og:image:alt" content="Ghostties pixel ghosts above a terminal running npx ghostties-install">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Download Ghostties for macOS">
+  <meta name="twitter:description" content="A free macOS terminal for running several coding agents in one window. Homebrew, npx or a signed DMG.">
+  <meta name="twitter:image:alt" content="Ghostties pixel ghosts above a terminal running npx ghostties-install">
   <meta name="twitter:image" content="https://ghostties.org/assets/social-card.png">
   <link rel="stylesheet" href="/style.css">
   <style>
@@ -110,6 +117,24 @@
       line-height: var(--leading-snug);
     }
 
+    .first-launch {
+      padding-left: 20px;
+      margin: 0 0 8px;
+    }
+
+    .first-launch li {
+      margin-bottom: 10px;
+    }
+
+    kbd {
+      font-family: var(--font-mono);
+      font-size: var(--size-caption);
+      background: var(--surface-inline);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 1px 5px;
+    }
+
     .all-releases {
       display: inline-block;
       margin-top: 24px;
@@ -154,7 +179,7 @@
     <a class="back" href="/">&larr; ghostties</a>
 
     <h1>Download</h1>
-    <p class="lead">Ghostties is a multi-agent workspace terminal for macOS &mdash; a fork of <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">Ghostty</a>, built by Sean Smith. Currently in beta.</p>
+    <p class="lead">Ghostties is a free Mac terminal for running several coding agents at once: every Claude Code and Codex session in one window, grouped by project, with status you can read at a glance. A fork of <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">Ghostty</a>, built by Sean Smith. Currently in beta.</p>
 
     <h2>Install</h2>
     <div class="install-block">
@@ -179,6 +204,13 @@
     </div>
 
     <p>Beta release &mdash; auto-updates via Sparkle once installed.</p>
+
+    <h2>First launch</h2>
+    <ol class="first-launch">
+      <li>Open Ghostties from Applications. Your existing Ghostty config, themes and keybindings load unchanged.</li>
+      <li>macOS may ask for access to Desktop, Documents or iCloud Drive. Those prompts come from commands running inside the terminal, as with any new terminal app. Deny anything you don&rsquo;t need. The dialogs say &ldquo;Ghostty&rdquo; because Ghostties keeps upstream&rsquo;s bundle identifier.</li>
+      <li>Press <kbd>Cmd</kbd>+<kbd>T</kbd> to open the composer. Add a project folder, then start a Shell, Claude Code, Codex or Browser session in it. Ghostties runs the agent CLIs you already have installed; it doesn&rsquo;t install them for you.</li>
+    </ol>
 
     <a class="all-releases" href="https://github.com/SeanSmithWorks/ghostties/releases" target="_blank" rel="noopener">View all releases on GitHub &rarr;</a>
     <br>
