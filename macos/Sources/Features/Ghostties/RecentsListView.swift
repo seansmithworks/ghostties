@@ -392,9 +392,10 @@ struct RecentsListView: View {
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         // The pinned break comes from the whole list, so a pinned drag
         // never moves it (`pinnedBreakGroupId`).
+        let pinnedBreakId = SidebarProjectGroupItem.pinnedBreakGroupId(allGroups)
         let items = SidebarProjectGroupItem.items(
             groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw),
-            pinnedBreakBefore: SidebarProjectGroupItem.pinnedBreakGroupId(allGroups)
+            pinnedBreakBefore: pinnedBreakId
         )
         // One cascade through every header and row, in reading order.
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
@@ -411,23 +412,21 @@ struct RecentsListView: View {
         let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
         // Every group whose card is lit or fading carries its card's anchors.
         let cardGroups = mix.cardGroups(selected: selectedGroupId)
-        // A project gap opens above the spacer before its group, so a drop
-        // at the end of Pinned parts the list above the pinned break, where
-        // it lands, not below it among the alphabetical projects.
-        let spacedGroupIds = Set(items.compactMap { item -> String? in
-            if case .spacer(let groupId, _) = item { groupId } else { nil }
-        })
+        // A drop at the end of Pinned opens its gap above the pinned break,
+        // where it lands, not below it among the alphabetical projects.
+        // Every other gap opens directly above its header.
+        let gapAbovePinnedBreak = pinnedBreakId != nil && projectGapBefore == .some(pinnedBreakId)
         ForEach(items) { item in
             switch item {
             case .spacer(let groupId, let height):
-                if projectGapBefore == .some(groupId) {
+                if gapAbovePinnedBreak, groupId == pinnedBreakId {
                     ProjectDragGapView()
                 }
                 Color.clear
                     .frame(height: height)
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
-                if projectGapBefore == .some(group.id), !spacedGroupIds.contains(group.id) {
+                if projectGapBefore == .some(group.id), !(gapAbovePinnedBreak && group.id == pinnedBreakId) {
                     ProjectDragGapView()
                 }
                 projectHeader(
