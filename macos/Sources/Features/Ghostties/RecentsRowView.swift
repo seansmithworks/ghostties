@@ -228,6 +228,22 @@ struct RecentsRowView: View, Equatable {
     }()
 }
 
+// MARK: - Row height
+
+/// A sidebar list row's height at rest, the same on the sidebar and the
+/// rail: the title band (the row height dial) plus the room a needs-you
+/// row holds for its action line. Drag reflow splits a row and sizes its
+/// gap with this, so both follow what is drawn.
+enum SidebarListRowHeight {
+    static func actionLine(hasActions: Bool) -> CGFloat {
+        hasActions ? SessionRowActionLine.addedHeight : 0
+    }
+
+    static func row(hasActions: Bool) -> CGFloat {
+        SidebarDialTuning.rowHeight() + actionLine(hasActions: hasActions)
+    }
+}
+
 // MARK: - Inline action line
 
 /// The action line's controls as VoiceOver actions: the row is one combined
@@ -392,8 +408,10 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         let labelLeading = dials.railTileSize
             + max(0, metrics.labelGap - WorkspaceLayout.sidebarIconLabelSpacing)
             + WorkspaceLayout.sidebarIconLabelSpacing
-        // The action line's room shrinks to nothing on the rail.
-        let actionsHeight = actions == nil ? 0 : SessionRowActionLine.addedHeight * (1 - min(max(progress, 0), 1))
+        // The action line's room is held in every state, the rail included
+        // (where the line itself fades out), so no tile or glyph below a
+        // needs-you row ever moves across the morph or the hover reveal.
+        let actionsHeight = SidebarListRowHeight.actionLine(hasActions: actions != nil)
         // The selection (`SelectedRowMix`): this instant's outline, tint,
         // and, for a new row, its growing slot and fading-in content.
         SelectedRowMixRowReader(id: mixID, isActive: isActive) { look in
@@ -433,7 +451,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 // The title band: the glyph and labels centre in it whether or
                 // not an action line follows.
                 .frame(height: bandHeight)
-                if let actions, actionsHeight > 0 {
+                if let actions {
                     actions
                         .padding(.leading, labelLeading)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -453,6 +471,9 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
             // a needs-you row's action line. A new row's slot, gap included,
             // grows from nothing (N4).
             .frame(height: (bandHeight + actionsHeight) * look.height)
+            // A row that starts or stops needing you grows or shrinks on the
+            // fold's spring, the way an accordion opens and closes.
+            .animation(SidebarUISpring.fold.animation(entering: actions != nil), value: actions != nil)
             .redlineFrame(redlineID)
             // The row-wide tint and its outline, drawn round the chip on the rail.
             .background {
