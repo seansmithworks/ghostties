@@ -112,24 +112,14 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
         )
     }
 
-    /// Dragging a pinned project to the end of the pinned block opens its
-    /// gap above the pinned break, not inside the alphabetical block below
-    /// it: the drop lands at the end of Pinned. Measured as laid-out frames
-    /// (Redlines registry) of the gap and the first alphabetical header.
-    func testPinnedDropGapAtTheEndOfPinnedSitsAboveTheBreak() throws {
-        let first = project("zeta", pinned: true)
-        let dragged = project("omega", pinned: true)
-        let alpha = project("alpha")
-        let projects = [first, dragged, alpha, project("beta")]
+    /// The laid-out frames (Redlines registry) of the one-view list for
+    /// `projects`, with `drag` in flight.
+    private func dragFrames(_ projects: [Project], drag: ProjectDragState) -> [String: CGRect] {
         let sessions = projects.map { AgentSession(name: "s-\($0.name)", templateId: UUID(), projectId: $0.id) }
         let store = WorkspaceStore(testingProjects: projects, testingSessions: sessions)
         for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
         let registry = RedlineRegistry()
-        // Dragged removed, the rendered groups are [zeta, alpha, beta]; gap
-        // index 1 is the end of Pinned, before alpha.
-        let drag = ProjectDragState(draggingProjectId: dragged.id, gapIndex: 1)
-
-        let frames: [String: CGRect] = withDials({
+        return withDials({
             $0.set(SidebarProjectsLayout.oneView.rawValue, forKey: SidebarDialTuning.projectsLayoutKey)
             $0.set(true, forKey: SidebarDialTuning.redlinesKey)
         }) {
@@ -149,13 +139,40 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
             }
             return registry.rects
         }
+    }
 
+    /// Clear space from the drag gap's bottom to `project`'s header tile.
+    private func gapToTile(_ frames: [String: CGRect], _ project: Project) throws -> CGFloat {
         let gap = try XCTUnwrap(frames[RedlineID.projectDragGap], "no drag gap frame in \(frames.keys.sorted())")
-        let alphaHeader = try XCTUnwrap(frames[RedlineID.header(alpha.id.uuidString) + ".tile"], "no alpha header frame in \(frames.keys.sorted())")
-        XCTAssertLessThan(gap.minY, alphaHeader.minY)
+        let tile = try XCTUnwrap(frames[RedlineID.header(project.id.uuidString) + ".tile"], "no \(project.name) tile in \(frames.keys.sorted())")
+        return tile.minY - gap.maxY
+    }
+
+    /// Dragging a pinned project to the end of the pinned block opens its
+    /// gap above the pinned break, not inside the alphabetical block below
+    /// it: the drop lands at the end of Pinned. Every other drop opens its
+    /// gap directly above the next header, as before the break existed.
+    func testPinnedDropGapAtTheEndOfPinnedSitsAboveTheBreak() throws {
+        let first = project("zeta", pinned: true)
+        let second = project("theta", pinned: true)
+        let dragged = project("omega", pinned: true)
+        let alpha = project("alpha")
+        let projects = [first, second, dragged, alpha, project("beta")]
+
+        // Dragged removed, the rendered groups are [zeta, theta, alpha,
+        // beta]; gap index 2 is the end of Pinned, before alpha.
+        let atEnd = dragFrames(projects, drag: ProjectDragState(draggingProjectId: dragged.id, gapIndex: 2))
         XCTAssertGreaterThanOrEqual(
-            alphaHeader.minY - gap.maxY, WorkspaceLayout.projectPinnedBreak,
+            try gapToTile(atEnd, alpha), WorkspaceLayout.projectPinnedBreak,
             "the pinned break must sit between the gap and the first alphabetical header"
+        )
+
+        // Gap index 1 is inside Pinned, before theta: directly above its
+        // header, with no group spacer between them.
+        let inside = dragFrames(projects, drag: ProjectDragState(draggingProjectId: dragged.id, gapIndex: 1))
+        XCTAssertLessThan(
+            try gapToTile(inside, second), SidebarProjectGroupItem.spacerHeight,
+            "an ordinary drop opens directly above the next header"
         )
     }
 
