@@ -31,17 +31,16 @@ enum SelectedRowOutline {
 
 /// The selected-row tint and outline behind a sidebar list row
 /// (`SidebarListRowChrome`), the whole row in the expanded list and the
-/// hover panel, the chip on the rail, morphing between the two with the
-/// row's chip (`MorphGlyphSlot`, `MorphTravel`), at this instant's
+/// hover panel, the chip on the rail, morphing between the two round the
+/// row's chip (`MorphGlyphSlot`), which never moves, at this instant's
 /// `SelectedRowMix.RowLook` (drawn on the row's current frame, so a new
 /// row's outline grows with it). Draws nothing on a clear row. Colours are
 /// resolved per render from the chrome scheme, so an appearance flip repaints.
 struct SelectedRowOutlineSurface: View {
     let look: SelectedRowMix.RowLook
     let progress: CGFloat
-    /// The chip's centre x in the row at progress 0, and how far it travels by 1.
+    /// The chip's centre x in the row, at every step.
     let chipCenterX: CGFloat
-    let chipTravel: CGFloat
     let chipSizes: (from: CGFloat, to: CGFloat)
 
     var body: some View {
@@ -49,7 +48,7 @@ struct SelectedRowOutlineSurface: View {
             if look.outline > 0 || look.tint > 0 {
                 SelectedRowOutlineShape(
                     progress: progress, look: look,
-                    chipCenterX: chipCenterX, chipTravel: chipTravel, chipSizes: chipSizes
+                    chipCenterX: chipCenterX, chipSizes: chipSizes
                 )
             }
         }
@@ -64,7 +63,6 @@ private struct SelectedRowOutlineShape: View, Animatable {
     var progress: CGFloat
     let look: SelectedRowMix.RowLook
     let chipCenterX: CGFloat
-    let chipTravel: CGFloat
     let chipSizes: (from: CGFloat, to: CGFloat)
 
     @ChromeScheme private var colorScheme
@@ -81,7 +79,7 @@ private struct SelectedRowOutlineShape: View, Animatable {
             let row = CGRect(origin: .zero, size: proxy.size)
             let side = SidebarMorphMetrics.lerp(chipSizes.from, chipSizes.to, progress)
             let chip = CGRect(
-                x: chipCenterX + chipTravel * progress - side / 2, y: (row.height - side) / 2,
+                x: chipCenterX - side / 2, y: (row.height - side) / 2,
                 width: side, height: side
             )
             let box = SelectedRowOutline.box(row: row, chip: chip, morph: Double(progress))

@@ -32,6 +32,8 @@ enum RedlineID {
     /// The selected group's card, and on the rail its column
     /// (`ProjectGroupCard`).
     static let groupCard = "group.card"
+    /// The names panel's divider on the rail's edge (`RailNamesDivider`).
+    static let railNamesDivider = "rail.namesDivider"
     /// A one-view project header; its tile is `<id>.tile`, its name
     /// `<id>.label`, its chevron frame `<id>.chevron`.
     static func header(_ groupId: String) -> String { "header.\(groupId)" }

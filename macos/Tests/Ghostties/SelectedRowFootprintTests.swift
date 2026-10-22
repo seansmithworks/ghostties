@@ -77,6 +77,13 @@ final class SelectedRowFootprintTests: XCTestCase {
 
     // MARK: - Rail
 
+    /// The session list's leading edge on the real rail, anchored to the
+    /// rail's tile column (`SidebarMorphMetrics.listMinX`).
+    private func listMinX() throws -> CGFloat {
+        let railWidth = try railWidth()
+        return withDials { SidebarMorphMetrics(expandedWidth: WorkspaceLayout.sidebarWidth, railWidth: railWidth, progress: 1).listMinX }
+    }
+
     /// A rail row outside any project column (a Pinned or Sessions-tab row)
     /// selects with the rail chip, centred on the rail: the expanded row,
     /// held at the rail's end.
@@ -85,14 +92,14 @@ final class SelectedRowFootprintTests: XCTestCase {
         let column = VStack(spacing: 0) {
             ExpandedHarness()
         }
-            .modifier(SidebarColumnPadding())
+            .modifier(SidebarColumnPadding(anchorsToRail: true))
             .environmentObject(SessionCoordinator())
             .asRail(width: width)
         let (rep, scale) = try render(column, width: width)
         try assertIsChip(
             rep, scale: scale, side: RailProjectColumn.chipSize(.rail),
             midX: width / 2, midY: SidebarDialTuning.contentPaddingTop() + SidebarDialTuning.rowHeight() / 2,
-            rowMinX: SidebarDialTuning.windowMargin(), "rail"
+            rowMinX: try listMinX(), "rail"
         )
     }
 
@@ -103,13 +110,13 @@ final class SelectedRowFootprintTests: XCTestCase {
         let column = VStack(spacing: 0) {
             HistoryRowView(subtitle: "3 sessions", isActive: true, onTap: {})
         }
-            .modifier(SidebarColumnPadding())
+            .modifier(SidebarColumnPadding(anchorsToRail: true))
             .asRail(width: width)
         let (rep, scale) = try render(column, width: width)
         try assertIsChip(
             rep, scale: scale, side: RailProjectColumn.chipSize(.rail),
             midX: width / 2, midY: SidebarDialTuning.contentPaddingTop() + SidebarDialTuning.rowHeight() / 2,
-            rowMinX: SidebarDialTuning.windowMargin(), "history"
+            rowMinX: try listMinX(), "history"
         )
     }
 

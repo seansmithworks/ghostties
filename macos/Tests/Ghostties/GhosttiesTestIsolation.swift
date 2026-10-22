@@ -120,12 +120,10 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.rowGhostSize(defaults: d) == 16)
         #expect(SidebarDialTuning.rowLeadingPadding(defaults: d) == 4)
         #expect(SidebarDialTuning.rowTrailingPadding(defaults: d) == 20)
-        #expect(SidebarDialTuning.groupCardInset(defaults: d) == 6)
-        // Tiles on the 8pt grid (Sean, 2026-10-10): sidebar 32 / glyph 16,
-        // rail 40 / glyph 16, text 13 in both.
-        #expect(SidebarDialTuning.sidebarProjectTileSize(defaults: d) == 32)
+        // Tiles on the 8pt grid: one 40pt project tile in both states (rail
+        // stays put, 2026-10-22), 40pt chips / 16pt glyphs, text 13 in both.
         #expect(SidebarDialTuning.sidebarProjectTileText(defaults: d) == 13)
-        #expect(SidebarDialTuning.sidebarThreadTileSize(defaults: d) == 32)
+        #expect(SidebarDialTuning.sidebarThreadTileSize(defaults: d) == 40)
         #expect(SidebarDialTuning.sidebarThreadTileIcon(defaults: d) == 16)
         #expect(SidebarDialTuning.railProjectTileSize(defaults: d) == 40)
         #expect(SidebarDialTuning.railProjectTileText(defaults: d) == 13)

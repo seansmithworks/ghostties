@@ -5,21 +5,22 @@ import GhosttiesCore
 // MARK: - Project column
 
 /// One view's selection (Sean, 2026-10-08, strawman C; option D,
-/// 2026-10-09): the selected session's project sits on a card the full row
-/// width in the expanded list, which narrows into a column on the rail, tile
-/// through its last row (`ProjectGroupCard`); its tile is filled with ink.
-/// Every session row, grouped or not, and History, is marked by a
-/// tile-sized chip behind its glyph, in both.
+/// 2026-10-09; rail stays put, 2026-10-22): the selected session's project
+/// sits on one card round the rail's tile column, tile through its last
+/// row, the same in the expanded list and on the rail (`ProjectGroupCard`);
+/// its tile is filled with ink. Every session row, grouped or not, and
+/// History, is marked by a tile-sized chip behind its glyph, in both.
 ///
 /// Every value below is a "Rail column" dial (`SidebarDialTuning`); the
 /// `default…` constants are what ships, and what each dial reads unset.
 enum RailProjectColumn {
-    /// The chip (thread tile) defaults to the monogram tile's side and
+    /// The chip (thread tile) defaults to the project tile's side and
     /// corner (`RailProjectTile.defaultSize`, `RailProjectTile.cornerRadius`),
-    /// so chip and tile read as one family.
+    /// so chip and tile read as one family, in both states: nothing
+    /// resizes across the morph.
     static let defaultThreadTileSize: CGFloat = RailProjectTile.defaultSize
-    /// The rail's chip, unset: the rail's tile (`RailProjectTile.defaultRailSize`).
-    static let defaultRailThreadTileSize: CGFloat = RailProjectTile.defaultRailSize
+    /// The rail's chip, unset: the same tile side.
+    static let defaultRailThreadTileSize: CGFloat = RailProjectTile.defaultSize
     /// The sidebar's status glyph inside its chip, unset (Sean, 2026-10-10:
     /// the 8pt grid). Not "Row ghost size", which the Sessions rows keep.
     static let defaultSidebarThreadTileIcon: CGFloat = 16
@@ -93,7 +94,7 @@ enum RailProjectColumn {
     /// How far the chip reaches past the tile on each side when the
     /// thread tile is the wider of the two; 0 when the project tile is.
     static func chipOverhang(_ context: SidebarTileContext) -> CGFloat {
-        max(0, chipSize(context) - RailProjectTile.size(context)) / 2
+        max(0, chipSize(context) - RailProjectTile.size) / 2
     }
 
     /// The overhang the card's or column's side gaps are measured past the
@@ -106,26 +107,18 @@ enum RailProjectColumn {
     /// The rail column's width: the wider of the rail's tile and chip, plus
     /// `inset` on each side.
     static func columnWidth(anchorCount: Int, inset: CGFloat) -> CGFloat {
-        RailProjectTile.size(.rail) + (sideOverhang(anchorCount: anchorCount, context: .rail) + inset) * 2
+        RailProjectTile.size + (sideOverhang(anchorCount: anchorCount, context: .rail) + inset) * 2
     }
 
-    /// The column's or card's vertical extent around its anchors' union:
-    /// `inset` above the tile; below, `inset` past the last row's chip on
-    /// the rail, `ProjectGroupCard.plateGap` past the last row's frame (the
-    /// plate's box) expanded, and `inset` below the tile when the header is
-    /// alone (Sean, 2026-10-09; the expanded bottom, Amendment 5, 2026-10-20).
-    static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat, context: SidebarTileContext) -> ClosedRange<CGFloat> {
-        let tileTrim = (ProjectAccordionHeader.height(context) - RailProjectTile.size(context)) / 2
-        let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize(context)) / 2)
+    /// The column's vertical extent around its anchors' union, the same
+    /// expanded and on the rail: `inset` above the tile; below, `inset` past
+    /// the last row's chip, or below the tile when the header is alone
+    /// (Sean, 2026-10-09).
+    static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat) -> ClosedRange<CGFloat> {
+        let tileTrim = (ProjectAccordionHeader.height - RailProjectTile.size) / 2
+        let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize(.rail)) / 2)
         let top = union.minY + tileTrim - inset
-        let bottom: CGFloat
-        if anchorCount <= 1 {
-            bottom = union.maxY - tileTrim + inset
-        } else if context == .sidebar {
-            bottom = union.maxY + ProjectGroupCard.plateGap
-        } else {
-            bottom = union.maxY - chipTrim + inset
-        }
+        let bottom = anchorCount <= 1 ? union.maxY - tileTrim + inset : union.maxY - chipTrim + inset
         return top...max(top, bottom)
     }
 }
@@ -151,15 +144,12 @@ extension View {
     }
 }
 
-/// The selected project's group card (option D) and, on the rail, its
-/// column: one rounded, faintly tinted rect behind the group's tile and
-/// rows, inset from the tile and chips on all four sides, at the chip's
-/// corner plus the inset. Expanded it wraps the row frames by `plateGap`
-/// at the sides and the bottom (concentric with the selected-row plate) and
-/// sits `groupCardInset` above the tile; on the rail it is the tile (or wider
-/// chip) plus `railColumnInset` each side, centred on the rail. Between the
-/// two it narrows on a straight line, every edge at once
-/// (`SidebarMorphMetrics.card`), so collapsing reads as one shape.
+/// The selected project's group card (option D; rail stays put): one
+/// rounded, faintly tinted rect behind the group's tile and its rows'
+/// chips, hugging only the rail's tile column: the tile (or wider chip)
+/// plus `railColumnInset` each side, centred on the rail, at the chip's
+/// corner plus the inset. The same shape expanded and on the rail
+/// (`SidebarMorphMetrics.card`); the names panel opens beside it.
 struct ProjectGroupCard: View {
     /// The sidebar's own coordinate space, named on its root
     /// (`SidebarHostRoot`): x = 0 at the sidebar's leading edge, wherever
@@ -176,28 +166,6 @@ struct ProjectGroupCard: View {
     let groups: [SidebarProjectGroup.ID: [Anchor<CGRect>]]
     /// The selected session's group: its card carries the Redlines tag.
     let selected: SidebarProjectGroup.ID?
-
-    /// The expanded card's gap round the selected-row plate, whose box is
-    /// the whole row frame: at the sides and the bottom, so the card's
-    /// corner (plate radius 8 + 4 = 12) is concentric with the plate's
-    /// (contract Amendment 5). The rail column's `columnInset` is its gap.
-    static let plateGap: CGFloat = 4
-
-    /// How far the expanded card reaches past the row frames on each side:
-    /// with rows, the plate gap (the plate is the row frame); a header
-    /// alone, the card inset round its tile, less the row's own leading
-    /// padding before the tile slot.
-    static func horizontalOutset(hasRows: Bool, cardInset: CGFloat, rowLeadingPadding: CGFloat) -> CGFloat {
-        hasRows ? plateGap : cardInset - rowLeadingPadding
-    }
-
-    /// The expanded card's overhang past the column's trailing edge, the
-    /// widest it gets: the room the list and the sidebar's clip leave for it.
-    static func trailingBleed() -> CGFloat {
-        let cardInset = SidebarDialTuning.groupCardInset(), lead = SidebarDialTuning.rowLeadingPadding()
-        return max(0, horizontalOutset(hasRows: true, cardInset: cardInset, rowLeadingPadding: lead),
-                   horizontalOutset(hasRows: false, cardInset: cardInset, rowLeadingPadding: lead))
-    }
 
     var body: some View {
         let metrics = widthModel.metrics(morphOverride ?? widthModel.morph, dials: morphDials)

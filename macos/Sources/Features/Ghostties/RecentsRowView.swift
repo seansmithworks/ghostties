@@ -219,13 +219,13 @@ struct SidebarListRowTitle: View {
     }
 }
 
-/// The visual shell of a sidebar list row (option D, 2026-10-09), on the
-/// expanded sidebar and the rail alike — one glyph in the leading status
-/// slot, the column the one-view tiles sit in, then title over subtitle; the
-/// row height and padding dials, the selected chip, hover, and the row's
-/// part in the sidebar ⇄ rail morph: the glyph and chip grow and travel to
-/// the rail's centre with the tile column (`MorphGlyphSlot`, `MorphTravel`)
-/// while the labels fade (`MorphLabelFade`). Shared by session rows
+/// The visual shell of a sidebar list row (option D, 2026-10-09; rail stays
+/// put, 2026-10-22), on the expanded sidebar and the rail alike — one glyph
+/// in the leading status slot, on the rail's tile column where the one-view
+/// tiles sit, then title over subtitle in the names panel right of the
+/// rail's divider; the row height and padding dials, the selected chip,
+/// hover, and the row's part in the sidebar ⇄ rail morph: the glyph and
+/// chip stay put (`MorphGlyphSlot`) while the labels fade (`MorphLabelFade`). Shared by session rows
 /// (`RecentsRowView`) and the History row (`HistoryRowView`) so both render
 /// identically by construction. Callers add tap and accessibility on top.
 struct SidebarListRowChrome<Title: View, Glyph: View>: View {
@@ -256,9 +256,9 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     @State private var isHovered = false
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
-    /// The leading status slot: the monogram tile's width, so a row's
-    /// glyph centres under its project's tile.
-    static var glyphSlotWidth: CGFloat { RailProjectTile.size(.sidebar) }
+    /// The leading status slot: the project tile's width, so a row's glyph
+    /// centres under its project's tile.
+    static var glyphSlotWidth: CGFloat { RailProjectTile.size }
 
     var body: some View {
         let progress = morphOverride ?? widthModel.morph
@@ -267,13 +267,14 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         // The selection (`SelectedRowMix`): this instant's outline, tint,
         // and, for a new row, its growing slot and fading-in content.
         SelectedRowMixRowReader(id: mixID, isActive: isActive) { look in
-            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+            // The labels start in the names panel, right of the divider.
+            HStack(spacing: metrics.labelGap) {
                 // Hover is a tile-sized chip behind the glyph in every list
                 // (option D); the group card is drawn only around a project
                 // group.
                 MorphGlyphSlot(
                     progress: progress,
-                    slotWidth: dials.sidebarTileSize,
+                    slotWidth: dials.railTileSize,
                     glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
                     chipSizes: (dials.sidebarChipSize, dials.railChipSize),
                     // The chip is hover only; selection is the row's outline.
@@ -282,7 +283,6 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     glyph: glyph
                 )
                 .redlineFrame(redlineID + ".glyph")
-                .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
 
                 // Title + subtitle stacked
                 VStack(alignment: .leading, spacing: 1) {
@@ -302,6 +302,9 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
             .redlineFrame(redlineID + ".content")
             .padding(.leading, SidebarDialTuning.rowLeadingPadding())
             .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+            // Leading: a row too narrow for its labels overflows at the
+            // trailing end, so the glyph never leaves the tile column.
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch. A new
             // row's slot, gap included, grows from nothing (N4).
             .frame(height: SidebarDialTuning.rowHeight() * look.height)
@@ -311,8 +314,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 SelectedRowOutlineSurface(
                     look: look,
                     progress: progress,
-                    chipCenterX: dials.rowLeadingPadding + dials.sidebarTileSize / 2,
-                    chipTravel: metrics.tileTravel,
+                    chipCenterX: dials.rowLeadingPadding + dials.railTileSize / 2,
                     chipSizes: (dials.sidebarChipSize, dials.railChipSize)
                 )
             }

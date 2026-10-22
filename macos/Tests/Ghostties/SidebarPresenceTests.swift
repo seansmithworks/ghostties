@@ -101,19 +101,20 @@ struct SidebarPresenceTests {
     // MARK: - Collapsed Rail Width — Hugs the Traffic Lights
 
     /// The rail hugs the traffic-light cluster: zoom `maxX` plus a trailing
-    /// gap equal to the leading inset, so the cluster sits centered. A
-    /// macOS 26-shaped cluster (x=20...78) gives 98 — not a fixed width
-    /// (Sean, sidebar-presence review round 3).
+    /// gap equal to the leading inset, so the cluster sits centered, on the
+    /// 8pt grid. A macOS 26-shaped cluster (x=20...78) gives 98, so 96 —
+    /// not a fixed width (Sean, sidebar-presence review round 3; the grid,
+    /// rail stays put).
     @Test func railWidthHugsATypicalCluster() {
         let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 78, leadingInset: 20)
-        #expect(width == 98)
+        #expect(width == 96)
     }
 
     /// The hug tracks the cluster: a wider cluster widens the rail by the
-    /// same amount.
+    /// same amount, to the nearest grid step (170, so 168).
     @Test func railWidthTracksAWideCluster() {
         let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 150, leadingInset: 20)
-        #expect(width == 170)
+        #expect(width == 168)
     }
 
     /// A cluster narrower than the floor must not squeeze the rail below

@@ -362,13 +362,13 @@ private struct ToggleKeyActivation: ViewModifier {
     }
 }
 
-/// A project's accordion header in the one-view list (option D):
-/// `[tile] NAME ⌄ ———— count`, on the expanded sidebar and the rail alike.
-/// The monogram tile leads, in the column the rows' status glyphs sit in;
-/// on the way to the rail its shape scales up to the rail's tile and
-/// travels to the rail's centre with that column, in a header that stays
-/// 40pt tall throughout, while the name, chevron and count fade
-/// (`MorphLabelFade`). A folded project's tile
+/// A project's accordion header in the one-view list (option D; rail stays
+/// put, project-icon-tile card 05): `[tile] | name ⌄ ———— count`, on the
+/// expanded sidebar and the rail alike. The tile (`ProjectTileView`) leads,
+/// in the rail's tile column, where the rows' status glyphs sit too; it is
+/// the same size at the same x in both states, in a header that stays 40pt
+/// tall, and the names panel right of the rail's divider holds the name,
+/// chevron and count, which fade (`MorphLabelFade`). A folded project's tile
 /// carries its session count on the rail. Clicking anywhere on it, tile
 /// included, folds or unfolds the project's rows. An empty project's header
 /// is dimmed, has no chevron (nothing to fold), and selects the project
@@ -377,12 +377,11 @@ struct ProjectAccordionHeader: View {
     /// The header's height on the sidebar and the rail (keyframe spec D1),
     /// which a tile at or under 40pt sits in.
     static let baseHeight: CGFloat = SidebarMorphMetrics.headerBaseHeight
-    /// The header's height in `context` (the expanded header, or the rail's
-    /// tile row): grows with that context's project tile, so the tile never
-    /// overflows it and the group card, measured from the header's frame,
-    /// always encloses the tile.
-    static func height(_ context: SidebarTileContext) -> CGFloat {
-        max(baseHeight, RailProjectTile.size(context))
+    /// The header's height, expanded and on the rail: grows with the project
+    /// tile, so the tile never overflows it and the group card, measured
+    /// from the header's frame, always encloses the tile.
+    static var height: CGFloat {
+        max(baseHeight, RailProjectTile.size)
     }
 
     let name: String
@@ -422,7 +421,7 @@ struct ProjectAccordionHeader: View {
         let progress = morphOverride ?? widthModel.morph
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
-        let slot = dials.sidebarTileSize
+        let slot = dials.railTileSize
         // A tap gesture, not a `Button`: the header is also the project's
         // drag handle (`RecentsListView.groupedActiveRows`), and a macOS
         // `Button` takes the mouse-down that `.onDrag` needs — the session
@@ -431,17 +430,16 @@ struct ProjectAccordionHeader: View {
         HStack(spacing: 0) {
             // The tile's face only: the whole header is the tap target and
             // the drag handle, so the tile is not a button of its own. Laid
-            // out in the sidebar's slot; drawn in a fixed rail-sized square
-            // centred on it, its shape scaled to this step's size.
+            // out in the rail's tile column, the same square in both states.
             Color.clear
                 .frame(width: slot, height: slot)
                 .overlay { tileFace(progress: progress, dials: dials) }
-                .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
-                .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
+                // The labels start in the names panel, right of the divider.
+                .padding(.trailing, metrics.labelGap)
             HStack(spacing: 0) {
-                Text(name.uppercased())
+                // The names panel's header: the project's name as typed.
+                Text(name)
                     .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .redlineFrame(redlineID.map { $0 + ".label" })
@@ -477,7 +475,10 @@ struct ProjectAccordionHeader: View {
         .foregroundStyle(ink)
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-        .modifier(MorphHeight(from: dials.sidebarHeaderHeight, to: dials.railHeaderHeight, progress: progress))
+        // Leading: a header too narrow for its labels overflows at the
+        // trailing end, so the tile never leaves the tile column.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .frame(height: dials.headerHeight)
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
         // Mid-morph the header is in flight: no clicks, drags or drops land.
@@ -511,7 +512,7 @@ struct ProjectAccordionHeader: View {
     private func tileFace(progress: CGFloat, dials: SidebarMorphMetrics.Dials) -> MorphTileFace {
         MorphTileFace(
             progress: progress,
-            sizes: (dials.sidebarTileSize, dials.railTileSize),
+            size: dials.railTileSize,
             textSizes: (
                 dials.tileTextSize(rail: false, letters: monogram.count),
                 dials.tileTextSize(rail: true, letters: monogram.count)
@@ -573,13 +574,13 @@ enum SidebarTileContext {
     case rail
 }
 
-/// The header's tile at one step of the morph: one rail-sized square in
-/// both states, its shape scaled from the sidebar's size at 0 to the
-/// rail's at 1 (`MorphTileScale`), the monogram at its own size, and, on
-/// the rail, a folded project's session count on the drawn shape's corner.
+/// The header's tile at one step of the morph: one square, the same in
+/// both states, the monogram at this step's text size, and, on the rail, a
+/// folded project's session count on its corner. The face itself is
+/// `ProjectTileView`.
 struct MorphTileFace: View, Animatable {
     var progress: CGFloat
-    let sizes: (from: CGFloat, to: CGFloat)
+    let size: CGFloat
     let textSizes: (from: CGFloat, to: CGFloat)
     let projectId: UUID?
     let iconStyle: ProjectIconStyle?
@@ -598,17 +599,12 @@ struct MorphTileFace: View, Animatable {
     }
 
     var body: some View {
-        let container = sizes.to
-        let scale = MorphTileScale.scale(from: sizes.from, to: sizes.to, progress: progress)
-        // How far the drawn shape's corner sits inside the container's.
-        let cornerInset = container * (1 - scale) / 2
         ProjectTileView(
             projectId: projectId,
             iconStyle: iconStyle,
             monogram: monogram,
-            size: container,
+            size: size,
             textSize: SidebarMorphMetrics.lerp(textSizes.from, textSizes.to, progress),
-            shapeScale: scale,
             isEmpty: isEmpty,
             isSelectedProject: isSelectedProject,
             redlineID: redlineID
@@ -625,7 +621,7 @@ struct MorphTileFace: View, Animatable {
                     .frame(minWidth: 15, minHeight: 15)
                     .background(Capsule().fill(style.fill))
                     .modifier(MorphRailOnlyFade())
-                    .offset(x: 5 - cornerInset, y: -5 + cornerInset)
+                    .offset(x: 5, y: -5)
                     // Folding is a close, but the badge arriving with it
                     // is an entrance: it pops in on the fold spring's
                     // bounce, and leaves on an unfold without one.
@@ -686,18 +682,12 @@ enum RailCountBadge {
 /// A project tile's dials and look, shared by the expanded header and the
 /// rail (the tile itself is `ProjectAccordionHeader`'s, in both).
 enum RailProjectTile {
-    /// The sidebar's tile, unset (Sean, 2026-10-10: the 8pt grid).
-    static let defaultSize: CGFloat = 32
-    /// The rail's tile, unset (Sean, 2026-10-10: the rail's tiles grow a third
-    /// as the sidebar shrinks to it, on the 8pt grid).
-    static let defaultRailSize: CGFloat = 40
-    /// The tile's side in `context`: that context's "Project tile size" dial.
-    static func size(_ context: SidebarTileContext) -> CGFloat {
-        switch context {
-        case .sidebar: max(SidebarDialTuning.sidebarProjectTileSize(), 0)
-        case .rail: max(SidebarDialTuning.railProjectTileSize(), 0)
-        }
-    }
+    /// The tile, unset: one size expanded and on the rail, so no tile ever
+    /// moves or resizes across the morph (rail stays put, 2026-10-22; was
+    /// 32 expanded, 40 on the rail).
+    static let defaultSize: CGFloat = 40
+    /// The tile's side in both states: the rail's "Project tile size" dial.
+    static var size: CGFloat { max(SidebarDialTuning.railProjectTileSize(), 0) }
     /// A one-letter monogram's font size: what the sidebar's "Project tile
     /// text" dial reads unset.
     static let defaultTextSize: CGFloat = 13

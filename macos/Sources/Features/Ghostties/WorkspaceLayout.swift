@@ -66,12 +66,28 @@ enum WorkspaceLayout {
     /// traffic-light cluster — the cluster's rightmost edge (zoom button
     /// `maxX`) plus a trailing gap equal to its leading inset (close button
     /// `minX`), both in the same coordinate space, so the cluster sits
-    /// visually centered in the rail. Native (AppKit-default) inset lands
-    /// around ~94pt on macOS 26. Never returns less than `sidebarRailWidth`,
-    /// so a narrow or unusual cluster never squeezes the tray pill.
+    /// visually centered in the rail — rounded to the nearest step of the
+    /// 8pt grid (`layoutGrid`), so the rail's tile column, at half its
+    /// width, sits on the grid too: the macOS 26 cluster's 79 + 19 = 98 is
+    /// a 96pt rail, its tiles centred at 48 (rail stays put). Never returns
+    /// less than `sidebarRailWidth`, so a narrow or unusual cluster never
+    /// squeezes the tray pill.
     static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        max(sidebarRailWidth, zoomButtonMaxX + leadingInset + SidebarDialTuning.railExtraWidth(defaults: defaults))
+        let hug = zoomButtonMaxX + leadingInset + SidebarDialTuning.railExtraWidth(defaults: defaults)
+        return max(sidebarRailWidth, (hug / layoutGrid).rounded() * layoutGrid)
     }
+
+    /// The layout grid the rail's width snaps to (`collapsedRailWidth`).
+    static let layoutGrid: CGFloat = 8
+
+    /// The names panel's divider on the rail's trailing edge (rail stays
+    /// put, project-icon-tile card 05): 1pt, drawn on the expanded sidebar,
+    /// where the names panel opens to the rail's right.
+    static let railDividerWidth: CGFloat = 1
+
+    /// From the divider to the names panel's labels: header names and row
+    /// titles start this far right of it (card 05: 12).
+    static let namesPanelLeadingInset: CGFloat = 12
 
     /// Pure fullscreen check shared by `titlebarRowTopAnchorConstant(in:)`
     /// and `collapsedRailWidth(in:)` — both need to special-case fullscreen
@@ -410,11 +426,6 @@ enum WorkspaceLayout {
     /// tile/glyph column (option D's group padding). The legacy
     /// `sidebarRowLeadingPadding` (8) still sets the Projects tab's rows.
     static let recentsRowLeadingPadding: CGFloat = 4
-
-    /// The selected project's group card in the expanded list (option D):
-    /// 6pt, inset from the tile and chips on all four sides. Read it through
-    /// `SidebarDialTuning.groupCardInset()`.
-    static let sidebarGroupCardInset: CGFloat = 6
 
     /// Top padding of the scrollable list content in both sidebar tabs
     /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s
@@ -955,19 +966,29 @@ extension EnvironmentValues {
 /// `horizontalOnly`: the pinned History footer below the list
 /// (`SidebarSessionSections.Layout.footer`) takes the column's horizontal
 /// insets but none of the list's vertical padding or redline frames.
+///
+/// `anchorsToRail` (the session list, which morphs to the rail; rail stays
+/// put): the leading edge is `SidebarMorphMetrics.listMinX`, anchored to
+/// the rail's tile column, so every tile and glyph slot sits where the rail
+/// draws it; the leading margin and content-padding dials don't apply.
 struct SidebarColumnPadding: ViewModifier {
     /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     /// See `EnvironmentValues.sidebarTrailingGutter`.
     @Environment(\.sidebarTrailingGutter) private var trailingGutter
+    @Environment(\.sidebarRailWidth) private var railWidth
+    @Environment(\.sidebarMorphDials) private var morphDials
     var symmetric = false
     var horizontalOnly = false
+    var anchorsToRail = false
 
     func body(content: Content) -> some View {
-        let margin = SidebarDialTuning.windowMargin()
+        let margin = anchorsToRail
+            ? SidebarMorphMetrics(dials: morphDials ?? .current(), expandedWidth: 0, railWidth: railWidth, progress: 0).listMinX
+            : SidebarDialTuning.windowMargin()
         content
             .redlineFrame(horizontalOnly ? nil : RedlineID.listContent)
-            .padding(.leading, symmetric ? 0 : SidebarDialTuning.contentPaddingLeading())
+            .padding(.leading, symmetric || anchorsToRail ? 0 : SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, symmetric ? 0 : SidebarDialTuning.contentPaddingTrailing())
             .padding(.top, horizontalOnly ? 0 : SidebarDialTuning.contentPaddingTop())
             .redlineFrame(horizontalOnly ? nil : RedlineID.listInner)

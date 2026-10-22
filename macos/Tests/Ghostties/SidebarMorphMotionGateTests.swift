@@ -55,13 +55,9 @@ struct SidebarMorphMotionGateTests {
     /// RED: the dials give 32 (sidebar, `max(30, 32)`) and 40 (rail), so the
     /// header reflows 32 -> 40 across the morph.
     @Test func headerHeightIsFortyAtEveryProgress() {
+        // One height for both states since rail stays put: no step can differ.
         let dials = withDials { SidebarMorphMetrics.Dials.current() }
-        #expect(dials.sidebarHeaderHeight == 40, "sidebar header \(dials.sidebarHeaderHeight)")
-        #expect(dials.railHeaderHeight == 40, "rail header \(dials.railHeaderHeight)")
-        for p in [CGFloat(0), 0.5, 1] {
-            let h = SidebarMorphMetrics.lerp(dials.sidebarHeaderHeight, dials.railHeaderHeight, p)
-            #expect(h == 40, "header height at morph \(p): \(h)")
-        }
+        #expect(dials.headerHeight == 40, "header \(dials.headerHeight)")
     }
 
     // MARK: - D2: quiet-tint count badge

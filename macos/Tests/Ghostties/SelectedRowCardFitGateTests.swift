@@ -5,19 +5,17 @@ import SwiftUI
 import Testing
 @testable import Ghostty
 
-/// Amendment 5 (`docs/plans/selected-row-mix-contract.md`): the glass
-/// active-group card wraps the selected-row plate with an even 4pt gap on
-/// every side, measured from the card edge to the plate's drawn box, with
-/// concentric corners (plate radius 8 + gap 4 = card radius 12). The card's
-/// extent comes from the full row frame the plate would occupy, so it never
-/// depends on which row is selected.
+/// Amendment 6 (`docs/plans/selected-row-mix-contract.md`, rail stays put,
+/// superseding Amendment 5's expanded card): the glass active-group card
+/// hugs the rail's tile column in the expanded list too, wrapping the
+/// group's tile and chips with an even 4pt gap (the column inset) at the
+/// sides and the bottom, with concentric corners (chip radius 8 + gap 4 =
+/// card radius 12). Its extent comes from the group's last row's chip, so it
+/// never depends on which row is selected.
 ///
 /// Live: a real `WorkspaceViewContainer` in a window, frames from the
-/// Redlines registry. In the expanded list the plate is drawn on the whole
-/// row (`SelectedRowOutlineSurface` at morph 0), so its box is the row's own
-/// `RedlineID.row` frame. If a build keeps the plate off the row frame, the
-/// contract's Amendment 5 must say where the plate sits and this gate must
-/// be amended with it; do not widen the band.
+/// Redlines registry (`RedlineID.row(id) + ".chip"`, the drawn chip). Do
+/// not widen the band.
 @MainActor
 @Suite(.serialized)
 struct SelectedRowCardFitGateTests {
@@ -114,23 +112,23 @@ struct SelectedRowCardFitGateTests {
             // atlas-api's second (last) session is selected.
             settle(rig)
             let card = try frame(rig, RedlineID.groupCard)
-            let plate = try frame(rig, RedlineID.row(rig.sessions[1].id))
+            let chip = try frame(rig, RedlineID.row(rig.sessions[1].id) + ".chip")
 
-            let left = plate.minX - card.minX
-            let right = card.maxX - plate.maxX
-            let bottom = card.maxY - plate.maxY
+            let left = chip.minX - card.minX
+            let right = card.maxX - chip.maxX
+            let bottom = card.maxY - chip.maxY
             #expect(abs(left - gap) <= tolerance, "left gap \(left), want \(gap)")
             #expect(abs(right - gap) <= tolerance, "right gap \(right), want \(gap)")
             #expect(abs(bottom - gap) <= tolerance, "bottom gap \(bottom), want \(gap)")
 
-            // Concentric corners: the card's radius is the plate's plus the gap
+            // Concentric corners: the card's radius is the chip's plus the gap
             // actually drawn, so the three agree.
             let metrics = SidebarMorphMetrics(
                 expandedWidth: rig.container.sidebarFrameForTesting.width,
                 railWidth: WorkspaceLayout.collapsedRailWidth(in: rig.container), progress: 0
             ).card(hasRows: true)
-            #expect(metrics.cornerRadius == SelectedRowOutline.cornerRadius + gap, "card radius \(metrics.cornerRadius), plate radius \(SelectedRowOutline.cornerRadius)")
-            #expect(abs(metrics.cornerRadius - (SelectedRowOutline.cornerRadius + left)) <= tolerance, "radius \(metrics.cornerRadius) is not plate radius + the drawn gap \(left)")
+            #expect(metrics.cornerRadius == RailProjectColumn.chipCornerRadius + gap, "card radius \(metrics.cornerRadius), chip radius \(RailProjectColumn.chipCornerRadius)")
+            #expect(abs(metrics.cornerRadius - (RailProjectColumn.chipCornerRadius + left)) <= tolerance, "radius \(metrics.cornerRadius) is not chip radius + the drawn gap \(left)")
         }
     }
 
@@ -153,12 +151,12 @@ struct SelectedRowCardFitGateTests {
             }
 
             // With the first row selected the card still reaches 4pt past the
-            // full frame of the last row, where its plate would sit.
-            let lastRow = try frame(rig, RedlineID.row(rig.sessions[1].id))
-            #expect(abs((firstSelected.maxY - lastRow.maxY) - gap) <= tolerance, "bottom gap with the first row selected: \(firstSelected.maxY - lastRow.maxY)")
-            let firstRow = try frame(rig, RedlineID.row(rig.sessions[0].id))
-            #expect(abs((firstRow.minX - firstSelected.minX) - gap) <= tolerance, "left gap with the first row selected: \(firstRow.minX - firstSelected.minX)")
-            #expect(abs((firstSelected.maxX - firstRow.maxX) - gap) <= tolerance, "right gap with the first row selected: \(firstSelected.maxX - firstRow.maxX)")
+            // last row's chip, and 4pt past the chips at the sides.
+            let lastChip = try frame(rig, RedlineID.row(rig.sessions[1].id) + ".chip")
+            #expect(abs((firstSelected.maxY - lastChip.maxY) - gap) <= tolerance, "bottom gap with the first row selected: \(firstSelected.maxY - lastChip.maxY)")
+            let firstChip = try frame(rig, RedlineID.row(rig.sessions[0].id) + ".chip")
+            #expect(abs((firstChip.minX - firstSelected.minX) - gap) <= tolerance, "left gap with the first row selected: \(firstChip.minX - firstSelected.minX)")
+            #expect(abs((firstSelected.maxX - firstChip.maxX) - gap) <= tolerance, "right gap with the first row selected: \(firstSelected.maxX - firstChip.maxX)")
         }
     }
 }

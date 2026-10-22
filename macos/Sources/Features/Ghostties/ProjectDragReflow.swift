@@ -53,7 +53,7 @@ enum ProjectDragReflow {
         func member(_ item: SidebarProjectGroupItem) -> (group: SidebarProjectGroup, height: CGFloat)? {
             switch item {
             case .spacer: return nil
-            case .header(let group, _): return (group, ProjectAccordionHeader.height(.sidebar))
+            case .header(let group, _): return (group, ProjectAccordionHeader.height)
             case .row(_, let group): return (group, SessionDragReflow.rowHeight)
             }
         }
@@ -125,7 +125,7 @@ struct ProjectDropTarget {
 struct ProjectDragGapView: View {
     var body: some View {
         Color.clear
-            .frame(height: ProjectAccordionHeader.height(.sidebar) + SidebarProjectGroupItem.spacerHeight)
+            .frame(height: ProjectAccordionHeader.height + SidebarProjectGroupItem.spacerHeight)
             .redlineFrame(RedlineID.projectDragGap)
             .transition(.opacity.combined(with: .scale(scale: 0.01, anchor: .center)))
     }

@@ -115,6 +115,9 @@ final class SidebarHistoryPlacementTests: XCTestCase {
                 SidebarTray(isVertical: rail, toggleLabel: rail ? "Expand Sidebar" : "Collapse Sidebar", forceOpaque: true)
             }
             .environment(\.sidebarTrailingGutter, 0)
+            // As `SidebarHostRoot` does: the tray and the list's reserve
+            // read the same rail.
+            .environment(\.sidebarRailWidth, rail ? width : WorkspaceLayout.sidebarRailWidth)
             .environmentObject(store)
             .environmentObject(coordinator)
             .environmentObject(SidebarWidthModel(width: width))
@@ -172,13 +175,15 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// standing in for History.
     private func selectedCard(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let rowHeight = SidebarDialTuning.rowHeight()
-        let trayHeight = SidebarTray.reservedHeight(isVertical: rail) - (rail ? 0 : SidebarDialTuning.listToTrayGap())
+        // The rail's tray is sized from the rail it is on (`RailTrayGeometry`).
+        let railWidth = rail ? r.width : WorkspaceLayout.sidebarRailWidth
+        let trayHeight = SidebarTray.reservedHeight(isVertical: rail, railWidth: railWidth) - (rail ? 0 : SidebarDialTuning.listToTrayGap())
         let chip = RailProjectColumn.chipSize(rail ? .rail : .sidebar)
         let markHeight = rail ? chip : rowHeight
         // The rail's reserved space holds no list-to-tray gap, so its footer
         // adds all of the History-to-tray gap (`MorphHistoryFooterGap`); the
         // expanded list's reserved space already holds the list-to-tray gap.
-        let historyBottom = r.height - SidebarTray.reservedHeight(isVertical: rail)
+        let historyBottom = r.height - SidebarTray.reservedHeight(isVertical: rail, railWidth: railWidth)
             - (SidebarSessionSections.historyToTrayGap() - (rail ? 0 : SidebarDialTuning.listToTrayGap()))
         let historyMid = historyBottom - rowHeight / 2
         let chips = runsDown(r, atX: chipCentreX(r, rail: rail) - chip / 2 + 8).filter {
@@ -248,11 +253,9 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     func testFirstRowSitsAtTheSameYInExpandedAndRail() throws {
         let e = try selectedChip(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
         let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
-        // Any difference between the rail's and the sidebar's project header
-        // heights moves the row under it; both are 40 at the defaults
-        // (keyframe spec D1), so the row keeps its y.
-        let headerGrowth = ProjectAccordionHeader.height(.rail) - ProjectAccordionHeader.height(.sidebar)
-        XCTAssertEqual((e.lowerBound + e.upperBound) / 2 + headerGrowth, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
+        // The project header is one height in both states (keyframe spec
+        // D1), so the row keeps its y.
+        XCTAssertEqual((e.lowerBound + e.upperBound) / 2, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
     }
 
     /// The x of the selected chip's centre: the rail's centre, or, in the

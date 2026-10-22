@@ -187,6 +187,10 @@ The builder picks the API (layered SwiftUI fills, `.glassEffect`, an `NSVisualEf
      - `SidebarMorphMetricsTests.endsAgreeWithTheSettledViews` (:75-90): its dials (`groupCardInset` 10, `chipOverhang`) feed `horizontalOutset`; keep the property (the metrics' card edge equals the settled view's) against the new formula.
      - `railEndMatchesOptionD` (:44-52): unchanged (rail column).
 
+### Amendment (2026-10-22, rail stays put)
+
+6. **The card hugs the rail column in both states; supersedes Amendment 5's expanded card.** Sean picked project-icon-tile card 05: the rail's tile column never moves, and the names panel opens to its right. The active-group card is the rail column at every step of the morph (`SidebarMorphMetrics.card`): the tile and chips plus `columnInset` (4) on every side, radius chip 8 + 4 = 12, never reaching into the names panel. The selected-row plate is unchanged: the whole row expanded, the chip on the rail, `SelectedRowOutline.box` between them. `SelectedRowCardFitGateTests` measures the 4pt gap from the drawn chips (`RedlineID.row(id) + ".chip"`) instead of the row frame.
+
 ## Decisions
 
 1. **Overshoot size: decided, 1.2** (2026-10-19). 1.1 peaked at +0.64% (about 0.3pt on a 48pt row), present but invisible; 1.2 peaks at +2.25%, under the 3% cap.

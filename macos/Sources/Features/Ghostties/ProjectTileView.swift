@@ -9,9 +9,8 @@ import SwiftUI
 ///
 /// It draws the project's icon (`ProjectIconStore`, resolved off the main
 /// thread; the body only does an in-memory lookup) when the project has one
-/// and its `iconStyle` allows it, else the monogram (option D: r8, 10% tint).
-/// A `size` square whose shape is scaled by `shapeScale` (`MorphTileScale`)
-/// while the monogram stays at `textSize`, unscaled.
+/// and its `iconStyle` allows it, else the monogram (option D: r8, 10% tint)
+/// at `textSize`.
 ///
 /// Selected (the project holding the selected session): a monogram fills
 /// with ink; an icon can't turn ink, so it gets an ink ring instead, 2pt
@@ -24,7 +23,6 @@ struct ProjectTileView: View {
     let monogram: String
     let size: CGFloat
     let textSize: CGFloat
-    var shapeScale: CGFloat = 1
     var isEmpty: Bool = false
     var isSelectedProject: Bool = false
     /// DEBUG Redlines tag for the drawn (scaled) shape.
@@ -67,7 +65,7 @@ struct ProjectTileView: View {
         }
     }
 
-    private var cornerRadius: CGFloat { RailProjectTile.cornerRadius / max(shapeScale, 0.01) }
+    private var cornerRadius: CGFloat { RailProjectTile.cornerRadius }
 
     /// `inkFill`: ink laid over the tile tint, 0 unselected, the dial when
     /// selected. Past the midpoint the tile reads as ink, so its text flips
@@ -80,9 +78,7 @@ struct ProjectTileView: View {
         // fill: the plain tile at 0, solid ink at 1.
         return shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(RailProjectTile.ink(colorScheme).opacity(inkFill)))
             .frame(width: size, height: size)
-            // Inside the scale, so Redlines reports the drawn tile.
             .redlineFrame(redlineID)
-            .scaleEffect(shapeScale)
             .overlay {
                 Text(monogram)
                     .font(.system(size: textSize, weight: .bold))
@@ -103,14 +99,12 @@ struct ProjectTileView: View {
             .frame(width: size, height: size)
             .clipShape(shape)
             .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius + outset / max(shapeScale, 0.01), style: .continuous)
-                    .strokeBorder(RailProjectTile.ink(colorScheme), lineWidth: Self.ringWidth / max(shapeScale, 0.01))
-                    .padding(-outset / max(shapeScale, 0.01))
+                RoundedRectangle(cornerRadius: cornerRadius + outset, style: .continuous)
+                    .strokeBorder(RailProjectTile.ink(colorScheme), lineWidth: Self.ringWidth)
+                    .padding(-outset)
                     .opacity(ring)
             }
             .redlineFrame(redlineID)
-            .scaleEffect(shapeScale)
-            .frame(width: size, height: size)
             .accessibilityHidden(true)
     }
 }

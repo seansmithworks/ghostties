@@ -324,7 +324,12 @@ final class SidebarSectionsHistoryTests: XCTestCase {
             .environmentObject(SessionCoordinator())
             .padding(.leading, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingTrailing())
-        let framed = (asRail ? AnyView(padded.asRail(width: width)) : AnyView(padded.environmentObject(SidebarWidthModel(width: width))))
+        // The rail is the session list's column, anchored to the rail's
+        // tile column as `RecentsListView` lays it out.
+        let railColumn = row
+            .environmentObject(SessionCoordinator())
+            .modifier(SidebarColumnPadding(horizontalOnly: true, anchorsToRail: true))
+        let framed = (asRail ? AnyView(railColumn.asRail(width: width)) : AnyView(padded.environmentObject(SidebarWidthModel(width: width))))
             .frame(width: width, height: rowHeight)
             .background(Color.white)
         let hosting = NSHostingView(rootView: framed)
@@ -419,7 +424,7 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     /// matched the 32pt header within the tolerance; the 40pt header,
     /// keyframe spec D1, centres its ink 4pt lower.)
     func testExpandedListRendersNoSectionTitles() throws {
-        let headerHeight = ProjectAccordionHeader.height(.sidebar)
+        let headerHeight = ProjectAccordionHeader.height
         let bare = try XCTUnwrap(render(
             ProjectAccordionHeader(
                 name: "3 sessions · last 2h ago",

@@ -89,15 +89,16 @@ struct WindowMarginLiveTests {
         return (close.convert(close.bounds, to: container).minX, zoom.convert(zoom.bounds, to: container).maxX)
     }
 
-    /// The canvas card's leading edge sits at `zoomMaxX + leadingInset`, the
-    /// same on every Window margin: the rail's trailing side adds no margin
-    /// or gutter. Top/right/bottom keep following the dial.
+    /// The canvas card's leading edge sits at `zoomMaxX + leadingInset` on
+    /// the 8pt grid (the rail's width, rail stays put), the same on every
+    /// Window margin: the rail's trailing side adds no margin or gutter.
+    /// Top/right/bottom keep following the dial.
     @Test func collapsedCardLeadingEdgeIsZoomMaxPlusLeadingInset() throws {
         let (container, window) = makeContainer(mode: .collapsed, realChrome: true)
         defer { window.contentView = nil }
         container.layoutSubtreeIfNeeded()
         let cluster = try clusterInContainer(container, window)
-        let expectedX = cluster.zoomMaxX + cluster.closeMinX
+        let expectedX = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: cluster.zoomMaxX, leadingInset: cluster.closeMinX)
         for margin: CGFloat in [16, 4, SidebarDialTuning.windowMargin()] {
             container.applyWindowMarginForTesting(margin)
             container.layoutSubtreeIfNeeded()
@@ -109,15 +110,16 @@ struct WindowMarginLiveTests {
         }
     }
 
-    /// Rail content centre == cluster centre, which with the card rule above
-    /// equals the rail column's centre. The rail has no trailing gutter.
+    /// Rail content centre == cluster centre, to within the rail's snap to
+    /// the 8pt grid (a quarter step: the width moves at most half a step).
+    /// The rail has no trailing gutter.
     @Test func collapsedRailCentreIsTheClusterCentreWithNoTrailingGutter() throws {
         let (container, window) = makeContainer(mode: .collapsed, realChrome: true)
         defer { window.contentView = nil }
         container.layoutSubtreeIfNeeded()
         let cluster = try clusterInContainer(container, window)
         let sidebar = container.sidebarFrameForTesting
-        #expect(sidebar.midX == (cluster.closeMinX + cluster.zoomMaxX) / 2, "rail centre \(sidebar.midX) vs cluster centre \((cluster.closeMinX + cluster.zoomMaxX) / 2)")
+        #expect(abs(sidebar.midX - (cluster.closeMinX + cluster.zoomMaxX) / 2) <= WorkspaceLayout.layoutGrid / 4, "rail centre \(sidebar.midX) vs cluster centre \((cluster.closeMinX + cluster.zoomMaxX) / 2)")
         #expect(WorkspaceLayout.sidebarTrailingGutter(for: .collapsed) == 0, "the rail adds no trailing gutter")
         #expect(WorkspaceLayout.sidebarTrailingGutter(for: .pinned) == SidebarDialTuning.windowMargin(), "pinned keeps its gutter")
     }

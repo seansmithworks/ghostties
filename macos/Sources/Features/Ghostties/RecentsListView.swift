@@ -160,7 +160,7 @@ struct RecentsListView: View {
                 if skipScrollViewForTesting {
                     // See the doc comment on the `previewDragState` init.
                     sectionsContent(displaySections, slots: layout.list)
-                        .modifier(SidebarColumnPadding())
+                        .modifier(SidebarColumnPadding(anchorsToRail: true))
                 } else {
                     sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds, underTray: underTray)
                 }
@@ -180,12 +180,16 @@ struct RecentsListView: View {
                         slotContent(slot, displaySections)
                     }
                 }
-                .modifier(SidebarColumnPadding(horizontalOnly: true))
+                .modifier(SidebarColumnPadding(horizontalOnly: true, anchorsToRail: true))
                 .modifier(MorphHistoryFooterGap())
                 .modifier(MorphTrayReserve())
             }
         }
         .background(.clear)
+        // The names panel's left edge: the divider on the rail's edge.
+        .background(alignment: .topLeading) {
+            if !store.sessions.isEmpty { RailNamesDivider() }
+        }
         // Project icons for the tiles, resolved off the render path.
         .modifier(ProjectIconRefresh(projects: store.projects))
         .environment(\.selectedRowMixDriver, mix)
@@ -309,7 +313,7 @@ struct RecentsListView: View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 sectionsContent(sections, slots: slots)
-                    .modifier(SidebarColumnPadding())
+                    .modifier(SidebarColumnPadding(anchorsToRail: true))
                     .animation(reflowAnimation, value: dragState)
                     .animation(reflowAnimation, value: projectDragState)
                     // Pin/Unpin moves a project group (`ProjectListOrder`).
@@ -318,12 +322,8 @@ struct RecentsListView: View {
                     // inside the clip; the scroll view reaches up the same
                     // amount, so rows keep their y.
                     .padding(.top, scrollBleed)
-                    // The card also reaches past the column's trailing edge
-                    // into the gutter before the canvas card.
-                    .padding(.trailing, trailingBleed)
             }
             .padding(.top, -scrollBleed)
-            .padding(.trailing, -trailingBleed)
             // Rows scroll under the floating tray; the inset is where the
             // last one rests, clear of it.
             .modifier(MorphTrayReserve(scrolls: true, isActive: underTray))
@@ -344,17 +344,13 @@ struct RecentsListView: View {
     }
 
     /// How far the scroll region reaches above the first row, so the group
-    /// card's inset above a first header isn't clipped: the card inset, but
-    /// never into the traffic lights' row (centred at half the titlebar
-    /// inset, 16pt tall). On the rail the column's smaller inset fits in it.
+    /// card's inset above a first header isn't clipped: the column inset,
+    /// but never into the traffic lights' row (centred at half the
+    /// titlebar inset, 16pt tall).
     private var scrollBleed: CGFloat {
         let titlebarInset = store.toolbarRowTopAnchorConstant * 2
-        return min(SidebarDialTuning.groupCardInset(), max(0, titlebarInset / 2 - 8))
+        return min(RailProjectColumn.columnInset, max(0, titlebarInset / 2 - 8))
     }
-
-    /// The group card's overhang past the column's trailing edge
-    /// (`ProjectGroupCard.trailingBleed`), so it isn't clipped there.
-    private var trailingBleed: CGFloat { ProjectGroupCard.trailingBleed() }
 
     // MARK: - Section Rows (drag-reflow aware)
 
@@ -515,9 +511,8 @@ struct RecentsListView: View {
                         projectDragState.draggingProjectId = projectId
                         return NSItemProvider(object: projectId.uuidString as NSString)
                     } preview: {
-                        Text(group.name.uppercased())
+                        Text(group.name)
                             .font(.system(size: 11, weight: .semibold))
-                            .tracking(0.5)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(.ultraThinMaterial)

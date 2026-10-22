@@ -242,11 +242,16 @@ struct SelectedRowMixPixelTests {
             coordinator.setActiveSessionIdForTesting(selected ? sessions[0].id : nil)
             let width = rail ? try railWidth() : listWidth
             let size = CGSize(width: width, height: 420 + (rail ? SidebarTray.reservedHeight(isVertical: true) : 0))
+            // The expanded list beside the real rail, whose tile column the
+            // card hugs (rail stays put).
+            let model = SidebarWidthModel(width: width)
+            model.railWidth = try railWidth()
             let content: AnyView = rail
                 ? AnyView(SidebarRailColumn().asRail(width: width).environmentObject(store).environmentObject(coordinator))
                 : AnyView(RecentsListView(previewDragState: SessionDragState())
                     .environmentObject(store).environmentObject(coordinator)
-                    .environmentObject(SidebarWidthModel(width: width)))
+                    .environmentObject(model)
+                    .environment(\.sidebarRailWidth, model.railWidth))
             return (try snapshot(content, size: size, scheme: scheme), width)
         }
     }
@@ -313,12 +318,13 @@ struct SelectedRowMixPixelTests {
 
     private func cardCase(rail: Bool, scheme: ColorScheme) throws {
         let label = "\(rail ? "rail" : "sidebar") \(scheme)"
-        let (on, width) = try renderGroups(rail: rail, selected: true, scheme: scheme)
+        let (on, _) = try renderGroups(rail: rail, selected: true, scheme: scheme)
         let (off, _) = try renderGroups(rail: rail, selected: false, scheme: scheme)
         let height = CGFloat(on.rep.pixelsHigh) / on.scale
-        // Sidebar: the card's trailing body, clear of row text. Rail: the
-        // column's 4pt ring beside the 40pt tile and chips, 2pt in from its edge.
-        let x = rail ? width / 2 + RailProjectTile.size(.rail) / 2 + 2 : listWidth * 0.72
+        // The card hugs the rail's tile column in both states (rail stays
+        // put): its 4pt ring beside the 40pt tile and chips, 2pt in from its
+        // edge, on the rail's centre.
+        let x = try railWidth() / 2 + RailProjectTile.size / 2 + 2
         let probe = try #require(try probeCard(on, off, x: x, height: height), "\(label): no active-group card found down x=\(x)")
         let band = try liftBand(scheme)
         #expect(band.contains(probe.lift), "\(label): card lift \(probe.lift) outside the glass band \(band)")
@@ -342,7 +348,8 @@ struct SelectedRowMixPixelTests {
     func darkCardBeatsTheOldFill() throws {
         let (on, _) = try renderGroups(rail: false, selected: true, scheme: .dark)
         let (off, _) = try renderGroups(rail: false, selected: false, scheme: .dark)
-        let probe = try #require(try probeCard(on, off, x: listWidth * 0.72, height: CGFloat(on.rep.pixelsHigh) / on.scale))
+        let x = try railWidth() / 2 + RailProjectTile.size / 2 + 2
+        let probe = try #require(try probeCard(on, off, x: x, height: CGFloat(on.rep.pixelsHigh) / on.scale))
         let t = theme(.dark)
         let old = 0.04 * (lum(try rgb(t.ink)) - lum(try rgb(t.chrome)))
         #expect(probe.lift >= old * 1.3, "dark card lift \(probe.lift) is not clearly above the old 4% card's \(old)")

@@ -17,8 +17,6 @@ struct SidebarMorphMetrics: Equatable {
     /// The dial values the metrics are built from. `current` reads the live
     /// dials; tests build one directly or read an isolated suite.
     struct Dials: Equatable {
-        var windowMargin: CGFloat
-        var contentPaddingLeading: CGFloat
         var contentPaddingTrailing: CGFloat
         /// The expanded list's trailing column padding
         /// (`SidebarDialTuning.contentColumnTrailingPadding` at the pinned
@@ -26,10 +24,10 @@ struct SidebarMorphMetrics: Equatable {
         var columnTrailingPadding: CGFloat
         var rowLeadingPadding: CGFloat
         var rowHeight: CGFloat
-        var groupCardInset: CGFloat
         var columnInset: CGFloat
         var chipCornerRadius: CGFloat
-        var sidebarTileSize: CGFloat
+        /// The project tile, one size in both states (rail stays put): the
+        /// rail's "Project tile size" dial.
         var railTileSize: CGFloat
         var sidebarChipSize: CGFloat
         var railChipSize: CGFloat
@@ -45,11 +43,10 @@ struct SidebarMorphMetrics: Equatable {
             max((rail ? railTileText : sidebarTileText) - (letters > 1 ? 2 : 0), 1)
         }
 
-        /// The project header's height in each context: 40 in both (keyframe
+        /// The project header's height, the same in both states: 40 (keyframe
         /// spec D1), so the rows never reflow across the morph; only a tile
         /// dialled past 40 grows it (`ProjectAccordionHeader.height`).
-        var sidebarHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, sidebarTileSize) }
-        var railHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, railTileSize) }
+        var headerHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, railTileSize) }
 
         /// The live dials, clamped as the views clamp them
         /// (`RailProjectTile.size`, `RailProjectColumn.chipSize`, …).
@@ -58,8 +55,6 @@ struct SidebarMorphMetrics: Equatable {
             let rowHeight = SidebarDialTuning.rowHeight(defaults: defaults)
             let chip = { (size: CGFloat) in min(max(size, 0), rowHeight) }
             return Dials(
-                windowMargin: margin,
-                contentPaddingLeading: SidebarDialTuning.contentPaddingLeading(defaults: defaults),
                 contentPaddingTrailing: SidebarDialTuning.contentPaddingTrailing(defaults: defaults),
                 columnTrailingPadding: SidebarDialTuning.contentColumnTrailingPadding(
                     gutter: WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: margin),
@@ -67,10 +62,8 @@ struct SidebarMorphMetrics: Equatable {
                 ),
                 rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(defaults: defaults),
                 rowHeight: rowHeight,
-                groupCardInset: SidebarDialTuning.groupCardInset(defaults: defaults),
                 columnInset: max(SidebarDialTuning.railColumnInset(defaults: defaults), 0),
                 chipCornerRadius: max(SidebarDialTuning.railChipCornerRadius(defaults: defaults), 0),
-                sidebarTileSize: max(SidebarDialTuning.sidebarProjectTileSize(defaults: defaults), 0),
                 railTileSize: max(SidebarDialTuning.railProjectTileSize(defaults: defaults), 0),
                 sidebarChipSize: chip(SidebarDialTuning.sidebarThreadTileSize(defaults: defaults)),
                 railChipSize: chip(SidebarDialTuning.railThreadTileSize(defaults: defaults)),
@@ -87,25 +80,24 @@ struct SidebarMorphMetrics: Equatable {
     /// (`ProjectAccordionHeader.baseHeight`).
     static let headerBaseHeight: CGFloat = 40
 
-    /// The selected group's card in the expanded list and its column on the
-    /// rail, as one shape: horizontal span, the inset above the tile and
-    /// below the group's last mark, corner radius, and how far the tile and
-    /// the last row's mark sit inside their header and row (the card's top
-    /// and bottom are measured from those, not from the frames).
+    /// The selected group's card: the rail column, the same shape in the
+    /// expanded list and on the rail (it hugs only the rail column, never
+    /// the names panel): horizontal span, the inset above the tile and below
+    /// the group's last mark, corner radius, and how far the tile and the
+    /// last row's chip sit inside their header and row (the card's top and
+    /// bottom are measured from those, not from the frames).
     struct Card: Equatable {
         var minX: CGFloat
         var width: CGFloat
         /// Above the tile.
         var topInset: CGFloat
-        /// Below the group's last mark: the last row's frame expanded (the
-        /// selected-row plate's box), its chip on the rail, the tile when the
-        /// header is alone.
+        /// Below the group's last mark: the last row's chip, or the tile when
+        /// the header is alone.
         var verticalInset: CGFloat
         var cornerRadius: CGFloat
         /// The tile's inset from its header's top and bottom.
         var tileTrim: CGFloat
-        /// The last row's mark's inset from the row's top and bottom: the
-        /// chip's on the rail, 0 expanded, where the plate is the whole row.
+        /// The last row's chip's inset from the row's top and bottom.
         var chipTrim: CGFloat
         var maxX: CGFloat { minX + width }
         var midX: CGFloat { minX + width / 2 }
@@ -156,25 +148,43 @@ struct SidebarMorphMetrics: Equatable {
         min(0, max(slack, 0) - (expandedWidth - railWidth) * progress)
     }
 
-    // MARK: Ends
+    // MARK: The tile column (rail stays put)
 
-    /// The expanded list's leading and trailing edges (`SidebarColumnPadding`).
-    var listMinX: CGFloat { dials.windowMargin + dials.contentPaddingLeading }
+    /// The tile column's centre, owned by the rail: tiles, chips, glyphs and
+    /// the group card sit on it in both states and at every step between.
+    var railTileCenterX: CGFloat { railWidth / 2 }
+
+    /// The expanded list's leading edge (`SidebarColumnPadding`), anchored
+    /// to the rail's tile column: a row's leading padding, then its tile
+    /// slot, puts the slot exactly where the rail draws the tile.
+    var listMinX: CGFloat { railTileCenterX - dials.railTileSize / 2 - dials.rowLeadingPadding }
     var listMaxX: CGFloat { expandedWidth - dials.contentPaddingTrailing - dials.columnTrailingPadding }
 
     /// The tile column's centre in the expanded list: the list's leading
     /// edge, the row's leading padding, then half the tile slot
-    /// (`SidebarListRowChrome.glyphSlotWidth`, the sidebar tile's side).
-    var sidebarTileCenterX: CGFloat { listMinX + dials.rowLeadingPadding + dials.sidebarTileSize / 2 }
-    /// The rail centres everything: tiles, chips, glyphs and the column.
-    var railTileCenterX: CGFloat { railWidth / 2 }
+    /// (`SidebarListRowChrome.glyphSlotWidth`, the tile's side). The rail
+    /// tile's centre, by construction.
+    var sidebarTileCenterX: CGFloat { listMinX + dials.rowLeadingPadding + dials.railTileSize / 2 }
+
+    /// How far the tile column travels, sidebar to rail: nothing, since
+    /// the list is anchored to the rail's column.
+    var tileTravel: CGFloat { railTileCenterX - sidebarTileCenterX }
+
+    /// The names panel, right of the rail: the 1pt divider on the rail's
+    /// trailing edge (`RailNamesDivider`), then the panel's leading inset,
+    /// where every header name and row title starts.
+    var namesMinX: CGFloat { railWidth + WorkspaceLayout.railDividerWidth + WorkspaceLayout.namesPanelLeadingInset }
+
+    /// The gap between a tile slot and its labels that puts the labels at
+    /// `namesMinX`.
+    var labelGap: CGFloat { max(0, namesMinX - (railTileCenterX + dials.railTileSize / 2)) }
 
     // MARK: Interpolated
 
     /// The centre x of the project tile, and of every row's chip and glyph
-    /// beneath it.
+    /// beneath it: the same at every step.
     var tileCenterX: CGFloat { lerp(sidebarTileCenterX, railTileCenterX) }
-    var tileSize: CGFloat { lerp(dials.sidebarTileSize, dials.railTileSize) }
+    var tileSize: CGFloat { dials.railTileSize }
     var chipSize: CGFloat { lerp(dials.sidebarChipSize, dials.railChipSize) }
     var glyphSize: CGFloat { lerp(dials.sidebarGlyphSize, dials.railGlyphSize) }
 
@@ -186,38 +196,11 @@ struct SidebarMorphMetrics: Equatable {
     var labelOpacity: Double { Self.labelOpacity(progress) }
     static func labelOpacity(_ progress: CGFloat) -> Double { Double(min(max(1 - progress * 2, 0), 1)) }
 
-    /// How far the tile column travels, sidebar to rail: every tile, chip
-    /// and glyph is laid out in its sidebar slot and drawn this much
-    /// further right, scaled by progress (`MorphTravel`).
-    var tileTravel: CGFloat { railTileCenterX - sidebarTileCenterX }
-
     /// How far a context's chip reaches past its tile on each side when it
     /// is the wider of the two (`RailProjectColumn.chipOverhang`); a header
     /// alone has no chip, so the tile is the outer element.
     private func sideOverhang(tile: CGFloat, chip: CGFloat, hasRows: Bool) -> CGFloat {
         hasRows ? max(0, chip - tile) / 2 : 0
-    }
-
-    /// The expanded group card (`ProjectGroupCard.horizontalOutset`): with
-    /// rows, it wraps the row frames (the selected-row plate's box) by
-    /// `ProjectGroupCard.plateGap` at the sides and the bottom, concentric
-    /// with the plate, so its size never depends on which row is selected;
-    /// a header alone sits the card inset round its tile. The top is the
-    /// card inset above the tile either way.
-    func sidebarCard(hasRows: Bool) -> Card {
-        let gap = ProjectGroupCard.plateGap
-        let outset = ProjectGroupCard.horizontalOutset(
-            hasRows: hasRows, cardInset: dials.groupCardInset, rowLeadingPadding: dials.rowLeadingPadding
-        )
-        return Card(
-            minX: listMinX - outset,
-            width: max(0, listMaxX - listMinX + outset * 2),
-            topInset: dials.groupCardInset,
-            verticalInset: hasRows ? gap : dials.groupCardInset,
-            cornerRadius: SelectedRowOutline.cornerRadius + gap,
-            tileTrim: (dials.sidebarHeaderHeight - dials.sidebarTileSize) / 2,
-            chipTrim: 0
-        )
     }
 
     /// The rail column: the tile (or the wider chip) plus the column inset
@@ -231,25 +214,15 @@ struct SidebarMorphMetrics: Equatable {
             topInset: dials.columnInset,
             verticalInset: dials.columnInset,
             cornerRadius: dials.chipCornerRadius + dials.columnInset,
-            tileTrim: (dials.railHeaderHeight - dials.railTileSize) / 2,
+            tileTrim: (dials.headerHeight - dials.railTileSize) / 2,
             chipTrim: max(0, (dials.rowHeight - dials.railChipSize) / 2)
         )
     }
 
-    /// The card narrowing into the column: every edge on a straight line
-    /// between the two.
+    /// The group card at this step: the rail column at every step, so the
+    /// card never moves either; the names panel opens beside it.
     func card(hasRows: Bool) -> Card {
-        let from = sidebarCard(hasRows: hasRows)
-        let to = railColumn(hasRows: hasRows)
-        return Card(
-            minX: lerp(from.minX, to.minX),
-            width: lerp(from.width, to.width),
-            topInset: lerp(from.topInset, to.topInset),
-            verticalInset: lerp(from.verticalInset, to.verticalInset),
-            cornerRadius: lerp(from.cornerRadius, to.cornerRadius),
-            tileTrim: lerp(from.tileTrim, to.tileTrim),
-            chipTrim: lerp(from.chipTrim, to.chipTrim)
-        )
+        railColumn(hasRows: hasRows)
     }
 }
 
@@ -295,27 +268,10 @@ extension SidebarWidthModel {
     }
 }
 
-/// The tile column's horizontal travel: render-only, so a frame of the
-/// morph moves pixels, not layout.
-struct MorphTravel: GeometryEffect {
-    /// The full travel, at progress 1 (`SidebarMorphMetrics.tileTravel`).
-    var distance: CGFloat
-    var progress: CGFloat
-
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func effectValue(size: CGSize) -> ProjectionTransform {
-        ProjectionTransform(CGAffineTransform(translationX: distance * progress, y: 0))
-    }
-}
-
-/// A tile's shape (the project tile, a row's chip) through the morph: one
-/// fixed square at the rail's size in both states, the shape scaled down to
-/// the sidebar's size (32 of 40, 0.8) and back up, so the container and the
-/// row never resize and the monogram or glyph inside stays its own size.
+/// A row's chip through the morph: one fixed square at the rail's size in
+/// both states, the shape scaled to the sidebar's size and back up (1 at
+/// the shipped dials, where both are 40), so the container and the row
+/// never resize and the glyph inside stays its own size.
 enum MorphTileScale {
     /// The shape's scale at `progress`: the size this frame draws
     /// (`SidebarMorphMetrics.tileSize`/`chipSize`) over the container's.
@@ -346,32 +302,15 @@ struct MorphTrailingClusterRide: GeometryEffect {
     }
 }
 
-/// A frame height between two ends: the project header (40 at both ends
-/// at the defaults; a tile dialled past 40 grows it).
-struct MorphHeight: ViewModifier, Animatable {
-    var from: CGFloat
-    var to: CGFloat
-    var progress: CGFloat
-
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        content.frame(height: SidebarMorphMetrics.lerp(from, to, progress))
-    }
-}
-
 /// A row's leading slot: the status glyph at its size for this frame of
 /// the morph (the "Thread tile icon" dials, 16 at both ends), over its chip,
-/// centred in the sidebar's tile slot (the layout never changes;
-/// `MorphTravel` moves it). The chip is one rail-sized square in both
+/// centred in the tile slot, which sits on the rail's tile column in both
+/// states, so it never moves. The chip is one rail-sized square in both
 /// states, its shape scaled to this frame's size (`MorphTileScale`), so
 /// its frame never resizes and the glyph is never scaled with it.
 struct MorphGlyphSlot<Glyph: View>: View, Animatable {
     var progress: CGFloat
-    /// The slot's laid-out width: the sidebar tile's side.
+    /// The slot's laid-out width: the tile's side.
     let slotWidth: CGFloat
     let glyphSizes: (from: CGFloat, to: CGFloat)
     let chipSizes: (from: CGFloat, to: CGFloat)
@@ -399,6 +338,31 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
                 )
                 .morphIdentityProbe(chipID)
             }
+    }
+}
+
+/// The names panel's left edge on the expanded sidebar (rail stays put,
+/// project-icon-tile card 05): a 1pt line on the rail's trailing edge, the
+/// height of the list, above the tray. It sits just past the rail's width,
+/// so the rail's own clip hides it there; as the panel widens it is the
+/// first thing revealed, and the names fade in to its right.
+struct RailNamesDivider: View {
+    @Environment(\.sidebarRailWidth) private var railWidth
+    @ChromeScheme private var colorScheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            // Measured from the sidebar's leading edge, like the group card.
+            let originX = proxy.frame(in: .named(ProjectGroupCard.sidebarSpace)).minX
+            Rectangle()
+                .fill(ChromeTheme.active(colorScheme).ink(.row))
+                .frame(width: WorkspaceLayout.railDividerWidth, height: proxy.size.height)
+                .offset(x: railWidth - originX)
+                .redlineFrame(RedlineID.railNamesDivider)
+        }
+        .modifier(MorphTrayReserve())
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -593,15 +557,17 @@ struct SidebarMorphFrame<Content: View>: View {
         content
             .environment(\.sidebarTrailingGutter, WorkspaceLayout.sidebarTrailingGutter(for: .pinned))
             .environment(\.sidebarMorphDials, dials)
+            // The list anchors its tile column to the rail's centre
+            // (`SidebarColumnPadding`): this tree's own rail, wherever it is
+            // hosted.
+            .environment(\.sidebarRailWidth, model.railWidth)
             .frame(width: model.expandedWidth)
             // Every frame top-leading: a frame narrower than its child
             // centres it by default, which would slide the whole list left
             // as the panel narrows.
             .frame(maxHeight: .infinity, alignment: .topLeading)
             .frame(width: model.width, alignment: .topLeading)
-            // The group card reaches a little past the column's trailing
-            // edge on the expanded sidebar; nothing else draws past it.
-            .clipShape(Rectangle().inset(by: -ProjectGroupCard.trailingBleed()))
+            .clipShape(Rectangle())
     }
 }
 

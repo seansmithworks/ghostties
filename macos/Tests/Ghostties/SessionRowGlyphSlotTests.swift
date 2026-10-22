@@ -94,7 +94,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let padded = row
             .padding(.leading, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingTrailing())
-        let framed = (asRail ? AnyView(padded.asRail(width: width)) : AnyView(padded))
+        // The rail is the session list's column, anchored to the rail's
+        // tile column as `RecentsListView` lays it out.
+        let framed = (asRail ? AnyView(row.modifier(SidebarColumnPadding(horizontalOnly: true, anchorsToRail: true)).asRail(width: width)) : AnyView(padded))
             .frame(width: width, height: rowHeight)
             .background(Color(nsColor: appearance == .darkAqua ? .black : .white))
         let hosting = NSHostingView(rootView: framed)
@@ -316,11 +318,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             let rIdle = try XCTUnwrap(renderWholeSidebar(expanded: false, state: .idle, appearance: appearance))
             let e = try XCTUnwrap(diffBounds(eNeeds, eIdle, fromX: leadingSlot.from, toX: leadingSlot.to), "expanded glyph not found")
             let r = try XCTUnwrap(diffBounds(rNeeds, rIdle, fromX: 0), "rail glyph not found")
-            // Any difference between the rail's and the sidebar's project
-            // header heights moves the row under it; both are 40 at the
-            // defaults (keyframe spec D1), so the row keeps its y.
-            let headerGrowth = ProjectAccordionHeader.height(.rail) - ProjectAccordionHeader.height(.sidebar)
-            XCTAssertEqual((e.minY + e.maxY) / 2 + headerGrowth, (r.minY + r.maxY) / 2, accuracy: 0.6, "first session glyph centre (\(appearance))")
+            // The project header is one height in both states (keyframe
+            // spec D1), so the row keeps its y.
+            XCTAssertEqual((e.minY + e.maxY) / 2, (r.minY + r.maxY) / 2, accuracy: 0.6, "first session glyph centre (\(appearance))")
         }
     }
 
@@ -614,7 +614,10 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// Create pill's icons each centred in its square button.
     func testRailTrayRendersSquarePillsCentredOnTheRail() throws {
         let (railWidth, clusterCentre) = try realRailGeometry()
-        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: 0.01, "rail centre is the cluster centre")
+        // The rail snaps to the 8pt grid (rail stays put), so its centre is
+        // within a quarter step of the cluster's.
+        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: WorkspaceLayout.layoutGrid / 4, "rail centre is the cluster centre, on the grid")
+        let railCentre = railWidth / 2
         let size = CGSize(width: railWidth, height: 400)
         let g = RailTrayGeometry.current(railWidth: railWidth)
         let margin = SidebarDialTuning.windowMargin()
@@ -630,7 +633,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             XCTAssertEqual(spans.count, 1, "\(name) capsule: one span across the rail, got \(spans)")
             let span = try XCTUnwrap(spans.first)
             XCTAssertEqual(span.upperBound - span.lowerBound, g.cell, accuracy: 1.0, "\(name) capsule width")
-            XCTAssertEqual((span.lowerBound + span.upperBound) / 2, clusterCentre, accuracy: 0.5, "\(name) capsule centred on the cluster")
+            XCTAssertEqual((span.lowerBound + span.upperBound) / 2, railCentre, accuracy: 0.5, "\(name) capsule centred on the rail")
         }
 
         let spans = try capsuleSpans(rep, scale: scale, alongX: false, at: railWidth / 2)
@@ -667,7 +670,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let column = VStack(spacing: 0) {
             ExpandedHarness(state: .needsAttention)
         }
-            .modifier(SidebarColumnPadding())
+            .modifier(SidebarColumnPadding(anchorsToRail: true))
             .environmentObject(SessionCoordinator())
             .asRail(width: railWidth)
             .frame(width: railWidth, height: 100, alignment: .top)
@@ -696,8 +699,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     /// The rail's row glyphs, its tray pill and the rail itself share one
-    /// centre, the traffic-light cluster's, with no gutter outside the rail,
-    /// and whatever the leading/trailing content-padding dials hold.
+    /// centre, the rail's (within a quarter grid step of the traffic-light
+    /// cluster's), with no gutter outside the rail, and whatever the
+    /// leading/trailing content-padding dials hold.
     func testRailRowGlyphAndTrayPillShareTheRailCentre() throws {
         // Rail A2: the rail adds no trailing gutter, and everything centres
         // on the traffic-light cluster, derived from real button frames.
@@ -712,14 +716,15 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let pill = try XCTUnwrap(try capsuleSpans(rep, scale: scale, alongX: true, at: toggleMidY).first)
         let pillX = (pill.lowerBound + pill.upperBound) / 2
 
-        XCTAssertEqual(glyphX, clusterCentre, accuracy: 0.5, "rail row glyph centre x vs cluster centre")
-        XCTAssertEqual(pillX, clusterCentre, accuracy: 0.5, "rail tray pill centre x vs cluster centre")
+        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: WorkspaceLayout.layoutGrid / 4, "rail centre vs cluster centre")
+        XCTAssertEqual(glyphX, railWidth / 2, accuracy: 0.5, "rail row glyph centre x vs rail centre")
+        XCTAssertEqual(pillX, railWidth / 2, accuracy: 0.5, "rail tray pill centre x vs rail centre")
         XCTAssertEqual(glyphX, pillX, accuracy: 0.5, "rail row glyph and tray pill share a centre")
 
         // Asymmetric content-padding dials (Sean's Dev holds leading 8,
         // trailing unset) must not move the rail's centre.
         try withDials({ $0.set(8.0, forKey: SidebarDialTuning.contentPaddingLeadingKey) }) {
-            XCTAssertEqual(try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter), clusterCentre, accuracy: 0.5, "rail glyph centre x with leading padding 8")
+            XCTAssertEqual(try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter), railWidth / 2, accuracy: 0.5, "rail glyph centre x with leading padding 8")
         }
     }
 
