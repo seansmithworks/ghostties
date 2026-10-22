@@ -188,6 +188,7 @@ final class ProjectIconStore {
         guard let decoded else { throw StoreError.unreadableImage }
         guard overrideTokens[projectId] == token else { return }
         _ = bump(projectId)
+        pendingForce.remove(projectId) // the refresh this supersedes never lands
         apply(Plan(writes: [(Self.file(supportDirectory, projectId, "png"), decoded.png)], removals: []),
               in: supportDirectory)
         setImage(decoded.image, for: projectId)

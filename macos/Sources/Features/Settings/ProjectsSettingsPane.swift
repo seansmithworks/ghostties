@@ -290,8 +290,14 @@ final class ProjectsSettingsModel: ObservableObject {
         return edit
     }
 
+    /// The style from before a run of overlapping chooses: captured by the
+    /// first choose that hasn't landed, kept until one lands or a style is
+    /// picked. A failed choose restores this, never another choose's `.file`.
+    private var styleBeforeChoosing: [UUID: ProjectIconStyle?] = [:]
+
     private func setIconStyle(_ style: ProjectIconStyle?, for projectId: UUID, force: Bool) -> _Concurrency.Task<Void, Never> {
         _ = beginIconEdit(projectId)
+        styleBeforeChoosing[projectId] = nil
         iconError = nil
         store.setIconStyle(style, for: projectId)
         guard let project = store.projects.first(where: { $0.id == projectId }) else { return _Concurrency.Task {} }
@@ -320,17 +326,22 @@ final class ProjectsSettingsModel: ObservableObject {
     /// Copies `url`, normalized, in as the project's tile. `iconStyle` is
     /// `.file` BEFORE the copy lands, so nothing reads a half-made choice;
     /// the refresh that sets off can't drop the copy (`setOverride`). An
-    /// unreadable image puts the old style back, unless the icon was
+    /// unreadable image puts back the style from before the first of any
+    /// overlapping chooses (`styleBeforeChoosing`), unless the icon was
     /// changed again while it was being read.
     func chooseImage(from url: URL, for projectId: UUID) async throws {
         let edit = beginIconEdit(projectId)
-        let previous = store.projects.first(where: { $0.id == projectId })?.iconStyle
+        if styleBeforeChoosing.index(forKey: projectId) == nil {
+            styleBeforeChoosing[projectId] = .some(store.projects.first(where: { $0.id == projectId })?.iconStyle)
+        }
         iconError = nil
         store.setIconStyle(.file, for: projectId)
         do {
             try await iconStore.setOverride(projectId: projectId, from: url)
+            if iconEdits[projectId] == edit { styleBeforeChoosing.removeValue(forKey: projectId) }
         } catch {
             if iconEdits[projectId] == edit {
+                let previous = styleBeforeChoosing[projectId] ?? nil
                 _ = setIconStyle(previous, for: projectId, force: false)
                 iconError = "That image couldn't be read. Try a PNG or JPEG."
             }
