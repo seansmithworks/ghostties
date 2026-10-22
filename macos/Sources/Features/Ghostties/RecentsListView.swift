@@ -186,6 +186,8 @@ struct RecentsListView: View {
             }
         }
         .background(.clear)
+        // Project icons for the tiles, resolved off the render path.
+        .modifier(ProjectIconRefresh(projects: store.projects))
         .environment(\.selectedRowMixDriver, mix)
         .onChange(of: mixSnapshot) { snapshot in
             mix.update(snapshot, cause: coordinator.selectionCause, reduceMotion: reduceMotion)
@@ -489,7 +491,9 @@ struct RecentsListView: View {
         monogram: String, isSelectedProject: Bool, staggerIndex: Int
     ) -> some View {
         let header = withProjectContextMenu(projectId: group.projectId) { ProjectAccordionHeader(
-            name: group.name, monogram: monogram, count: group.sessions.count,
+            name: group.name, projectId: group.projectId,
+            iconStyle: store.projects.first { $0.id == group.projectId }?.iconStyle,
+            monogram: monogram, count: group.sessions.count,
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
             redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex
         ) {

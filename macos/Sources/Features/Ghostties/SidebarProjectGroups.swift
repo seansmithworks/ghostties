@@ -386,6 +386,9 @@ struct ProjectAccordionHeader: View {
     }
 
     let name: String
+    /// The project, for its icon (`ProjectTileView`); nil for "Unknown".
+    var projectId: UUID? = nil
+    var iconStyle: ProjectIconStyle? = nil
     /// `ProjectMonogram.monograms`' entry for this project.
     var monogram: String = "?"
     let count: Int
@@ -432,21 +435,7 @@ struct ProjectAccordionHeader: View {
             // centred on it, its shape scaled to this step's size.
             Color.clear
                 .frame(width: slot, height: slot)
-                .overlay {
-                    MorphTileFace(
-                        progress: progress,
-                        sizes: (dials.sidebarTileSize, dials.railTileSize),
-                        textSizes: (
-                            dials.tileTextSize(rail: false, letters: monogram.count),
-                            dials.tileTextSize(rail: true, letters: monogram.count)
-                        ),
-                        monogram: monogram,
-                        isEmpty: isEmpty,
-                        isSelectedProject: isSelectedProject,
-                        redlineID: redlineID.map { $0 + ".tile" },
-                        badgeCount: isCollapsed ? count : nil
-                    )
-                }
+                .overlay { tileFace(progress: progress, dials: dials) }
                 .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
                 .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
             HStack(spacing: 0) {
@@ -518,6 +507,25 @@ struct ProjectAccordionHeader: View {
         .accessibilityHint(Self.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
     }
 
+    /// The tile at this step of the morph (`MorphTileFace`).
+    private func tileFace(progress: CGFloat, dials: SidebarMorphMetrics.Dials) -> MorphTileFace {
+        MorphTileFace(
+            progress: progress,
+            sizes: (dials.sidebarTileSize, dials.railTileSize),
+            textSizes: (
+                dials.tileTextSize(rail: false, letters: monogram.count),
+                dials.tileTextSize(rail: true, letters: monogram.count)
+            ),
+            projectId: projectId,
+            iconStyle: iconStyle,
+            monogram: monogram,
+            isEmpty: isEmpty,
+            isSelectedProject: isSelectedProject,
+            redlineID: redlineID.map { $0 + ".tile" },
+            badgeCount: isCollapsed ? count : nil
+        )
+    }
+
     /// How far `part`'s trailing edge sits inside the count's (0 for the
     /// count, and until both are measured).
     private func clusterSlack(_ part: ClusterPart) -> CGFloat {
@@ -565,56 +573,6 @@ enum SidebarTileContext {
     case rail
 }
 
-/// A project's monogram tile, as drawn (option D: r8, 10% tint; solid ink
-/// when it heads the selected project): a `size` square whose shape is
-/// scaled by `shapeScale` (`MorphTileScale`) while the monogram stays at
-/// `textSize`, unscaled.
-struct ProjectMonogramTileFace: View {
-    let monogram: String
-    let size: CGFloat
-    let textSize: CGFloat
-    var shapeScale: CGFloat = 1
-    var isEmpty: Bool = false
-    var isSelectedProject: Bool = false
-    /// DEBUG Redlines tag for the drawn (scaled) shape.
-    var redlineID: String? = nil
-
-    /// Re-renders on every dial write; the fill reads "Selected tile fill".
-    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @ChromeScheme private var colorScheme
-    /// The header's group: its ink follows the group's card (`SelectedRowMix`).
-    @Environment(\.selectedRowMixGroup) private var mixGroup
-
-    // Option D (`hRCBC`: `#28221E1A`), per appearance.
-    private var tint: Color { SidebarColors.tileFill(colorScheme, isEmpty: isEmpty) }
-    var body: some View {
-        SelectedRowMixGroupReader(id: mixGroup, fallback: isSelectedProject ? 1 : 0) { card in
-            face(inkFill: card * RailProjectColumn.selectedTileFill)
-        }
-    }
-
-    /// `inkFill`: ink laid over the tile tint, 0 unselected, the dial when
-    /// selected. Past the midpoint the tile reads as ink, so its text flips
-    /// to the chrome colour to stay legible.
-    private func face(inkFill: Double) -> some View {
-        let isFilled = inkFill > 0.5
-        let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
-        // Tint fades out as ink fades in, so each end draws exactly one
-        // fill: the plain tile at 0, solid ink at 1.
-        return shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(RailProjectTile.ink(colorScheme).opacity(inkFill)))
-            .frame(width: size, height: size)
-            // Inside the scale, so Redlines reports the drawn tile.
-            .redlineFrame(redlineID)
-            .scaleEffect(shapeScale)
-            .overlay {
-                Text(monogram)
-                    .font(.system(size: textSize, weight: .bold))
-                    .foregroundStyle(isEmpty ? SidebarColors.dimmedProject(colorScheme) : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
-            }
-            .frame(width: size, height: size)
-    }
-}
-
 /// The header's tile at one step of the morph: one rail-sized square in
 /// both states, its shape scaled from the sidebar's size at 0 to the
 /// rail's at 1 (`MorphTileScale`), the monogram at its own size, and, on
@@ -623,6 +581,8 @@ struct MorphTileFace: View, Animatable {
     var progress: CGFloat
     let sizes: (from: CGFloat, to: CGFloat)
     let textSizes: (from: CGFloat, to: CGFloat)
+    let projectId: UUID?
+    let iconStyle: ProjectIconStyle?
     let monogram: String
     let isEmpty: Bool
     let isSelectedProject: Bool
@@ -642,7 +602,9 @@ struct MorphTileFace: View, Animatable {
         let scale = MorphTileScale.scale(from: sizes.from, to: sizes.to, progress: progress)
         // How far the drawn shape's corner sits inside the container's.
         let cornerInset = container * (1 - scale) / 2
-        ProjectMonogramTileFace(
+        ProjectTileView(
+            projectId: projectId,
+            iconStyle: iconStyle,
             monogram: monogram,
             size: container,
             textSize: SidebarMorphMetrics.lerp(textSizes.from, textSizes.to, progress),

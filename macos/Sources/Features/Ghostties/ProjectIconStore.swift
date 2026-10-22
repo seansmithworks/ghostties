@@ -5,7 +5,8 @@ import GhosttiesCore
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Owns the 128px icon image for each project. Not wired into any view yet.
+/// Owns the 128px icon image for each project. `ProjectTileView` reads it;
+/// `ProjectIconRefresh` keeps it current.
 ///
 /// Resolution happens off the main thread on a utility queue and never on a
 /// render path: views call `image(for:)`, which is an in-memory lookup only,
