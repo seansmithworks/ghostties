@@ -48,13 +48,17 @@ enum ProjectDragReflow {
     /// id. `groups` is the rendered list (dragged group removed); the
     /// "Unknown" group has no project, so its items get no slot and never
     /// take a project drop.
-    static func slots(groups: [SidebarProjectGroup], items: [SidebarProjectGroupItem]) -> [String: ProjectDropSlot] {
+    /// `rowHeight` is each row's drawn height (a needs-you row is taller).
+    static func slots(
+        groups: [SidebarProjectGroup], items: [SidebarProjectGroupItem],
+        rowHeight: (UUID) -> CGFloat = { _ in SessionDragReflow.rowHeight }
+    ) -> [String: ProjectDropSlot] {
         let groupIndex = Dictionary(uniqueKeysWithValues: groups.filter { $0.projectId != nil }.enumerated().map { ($1.id, $0) })
         func member(_ item: SidebarProjectGroupItem) -> (group: SidebarProjectGroup, height: CGFloat)? {
             switch item {
             case .spacer: return nil
             case .header(let group, _): return (group, ProjectAccordionHeader.height)
-            case .row(_, let group): return (group, SessionDragReflow.rowHeight)
+            case .row(let session, let group): return (group, rowHeight(session.id))
             }
         }
         var slotCounts: [String: Int] = [:]
