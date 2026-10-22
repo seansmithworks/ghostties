@@ -423,6 +423,7 @@ final class SessionPopoverController {
     /// anchor registers as the sidebar lays out. No-op outside fixture mode.
     func openForCaptureFixtureIfNeeded() {
         guard CaptureFixture.isActive, let id = CaptureFixture.popoverTargetSessionId else { return }
+        CaptureFixture.applyApprovalsKnobIfNeeded()
         func attempt(_ remaining: Int) {
             if let anchor = anchors[id]?.view, anchor.window != nil, anchor.bounds.height > 0 {
                 isPinnedOpen = true
