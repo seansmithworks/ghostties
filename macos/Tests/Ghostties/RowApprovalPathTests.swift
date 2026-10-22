@@ -51,6 +51,21 @@ final class RowApprovalPathTests: XCTestCase {
         _ = coordinator
     }
 
+    /// Only a sent answer disables Approve/Deny: a tap the guard turned
+    /// away (stale) leaves the prompt answerable.
+    func testOnlyASentAnswerMarksThePromptAnswered() {
+        var live = state(updatedAt: shownAt + 5)
+        let (coordinator, popover) = controller(live: { live }, sends: {})
+        let shown = SessionPopoverContent.ApprovalPrompt(updatedAt: shownAt, fingerprint: fp)
+        XCTAssertEqual(popover.respond(.approve, sessionId: sid, prompt: shown), .stale)
+        XCTAssertFalse(popover.model.isAnswered(shown, for: sid), "a stale outcome leaves Approve/Deny enabled")
+
+        live = state(updatedAt: shownAt)
+        XCTAssertEqual(popover.respond(.approve, sessionId: sid, prompt: shown), .sent)
+        XCTAssertTrue(popover.model.isAnswered(shown, for: sid), "a sent outcome disables them")
+        _ = coordinator
+    }
+
     /// A second tap on the same prompt never reaches the responder, from
     /// the row or the card; a new prompt is answerable again.
     func testOnePromptIsAnsweredOnce() {
