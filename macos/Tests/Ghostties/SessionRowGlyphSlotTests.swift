@@ -614,9 +614,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// Create pill's icons each centred in its square button.
     func testRailTrayRendersSquarePillsCentredOnTheRail() throws {
         let (railWidth, clusterCentre) = try realRailGeometry()
-        // The rail snaps to the 8pt grid (rail stays put), so its centre is
-        // within a quarter step of the cluster's.
-        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: WorkspaceLayout.layoutGrid / 4, "rail centre is the cluster centre, on the grid")
+        // The rail snaps to the 8pt grid (rail stays put): on macOS 26's
+        // cluster its centre is 1pt left of the cluster's.
+        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: 1, "rail centre is the cluster centre, on the grid")
         let railCentre = railWidth / 2
         let size = CGSize(width: railWidth, height: 400)
         let g = RailTrayGeometry.current(railWidth: railWidth)
@@ -716,7 +716,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let pill = try XCTUnwrap(try capsuleSpans(rep, scale: scale, alongX: true, at: toggleMidY).first)
         let pillX = (pill.lowerBound + pill.upperBound) / 2
 
-        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: WorkspaceLayout.layoutGrid / 4, "rail centre vs cluster centre")
+        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: 1, "rail centre vs cluster centre")
         XCTAssertEqual(glyphX, railWidth / 2, accuracy: 0.5, "rail row glyph centre x vs rail centre")
         XCTAssertEqual(pillX, railWidth / 2, accuracy: 0.5, "rail tray pill centre x vs rail centre")
         XCTAssertEqual(glyphX, pillX, accuracy: 0.5, "rail row glyph and tray pill share a centre")
