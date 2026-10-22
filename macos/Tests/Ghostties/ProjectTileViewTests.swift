@@ -111,6 +111,8 @@ struct ProjectTileViewTests {
         let rep = try render(tile(rig, style: .monogram, selected: false))
         let fill = try pixel(rep, fillPoint.0, fillPoint.1)
         #expect(!isIconBlue(fill), "a .monogram tile drew the stored icon (\(fill))")
+        // And the monogram is what's drawn there: its tint, not a blank.
+        #expect(!isWhite(fill), "a .monogram tile drew nothing (\(fill))")
     }
 
     @Test func aSelectedIconGetsAnInkRingNotAFill() async throws {
