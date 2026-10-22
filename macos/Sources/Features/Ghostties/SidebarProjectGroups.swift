@@ -520,6 +520,10 @@ struct ProjectAccordionHeader: View {
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.count), progress: progress))
                     .background(ClusterEdgeReporter(part: .count))
+                    // Sized before the name: the frame's 18pt minimum would
+                    // otherwise let a long name take the room "2 need you"
+                    // draws in, and the two would overlap.
+                    .layoutPriority(2)
             }
         }
         .coordinateSpace(name: ClusterEdgeReporter.space)
