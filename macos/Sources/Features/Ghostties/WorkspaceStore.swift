@@ -523,11 +523,14 @@ final class WorkspaceStore: ObservableObject {
 
     /// All sessions with a live surface (visible in the sidebar, regardless of
     /// running/completed/exited/killed status), flattened in the same visual
-    /// order as `flatProjectsInVisualOrder` + `sessionGroups(forProject:)`.
+    /// order as `projectsInDisplayOrder(layout:)` + `sessionGroups(forProject:)`.
     /// Powers Cmd+Shift+[/] session cycling — see
     /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`.
-    func sessionsInVisualOrder(coordinator: SessionCoordinator) -> [AgentSession] {
-        flatProjectsInVisualOrder.flatMap { project in
+    func sessionsInVisualOrder(
+        coordinator: SessionCoordinator,
+        layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()
+    ) -> [AgentSession] {
+        projectsInDisplayOrder(layout: layout).flatMap { project in
             sessionGroups(forProject: project.id, startedThisLaunch: coordinator.sessionIdsStartedThisLaunch).flatMap { $0.1 }
         }.filter { coordinator.hasLiveSurface(id: $0.id) }
     }
