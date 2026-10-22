@@ -125,10 +125,10 @@ enum SidebarProjectGroupItem: Identifiable {
     static let spacerHeight: CGFloat = 13
 
     /// Card 01's only separator between the pinned block and the
-    /// alphabetical one: 16pt of clear space, added to the usual break. The
-    /// rail renders the same items, so the gap is the same height in both
-    /// widths and no tile moves between them.
-    static let pinnedBreakHeight: CGFloat = 16
+    /// alphabetical one (`WorkspaceLayout.projectPinnedBreak`), added to the
+    /// usual break. The rail renders the same items, so the gap is the same
+    /// height in both widths and no tile moves between them.
+    static let pinnedBreakHeight: CGFloat = WorkspaceLayout.projectPinnedBreak
 
     /// A spacer's height: the usual break, plus the pinned block's break.
     static func spacerHeight(isPinnedBreak: Bool) -> CGFloat {
