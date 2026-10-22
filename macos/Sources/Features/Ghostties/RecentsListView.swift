@@ -264,7 +264,7 @@ struct RecentsListView: View {
     private func slotContent(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
         switch slot {
         case .pinnedRows:
-            sectionRows(sections.pinned, section: .pinned)
+            sectionRows(sections.pinned, section: .pinned, gapHeight: draggedRowHeight(active: sections.active))
         case .pinnedEnd:
             endDropZone(section: .pinned, sectionList: sections.pinned)
         case .activeRows:
@@ -285,7 +285,10 @@ struct RecentsListView: View {
             if SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView {
                 groupedActiveRows(sections.active, cascadeStart: sections.pinned.count)
             } else {
-                sectionRows(sections.active, section: .active, cascadeStart: sections.pinned.count)
+                sectionRows(
+                    sections.active, section: .active, cascadeStart: sections.pinned.count,
+                    gapHeight: draggedRowHeight(active: sections.active)
+                )
             }
         case .activeEnd:
             endDropZone(section: .active, sectionList: sections.active)
@@ -376,7 +379,10 @@ struct RecentsListView: View {
     /// session's own row is omitted entirely — its original slot collapses
     /// so there is never a double gap (item 1).
     @ViewBuilder
-    private func sectionRows(_ list: [AgentSession], section: SessionSection, cascadeStart: Int = 0) -> some View {
+    private func sectionRows(
+        _ list: [AgentSession], section: SessionSection, cascadeStart: Int = 0,
+        gapHeight: CGFloat = SessionDragReflow.rowHeight
+    ) -> some View {
         ForEach(rowSlots(for: list, section: section)) { slot in
             switch slot.kind {
             case .session(let session):
@@ -385,7 +391,7 @@ struct RecentsListView: View {
                     staggerIndex: cascadeStart + (list.firstIndex(where: { $0.id == session.id }) ?? 0)
                 )
             case .gap:
-                SessionDragGapView()
+                SessionDragGapView(height: gapHeight)
             }
         }
     }
@@ -416,7 +422,13 @@ struct RecentsListView: View {
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
         let projectGapBefore = projectGapTarget(groups)
-        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
+        // A row that needs you draws an action line (card 01): its question
+        // is the subtitle, and drag reflow measures it at its full height.
+        let prompts = rowPrompts(active)
+        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items) {
+            SidebarListRowHeight.row(hasActions: prompts[$0] != nil)
+        }
+        let gapHeight = draggedRowHeight(active: active)
         // Option D: each header leads with its project's monogram tile (the
         // rail's), and the group holding the selected session sits on one
         // card (`ProjectGroupCard`), its rows marked by chips.
@@ -454,16 +466,17 @@ struct RecentsListView: View {
             case .row(let session, let group):
                 if session.id != dragState.draggingSessionId {
                     if gapBeforeId == .some(session.id) {
-                        SessionDragGapView()
+                        SessionDragGapView(height: gapHeight)
                     }
-                    let indicator = store.globalIndicatorStates[session.id] ?? .inactive
-                    let claudeState = coordinator.claudeStateStore.state(for: session.id)
-                    // A row that needs you says what it asks and how to answer
-                    // (card 01); any other row says what the session is doing.
-                    let prompt = SessionRowPrompt.make(indicator: indicator, state: claudeState)
+                    let prompt = prompts[session.id]
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: prompt?.subtitle ?? SessionNeedsYou.subtitle(indicator: indicator, state: claudeState),
+                        // A row that needs you says what it asks; any other
+                        // row says what the session is doing.
+                        subtitle: prompt?.subtitle ?? SessionNeedsYou.subtitle(
+                            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
+                            state: coordinator.claudeStateStore.state(for: session.id)
+                        ),
                         prompt: prompt,
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
@@ -473,11 +486,34 @@ struct RecentsListView: View {
             }
         }
         if gapBeforeId == .some(nil) {
-            SessionDragGapView()
+            SessionDragGapView(height: gapHeight)
         }
         if projectGapBefore == .some(nil) {
             ProjectDragGapView()
         }
+    }
+
+    /// The inline prompt of every one-view Active row that genuinely needs
+    /// you (`SessionRowPrompt`): the only rows that draw an action line.
+    private func rowPrompts(_ active: [AgentSession]) -> [UUID: SessionRowPrompt] {
+        var prompts: [UUID: SessionRowPrompt] = [:]
+        for session in active {
+            prompts[session.id] = SessionRowPrompt.make(
+                indicator: store.globalIndicatorStates[session.id] ?? .inactive,
+                state: coordinator.claudeStateStore.state(for: session.id)
+            )
+        }
+        return prompts
+    }
+
+    /// The live session gap's height: the dragged row's own drawn height,
+    /// whose slot collapses while it is in flight, so the list's total
+    /// height never changes mid-drag.
+    private func draggedRowHeight(active: [AgentSession]) -> CGFloat {
+        guard let id = dragState.draggingSessionId,
+              SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView,
+              let session = active.first(where: { $0.id == id }) else { return SessionDragReflow.rowHeight }
+        return SidebarListRowHeight.row(hasActions: rowPrompts([session])[id] != nil)
     }
 
     /// The selected session's project group, or none (nothing selected,
@@ -907,7 +943,8 @@ struct RecentsListView: View {
             dragState: $dragState,
             draggedContext: { [self] id in draggedContext(for: id) },
             performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) },
-            projectDrop: projectDrop
+            projectDrop: projectDrop,
+            rowHeight: SidebarListRowHeight.row(hasActions: prompt != nil)
         ))
         .accessibilityAction(named: Text("Move Up")) {
             guard supportsReorder else { return }

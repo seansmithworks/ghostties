@@ -13,10 +13,10 @@ import UniformTypeIdentifiers
 /// model until a real drop lands (see `SessionSectionDrop`/
 /// `WorkspaceStore.moveSessionInSessionsView`).
 enum SessionDragReflow {
-    /// Matches `RecentsRowView`'s fixed row height — the gap spacer is
-    /// exactly this tall so reflow only ever moves existing vertical space,
-    /// never adds or removes any.
-    static let rowHeight: CGFloat = 36
+    /// A plain session row's drawn height (`SidebarListRowHeight`). A
+    /// needs-you row is taller; callers measure that one with
+    /// `SidebarListRowHeight.row(hasActions:)`.
+    static var rowHeight: CGFloat { SidebarListRowHeight.row(hasActions: false) }
 
     /// Where the reflow gap should render: which section, and which index
     /// within that section's list (the dragged session already excluded).
@@ -93,14 +93,18 @@ struct SessionDragState: Equatable {
 
 // MARK: - Gap Spacer
 
-/// The reflow gap itself — a plain spacer exactly one row tall (see
-/// `SessionDragReflow.rowHeight`), spliced into a section's `ForEach` at the
-/// proposed insertion point (item 1). Deliberately empty, not a placeholder
-/// card — the surrounding rows moving apart IS the affordance.
+/// The reflow gap itself — a plain spacer exactly as tall as the dragged
+/// row, whose own slot collapses while it is in flight, so reflow only ever
+/// moves existing vertical space, never adds or removes any. Spliced into a
+/// section's `ForEach` at the proposed insertion point (item 1).
+/// Deliberately empty, not a placeholder card — the surrounding rows moving
+/// apart IS the affordance.
 struct SessionDragGapView: View {
+    var height: CGFloat = SessionDragReflow.rowHeight
+
     var body: some View {
         Color.clear
-            .frame(height: SessionDragReflow.rowHeight)
+            .frame(height: height)
             .transition(.opacity.combined(with: .scale(scale: 0.01, anchor: .center)))
     }
 }
@@ -157,6 +161,8 @@ struct SessionRowDropModifier: ViewModifier {
     /// Set only for one-view rows, which also take a dragged project group
     /// (`ProjectSlotDropDelegate`).
     var projectDrop: ProjectDropTarget? = nil
+    /// The hovered row's drawn height, so a pointer splits it at its midpoint.
+    var rowHeight: CGFloat = SessionDragReflow.rowHeight
 
     func body(content: Content) -> some View {
         if isEnabled {
@@ -166,7 +172,8 @@ struct SessionRowDropModifier: ViewModifier {
                 hoveredSession: hoveredSession,
                 dragState: $dragState,
                 draggedContext: draggedContext,
-                performDrop: performDrop
+                performDrop: performDrop,
+                rowHeight: rowHeight
             )
             if let projectDrop {
                 content.onDrop(of: [.text], delegate: ProjectSlotDropDelegate(target: projectDrop, session: sessionDelegate))
@@ -191,6 +198,8 @@ struct SessionRowDropDelegate: DropDelegate {
     @Binding var dragState: SessionDragState
     let draggedContext: (UUID) -> (section: SessionSection, isOpen: Bool)?
     let performDrop: (UUID, SessionDragReflow.GapPosition) -> Bool
+    /// The hovered row's drawn height (`SidebarListRowHeight`).
+    var rowHeight: CGFloat = SessionDragReflow.rowHeight
 
     func dropEntered(info: DropInfo) {
         updateGap(info: info)
@@ -226,7 +235,7 @@ struct SessionRowDropDelegate: DropDelegate {
               let context = draggedContext(draggedId) else { return nil }
         let working = sectionList.filter { $0.id != draggedId }
         guard let hoveredIndex = working.firstIndex(where: { $0.id == hoveredSession.id }) else { return nil }
-        let fraction = min(max(location.y / SessionDragReflow.rowHeight, 0), 1)
+        let fraction = min(max(location.y / rowHeight, 0), 1)
         return SessionDragReflow.insertionPoint(
             draggedSection: context.section,
             draggedIsOpen: context.isOpen,

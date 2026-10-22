@@ -34,4 +34,22 @@ final class SessionDragRowHeightTests: XCTestCase {
         XCTAssertEqual(slot.slot, 1)
         XCTAssertNotEqual(above, below, "4pt either side of the row's midpoint land on different sides")
     }
+
+    /// A needs-you row is taller (its action line); a project drag over it
+    /// splits it at its own midpoint, not a plain row's.
+    func testANeedsYouRowIsMeasuredWithItsActionLine() throws {
+        let a1 = session("a1"), a2 = session("a2")
+        let groups = SidebarProjectGroup.make(active: [a1, a2], projects: [atlas])
+        let items = SidebarProjectGroupItem.items(groups, collapsed: [])
+        let tall = SidebarListRowHeight.row(hasActions: true)
+        XCTAssertGreaterThan(tall, SidebarListRowHeight.row(hasActions: false))
+        let slots = ProjectDragReflow.slots(groups: groups, items: items) {
+            SidebarListRowHeight.row(hasActions: $0 == a1.id)
+        }
+        let slot = try XCTUnwrap(slots[a1.id.uuidString])
+        XCTAssertEqual(slot.height, tall)
+        let above = ProjectDragReflow.insertionIndex(hoveredIndex: 0, slot: slot.slot, slotCount: slot.slotCount, fraction: (tall / 2 - 4) / slot.height)
+        let below = ProjectDragReflow.insertionIndex(hoveredIndex: 0, slot: slot.slot, slotCount: slot.slotCount, fraction: (tall / 2 + 4) / slot.height)
+        XCTAssertNotEqual(above, below, "the tall row splits at its own midpoint")
+    }
 }
