@@ -6,6 +6,10 @@ import SwiftUI
 @MainActor
 final class SessionPopoverModel: ObservableObject {
     @Published var content: SessionPopoverContent?
+    /// "Answer in terminal →": focus the card's session.
+    var onAnswerInTerminal: (() -> Void)?
+    /// Approve/Deny on a bounded prompt (shown only while `ApprovalFlag` is on).
+    var onApprovalDecision: ((ApprovalDecision) -> Void)?
 }
 
 /// Hosting view whose hit-testing covers only the card, not the transparent
@@ -75,7 +79,13 @@ final class SessionPopoverController {
         self.coordinator = coordinator
         self.workspace = workspace
         self.claudeState = claudeState
+        model.onAnswerInTerminal = { [weak self] in self?.answerInTerminal() }
+        model.onApprovalDecision = { [weak self] in self?.respond($0) }
     }
+
+    /// Answers Approve/Deny. The shipped default sends nothing; C3 supplies
+    /// the real key delivery behind `ApprovalFlag`.
+    var approvalResponder: any ApprovalResponder = NoOpApprovalResponder()
 
     var isVisible: Bool { hosting?.superview != nil && currentSessionId != nil }
 
@@ -162,6 +172,27 @@ final class SessionPopoverController {
     }
 
     // MARK: - Actions
+
+    /// "Answer in terminal →": the same focus a row click does, and the card
+    /// goes away.
+    private func answerInTerminal() {
+        guard let id = currentSessionId else { return }
+        dismiss()
+        coordinator?.focusSession(id: id)
+    }
+
+    /// Approve/Deny: hands the prompt the card showed to the responder, whose
+    /// guard re-reads the live state before anything is sent, then
+    /// re-derives the card.
+    private func respond(_ decision: ApprovalDecision) {
+        guard ApprovalFlag.isEnabled, let id = currentSessionId,
+              let prompt = model.content?.approvalPrompt,
+              let surfaceId = coordinator?.approvalSurfaceId(forSession: id) else { return }
+        _ = approvalResponder.respond(decision, to: ApprovalTarget(
+            sessionId: id, updatedAt: prompt.updatedAt, surfaceId: surfaceId, fingerprint: prompt.fingerprint
+        ))
+        refresh()
+    }
 
     func dismiss() {
         showWork?.cancel()

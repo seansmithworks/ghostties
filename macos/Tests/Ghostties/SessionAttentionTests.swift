@@ -272,7 +272,11 @@ final class SessionAttentionTests: XCTestCase {
             structuredPrompt: StructuredPrompt(toolName: "AskUserQuestion", toolUseId: nil,
                                                toolInput: ToolInputSummary(questions: ["Which?"])),
             updatedAt: Date())
-        XCTAssertNil(SessionPopoverContent.make(sessionId: sid, indicator: .needsAttention, approval: ask))
+        // C2: the card now shows the question (freeform), never an approval.
+        let card = SessionPopoverContent.make(sessionId: sid, indicator: .needsAttention, approval: ask)
+        XCTAssertEqual(card?.block, .freeform)
+        XCTAssertEqual(card?.isApproval, false)
+        XCTAssertNil(card?.approvalPrompt)
     }
 
     func testResponderWrongSurfaceSendsNothing() {
