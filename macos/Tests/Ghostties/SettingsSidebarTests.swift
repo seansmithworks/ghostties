@@ -190,6 +190,36 @@ final class SettingsSidebarTests: XCTestCase {
         XCTAssertEqual(reloaded.projects, store.projects)
     }
 
+    // MARK: - Name
+
+    /// Renaming in Settings updates the store at once (the sidebar reads it)
+    /// and survives a reload from workspace.json. A blank name is ignored.
+    func testRenameInSettingsPersistsAcrossReload() async throws {
+        let dir = try tempDir("rename-state")
+        let seed = """
+        {"projects":[{"id":"11111111-1111-1111-1111-111111111111","name":"atlas","rootPath":"/tmp/atlas",\
+        "isPinned":false}],"sessions":[],"templates":[],"sidebarMode":0,\
+        "hasShownPinMigrationNotice":true,"hasDismissedPinMigrationNotice":true}
+        """
+        try Data(seed.utf8).write(to: dir.appendingPathComponent("workspace.json"))
+
+        let store = WorkspaceStore(testingStateDirectory: dir)
+        let id = try XCTUnwrap(store.projects.first?.id)
+        let model = ProjectsSettingsModel(store: store, iconStore: ProjectIconStore(
+            cacheDirectory: try tempDir("c"), supportDirectory: try tempDir("s")
+        ))
+
+        model.rename(id, to: "  harbor  ")
+        XCTAssertEqual(model.selectedProject?.name, "harbor")
+        XCTAssertEqual(store.projects.first?.name, "harbor")
+
+        model.rename(id, to: "   ")
+        XCTAssertEqual(store.projects.first?.name, "harbor", "a blank name is never stored")
+
+        await store.flushPersistenceForTesting()
+        XCTAssertEqual(WorkspaceStore(testingStateDirectory: dir).projects.first?.name, "harbor")
+    }
+
     // MARK: - New-session default
 
     func testNewSessionDefaultShellLastUsedAndTemplate() {

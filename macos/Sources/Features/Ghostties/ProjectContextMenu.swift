@@ -3,8 +3,8 @@ import GhosttiesCore
 
 extension View {
     /// The project context menu (Settings…, which opens the Settings window
-    /// on this project; Name & Templates…; Pin/Unpin; Remove), the popover
-    /// Name & Templates… opens, and the DEBUG capture hook for that popover. Defined once here and applied to every project
+    /// on this project; Pin/Unpin; Remove) and the DEBUG capture hook that
+    /// opens Settings on a project. Defined once here and applied to every project
     /// header: the tabs layout's `ProjectDisclosureRow` and one-view's
     /// `ProjectAccordionHeader` (which is also the rail's project tile).
     func projectContextMenu(_ project: Project) -> some View {
@@ -16,16 +16,12 @@ struct ProjectContextMenu: ViewModifier {
     let project: Project
 
     @EnvironmentObject private var store: WorkspaceStore
-    @State private var settingsProject: Project?
 
     func body(content: Content) -> some View {
         content
             .contextMenu {
                 Button("Settings\u{2026}") {
                     GhosttiesSettingsWindowController.shared.show(projectId: project.id)
-                }
-                Button("Name & Templates\u{2026}") {
-                    settingsProject = project
                 }
                 Divider()
                 Button(project.isPinned ? "Unpin" : "Pin") {
@@ -36,18 +32,6 @@ struct ProjectContextMenu: ViewModifier {
                     store.removeProject(id: project.id)
                 }
             }
-            .popover(
-                isPresented: Binding(
-                    get: { settingsProject?.id == project.id },
-                    set: { if !$0 { settingsProject = nil } }
-                ),
-                arrowEdge: .trailing
-            ) {
-                ProjectSettingsView(project: project) {
-                    settingsProject = nil
-                }
-                .environmentObject(store)
-            }
             #if DEBUG
             .onAppear(perform: applyCaptureProjectSettingsIfNeeded)
             #endif
@@ -55,13 +39,12 @@ struct ProjectContextMenu: ViewModifier {
 
     #if DEBUG
     /// `GHOSTTIES_CAPTURE_PROJECT_SETTINGS`: what the context menu's
-    /// "Name & Templates…" does. Deferred so the window is on screen before the
-    /// popover anchors to the header.
+    /// "Settings…" does: opens Settings on the named project.
     private func applyCaptureProjectSettingsIfNeeded() {
         guard CaptureFixture.projectSettingsHook?.projectName == project.name,
               CaptureFixture.claimHook("projectSettings") else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            settingsProject = project
+            GhosttiesSettingsWindowController.shared.show(projectId: project.id)
         }
     }
     #endif

@@ -1,15 +1,14 @@
 import SwiftUI
 import GhosttiesCore
 
-/// Template management, hosted in `ProjectSettingsView`. These actions used
+/// Template management, hosted in the Settings projects pane (`ProjectsSettingsPane`). These actions used
 /// to live in the composer popover's results table; the centered
 /// single-line composer has no list, so this section is now the only place
 /// templates are created, edited, duplicated, pinned and deleted.
 ///
 /// Templates are GLOBAL (`WorkspaceStore.templates`), not per project, so
 /// every change here applies immediately to the store (and to every other
-/// project) — it is NOT staged behind the settings popover's Save/Cancel,
-/// which only governs this project's icon, name and default template. That
+/// project) — it is not staged behind anything. That
 /// is the same immediate-apply behavior the deleted results table had.
 enum TemplateManagement {
 
