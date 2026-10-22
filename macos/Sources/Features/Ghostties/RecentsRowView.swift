@@ -69,6 +69,10 @@ struct RecentsRowView: View, Equatable {
     var dialEpoch: Int = 0
 
     @EnvironmentObject private var coordinator: SessionCoordinator
+    /// The bounded prompt whose answer window (`ClaudeStateStore.staleInterval`)
+    /// has run out while it showed: its Approve/Deny give way to "Answer in
+    /// terminal" without waiting for anything else to redraw the row.
+    @State private var expiredApproval: SessionPopoverContent.ApprovalPrompt?
 
     /// Every field that affects rendered output. Deliberately excludes
     /// `editingName`/`isRenameFocused`/the closures — those are live
@@ -141,20 +145,39 @@ struct RecentsRowView: View, Equatable {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
         .modifier(SessionRowPromptAccessibility(
-            prompt: prompt, approvalsEnabled: approvalsEnabled,
+            prompt: prompt, approval: liveApproval,
             onAnswerInTerminal: onAnswerInTerminal, onApprovalDecision: onApprovalDecision
         ))
+        .task(id: prompt?.approvalPrompt) { await expireWhenStale(prompt?.approvalPrompt) }
     }
 
-    /// A needs-you row's action line: Approve/Deny for a bounded prompt
-    /// while the flag is on, else "Answer in terminal →".
+    /// The prompt Approve/Deny answer: a fresh bounded prompt, while the
+    /// flag is on. Nil shows "Answer in terminal →" instead.
+    private var liveApproval: SessionPopoverContent.ApprovalPrompt? {
+        guard approvalsEnabled, let approval = prompt?.approvalPrompt, approval != expiredApproval else { return nil }
+        return approval
+    }
+
+    /// Sleeps until `approval` ages past the answer window, then retires it.
+    private func expireWhenStale(_ approval: SessionPopoverContent.ApprovalPrompt?) async {
+        guard let approval else { return }
+        let remaining = approval.updatedAt.addingTimeInterval(ClaudeStateStore.staleInterval).timeIntervalSinceNow
+        if remaining > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+        }
+        expiredApproval = approval
+    }
+
+    /// A needs-you row's action line: Approve/Deny for a live bounded
+    /// prompt, else "Answer in terminal →".
     private var actionLine: SessionRowActionLine? {
-        guard let prompt, !isEditing else { return nil }
-        let approval = approvalsEnabled ? prompt.approvalPrompt : nil
+        guard prompt != nil, !isEditing else { return nil }
         return SessionRowActionLine(
-            showsApproveDeny: approval != nil,
-            onApprove: { if let approval { onApprovalDecision(.approve, approval) } },
-            onDeny: { if let approval { onApprovalDecision(.deny, approval) } },
+            sessionId: session.id,
+            approval: liveApproval,
+            answers: coordinator.sessionPopover.model,
+            onApprovalDecision: onApprovalDecision,
             onAnswerInTerminal: onAnswerInTerminal
         )
     }
@@ -250,13 +273,13 @@ enum SidebarListRowHeight {
 /// element, so its buttons are offered as named actions on it.
 private struct SessionRowPromptAccessibility: ViewModifier {
     let prompt: SessionRowPrompt?
-    let approvalsEnabled: Bool
+    let approval: SessionPopoverContent.ApprovalPrompt?
     let onAnswerInTerminal: () -> Void
     let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
 
     func body(content: Content) -> some View {
-        if let prompt {
-            if approvalsEnabled, let approval = prompt.approvalPrompt {
+        if prompt != nil {
+            if let approval {
                 content
                     .accessibilityAction(named: Text("Approve")) { onApprovalDecision(.approve, approval) }
                     .accessibilityAction(named: Text("Deny")) { onApprovalDecision(.deny, approval) }
@@ -273,9 +296,12 @@ private struct SessionRowPromptAccessibility: ViewModifier {
 /// 01): Approve (ink fill) and Deny (quiet) for a bounded prompt while
 /// `ApprovalFlag` is on, otherwise "Answer in terminal →".
 struct SessionRowActionLine: View {
-    let showsApproveDeny: Bool
-    let onApprove: () -> Void
-    let onDeny: () -> Void
+    let sessionId: UUID
+    /// The prompt Approve/Deny answer; nil shows "Answer in terminal →".
+    let approval: SessionPopoverContent.ApprovalPrompt?
+    /// Which prompts a tap (here or on the hover card) already answered.
+    @ObservedObject var answers: SessionPopoverModel
+    let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
     let onAnswerInTerminal: () -> Void
 
     /// The hover card's chip height and corner (one control, one size; on
@@ -296,9 +322,19 @@ struct SessionRowActionLine: View {
         let theme = ChromeTheme.active(colorScheme)
         let size = SidebarDialTuning.rowSubtitleSize()
         HStack(spacing: Self.controlSpacing) {
-            if showsApproveDeny {
-                chip("Approve", size: size, fill: Color(theme.ink), text: Color(theme.canvas), action: onApprove)
-                chip("Deny", size: size, fill: theme.ink(.composerRow), text: SidebarColors.primaryText(colorScheme), action: onDeny)
+            if let approval {
+                let answered = answers.isAnswered(approval, for: sessionId)
+                Group {
+                    chip("Approve", size: size, fill: Color(theme.ink), text: Color(theme.canvas)) {
+                        onApprovalDecision(.approve, approval)
+                    }
+                    chip("Deny", size: size, fill: theme.ink(.composerRow), text: SidebarColors.primaryText(colorScheme)) {
+                        onApprovalDecision(.deny, approval)
+                    }
+                }
+                // Answered once: off until the prompt changes.
+                .disabled(answered)
+                .opacity(answered ? SessionPopoverLayout.answeredOpacity : 1)
             } else {
                 Button(action: onAnswerInTerminal) {
                     Text("Answer in terminal →")

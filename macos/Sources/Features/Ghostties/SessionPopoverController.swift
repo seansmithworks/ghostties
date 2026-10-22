@@ -10,6 +10,19 @@ final class SessionPopoverModel: ObservableObject {
     var onAnswerInTerminal: (() -> Void)?
     /// Approve/Deny on a bounded prompt (shown only while `ApprovalFlag` is on).
     var onApprovalDecision: ((ApprovalDecision) -> Void)?
+    /// The prompt each session's Approve/Deny last answered, from the card
+    /// or a sidebar row. Both disable their Approve/Deny while it is still
+    /// the prompt showing, so one prompt is never answered twice; a new
+    /// prompt (another `updatedAt` or fingerprint) enables them again.
+    @Published private(set) var answered: [UUID: SessionPopoverContent.ApprovalPrompt] = [:]
+
+    func isAnswered(_ prompt: SessionPopoverContent.ApprovalPrompt?, for sessionId: UUID) -> Bool {
+        prompt != nil && answered[sessionId] == prompt
+    }
+
+    fileprivate func markAnswered(_ prompt: SessionPopoverContent.ApprovalPrompt, for sessionId: UUID) {
+        answered[sessionId] = prompt
+    }
 }
 
 /// Hosting view whose hit-testing covers only the card, not the transparent
@@ -43,7 +56,8 @@ final class SessionPopoverController {
     private weak var coordinator: SessionCoordinator?
     private let workspace: WorkspaceStore
     private let claudeState: ClaudeStateStore
-    private let model = SessionPopoverModel()
+    /// The card's model; sidebar rows also read its `answered` record.
+    let model = SessionPopoverModel()
 
     private var anchors: [UUID: WeakAnchor] = [:]
     private var hosting: SessionPopoverHostingView?
@@ -192,12 +206,30 @@ final class SessionPopoverController {
 
     /// Approve/Deny from the card or a sidebar row's inline action line:
     /// one path into the responder for both.
-    func respond(_ decision: ApprovalDecision, sessionId id: UUID, prompt: SessionPopoverContent.ApprovalPrompt) {
-        guard ApprovalFlag.isEnabled, let surfaceId = coordinator?.approvalSurfaceId(forSession: id) else { return }
-        _ = approvalResponder.respond(decision, to: ApprovalTarget(
+    /// The first tap on a prompt is the only one that reaches the
+    /// responder (nil for any later tap, or with the flag off or no
+    /// surface); the responder's own guard then checks it is still live.
+    @discardableResult
+    func respond(_ decision: ApprovalDecision, sessionId id: UUID, prompt: SessionPopoverContent.ApprovalPrompt) -> ApprovalOutcome? {
+        guard ApprovalFlag.isEnabled, !model.isAnswered(prompt, for: id),
+              let surfaceId = approvalSurfaceId(forSession: id) else { return nil }
+        model.markAnswered(prompt, for: id)
+        return approvalResponder.respond(decision, to: ApprovalTarget(
             sessionId: id, updatedAt: prompt.updatedAt, surfaceId: surfaceId, fingerprint: prompt.fingerprint
         ))
     }
+
+    private func approvalSurfaceId(forSession id: UUID) -> UUID? {
+#if DEBUG
+        if let approvalSurfaceIdForTesting { return approvalSurfaceIdForTesting(id) }
+#endif
+        return coordinator?.approvalSurfaceId(forSession: id)
+    }
+
+#if DEBUG
+    /// Stands in for a live session surface, which a test can't create.
+    var approvalSurfaceIdForTesting: ((UUID) -> UUID?)?
+#endif
 
     func dismiss() {
         showWork?.cancel()

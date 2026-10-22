@@ -37,6 +37,8 @@ enum SessionPopoverLayout {
     static let actionHeight: CGFloat = 24
     static let actionHorizontalPadding: CGFloat = 12
     static let actionCornerRadius: CGFloat = 6
+    /// Approve/Deny once a tap has answered the prompt they show.
+    static let answeredOpacity: Double = 0.4
 }
 
 /// The popover card: the card shell around one content block (a Bash command,
@@ -146,6 +148,9 @@ struct SessionPopoverCard: View {
                         model.onApprovalDecision?(.deny)
                     }
                 }
+                // Answered once: off until the prompt changes.
+                .disabled(model.isAnswered(content.approvalPrompt, for: content.sessionId))
+                .opacity(model.isAnswered(content.approvalPrompt, for: content.sessionId) ? SessionPopoverLayout.answeredOpacity : 1)
             }
             Button {
                 model.onAnswerInTerminal?()
