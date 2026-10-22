@@ -441,7 +441,10 @@ struct RecentsListView: View {
                     }
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        subtitle: SessionNeedsYou.subtitle(
+                            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
+                            state: coordinator.claudeStateStore.state(for: session.id)
+                        ),
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
@@ -490,6 +493,12 @@ struct RecentsListView: View {
             name: group.name, projectId: group.projectId,
             iconStyle: store.projects.first { $0.id == group.projectId }?.iconStyle,
             monogram: monogram, count: group.sessions.count,
+            needYouCount: group.sessions.filter {
+                SessionNeedsYou.isGenuine(
+                    indicator: store.globalIndicatorStates[$0.id] ?? .inactive,
+                    state: coordinator.claudeStateStore.state(for: $0.id)
+                )
+            }.count,
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
             redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex
         ) {
