@@ -110,17 +110,25 @@ struct WindowMarginLiveTests {
         }
     }
 
-    /// Rail content centre == cluster centre, to within the rail's snap to
-    /// the 8pt grid: on macOS 26's cluster (19...79, so 98 snapped to 96)
-    /// the rail's centre is exactly 1pt left of the cluster's. The rail has
-    /// no trailing gutter.
+    /// Rail content centre == cluster centre, off by exactly half the rail's
+    /// snap to the 8pt grid (rail stays put): the rail is the cluster's hug
+    /// (zoom maxX + leading inset) rounded to the grid, so its centre is
+    /// half that rounding from the cluster's, on any traffic-light layout.
+    /// The rail has no trailing gutter.
     @Test func collapsedRailCentreIsTheClusterCentreWithNoTrailingGutter() throws {
         let (container, window) = makeContainer(mode: .collapsed, realChrome: true)
         defer { window.contentView = nil }
         container.layoutSubtreeIfNeeded()
         let cluster = try clusterInContainer(container, window)
         let sidebar = container.sidebarFrameForTesting
-        #expect(abs(sidebar.midX - (cluster.closeMinX + cluster.zoomMaxX) / 2) <= 1, "rail centre \(sidebar.midX) vs cluster centre \((cluster.closeMinX + cluster.zoomMaxX) / 2)")
+        #expect(SidebarDialTuning.railExtraWidth() == 0, "no extra rail width in the test's dials")
+        let hug = cluster.zoomMaxX + cluster.closeMinX
+        let snapped = (hug / WorkspaceLayout.layoutGrid).rounded() * WorkspaceLayout.layoutGrid
+        let clusterCentre = (cluster.closeMinX + cluster.zoomMaxX) / 2
+        #expect(abs(sidebar.width - snapped) <= 0.01, "rail width \(sidebar.width) vs the hug \(hug) snapped, \(snapped)")
+        #expect(abs(sidebar.midX - snapped / 2) <= 0.01, "rail centre \(sidebar.midX) vs snapped / 2, \(snapped / 2)")
+        #expect(abs(abs(sidebar.midX - clusterCentre) - abs(snapped - hug) / 2) <= 0.01,
+                "rail centre \(sidebar.midX) vs cluster centre \(clusterCentre): off by \(abs(sidebar.midX - clusterCentre)), the snap is \(abs(snapped - hug))")
         #expect(WorkspaceLayout.sidebarTrailingGutter(for: .collapsed) == 0, "the rail adds no trailing gutter")
         #expect(WorkspaceLayout.sidebarTrailingGutter(for: .pinned) == SidebarDialTuning.windowMargin(), "pinned keeps its gutter")
     }

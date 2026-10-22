@@ -410,6 +410,18 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// The stock traffic-light cluster of a titled window, in window
     /// coordinates, and the collapsed-rail width and centre derived from it:
     /// nothing hard-coded, so it holds on any macOS titlebar layout.
+    /// The rail is the cluster's hug (zoom maxX + leading inset, twice the
+    /// cluster's centre with no extra-width dial) snapped to the 8pt grid
+    /// (rail stays put), so its centre sits exactly half the snap away from
+    /// the cluster's, on any traffic-light layout.
+    private func assertRailCentreIsTheSnappedHug(railWidth: CGFloat, clusterCentre: CGFloat, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(SidebarDialTuning.railExtraWidth(), 0, "no extra rail width in the test's dials", file: file, line: line)
+        let hug = clusterCentre * 2
+        let snapped = (hug / WorkspaceLayout.layoutGrid).rounded() * WorkspaceLayout.layoutGrid
+        XCTAssertEqual(railWidth, snapped, accuracy: 0.01, "rail width is the hug \(hug) snapped to the grid", file: file, line: line)
+        XCTAssertEqual(abs(railWidth / 2 - clusterCentre), abs(snapped - hug) / 2, accuracy: 0.01, "rail centre vs cluster centre", file: file, line: line)
+    }
+
     private func realRailGeometry() throws -> (railWidth: CGFloat, clusterCentre: CGFloat) {
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: true)
         let close = try XCTUnwrap(window.standardWindowButton(.closeButton))
@@ -614,9 +626,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// Create pill's icons each centred in its square button.
     func testRailTrayRendersSquarePillsCentredOnTheRail() throws {
         let (railWidth, clusterCentre) = try realRailGeometry()
-        // The rail snaps to the 8pt grid (rail stays put): on macOS 26's
-        // cluster its centre is 1pt left of the cluster's.
-        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: 1, "rail centre is the cluster centre, on the grid")
+        assertRailCentreIsTheSnappedHug(railWidth: railWidth, clusterCentre: clusterCentre)
         let railCentre = railWidth / 2
         let size = CGSize(width: railWidth, height: 400)
         let g = RailTrayGeometry.current(railWidth: railWidth)
@@ -716,7 +726,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let pill = try XCTUnwrap(try capsuleSpans(rep, scale: scale, alongX: true, at: toggleMidY).first)
         let pillX = (pill.lowerBound + pill.upperBound) / 2
 
-        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: 1, "rail centre vs cluster centre")
+        assertRailCentreIsTheSnappedHug(railWidth: railWidth, clusterCentre: clusterCentre)
         XCTAssertEqual(glyphX, railWidth / 2, accuracy: 0.5, "rail row glyph centre x vs rail centre")
         XCTAssertEqual(pillX, railWidth / 2, accuracy: 0.5, "rail tray pill centre x vs rail centre")
         XCTAssertEqual(glyphX, pillX, accuracy: 0.5, "rail row glyph and tray pill share a centre")
