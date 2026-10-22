@@ -10,8 +10,10 @@ enum ProjectIconFixtures {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("project-icon-tests-\(label)-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        // Resolve /var -> /private/var so path comparisons are stable.
-        return url.resolvingSymlinksInPath()
+        // Real path (/private/var, not /var) so path comparisons are stable.
+        let resolved = realpath(url.path, nil)!
+        defer { free(resolved) }
+        return URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
     }
 
     /// A solid-colour PNG, `pixels` square.
