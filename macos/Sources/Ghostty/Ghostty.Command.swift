@@ -72,5 +72,6 @@ extension Ghostty {
             }
             return result
         }
+        // MARK: - End Ghostties fork fence (open_config palette entry)
     }
 }

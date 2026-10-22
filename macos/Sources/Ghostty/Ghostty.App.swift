@@ -131,6 +131,7 @@ extension Ghostty {
                 GhosttiesSettingsWindowController.shared.show()
             }
         }
+        // MARK: - End Ghostties fork fence (open_config opens Settings)
 
         #if DEBUG
         /// Ghostties test seam: when set, `openConfig()` hands the config
