@@ -788,9 +788,9 @@ final class WorkspaceStore: ObservableObject {
 
     /// Reposition a project so it sits immediately BEFORE `beforeId` — or
     /// last, if `beforeId` is nil or not found — within its own pin group.
-    /// `projects` order, pinned first (`ProjectListOrder`), is the one-view
-    /// list's group order and the rail's tile order, and it is persisted
-    /// as-is, so this is the whole reorder. A move never crosses the
+    /// `projects` order is the pinned block's order in the one-view list
+    /// and the rail (`ProjectListOrder`; the rest sort by name there), and
+    /// it is persisted as-is, so this is the whole reorder. A move never crosses the
     /// pinned/unpinned boundary: a target in the other group lands the
     /// project at its own group's near edge (a pinned project at the end of
     /// Pinned, an unpinned one at the top of the rest). Only the moved

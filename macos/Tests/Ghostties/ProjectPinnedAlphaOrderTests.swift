@@ -59,6 +59,18 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
         XCTAssertEqual(SidebarProjectGroup.make(active: [], projects: store.projects).map(\.name), ["alpha", "zeta", "mid"])
     }
 
+    /// Only a pinned project's header drags or takes Move Up/Down: the
+    /// alphabetical block has no manual order to change, and the "Unknown"
+    /// group has no project.
+    func testOnlyPinnedGroupsReorder() {
+        let pinned = project("zeta", pinned: true)
+        let rest = project("alpha")
+        let orphan = AgentSession(name: "lost", templateId: UUID(), projectId: UUID())
+        let groups = SidebarProjectGroup.make(active: [orphan], projects: [rest, pinned])
+        XCTAssertEqual(groups.map(\.name), ["zeta", "alpha", "Unknown"])
+        XCTAssertEqual(groups.map(\.isReorderable), [true, false, false])
+    }
+
     // MARK: - Gap
 
     /// The list's laid-out height at the pinned width and on the rail.

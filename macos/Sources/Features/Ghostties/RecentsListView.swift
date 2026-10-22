@@ -406,9 +406,9 @@ struct RecentsListView: View {
         let cardGroups = mix.cardGroups(selected: selectedGroupId)
         ForEach(items) { item in
             switch item {
-            case .spacer:
+            case .spacer(_, let isPinnedBreak):
                 Color.clear
-                    .frame(height: SidebarProjectGroupItem.spacerHeight)
+                    .frame(height: SidebarProjectGroupItem.spacerHeight(isPinnedBreak: isPinnedBreak))
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
                 if projectGapBefore == .some(group.id) {
@@ -463,9 +463,11 @@ struct RecentsListView: View {
         )
     }
 
-    /// One project's accordion header. A real project's header is a drag
-    /// source and a project drop target, with Move Up/Down for VoiceOver;
-    /// the "Unknown" group (no project) is neither.
+    /// One project's accordion header. A real project's header is a
+    /// project drop target; a pinned one is also a drag source, with Move
+    /// Up/Down for VoiceOver (`SidebarProjectGroup.isReorderable`: the
+    /// alphabetical block has no manual order to change). The "Unknown"
+    /// group (no project) is neither.
     @ViewBuilder
     private func projectHeader(
         _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
@@ -480,7 +482,7 @@ struct RecentsListView: View {
                 ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
             }
         } }
-        if let projectId = group.projectId, let dropSlot {
+        if let projectId = group.projectId, let dropSlot, group.isReorderable {
             let movable = header
                 .accessibilityAction(named: Text("Move Up")) { moveProject(projectId, by: -1) }
                 .accessibilityAction(named: Text("Move Down")) { moveProject(projectId, by: 1) }
@@ -506,6 +508,10 @@ struct RecentsListView: View {
             } else {
                 movable
             }
+        } else if group.projectId != nil, let dropSlot, dragInteractionsEnabledForRendering {
+            // Still a drop target, so a pinned drag over the alphabetical
+            // block keeps its gap at the pinned block's end.
+            header.onDrop(of: [.text], delegate: ProjectSlotDropDelegate(target: projectDropTarget(dropSlot), session: nil))
         } else {
             header
         }

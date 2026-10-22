@@ -44,7 +44,7 @@ final class ProjectReorderTests: XCTestCase {
     }
 
     /// A reorder keeps every project's pin, and a pinned project leads the
-    /// one-view groups wherever it sits in the array.
+    /// one-view groups wherever it sits in the array; the rest sort by name.
     func testMoveProjectKeepsPinsAndDrivesGroupOrder() {
         var pinnedOrbit = orbit
         pinnedOrbit.isPinned = true
@@ -53,7 +53,7 @@ final class ProjectReorderTests: XCTestCase {
         store.moveProject(id: atlas.id, before: nil)
 
         XCTAssertEqual(store.projects.map(\.isPinned), [false, false, true])
-        XCTAssertEqual(SidebarProjectGroup.make(active: [], projects: store.projects).map(\.name), ["orbit-web", "fieldwork", "atlas-api"])
+        XCTAssertEqual(SidebarProjectGroup.make(active: [], projects: store.projects).map(\.name), ["orbit-web", "atlas-api", "fieldwork"])
     }
 
     // MARK: - Pin
@@ -108,12 +108,15 @@ final class ProjectReorderTests: XCTestCase {
         store.moveProject(id: pinnedAtlas.id, before: nil)
         XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "fieldwork", "quiet"])
 
-        // Unpinned dropped above a pinned project: top of the rest.
+        // Unpinned dropped above a pinned project: top of the rest in the
+        // array; the list still shows the rest by name.
         store.moveProject(id: quiet.id, before: pinnedOrbit.id)
-        XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "quiet", "fieldwork"])
+        XCTAssertEqual(store.projects.map(\.name), ["orbit-web", "quiet", "atlas-api", "fieldwork"])
+        XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "fieldwork", "quiet"])
 
         // Within the rest, to the end.
         store.moveProject(id: quiet.id, before: nil)
+        XCTAssertEqual(store.projects.map(\.name), ["orbit-web", "fieldwork", "atlas-api", "quiet"])
         XCTAssertEqual(names(store), ["orbit-web", "atlas-api", "fieldwork", "quiet"])
         XCTAssertEqual(store.projects.map(\.isPinned), [true, false, true, false])
     }
@@ -249,14 +252,20 @@ final class ProjectReorderTests: XCTestCase {
     // MARK: - Rail
 
     /// The rail's tiles and glyphs read the same `store.projects` order as
-    /// the expanded list, so a reorder moves both.
+    /// the expanded list, so a reorder (of pinned projects, the only ones
+    /// with a manual order) moves both.
     func testRailFollowsTheExpandedOrderAfterAReorder() {
         let pinned = session("orchestrator", orbit, pinned: true)
         let a1 = session("a1", atlas)
         let f1 = session("f1", fieldwork)
         let o1 = session("o1", orbit)
         let all = [pinned, a1, f1, o1]
-        let store = WorkspaceStore(testingProjects: [atlas, fieldwork, orbit, quiet], testingSessions: all)
+        let pinnedProjects = [atlas, fieldwork, orbit, quiet].map { project -> Project in
+            var pinnedProject = project
+            pinnedProject.isPinned = true
+            return pinnedProject
+        }
+        let store = WorkspaceStore(testingProjects: pinnedProjects, testingSessions: all)
         for s in all { store.updateSessionStatus(id: s.id, status: .running) }
 
         store.moveProject(id: orbit.id, before: atlas.id)
