@@ -60,6 +60,10 @@ jobs:
         working-directory: cli
         run: swift test --parallel
 
+      - name: swift test (cloud/contract)
+        working-directory: cloud/contract
+        run: swift test --parallel
+
   # ---------------------------------------------------------------------------
   # macOS App — Ghostties Xcode project tests
   # ---------------------------------------------------------------------------
