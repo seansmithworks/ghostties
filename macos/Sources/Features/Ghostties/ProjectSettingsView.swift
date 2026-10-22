@@ -1,9 +1,10 @@
 import SwiftUI
 import GhosttiesCore
 
-/// Popover for editing a project's display name, ghost character, and default template,
-/// and for managing the (global) templates. Save/Cancel covers the project fields only;
-/// template changes apply immediately (see `ProjectTemplatesSection`).
+/// Popover for editing a project's display name and default template, and for
+/// managing the (global) templates. Save/Cancel covers the project fields only;
+/// template changes apply immediately (see `ProjectTemplatesSection`). The
+/// project's icon is set in the Settings window (`ProjectsSettingsPane`).
 struct ProjectSettingsView: View {
     let project: Project
     var onDismiss: () -> Void
@@ -11,51 +12,17 @@ struct ProjectSettingsView: View {
     @EnvironmentObject private var store: WorkspaceStore
 
     @State private var name: String
-    @State private var selectedGhost: GhostCharacter?
     @State private var defaultTemplateId: UUID?
-
-    private let ghostColumns = Array(repeating: GridItem(.fixed(36), spacing: 8), count: 6)
 
     init(project: Project, onDismiss: @escaping () -> Void) {
         self.project = project
         self.onDismiss = onDismiss
         _name = State(initialValue: project.name)
-        _selectedGhost = State(initialValue: project.ghostCharacter)
         _defaultTemplateId = State(initialValue: project.defaultTemplateId)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Ghost picker
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Icon")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                LazyVGrid(columns: ghostColumns, spacing: 8) {
-                    ForEach(GhostCharacter.allCases, id: \.self) { ghost in
-                        GhostCharacterView(
-                            character: ghost,
-                            color: selectedGhost == ghost ? Color.accentColor : .secondary
-                        )
-                        .frame(width: 20, height: 20)
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(selectedGhost == ghost ? Color.accentColor.opacity(0.15) : Color.clear)
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedGhost = ghost
-                        }
-                        .accessibilityLabel(ghost.rawValue)
-                        .accessibilityAddTraits(selectedGhost == ghost ? .isSelected : [])
-                    }
-                }
-            }
-
-            Divider()
-
             // Name field
             VStack(alignment: .leading, spacing: 4) {
                 Text("Name")
@@ -115,7 +82,6 @@ struct ProjectSettingsView: View {
         store.updateProject(
             id: project.id,
             name: finalName,
-            ghostCharacter: selectedGhost,
             defaultTemplateId: defaultTemplateId
         )
         // If user picked "Always ask" (nil), explicitly clear the default template.

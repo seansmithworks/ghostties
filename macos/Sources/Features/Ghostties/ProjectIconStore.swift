@@ -13,11 +13,17 @@ import UniformTypeIdentifiers
 /// and listen to `changes` to re-read after a refresh.
 ///
 /// Concurrency model: one generation token per project. Every `refresh`,
-/// `setOverride` and `forget` bumps it. Background work only computes (it
-/// returns a plan and never touches the cache or the override); the plan is
-/// applied on the main actor, and only if the token it started with is still
-/// current. A late result from a superseded refresh, or from before a
-/// `forget`, is dropped. `forget` keeps the bumped token as a tombstone.
+/// `forget`, and a landing `setOverride`, bumps it. Background work only
+/// computes (it returns a plan and never touches the cache or the
+/// override); the plan is applied on the main actor, and only if the token
+/// it started with is still current. A late result from a superseded
+/// refresh, or from before a `forget`, is dropped. `forget` keeps the
+/// bumped token as a tombstone.
+///
+/// A chosen image (`setOverride`) has its own token, bumped only by a newer
+/// choice and by `forget`: the caller sets `iconStyle = .file` first, and
+/// the refresh that style change sets off runs while the image is still
+/// being normalized, so a refresh must not cancel it.
 ///
 /// On disk:
 /// - `<caches>/project-icons/<id>.png`  resolved icon (a cache; safe to delete)
@@ -49,6 +55,7 @@ final class ProjectIconStore {
     /// would silently turn a project back into its monogram. 128px per project is tiny.
     private var memory: [UUID: NSImage] = [:]
     private var generations: [UUID: Int] = [:]
+    private var overrideTokens: [UUID: Int] = [:]
     private static let queue = DispatchQueue(label: "ghostties.project-icons", qos: .utility)
 
     /// Directories are the final `project-icons` folders. Defaults:
@@ -137,17 +144,21 @@ final class ProjectIconStore {
     // MARK: - Override
 
     /// Normalizes the chosen image to <=128px PNG and copies it into
-    /// Application Support. The caller then sets `iconStyle = .file`.
-    /// If the project is refreshed or removed while this runs, the result is dropped.
+    /// Application Support. Set `iconStyle = .file` before calling: a
+    /// refresh while this runs doesn't cancel it (see the type's doc), and
+    /// landing supersedes any refresh still in flight. A newer choice, or
+    /// the project's removal, drops this one.
     func setOverride(projectId: UUID, from source: URL) async throws {
-        let generation = bump(projectId)
+        let token = (overrideTokens[projectId] ?? 0) + 1
+        overrideTokens[projectId] = token
         let decoded = await Self.onQueue { () -> Decoded? in
             guard let cg = ProjectIconResolver.normalizedThumbnail(fromFileAt: source),
                   let data = Self.pngData(cg) else { return nil }
             return Decoded(image: cg, png: data)
         }
         guard let decoded else { throw StoreError.unreadableImage }
-        guard isCurrent(projectId, generation) else { return }
+        guard overrideTokens[projectId] == token else { return }
+        _ = bump(projectId)
         apply(Plan(writes: [(Self.file(supportDirectory, projectId, "png"), decoded.png)], removals: []),
               in: supportDirectory)
         setImage(decoded.image, for: projectId)
@@ -159,6 +170,7 @@ final class ProjectIconStore {
     /// invalidates any in-flight work for it.
     func forget(projectId id: UUID) {
         _ = bump(id) // tombstone: late results from before this call are dropped
+        overrideTokens[id] = (overrideTokens[id] ?? 0) + 1
         for ext in ["png", "key", "none"] {
             try? FileManager.default.removeItem(at: Self.file(cacheDirectory, id, ext))
         }
