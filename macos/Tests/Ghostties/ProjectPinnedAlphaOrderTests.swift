@@ -71,6 +71,21 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
         XCTAssertEqual(groups.map(\.isReorderable), [true, false, false])
     }
 
+    /// Next/Previous Project (Cmd+Ctrl+] / [) steps the order the list
+    /// shows: one view's pinned-then-alphabetical order, the tabs layout's
+    /// sections.
+    func testNextPreviousProjectStepsTheDisplayedOrder() {
+        let store = WorkspaceStore(testingProjects: [
+            project("kiln"), project("harbor", pinned: true), project("beacon"), project("atlas-api", pinned: true),
+        ])
+        XCTAssertEqual(store.projectsInDisplayOrder(layout: .oneView).map(\.name), ["harbor", "atlas-api", "beacon", "kiln"])
+        XCTAssertEqual(
+            store.projectsInDisplayOrder(layout: .oneView).map(\.id),
+            SidebarProjectGroup.make(active: [], projects: store.projects).compactMap(\.projectId)
+        )
+        XCTAssertEqual(store.projectsInDisplayOrder(layout: .tabs).map(\.id), store.flatProjectsInVisualOrder.map(\.id))
+    }
+
     // MARK: - Gap
 
     /// The list's laid-out height at the pinned width and on the rail.
