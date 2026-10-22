@@ -28,7 +28,7 @@ enum ProjectIconResolver {
         var maxEntries = 2000
         var timeBudget: TimeInterval = 0.2
         /// Reject images whose declared pixel count exceeds this (decode-bomb guard).
-        var maxSourcePixels = 64_000_000
+        var maxSourcePixels = 16_000_000
     }
 
     /// A validated, already-read candidate file. `data` was read from the same
@@ -51,16 +51,34 @@ enum ProjectIconResolver {
         let image: CGImage
     }
 
-    /// Resolves `root` to an icon. `image` turns a candidate into pixels; the
-    /// default decodes it, and the store passes a closure that can answer from
-    /// its on-disk cache without decoding. Returning nil rejects the candidate
-    /// and moves on to the next.
+    enum Resolution {
+        case hit(Hit)
+        /// Searched everything reachable and found nothing.
+        case none
+        /// The walk hit its entry or time cap before finishing, so "nothing"
+        /// is unproven. Callers must not cache this as a negative result.
+        case truncated
+    }
+
     static func resolve(
         root: URL,
         limits: Limits = Limits(),
         image: (Candidate) -> CGImage? = { $0.thumbnail() }
     ) -> Hit? {
-        guard let realRoot = localRealRoot(root) else { return nil }
+        if case .hit(let hit) = resolveDetailed(root: root, limits: limits, image: image) { return hit }
+        return nil
+    }
+
+    /// Resolves `root` to an icon. `image` turns a candidate into pixels; the
+    /// default decodes it, and the store passes a closure that can answer from
+    /// its on-disk cache without decoding. Returning nil rejects the candidate
+    /// and moves on to the next.
+    static func resolveDetailed(
+        root: URL,
+        limits: Limits = Limits(),
+        image: (Candidate) -> CGImage? = { $0.thumbnail() }
+    ) -> Resolution {
+        guard let realRoot = localRealRoot(root) else { return .none }
         let deadline = ProcessInfo.processInfo.systemUptime + limits.timeBudget
 
         func attempt(_ path: String) -> Hit? {
@@ -81,18 +99,20 @@ enum ProjectIconResolver {
         }
 
         if let hit = first(inDirs(["public", "static", "web", "app", ""], ["apple-touch-icon.png"])) {
-            return hit
+            return .hit(hit)
         }
-        for set in appIconSets(realRoot: realRoot, limits: limits, deadline: deadline) {
+        let walk = appIconSets(realRoot: realRoot, limits: limits, deadline: deadline)
+        for set in walk.sets {
             for file in largestFirstFilenames(inSetAt: set, realRoot: realRoot, limits: limits) {
-                if let hit = attempt(set + "/" + file) { return hit }
+                if let hit = attempt(set + "/" + file) { return .hit(hit) }
             }
         }
-        if let hit = first(["app/icon.png", "app/apple-icon.png", "src/app/icon.png"]) { return hit }
+        if let hit = first(["app/icon.png", "app/apple-icon.png", "src/app/icon.png"]) { return .hit(hit) }
         if let hit = first(inDirs(["public", "static", "assets", "web", "app", ""], ["favicon.png", "favicon.ico"])) {
-            return hit
+            return .hit(hit)
         }
-        return first(["icon.png"])
+        if let hit = first(["icon.png"]) { return .hit(hit) }
+        return walk.truncated ? .truncated : .none
     }
 
     // MARK: - Root
@@ -109,7 +129,14 @@ enum ProjectIconResolver {
         ]), values.isDirectory == true,
         values.volumeIsLocal ?? false,
         !(values.isUbiquitousItem ?? false) else { return nil }
-        return real.path
+        // Take the root's spelling from the same API that later judges each
+        // file (F_GETPATH), so case-insensitive volumes compare like with like.
+        let fd = open(real.path, O_RDONLY | O_DIRECTORY | O_NOCTTY | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        guard fcntl(fd, F_GETPATH, &buffer) != -1 else { return nil }
+        return String(cString: buffer)
     }
 
     // MARK: - Reading
@@ -127,7 +154,7 @@ enum ProjectIconResolver {
     private static func readFile(
         path: String, realRoot: String, maxBytes: Int
     ) -> (data: Data, path: String, mtime: TimeInterval)? {
-        let fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
+        let fd = open(path, O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC)
         guard fd >= 0 else { return nil }
         defer { close(fd) }
 
@@ -163,19 +190,23 @@ enum ProjectIconResolver {
 
     /// `AppIcon.appiconset` directories inside an `*.xcassets`, depth <= 4,
     /// bounded by entry count and wall-clock budget. Sorted for determinism.
-    private static func appIconSets(realRoot: String, limits: Limits, deadline: TimeInterval) -> [String] {
+    private static func appIconSets(realRoot: String, limits: Limits, deadline: TimeInterval) -> (sets: [String], truncated: Bool) {
         let rootURL = URL(fileURLWithPath: realRoot, isDirectory: true)
         guard let walker = FileManager.default.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: []
-        ) else { return [] }
+        ) else { return ([], false) }
 
         var found: [String] = []
         var seen = 0
+        var truncated = false
         while let url = walker.nextObject() as? URL {
             seen += 1
-            if seen > limits.maxEntries || ProcessInfo.processInfo.systemUptime > deadline { break }
+            if seen > limits.maxEntries || ProcessInfo.processInfo.systemUptime > deadline {
+                truncated = true
+                break
+            }
 
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             guard isDirectory else { continue }
@@ -190,7 +221,7 @@ enum ProjectIconResolver {
             }
             if walker.level >= 4 { walker.skipDescendants() }
         }
-        return found.sorted()
+        return (found.sorted(), truncated)
     }
 
     /// Filenames from `Contents.json`, largest pixel size first. Only PNGs.

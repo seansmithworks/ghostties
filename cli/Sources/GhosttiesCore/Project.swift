@@ -82,8 +82,10 @@ public struct Project: Identifiable, Codable, Hashable {
         self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
         self.defaultTemplateId = try container.decodeIfPresent(UUID.self, forKey: .defaultTemplateId)
         self.lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
-        self.iconStyle = try container.decodeIfPresent(ProjectIconStyle.self, forKey: .iconStyle)
-        self.newSessionDefault = try container.decodeIfPresent(NewSessionDefault.self, forKey: .newSessionDefault)
+        // Lenient: a value written by a newer build (unknown case) reads as nil
+        // instead of failing the whole project, which would drop it on load.
+        self.iconStyle = (try? container.decodeIfPresent(ProjectIconStyle.self, forKey: .iconStyle)) ?? nil
+        self.newSessionDefault = (try? container.decodeIfPresent(NewSessionDefault.self, forKey: .newSessionDefault)) ?? nil
         self.lastTemplateId = try container.decodeIfPresent(UUID.self, forKey: .lastTemplateId)
     }
 }

@@ -11,6 +11,13 @@ import UniformTypeIdentifiers
 /// render path: views call `image(for:)`, which is an in-memory lookup only,
 /// and listen to `changes` to re-read after a refresh.
 ///
+/// Concurrency model: one generation token per project. Every `refresh`,
+/// `setOverride` and `forget` bumps it. Background work only computes (it
+/// returns a plan and never touches the cache or the override); the plan is
+/// applied on the main actor, and only if the token it started with is still
+/// current. A late result from a superseded refresh, or from before a
+/// `forget`, is dropped. `forget` keeps the bumped token as a tombstone.
+///
 /// On disk:
 /// - `<caches>/project-icons/<id>.png`  resolved icon (a cache; safe to delete)
 /// - `<caches>/project-icons/<id>.key`  source path + mtime + size the PNG came from
@@ -36,13 +43,22 @@ final class ProjectIconStore {
     private let cacheDirectory: URL
     private let supportDirectory: URL
     private let now: () -> Date
-    private let memory = NSCache<NSString, NSImage>()
+    private let limits: ProjectIconResolver.Limits
+    /// A dictionary, not NSCache: NSCache may evict under memory pressure, which
+    /// would silently turn a project back into its monogram. 128px per project is tiny.
+    private var memory: [UUID: NSImage] = [:]
+    private var generations: [UUID: Int] = [:]
     private static let queue = DispatchQueue(label: "ghostties.project-icons", qos: .utility)
 
     /// Directories are the final `project-icons` folders. Defaults:
     /// `~/Library/Caches/<bundle id>/project-icons` and
     /// `<Application Support state dir>/project-icons`.
-    init(cacheDirectory: URL? = nil, supportDirectory: URL? = nil, now: @escaping () -> Date = Date.init) {
+    init(
+        cacheDirectory: URL? = nil,
+        supportDirectory: URL? = nil,
+        now: @escaping () -> Date = Date.init,
+        limits: ProjectIconResolver.Limits = ProjectIconResolver.Limits()
+    ) {
         self.cacheDirectory = cacheDirectory ?? FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Ghostties", isDirectory: true)
@@ -50,13 +66,26 @@ final class ProjectIconStore {
         self.supportDirectory = supportDirectory ?? WorkspacePersistence.directory
             .appendingPathComponent("project-icons", isDirectory: true)
         self.now = now
+        self.limits = limits
     }
 
     // MARK: - Reading
 
     /// In-memory lookup only. Nil means "draw the monogram".
     func image(for projectId: UUID) -> NSImage? {
-        memory.object(forKey: projectId.uuidString as NSString)
+        memory[projectId]
+    }
+
+    // MARK: - Generation token
+
+    private func bump(_ id: UUID) -> Int {
+        let next = (generations[id] ?? 0) + 1
+        generations[id] = next
+        return next
+    }
+
+    private func isCurrent(_ id: UUID, _ generation: Int) -> Bool {
+        generations[id] == generation
     }
 
     // MARK: - Refresh
@@ -69,10 +98,12 @@ final class ProjectIconStore {
     /// Recomputes the effective image for `project` off the main thread.
     func refresh(_ project: Project) async {
         let id = project.id
+        let generation = bump(id)
         let cacheDir = cacheDirectory
         let supportDir = supportDirectory
         let root = URL(fileURLWithPath: project.rootPath, isDirectory: true)
         let clock = now()
+        let limits = limits
 
         switch project.iconStyle ?? .auto {
         case .monogram:
@@ -80,6 +111,7 @@ final class ProjectIconStore {
             return
         case .file:
             let override = await Self.onQueue { Self.loadPNG(Self.file(supportDir, id, "png")) }
+            guard isCurrent(id, generation) else { return }
             if let override {
                 setImage(override.image, for: id)
                 return
@@ -89,8 +121,12 @@ final class ProjectIconStore {
             break
         }
 
-        let outcome = await Self.onQueue { Self.resolveOnDisk(root: root, id: id, dir: cacheDir, now: clock) }
+        let outcome = await Self.onQueue {
+            Self.resolveOnDisk(root: root, id: id, dir: cacheDir, now: clock, limits: limits)
+        }
         if outcome.ranResolver { resolverRuns += 1 }
+        guard isCurrent(id, generation) else { return }
+        apply(outcome.plan, in: cacheDir)
         setImage(outcome.image?.image, for: id)
     }
 
@@ -98,24 +134,27 @@ final class ProjectIconStore {
 
     /// Normalizes the chosen image to <=128px PNG and copies it into
     /// Application Support. The caller then sets `iconStyle = .file`.
+    /// If the project is refreshed or removed while this runs, the result is dropped.
     func setOverride(projectId: UUID, from source: URL) async throws {
-        let target = Self.file(supportDirectory, projectId, "png")
-        let dir = supportDirectory
-        let box = await Self.onQueue { () -> ImageBox? in
+        let generation = bump(projectId)
+        let decoded = await Self.onQueue { () -> Decoded? in
             guard let cg = ProjectIconResolver.normalizedThumbnail(fromFileAt: source),
                   let data = Self.pngData(cg) else { return nil }
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            guard (try? data.write(to: target, options: .atomic)) != nil else { return nil }
-            return ImageBox(image: cg)
+            return Decoded(image: cg, png: data)
         }
-        guard let box else { throw StoreError.unreadableImage }
-        setImage(box.image, for: projectId)
+        guard let decoded else { throw StoreError.unreadableImage }
+        guard isCurrent(projectId, generation) else { return }
+        apply(Plan(writes: [(Self.file(supportDirectory, projectId, "png"), decoded.png)], removals: []),
+              in: supportDirectory)
+        setImage(decoded.image, for: projectId)
     }
 
     // MARK: - Removal
 
-    /// Deletes every cached file and the override for a removed project.
+    /// Deletes every cached file and the override for a removed project, and
+    /// invalidates any in-flight work for it.
     func forget(projectId id: UUID) {
+        _ = bump(id) // tombstone: late results from before this call are dropped
         for ext in ["png", "key", "none"] {
             try? FileManager.default.removeItem(at: Self.file(cacheDirectory, id, ext))
         }
@@ -126,21 +165,41 @@ final class ProjectIconStore {
     // MARK: - Internals
 
     private func setImage(_ cg: CGImage?, for id: UUID) {
-        let key = id.uuidString as NSString
         if let cg {
-            memory.setObject(NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)), forKey: key)
+            memory[id] = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         } else {
-            memory.removeObject(forKey: key)
+            memory[id] = nil
         }
         changes.send(id)
+    }
+
+    /// Small file writes decided by background work, applied on the main actor
+    /// only while the project's generation is current.
+    private struct Plan: Sendable {
+        var writes: [(URL, Data)]
+        var removals: [URL]
+    }
+
+    private func apply(_ plan: Plan, in directory: URL) {
+        let fm = FileManager.default
+        for url in plan.removals { try? fm.removeItem(at: url) }
+        guard !plan.writes.isEmpty else { return }
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        for (url, data) in plan.writes { try? data.write(to: url, options: .atomic) }
     }
 
     /// CGImage is immutable; the box lets it cross the queue boundary.
     private struct ImageBox: @unchecked Sendable { let image: CGImage }
 
+    private struct Decoded: @unchecked Sendable {
+        let image: CGImage
+        let png: Data
+    }
+
     private struct Outcome: @unchecked Sendable {
         var image: ImageBox?
         var ranResolver: Bool
+        var plan = Plan(writes: [], removals: [])
     }
 
     private nonisolated static func onQueue<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
@@ -176,9 +235,11 @@ final class ProjectIconStore {
     }
 
     /// The disk half of `refresh`: negative cache, source-keyed PNG cache, then
-    /// the resolver. Runs on the utility queue.
-    private nonisolated static func resolveOnDisk(root: URL, id: UUID, dir: URL, now: Date) -> Outcome {
-        let fm = FileManager.default
+    /// the resolver. Runs on the utility queue and only reads; it returns the
+    /// cache writes for the main actor to apply if still current.
+    private nonisolated static func resolveOnDisk(
+        root: URL, id: UUID, dir: URL, now: Date, limits: ProjectIconResolver.Limits
+    ) -> Outcome {
         let rootMtime = mtime(of: root)
         let noneURL = file(dir, id, "none")
         let pngURL = file(dir, id, "png")
@@ -195,7 +256,7 @@ final class ProjectIconStore {
 
         let storedKey = try? String(contentsOf: keyURL, encoding: .utf8)
         var servedFromCache = false
-        let hit = ProjectIconResolver.resolve(root: root) { candidate in
+        let resolution = ProjectIconResolver.resolveDetailed(root: root, limits: limits) { candidate in
             if storedKey == keyString(for: candidate), let cached = loadPNG(pngURL) {
                 servedFromCache = true
                 return cached.image
@@ -203,20 +264,24 @@ final class ProjectIconStore {
             return candidate.thumbnail()
         }
 
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard let hit else {
-            try? fm.removeItem(at: pngURL)
-            try? fm.removeItem(at: keyURL)
-            if let rootMtime {
-                try? "\(rootMtime)\n\(now.timeIntervalSince1970)".write(to: noneURL, atomically: true, encoding: .utf8)
-            }
+        switch resolution {
+        case .truncated:
+            // Unproven absence: show nothing now, cache nothing, retry next time.
             return Outcome(image: nil, ranResolver: true)
+        case .none:
+            var plan = Plan(writes: [], removals: [pngURL, keyURL])
+            if let rootMtime {
+                let text = "\(rootMtime)\n\(now.timeIntervalSince1970)"
+                plan.writes.append((noneURL, Data(text.utf8)))
+            }
+            return Outcome(image: nil, ranResolver: true, plan: plan)
+        case .hit(let hit):
+            var plan = Plan(writes: [], removals: [noneURL])
+            if !servedFromCache, let data = pngData(hit.image) {
+                plan.writes.append((pngURL, data))
+                plan.writes.append((keyURL, Data(keyString(for: hit.source).utf8)))
+            }
+            return Outcome(image: ImageBox(image: hit.image), ranResolver: true, plan: plan)
         }
-        try? fm.removeItem(at: noneURL)
-        if !servedFromCache, let data = pngData(hit.image) {
-            try? data.write(to: pngURL, options: .atomic)
-            try? keyString(for: hit.source).write(to: keyURL, atomically: true, encoding: .utf8)
-        }
-        return Outcome(image: ImageBox(image: hit.image), ranResolver: true)
     }
 }
