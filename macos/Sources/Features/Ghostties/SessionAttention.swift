@@ -21,6 +21,11 @@ enum SessionAttention: Equatable {
         switch state.state {
         case .needsPermission:
             let input = state.structuredPrompt?.toolInput
+            // AskUserQuestion can surface as a PermissionRequest; Approve =
+            // Enter would silently pick option 1. It is always freeform.
+            if state.structuredPrompt?.toolName == "AskUserQuestion" {
+                return .freeform(question: input?.questions.first)
+            }
             return .bounded(
                 prompt: permissionPrompt(tool: state.structuredPrompt?.toolName, input: input),
                 command: input?.command

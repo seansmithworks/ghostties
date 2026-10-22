@@ -548,7 +548,12 @@ final class ClaudeStateStore {
             // in `structuredPrompt.toolInput` (hooks docs: tool_input.questions).
             kind = .needsInput
             structuredPrompt = StructuredPrompt(toolName: "AskUserQuestion", toolUseId: hook.toolUseId, toolInput: hook.toolInput)
-        case "UserPromptSubmit", "PreToolUse", "PostToolUse":
+        case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied":
+            // PostToolUseFailure / PermissionDenied: the blocked tool call
+            // resolved and Claude carries on (hooks docs, "PostToolUseFailure"
+            // and "PermissionDenied"), so a pending needs-you clears to busy.
+            // Docs caveat: a user Esc fires neither, and `Stop` is skipped on
+            // user interrupt -- the next event (e.g. UserPromptSubmit) clears it.
             kind = .busy
         case "Stop":
             kind = .idle
@@ -566,6 +571,11 @@ final class ClaudeStateStore {
                 kind = .idle
             case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
                 kind = .needsInput
+            case "elicitation_complete", "elicitation_response":
+                // The MCP elicitation resolved; Claude resumes. (The docs give
+                // no clearing event for agent_needs_input: the next hook
+                // event overwrites it.)
+                kind = .busy
             default:
                 return nil
             }
