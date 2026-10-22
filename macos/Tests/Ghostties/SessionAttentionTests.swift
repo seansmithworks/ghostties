@@ -93,7 +93,7 @@ final class SessionAttentionTests: XCTestCase {
     // arrive after a blocked prompt resolves, so each must clear attention.
     func testResolutionEventsClearAttention() {
         let events = [
-            #"{"cwd":"/tmp","hook_event_name":"PostToolUseFailure","session_id":"d1","tool_name":"AskUserQuestion","tool_use_id":"t","error":"x","is_interrupt":true}"#,
+            #"{"cwd":"/tmp","hook_event_name":"PostToolUseFailure","session_id":"d1","tool_name":"AskUserQuestion","tool_use_id":"t","error":"x","is_interrupt":false}"#,
             #"{"cwd":"/tmp","hook_event_name":"PostToolUseFailure","session_id":"d1","tool_name":"Bash","tool_use_id":"t","error":"x"}"#,
             #"{"cwd":"/tmp","hook_event_name":"PermissionDenied","session_id":"d1","tool_name":"Bash","tool_use_id":"t","reason":"x"}"#,
             #"{"cwd":"/tmp","hook_event_name":"Notification","notification_type":"elicitation_complete","session_id":"d1"}"#,
@@ -104,6 +104,39 @@ final class SessionAttentionTests: XCTestCase {
             XCTAssertEqual(state?.state, .busy, hook)
             XCTAssertNil(SessionAttention.make(indicator: indicator(for: state), state: state), hook)
         }
+    }
+
+    /// Stop is skipped on user interrupt, so an interrupted failure must land
+    /// on idle or the row spins "working" until the stale timeout.
+    func testInterruptedFailureGoesIdle() {
+        let state = derive(#"""
+        {"cwd":"/tmp","hook_event_name":"PostToolUseFailure","session_id":"d3","tool_name":"Bash","tool_use_id":"t","error":"x","is_interrupt":true}
+        """#)
+        XCTAssertEqual(state?.state, .idle)
+    }
+
+    func testIdlePromptKeepsPendingAttention() {
+        func wrapper(_ hook: String) -> ClaudeHookWrapper {
+            try! JSONDecoder().decode(ClaudeHookWrapper.self, from: Data(#"""
+            {"ghosttiesSessionId":"\#(sid.uuidString)","updatedAt":1700000100,"hook":\#(hook)}
+            """#.utf8))
+        }
+        let idleW = wrapper(#"{"cwd":"/tmp","hook_event_name":"Notification","notification_type":"idle_prompt","session_id":"e"}"#)
+        let derived = ClaudeStateStore.derive(from: idleW)!
+        for kind in [ClaudeState.Kind.needsPermission, .needsInput] {
+            let prev = ClaudeState(ghosttiesSessionId: sid, claudeSessionId: "c", cwd: "/tmp", state: kind,
+                                   structuredPrompt: nil, updatedAt: at)
+            XCTAssertEqual(ClaudeStateStore.resolve(derived, previous: prev, wrapper: idleW), prev)
+        }
+        let busy = ClaudeState(ghosttiesSessionId: sid, claudeSessionId: "c", cwd: "/tmp", state: .busy,
+                               structuredPrompt: nil, updatedAt: at)
+        XCTAssertEqual(ClaudeStateStore.resolve(derived, previous: busy, wrapper: idleW), derived)
+        // A real Stop still clears a pending prompt.
+        let stopW = wrapper(#"{"cwd":"/tmp","hook_event_name":"Stop","session_id":"e"}"#)
+        let stop = ClaudeStateStore.derive(from: stopW)!
+        let pending = ClaudeState(ghosttiesSessionId: sid, claudeSessionId: "c", cwd: "/tmp", state: .needsPermission,
+                                  structuredPrompt: nil, updatedAt: at)
+        XCTAssertEqual(ClaudeStateStore.resolve(stop, previous: pending, wrapper: stopW), stop)
     }
 
     func testPermissionRequestForAskUserQuestionIsNeverBounded() {
@@ -198,6 +231,48 @@ final class SessionAttentionTests: XCTestCase {
         XCTAssertEqual(responder(nil).respond(.deny, to: target), .stale)
         XCTAssertEqual(responder(claudeState(.needsPermission, updatedAt: at + 5)).respond(.approve, to: target), .stale)
         XCTAssertEqual(sent, 0)
+    }
+
+    func testResponderRefusesAskUserQuestionEvenWithMatchingFingerprint() {
+        let surface = UUID()
+        var sent = 0
+        let ask = ClaudeState(
+            ghosttiesSessionId: sid, claudeSessionId: "c", cwd: "/tmp", state: .needsPermission,
+            structuredPrompt: StructuredPrompt(toolName: "AskUserQuestion", toolUseId: nil,
+                                               toolInput: ToolInputSummary(questions: ["Which?"])),
+            updatedAt: at)
+        let responder = GuardedApprovalResponder(isEnabled: { true }, currentState: { _ in ask },
+                                                 ownSurface: { _ in surface }, send: { _, _ in sent += 1 })
+        let target = ApprovalTarget(sessionId: sid, updatedAt: at, surfaceId: surface,
+                                    fingerprint: ApprovalFingerprint.make(ask))
+        XCTAssertEqual(responder.respond(.approve, to: target), .stale)
+        XCTAssertEqual(sent, 0)
+    }
+
+    func testFingerprintDistinguishesFullInputAndNotificationMessage() throws {
+        func fp(_ json: String) throws -> String {
+            let w = try JSONDecoder().decode(ClaudeHookWrapper.self, from: Data(#"""
+            {"ghosttiesSessionId":"\#(sid.uuidString)","updatedAt":1,"hook":\#(json)}
+            """#.utf8))
+            return ApprovalFingerprint.make(try XCTUnwrap(ClaudeStateStore.derive(from: w)))
+        }
+        let a = try fp(#"{"hook_event_name":"PermissionRequest","tool_name":"Edit","tool_input":{"file_path":"/a.swift","old_string":"x","new_string":"1"}}"#)
+        let b = try fp(#"{"hook_event_name":"PermissionRequest","tool_name":"Edit","tool_input":{"file_path":"/a.swift","old_string":"x","new_string":"2"}}"#)
+        let a2 = try fp(#"{"hook_event_name":"PermissionRequest","tool_name":"Edit","tool_input":{"new_string":"1","old_string":"x","file_path":"/a.swift"}}"#)
+        XCTAssertNotEqual(a, b)
+        XCTAssertEqual(a, a2, "key order must not change the digest")
+        let n1 = try fp(#"{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs permission to use Bash"}"#)
+        let n2 = try fp(#"{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs permission to use Write"}"#)
+        XCTAssertNotEqual(n1, n2)
+    }
+
+    func testPopoverDoesNotRenderApprovalForAskUserQuestion() {
+        let ask = ClaudeState(
+            ghosttiesSessionId: sid, claudeSessionId: "c", cwd: "/tmp", state: .needsPermission,
+            structuredPrompt: StructuredPrompt(toolName: "AskUserQuestion", toolUseId: nil,
+                                               toolInput: ToolInputSummary(questions: ["Which?"])),
+            updatedAt: Date())
+        XCTAssertNil(SessionPopoverContent.make(sessionId: sid, indicator: .needsAttention, approval: ask))
     }
 
     func testResponderWrongSurfaceSendsNothing() {
