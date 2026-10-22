@@ -28,7 +28,13 @@ Everything else is Ghostty, unmodified: the terminal, the renderer, fonts, confi
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/SeanSmithWorks/ghostties/releases), drag it to Applications, open it. It updates itself after that.
+With Homebrew:
+
+```sh
+brew install --cask seansmithworks/tap/ghostties
+```
+
+Or run `npx ghostties-install`, or download the latest `.dmg` from [Releases](https://github.com/SeanSmithWorks/ghostties/releases) and drag it to Applications. It updates itself after that.
 
 Requires **macOS 13 or later on Apple Silicon**. There's no Intel build and no Linux build.
 

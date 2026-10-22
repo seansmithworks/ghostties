@@ -8,6 +8,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+Ghostties gets a Settings window and a theme picker, and the whole window now follows your terminal theme. Ghostties ships its own light and dark theme by default. The selected session is a quiet outline that crossfades between rows, a closed sidebar slides out and moves the terminal over when you rest on the window's edge, and closing the browser no longer closes the window.
+
+### Added
+
+- **A Settings window.** Cmd+, opens Settings, with General and Appearance panes, in place of the old "Coming Soon" stub. An Open Config File button is always there, and the config file itself is never written.
+- **Pick a theme in Settings.** Settings → Appearance shows themes as a 3×3 grid with a search field, with separate Light and Dark picks. A theme set in your config shows up as Custom. A pick beats `theme =` in your config until you choose Use Theme from Config or Reset to Ghostties; explicit `background`, `foreground` and `palette` lines in your config still win.
+- **Pick a theme from the composer.** Type `theme` in Cmd+T, or `/theme` and a name, to browse the same grid. Moving through it previews the whole window live; Return keeps the theme, and Esc, clicking away or closing the window puts the old one back.
+- **Appearance Mode.** Settings → Appearance has a System, Light or Dark switch.
+
+### Changed
+
+- **The whole window follows your terminal theme.** With a theme other than Ghostties', the sidebar, canvas and toolbar pills take their colors from it, and sidebar text is kept readable against them. A few themes can't reach that contrast and fall back to plain white or black text.
+- **Ghostties Light and Ghostties Dark are the default theme.** The terminal background matches its card: a warm off-white in light, near-black in dark. A `theme =` in your config still wins.
+- **Dark mode is darker.** The canvas behind the terminal is near-black, the card shadow is softer in both appearances, and the tray shadow is lighter in light. History and the triage card follow the darker canvas.
+- **The selected session is a thin outline over a tint.** It crossfades from the old row to the new one whether you click or use the keyboard, and the project holding the active session sits on a glass card. With Reduce Motion on, it only fades.
+- **Project tile monograms use the main text color**, a little more contrast in every theme.
+- **Resting on the edge of a closed sidebar slides the full sidebar out and moves the terminal over**, instead of floating a separate bar over it. It closes when the pointer leaves, Cmd+S keeps it open, and it never changes whether the sidebar stays closed next time.
+- **Cmd+T then Return opens a Shell** in the project you picked, even when Browser is that project's default or last-used template.
+- **Closing the browser asks first.** Stop in the sidebar, or Cmd+W on the active browser, asks "Close browser?", says how many tabs will close, and closes only the browser. Focus moves to a running terminal in the same project.
+
+### Fixed
+
+- **Closing or stopping the in-app browser no longer closes the window.**
+- **The terminal card keeps its shadow after a light or dark switch.** It used to vanish until the sidebar mode changed.
+
 ---
 
 ## [0.5.0-beta.26] — 2026-10-12
