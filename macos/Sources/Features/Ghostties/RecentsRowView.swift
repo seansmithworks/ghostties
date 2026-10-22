@@ -267,8 +267,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         // The selection (`SelectedRowMix`): this instant's outline, tint,
         // and, for a new row, its growing slot and fading-in content.
         SelectedRowMixRowReader(id: mixID, isActive: isActive) { look in
-            // The labels start in the names panel, right of the divider.
-            HStack(spacing: metrics.labelGap) {
+            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
                 // Hover is a tile-sized chip behind the glyph in every list
                 // (option D); the group card is drawn only around a project
                 // group.
@@ -283,6 +282,8 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     glyph: glyph
                 )
                 .redlineFrame(redlineID + ".glyph")
+                // The labels start in the names panel, right of the divider.
+                .padding(.trailing, max(0, metrics.labelGap - WorkspaceLayout.sidebarIconLabelSpacing))
 
                 // Title + subtitle stacked
                 VStack(alignment: .leading, spacing: 1) {
