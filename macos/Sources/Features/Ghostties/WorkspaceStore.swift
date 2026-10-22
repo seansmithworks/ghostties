@@ -472,6 +472,14 @@ final class WorkspaceStore: ObservableObject {
         sectionedProjects.flatMap { $0.1 }
     }
 
+    /// The projects in the order the sidebar's project list shows them: one
+    /// view's `ProjectListOrder` (pinned, then by name, the same order
+    /// `SidebarProjectGroup.make` renders), else the tabs layout's sections.
+    /// Next/Previous Project steps this.
+    func projectsInDisplayOrder(layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()) -> [Project] {
+        layout == .oneView ? ProjectListOrder.pinnedFirst(projects) : flatProjectsInVisualOrder
+    }
+
     /// Deterministic signature of the current section layout — an ordered list
     /// of project IDs. Views can attach `.animation(.default, value:)` to this
     /// so SwiftUI animates only when the actual ordering changes, not on every

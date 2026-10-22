@@ -3454,7 +3454,7 @@ class WorkspaceViewContainer: NSView {
     /// `store.lastSelectedProjectId` (the list restores from it on mount);
     /// the list mirrors it via `.workspaceDidSelectProjectFromShortcut`.
     private func selectAdjacentProject(offset: Int) {
-        let order = store.flatProjectsInVisualOrder
+        let order = store.projectsInDisplayOrder()
         guard !order.isEmpty else { return }
         let activeProject = coordinator.activeSessionId.flatMap { id in
             store.sessions.first(where: { $0.id == id })?.projectId
