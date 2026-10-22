@@ -24,7 +24,7 @@ struct SessionPopoverContent: Equatable {
         case freeform
     }
 
-    /// What Approve/Deny answer: the prompt the card showed, so the
+    /// What a row's Approve/Deny answer: the prompt it showed, so the
     /// responder's stale-guard can tell it from a later one
     /// (`ApprovalTarget`).
     struct ApprovalPrompt: Equatable {
@@ -38,8 +38,6 @@ struct SessionPopoverContent: Equatable {
     /// name?"). Nil on a card for a session that does not genuinely need the
     /// user (`SessionAttention`), which then has no hand-off either.
     var question: String? = nil
-    /// Set only for a bounded prompt: the one shape Approve/Deny can answer.
-    var approvalPrompt: ApprovalPrompt? = nil
 
     var isApproval: Bool {
         switch block {
@@ -83,8 +81,7 @@ struct SessionPopoverContent: Equatable {
                       let block = approvalBlock(toolName: structured.toolName, input: structured.toolInput) else { return nil }
                 return SessionPopoverContent(
                     sessionId: sessionId, block: block,
-                    question: boundedQuestion(prompt: prompt, toolName: structured.toolName, command: command),
-                    approvalPrompt: ApprovalPrompt(updatedAt: approval.updatedAt, fingerprint: ApprovalFingerprint.make(approval))
+                    question: boundedQuestion(prompt: prompt, toolName: structured.toolName, command: command)
                 )
             }
         }
