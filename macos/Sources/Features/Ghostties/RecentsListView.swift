@@ -63,8 +63,9 @@ struct RecentsListView: View {
     /// separately-called method, so `@EnvironmentObject` resolves normally
     /// through SwiftUI's own view-graph processing. Never referenced by the
     /// shipped app.
-    init(previewDragState: SessionDragState) {
+    init(previewDragState: SessionDragState, previewProjectDragState: ProjectDragState = ProjectDragState()) {
         self._dragState = State(initialValue: previewDragState)
+        self._projectDragState = State(initialValue: previewProjectDragState)
         self.skipScrollViewForTesting = true
     }
     #endif
