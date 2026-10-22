@@ -112,6 +112,53 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
         )
     }
 
+    /// Dragging a pinned project to the end of the pinned block opens its
+    /// gap above the pinned break, not inside the alphabetical block below
+    /// it: the drop lands at the end of Pinned. Measured as laid-out frames
+    /// (Redlines registry) of the gap and the first alphabetical header.
+    func testPinnedDropGapAtTheEndOfPinnedSitsAboveTheBreak() throws {
+        let first = project("zeta", pinned: true)
+        let dragged = project("omega", pinned: true)
+        let alpha = project("alpha")
+        let projects = [first, dragged, alpha, project("beta")]
+        let sessions = projects.map { AgentSession(name: "s-\($0.name)", templateId: UUID(), projectId: $0.id) }
+        let store = WorkspaceStore(testingProjects: projects, testingSessions: sessions)
+        for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
+        let registry = RedlineRegistry()
+        // Dragged removed, the rendered groups are [zeta, alpha, beta]; gap
+        // index 1 is the end of Pinned, before alpha.
+        let drag = ProjectDragState(draggingProjectId: dragged.id, gapIndex: 1)
+
+        let frames: [String: CGRect] = withDials({
+            $0.set(SidebarProjectsLayout.oneView.rawValue, forKey: SidebarDialTuning.projectsLayoutKey)
+            $0.set(true, forKey: SidebarDialTuning.redlinesKey)
+        }) {
+            let view = RecentsListView(previewDragState: SessionDragState(), previewProjectDragState: drag)
+                .environmentObject(store)
+                .environmentObject(SessionCoordinator())
+                .environmentObject(SidebarWidthModel(width: 260))
+                .environment(\.redlineRegistry, registry)
+                .frame(width: 260, height: 800, alignment: .top)
+            let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 260, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = NSHostingView(rootView: view)
+            window.orderFrontRegardless()
+            defer { window.orderOut(nil) }
+            for _ in 0..<10 {
+                window.contentView?.layoutSubtreeIfNeeded()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            }
+            return registry.rects
+        }
+
+        let gap = try XCTUnwrap(frames[RedlineID.projectDragGap], "no drag gap frame in \(frames.keys.sorted())")
+        let alphaHeader = try XCTUnwrap(frames[RedlineID.header(alpha.id.uuidString) + ".tile"], "no alpha header frame in \(frames.keys.sorted())")
+        XCTAssertLessThan(gap.minY, alphaHeader.minY)
+        XCTAssertGreaterThanOrEqual(
+            alphaHeader.minY - gap.maxY, WorkspaceLayout.projectPinnedBreak,
+            "the pinned break must sit between the gap and the first alphabetical header"
+        )
+    }
+
     // MARK: - Gap
 
     private func spacerHeights(_ items: [SidebarProjectGroupItem]) -> [CGFloat] {
