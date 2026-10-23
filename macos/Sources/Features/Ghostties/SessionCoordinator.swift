@@ -1047,13 +1047,14 @@ final class SessionCoordinator: ObservableObject {
             manager.closeAllTabs()
             browserManagers.removeValue(forKey: id)
             browserBridges.removeValue(forKey: id)
+            let pairedTerminal = PairedBrowserRows.rowId(for: id, pairedBrowsers: pairedBrowserByTerminal)
             pairedBrowserByTerminal = pairedBrowserByTerminal.filter { $0.value != id }
             setStatus(.killed, for: id)
             #if DEBUG
             NSLog("[BrowserAgent] closed browser session %@", id.uuidString)
             #endif
             if activeSessionId == id {
-                switchAfterClosingActiveBrowser(projectId: closingProjectId)
+                switchAfterClosingActiveBrowser(projectId: closingProjectId, pairedTerminal: pairedTerminal == id ? nil : pairedTerminal)
             } else if shownBrowserSessionId == id {
                 // A paired browser beside the selected terminal: nothing left
                 // to show, so the panel collapses and the terminal stays.
@@ -1255,7 +1256,9 @@ final class SessionCoordinator: ObservableObject {
     /// `switchToNextSession()`. A running terminal in the same project wins;
     /// otherwise the most recently active running session anywhere; otherwise
     /// nothing.
-    private func switchAfterClosingActiveBrowser(projectId: UUID?) {
+    /// `pairedTerminal` is the closed browser's own terminal, which wins over
+    /// everything; a paired browser is never a candidate (it has no row).
+    private func switchAfterClosingActiveBrowser(projectId: UUID?, pairedTerminal: UUID? = nil) {
         let records = sessionRecordStore.sessions
         func isRunning(_ id: UUID) -> Bool {
             statuses[id] == .running && (sessionTrees[id] != nil || browserManagers[id] != nil)
@@ -1267,12 +1270,15 @@ final class SessionCoordinator: ObservableObject {
             records.first { $0.id == id }?.projectId
         }
 
+        let hidden = Set(pairedBrowserByTerminal.values)
+        let ownTerminal = pairedTerminal.flatMap { isRunning($0) && sessionTrees[$0] != nil ? $0 : nil }
         let sameProjectTerminal = sessionTrees.keys
             .filter { isRunning($0) && project($0) == projectId && projectId != nil }
             .max { lastActive($0) < lastActive($1) }
-        let nextId = sameProjectTerminal
+        let nextId = ownTerminal
+            ?? sameProjectTerminal
             ?? Set(sessionTrees.keys).union(browserManagers.keys)
-                .filter(isRunning)
+                .filter { isRunning($0) && !hidden.contains($0) }
                 .max { lastActive($0) < lastActive($1) }
 
         guard let nextId else {

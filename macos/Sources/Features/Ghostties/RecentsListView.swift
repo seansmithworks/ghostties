@@ -458,7 +458,7 @@ struct RecentsListView: View {
     /// The id the selected-row mix follows: History, else the selected row
     /// (a paired browser's is its terminal's).
     static func mixSelectedId(_ coordinator: SessionCoordinator) -> UUID? {
-        coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.activeSessionId
+        coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.sidebarSelectedSessionId
     }
 
     private func mixSnapshot(_ sections: SidebarSessionSections) -> SelectedRowMixDriver.Snapshot {
