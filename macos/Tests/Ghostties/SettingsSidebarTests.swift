@@ -312,7 +312,7 @@ final class SettingsSidebarTests: XCTestCase {
 
         let choosing = _Concurrency.Task { try await model.chooseImage(from: picked, for: p.id) }
         await _Concurrency.Task.yield()
-        // The refresh `ProjectIconRefresh` runs for the style change.
+        // The refresh `ProjectIconStore.follow` runs for the style change.
         let current = try XCTUnwrap(store.projects.first)
         XCTAssertEqual(current.iconStyle, .file, "iconStyle must be .file before the override lands")
         await iconStore.refresh(current)
@@ -391,7 +391,7 @@ final class SettingsSidebarTests: XCTestCase {
 
         let forced = _Concurrency.Task { await iconStore.refresh(p, force: true) }
         await _Concurrency.Task.yield()
-        await iconStore.refresh(p) // ProjectIconRefresh, for the same change
+        await iconStore.refresh(p) // `ProjectIconStore.follow`'s refresh, for the same change
         await forced.value
         XCTAssertNotNil(iconStore.image(for: p.id), "the forced re-check was dropped; the negative cache won")
     }

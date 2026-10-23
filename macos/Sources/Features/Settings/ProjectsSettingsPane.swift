@@ -66,14 +66,7 @@ struct ProjectsSettingsPane: View {
             model.select(project.id)
         } label: {
             HStack(spacing: 8) {
-                ProjectTileView(
-                    projectId: project.id,
-                    iconStyle: project.iconStyle,
-                    monogram: monogram,
-                    size: Self.listTileSize,
-                    textSize: 12,
-                    iconStore: model.iconStore
-                )
+                tile(project, monogram: monogram, size: Self.listTileSize, textSize: 12)
                 Text(project.name)
                     .font(.system(size: 11))
                     .lineLimit(1)
@@ -93,6 +86,18 @@ struct ProjectsSettingsPane: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// The sidebar's own tile face (`ProjectMonogramTileFace`) at `size`:
+    /// the project's icon when it has one, else its monogram. The model
+    /// re-renders the pane when the icon store reports a change.
+    private func tile(_ project: Project, monogram: String, size: CGFloat, textSize: CGFloat) -> some View {
+        ProjectMonogramTileFace(
+            monogram: monogram,
+            size: size,
+            textSize: textSize,
+            icon: model.icon(for: project)
+        )
     }
 
     // MARK: - Detail
@@ -157,14 +162,7 @@ struct ProjectsSettingsPane: View {
         let caption = model.iconCaption(for: project)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                ProjectTileView(
-                    projectId: project.id,
-                    iconStyle: project.iconStyle,
-                    monogram: monogram,
-                    size: 40,
-                    textSize: 18,
-                    iconStore: model.iconStore
-                )
+                tile(project, monogram: monogram, size: 40, textSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(caption.title)
                     Text(caption.detail)
@@ -301,6 +299,13 @@ final class ProjectsSettingsModel: ObservableObject {
     }
 
     // MARK: Icon
+
+    /// The image the project's tile draws: an in-memory lookup, never a
+    /// resolve. `.monogram` draws none, even before the store has caught
+    /// up with the style change.
+    func icon(for project: Project) -> NSImage? {
+        project.iconStyle == .monogram ? nil : iconStore.image(for: project.id)
+    }
 
     /// What the tile shows now, in words.
     func iconCaption(for project: Project) -> (title: String, detail: String) {
