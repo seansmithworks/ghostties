@@ -250,6 +250,11 @@ enum ProjectSelection {
 /// subtitle names the terminal. Ending the pairing needs no cleanup here:
 /// the row is plain again the next time the list is built.
 enum PairedBrowserRows {
+    // RED STUBS (inert): replaced by the one-row implementation.
+    static func visible(_ sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> [AgentSession] { sessions }
+    static func hasBrowser(_ terminalId: UUID, pairedBrowsers: [UUID: UUID]) -> Bool { false }
+    static func rowId(for sessionId: UUID, pairedBrowsers: [UUID: UUID]) -> UUID { sessionId }
+
     /// `sessions` (one project's rows, in render order) with each paired
     /// browser moved to directly after its terminal. A pair is seated only
     /// when both rows are in `sessions`; any other browser keeps its place.

@@ -2303,6 +2303,12 @@ final class SessionCoordinator: ObservableObject {
         statuses[id] = .running
     }
 
+    /// Test-only: records `browser` as `terminal`'s paired browser without
+    /// CEF. Never used in production.
+    func seedPairedBrowserForTesting(terminal: UUID, browser: UUID) {
+        pairedBrowserByTerminal[terminal] = browser
+    }
+
     /// Test-only: seed a "live" session (running + producing recent output)
     /// so `indicatorState(for:)` resolves `.processing`, without needing a
     /// real GhosttyKit surface. Never used in production.

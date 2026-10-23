@@ -31,7 +31,8 @@ struct SidebarSessionSections: Equatable {
         sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
         sessionIdsStartedThisLaunch: Set<UUID>,
-        pinningAvailable: Bool = SessionPinning.isAvailable
+        pinningAvailable: Bool = SessionPinning.isAvailable,
+        pairedBrowsers: [UUID: UUID] = [:]
     ) -> SidebarSessionSections {
         SidebarSessionSections(
             pinned: RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable),
