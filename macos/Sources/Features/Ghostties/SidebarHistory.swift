@@ -34,7 +34,9 @@ struct SidebarSessionSections: Equatable {
         pinningAvailable: Bool = SessionPinning.isAvailable,
         pairedBrowsers: [UUID: UUID] = [:]
     ) -> SidebarSessionSections {
-        SidebarSessionSections(
+        // A paired browser shares its terminal's row, so it is never listed.
+        let sessions = PairedBrowserRows.visible(sessions, pairedBrowsers: pairedBrowsers)
+        return SidebarSessionSections(
             pinned: RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable),
             active: RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: pinningAvailable),
             inactive: RecentsListView.inactiveSessions(

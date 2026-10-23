@@ -519,9 +519,11 @@ final class WorkspaceStore: ObservableObject {
     /// Powers Cmd+Shift+[/] session cycling — see
     /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`.
     func sessionsInVisualOrder(coordinator: SessionCoordinator) -> [AgentSession] {
-        flatProjectsInVisualOrder.flatMap { project in
+        let rows = flatProjectsInVisualOrder.flatMap { project in
             sessionGroups(forProject: project.id, startedThisLaunch: coordinator.sessionIdsStartedThisLaunch).flatMap { $0.1 }
         }.filter { coordinator.hasLiveSurface(id: $0.id) }
+        // A paired browser is its terminal's stop, never one of its own.
+        return PairedBrowserRows.visible(rows, pairedBrowsers: coordinator.pairedBrowserByTerminal)
     }
 
     /// Pinned + Active sessions, in the same order `RecentsListView` renders
@@ -540,9 +542,10 @@ final class WorkspaceStore: ObservableObject {
         pinningAvailable: Bool = SessionPinning.isAvailable,
         pairedBrowsers: [UUID: UUID] = [:]
     ) -> [AgentSession] {
+        let sessions = PairedBrowserRows.visible(sessions, pairedBrowsers: pairedBrowsers)
         let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses, pinningAvailable: pinningAvailable)
         let ordered = layout == .oneView
-            ? SidebarProjectGroup.make(active: active, projects: projects, pairedBrowsers: pairedBrowsers).flatMap(\.sessions)
+            ? SidebarProjectGroup.make(active: active, projects: projects).flatMap(\.sessions)
             : active
         return RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable) + ordered
     }
@@ -1004,17 +1007,10 @@ final class WorkspaceStore: ObservableObject {
     /// removal, makes "drop on a row = insert before that row" true in both
     /// directions with no index arithmetic to get wrong.
     func moveSessionInSessionsView(id: UUID, before beforeId: UUID?, within sectionSessions: [AgentSession]) {
-        moveSessionsInSessionsView(ids: [id], before: beforeId, within: sectionSessions)
-    }
-
-    /// `moveSessionInSessionsView` for rows that travel together (a terminal
-    /// and its paired browser), kept in `ids` order.
-    func moveSessionsInSessionsView(ids: [UUID], before beforeId: UUID?, within sectionSessions: [AgentSession]) {
-        let moved = ids.compactMap { id in sessions.first(where: { $0.id == id }) }
-        guard !moved.isEmpty else { return }
-        var list = sectionSessions.filter { !ids.contains($0.id) }
+        guard let session = sessions.first(where: { $0.id == id }) else { return }
+        var list = sectionSessions.filter { $0.id != id }
         let insertIndex = beforeId.flatMap { target in list.firstIndex(where: { $0.id == target }) } ?? list.count
-        list.insert(contentsOf: moved, at: insertIndex)
+        list.insert(session, at: insertIndex)
 
         for (order, s) in list.enumerated() {
             if let globalIndex = sessions.firstIndex(where: { $0.id == s.id }) {

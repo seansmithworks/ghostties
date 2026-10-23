@@ -78,9 +78,12 @@ final class SessionCoordinator: ObservableObject {
     @Published private(set) var isHistoryPresented = false
 
     /// The session the sidebar draws as selected: none while History is
-    /// selected, so exactly one row (History) carries the selected card.
+    /// selected, so exactly one row (History) carries the selected card. A
+    /// paired browser has no row of its own, so while it is up its terminal's
+    /// row is the selected one.
     var sidebarSelectedSessionId: UUID? {
-        isHistoryPresented ? nil : activeSessionId
+        guard !isHistoryPresented, let activeSessionId else { return nil }
+        return PairedBrowserRows.rowId(for: activeSessionId, pairedBrowsers: pairedBrowserByTerminal)
     }
 
     /// Selects the History row: the canvas shows the history browser
@@ -1023,7 +1026,7 @@ final class SessionCoordinator: ObservableObject {
     func focusAdjacentLiveSession(offset: Int, in sessions: [AgentSession]) -> AgentSession? {
         guard !sessions.isEmpty else { return nil }
 
-        guard let currentId = activeSessionId,
+        guard let currentId = activeSessionId.map({ PairedBrowserRows.rowId(for: $0, pairedBrowsers: pairedBrowserByTerminal) }),
               let currentIndex = sessions.firstIndex(where: { $0.id == currentId }) else {
             let target = offset > 0 ? sessions[0] : sessions[sessions.count - 1]
             focusSession(id: target.id)
@@ -1062,13 +1065,13 @@ final class SessionCoordinator: ObservableObject {
         guard let tree = sessionTrees[id] else { return }
 
         // Remove from our tracking first, then close surfaces via the controller.
-        pairedBrowserByTerminal.removeValue(forKey: id)
         sessionTrees.removeValue(forKey: id)
         outputSubscriptions.removeValue(forKey: id)
         cancelTerminalSync(for: id)
         setStatus(.killed, for: id)
         gcDraftIfPresent(for: id)
         Self.removeLauncherScript(for: id)
+        closePairedBrowser(ofTerminal: id)
 
         // If this was the active session, switch to another running session.
         if activeSessionId == id {
@@ -1079,6 +1082,16 @@ final class SessionCoordinator: ObservableObject {
         guard let controller = terminalController else { return }
         for surface in tree {
             controller.closeSurface(surface, withConfirmation: false)
+        }
+    }
+
+    /// A paired browser has no sidebar row of its own, so it must not outlive
+    /// its terminal: closes it and drops the pairing. No confirmation; the
+    /// terminal's own close already asked.
+    private func closePairedBrowser(ofTerminal id: UUID) {
+        guard let browserId = pairedBrowserByTerminal.removeValue(forKey: id) else { return }
+        if browserManagers[browserId] != nil {
+            closeSession(id: browserId)
         }
     }
 
@@ -1366,6 +1379,7 @@ final class SessionCoordinator: ObservableObject {
                     cancelTerminalSync(for: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
+                    closePairedBrowser(ofTerminal: sessionId)
                     switchToNextSession()
                 } else {
                     sessionTrees[sessionId] = liveTree
@@ -1382,6 +1396,7 @@ final class SessionCoordinator: ObservableObject {
                     cancelTerminalSync(for: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
+                    closePairedBrowser(ofTerminal: sessionId)
                 } else {
                     sessionTrees[sessionId] = updated
                 }
