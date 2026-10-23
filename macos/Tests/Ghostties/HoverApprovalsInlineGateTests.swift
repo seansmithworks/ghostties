@@ -264,8 +264,10 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
 
     /// The real pinned sidebar holding `rows`, held at each morph progress in
     /// `steps` in turn; `body` runs once per step with the container.
-    private func withContainer(_ rows: [Row], morph steps: [CGFloat], _ body: (WorkspaceViewContainer, CGFloat) throws -> Void) throws {
-        try withDials({ $0.set(true, forKey: SidebarDialTuning.redlinesKey) }) {
+    /// `redlines` off draws no badge, so OCR can't read through it; rects
+    /// need it on.
+    private func withContainer(_ rows: [Row], morph steps: [CGFloat], redlines: Bool = true, _ body: (WorkspaceViewContainer, CGFloat) throws -> Void) throws {
+        try withDials({ $0.set(redlines, forKey: SidebarDialTuning.redlinesKey) }) {
             let tabKey = "ghostties.sidebarTab"
             let previousTab = UserDefaults.standard.object(forKey: tabKey)
             UserDefaults.standard.set(SidebarTab.projects.rawValue, forKey: tabKey)
@@ -313,15 +315,15 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
         UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
         var expanded = "", rail = ""
         var railGlyph: CGRect?
-        try withContainer([bash, ask], morph: [0, 1]) { container, p in
+        // Rects with Redlines on (its badge sits at mid-height and can
+        // overlap OCR'd text); text with Redlines off.
+        try withContainer([bash, ask], morph: [1]) { container, _ in
+            let rects = container.redlineRegistryForTesting.rects
+            railGlyph = rects[RedlineID.row(bashId) + ".glyph"] ?? rects[RedlineID.row(bashId) + ".chip"]
+        }
+        try withContainer([bash, ask], morph: [0, 1], redlines: false) { container, p in
             let shown = containerText(container)
-            if p == 0 {
-                expanded = shown
-            } else {
-                rail = shown
-                let rects = container.redlineRegistryForTesting.rects
-                railGlyph = rects[RedlineID.row(bashId) + ".glyph"] ?? rects[RedlineID.row(bashId) + ".chip"]
-            }
+            if p == 0 { expanded = shown } else { rail = shown }
         }
         for want in ["run npm test?", "which env name?", "approve", "deny", "answer in terminal"] {
             XCTAssertTrue(expanded.contains(want), "expanded sidebar must show inline \"\(want)\"; it shows \(expanded.debugDescription)")
