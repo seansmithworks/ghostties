@@ -472,6 +472,14 @@ final class WorkspaceStore: ObservableObject {
         sectionedProjects.flatMap { $0.1 }
     }
 
+    /// The projects in the order the sidebar's project list shows them: one
+    /// view's `ProjectListOrder` (pinned, then by name, the same order
+    /// `SidebarProjectGroup.make` renders), else the tabs layout's sections.
+    /// Next/Previous Project steps this.
+    func projectsInDisplayOrder(layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()) -> [Project] {
+        layout == .oneView ? ProjectListOrder.pinnedFirst(projects) : flatProjectsInVisualOrder
+    }
+
     /// Deterministic signature of the current section layout — an ordered list
     /// of project IDs. Views can attach `.animation(.default, value:)` to this
     /// so SwiftUI animates only when the actual ordering changes, not on every
@@ -515,11 +523,14 @@ final class WorkspaceStore: ObservableObject {
 
     /// All sessions with a live surface (visible in the sidebar, regardless of
     /// running/completed/exited/killed status), flattened in the same visual
-    /// order as `flatProjectsInVisualOrder` + `sessionGroups(forProject:)`.
+    /// order as `projectsInDisplayOrder(layout:)` + `sessionGroups(forProject:)`.
     /// Powers Cmd+Shift+[/] session cycling — see
     /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`.
-    func sessionsInVisualOrder(coordinator: SessionCoordinator) -> [AgentSession] {
-        flatProjectsInVisualOrder.flatMap { project in
+    func sessionsInVisualOrder(
+        coordinator: SessionCoordinator,
+        layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()
+    ) -> [AgentSession] {
+        projectsInDisplayOrder(layout: layout).flatMap { project in
             sessionGroups(forProject: project.id, startedThisLaunch: coordinator.sessionIdsStartedThisLaunch).flatMap { $0.1 }
         }.filter { coordinator.hasLiveSurface(id: $0.id) }
     }
@@ -788,9 +799,9 @@ final class WorkspaceStore: ObservableObject {
 
     /// Reposition a project so it sits immediately BEFORE `beforeId` — or
     /// last, if `beforeId` is nil or not found — within its own pin group.
-    /// `projects` order, pinned first (`ProjectListOrder`), is the one-view
-    /// list's group order and the rail's tile order, and it is persisted
-    /// as-is, so this is the whole reorder. A move never crosses the
+    /// `projects` order is the pinned block's order in the one-view list
+    /// and the rail (`ProjectListOrder`; the rest sort by name there), and
+    /// it is persisted as-is, so this is the whole reorder. A move never crosses the
     /// pinned/unpinned boundary: a target in the other group lands the
     /// project at its own group's near edge (a pinned project at the end of
     /// Pinned, an unpinned one at the top of the rest). Only the moved

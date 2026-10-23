@@ -42,15 +42,27 @@ enum SidebarBodyKind: Equatable {
     }
 }
 
-/// The one-view list's project order, which the rail shares: pinned
-/// projects first, then the rest, each in `WorkspaceStore.projects` order
-/// (the manual drag order). A stable partition, so unpinning a project puts
-/// it back at its own place in that order. Everything that orders one-view
-/// projects (`SidebarProjectGroup.make`, project drag and keyboard moves)
-/// reads this; `WorkspaceStore.moveProject` keeps a move inside its group.
+/// The one-view list's project order, which the rail shares (mild2wild
+/// 2026-10-21 card 01, "Spacing only"): pinned projects first, in
+/// `WorkspaceStore.projects` order (the manual drag order), then every other
+/// project by name — case-insensitive, numbers in numeric order, ties in
+/// array order. The sort is display-only: `workspace.json` keeps its order.
+/// Everything that orders one-view projects (`SidebarProjectGroup.make`,
+/// project drag and keyboard moves) reads this. Only pinned projects
+/// reorder (`SidebarProjectGroup.isReorderable`), and
+/// `WorkspaceStore.moveProject` keeps a move inside its group.
 enum ProjectListOrder {
     static func pinnedFirst(_ projects: [Project]) -> [Project] {
-        projects.filter(\.isPinned) + projects.filter { !$0.isPinned }
+        let rest = projects.enumerated().filter { !$0.element.isPinned }.sorted { a, b in
+            // `localizedStandardCompare` without its forced ordering, which
+            // would break a case-only tie ("app"/"App") by case, not array order.
+            switch a.element.name.compare(b.element.name, options: [.caseInsensitive, .numeric, .widthInsensitive], locale: .current) {
+            case .orderedAscending: return true
+            case .orderedDescending: return false
+            case .orderedSame: return a.offset < b.offset
+            }
+        }
+        return projects.filter(\.isPinned) + rest.map(\.element)
     }
 }
 
@@ -60,6 +72,12 @@ struct SidebarProjectGroup: Equatable, Identifiable {
     let projectId: UUID?
     let name: String
     let sessions: [AgentSession]
+    /// The project is pinned: its group sits in the pinned block.
+    var isPinned = false
+
+    /// Whether a drag or Move Up/Down can move this group: the alphabetical
+    /// block has no manual order, so only a pinned project reorders.
+    var isReorderable: Bool { projectId != nil && isPinned }
 
     var id: String { projectId?.uuidString ?? "unknown-project" }
 
@@ -79,7 +97,7 @@ struct SidebarProjectGroup: Equatable, Identifiable {
             byProject[session.projectId, default: []].append(session)
         }
         var groups: [SidebarProjectGroup] = ProjectListOrder.pinnedFirst(projects).map { project in
-            SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [])
+            SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [], isPinned: project.isPinned)
         }
         let orphans = active.filter { byProject[$0.projectId] != nil }
         if !orphans.isEmpty {
@@ -95,8 +113,11 @@ struct SidebarProjectGroup: Equatable, Identifiable {
 /// them inside the section `VStack` with its row gap, slot for slot: every
 /// rail tile sits at its header's y, every rail glyph at its row's y.
 enum SidebarProjectGroupItem: Identifiable {
-    /// Clear space before every group but the first (`spacerHeight`).
-    case spacer(groupId: String)
+    /// Clear space before every group but the first (`spacerHeight`). The
+    /// one before the first unpinned project is also the pinned block's
+    /// break (`pinnedBreakHeight` taller); while the only pinned project is
+    /// dragged that group leads the list, and its spacer is the break alone.
+    case spacer(groupId: String, height: CGFloat)
     case header(SidebarProjectGroup, isCollapsed: Bool)
     case row(AgentSession, group: SidebarProjectGroup)
 
@@ -104,18 +125,43 @@ enum SidebarProjectGroupItem: Identifiable {
     /// line (`.hair`). The rule itself now sits in the header.
     static let spacerHeight: CGFloat = 13
 
+    /// Card 01's only separator between the pinned block and the
+    /// alphabetical one (`WorkspaceLayout.projectPinnedBreak`), added to the
+    /// usual break. The rail renders the same items, so the gap is the same
+    /// height in both widths and no tile moves between them.
+    static let pinnedBreakHeight: CGFloat = WorkspaceLayout.projectPinnedBreak
+
+    /// The group the pinned break sits before: the first unpinned project,
+    /// when a pinned project leads it. Read from the whole list, never the
+    /// rendered one, so a pinned drag (which drops its group from the
+    /// render) leaves the break where it was.
+    static func pinnedBreakGroupId(_ groups: [SidebarProjectGroup]) -> String? {
+        guard groups.contains(where: \.isPinned) else { return nil }
+        return groups.first { $0.projectId != nil && !$0.isPinned }?.id
+    }
+
     var id: String {
         switch self {
-        case .spacer(let groupId): return "spacer-\(groupId)"
+        case .spacer(let groupId, _): return "spacer-\(groupId)"
         case .header(let group, _): return "header-\(group.id)"
         case .row(let session, _): return session.id.uuidString
         }
     }
 
     static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>) -> [SidebarProjectGroupItem] {
+        items(groups, collapsed: collapsed, pinnedBreakBefore: pinnedBreakGroupId(groups))
+    }
+
+    /// `pinnedBreakBefore` is `pinnedBreakGroupId` of the whole list when
+    /// `groups` is the rendered one with a dragged group removed.
+    static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>, pinnedBreakBefore: String?) -> [SidebarProjectGroupItem] {
         var items: [SidebarProjectGroupItem] = []
         for (index, group) in groups.enumerated() {
-            if index > 0 { items.append(.spacer(groupId: group.id)) }
+            let breakHeight = group.id == pinnedBreakBefore ? pinnedBreakHeight : 0
+            let height = (index > 0 ? spacerHeight : 0) + breakHeight
+            if height > 0 {
+                items.append(.spacer(groupId: group.id, height: height))
+            }
             let isCollapsed = !group.isEmpty && (group.projectId.map(collapsed.contains) ?? false)
             items.append(.header(group, isCollapsed: isCollapsed))
             if !isCollapsed {
