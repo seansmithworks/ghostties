@@ -1,5 +1,23 @@
 import Foundation
 
+/// How a project's sidebar tile is drawn. Nil on `Project` means `.auto`.
+/// No ghost case: the ghost shapes are not offered as an icon option.
+public enum ProjectIconStyle: String, Codable, Hashable, CaseIterable {
+    /// Use a detected project icon, else fall back to the monogram.
+    case auto
+    /// Always draw the project's initial.
+    case monogram
+    /// Use the user-chosen image copied into Application Support.
+    case file
+}
+
+/// What the new-session shortcut creates for a project.
+public enum NewSessionDefault: Codable, Hashable {
+    case shell
+    case lastUsed
+    case template(UUID)
+}
+
 /// A workspace project representing a directory the user has pinned.
 public struct Project: Identifiable, Codable, Hashable {
     public let id: UUID
@@ -20,6 +38,15 @@ public struct Project: Identifiable, Codable, Hashable {
     /// Nil means this project predates the timestamp system or has never been touched.
     public var lastActiveAt: Date?
 
+    /// Tile style. Nil means `.auto`.
+    public var iconStyle: ProjectIconStyle?
+
+    /// What the new-session shortcut creates. Nil means the app default.
+    public var newSessionDefault: NewSessionDefault?
+
+    /// The template most recently used to create a session in this project.
+    public var lastTemplateId: UUID?
+
     public init(
         id: UUID = UUID(),
         name: String,
@@ -27,7 +54,10 @@ public struct Project: Identifiable, Codable, Hashable {
         isPinned: Bool = false,
         ghostCharacter: GhostCharacter? = nil,
         defaultTemplateId: UUID? = nil,
-        lastActiveAt: Date? = nil
+        lastActiveAt: Date? = nil,
+        iconStyle: ProjectIconStyle? = nil,
+        newSessionDefault: NewSessionDefault? = nil,
+        lastTemplateId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -36,6 +66,9 @@ public struct Project: Identifiable, Codable, Hashable {
         self.ghostCharacter = ghostCharacter
         self.defaultTemplateId = defaultTemplateId
         self.lastActiveAt = lastActiveAt
+        self.iconStyle = iconStyle
+        self.newSessionDefault = newSessionDefault
+        self.lastTemplateId = lastTemplateId
     }
 
     // Custom decoder so existing workspace.json files (without ghost/template/timestamp
@@ -49,5 +82,10 @@ public struct Project: Identifiable, Codable, Hashable {
         self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
         self.defaultTemplateId = try container.decodeIfPresent(UUID.self, forKey: .defaultTemplateId)
         self.lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+        // Lenient: a value written by a newer build (unknown case) reads as nil
+        // instead of failing the whole project, which would drop it on load.
+        self.iconStyle = (try? container.decodeIfPresent(ProjectIconStyle.self, forKey: .iconStyle)) ?? nil
+        self.newSessionDefault = (try? container.decodeIfPresent(NewSessionDefault.self, forKey: .newSessionDefault)) ?? nil
+        self.lastTemplateId = try container.decodeIfPresent(UUID.self, forKey: .lastTemplateId)
     }
 }
