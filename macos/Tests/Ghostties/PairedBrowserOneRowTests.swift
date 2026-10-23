@@ -224,4 +224,105 @@ final class PairedBrowserOneRowTests: XCTestCase {
 
         XCTAssertEqual(coordinator.sidebarSelectedSessionId, mine.id)
     }
+
+    // MARK: Review round 1
+
+    /// A terminal T, its paired browser B, then a second terminal.
+    private func pairScene() -> (store: WorkspaceStore, coordinator: SessionCoordinator, a: AgentSession, t: AgentSession, b: AgentSession, c: AgentSession) {
+        let a = session("a"), t = session("t"), c = session("c")
+        let b = browserSession("Browser 2")
+        let store = makeStore([a, t, b, c])
+        let coordinator = makeCoordinator(store)
+        for s in [a, t, c] {
+            coordinator.seedEmptySessionTreeForTesting(id: s.id)
+            coordinator.seedRunningSessionForTesting(id: s.id)
+        }
+        coordinator.seedBrowserSessionForTesting(id: b.id)
+        coordinator.seedPairedBrowserForTesting(terminal: t.id, browser: b.id)
+        return (store, coordinator, a, t, b, c)
+    }
+
+    // 1. Sessions tab cycling and Cmd+1-9
+    func testTheSessionsTabCycleOrderSkipsThePairedBrowserAndNextReachesTheFollowingTerminal() {
+        let w = pairScene()
+        let order = WorkspaceSidebarView.sessionsTabCycleOrder(
+            sessions: w.store.sessions, statuses: w.store.globalStatuses, coordinator: w.coordinator,
+            pinningAvailable: true, pairedBrowsers: w.coordinator.pairedBrowserByTerminal
+        )
+        XCTAssertEqual(order.map(\.name), ["a", "t", "c"])
+
+        w.coordinator.setActiveSessionIdForTesting(w.t.id)
+        XCTAssertEqual(w.coordinator.focusAdjacentLiveSession(offset: 1, in: order)?.name, "c")
+    }
+
+    func testTheSessionsTabShortcutListSkipsThePairedBrowser() {
+        let w = pairScene()
+        let list = WorkspaceViewContainer.shortcutSessions(
+            sidebarMode: .pinned, sidebarViewMode: "projects", sidebarTab: .sessions,
+            projectsLayout: .tabs, store: w.store, coordinator: w.coordinator
+        )
+        XCTAssertFalse(list.contains { $0.id == w.b.id }, "Cmd+1-9 counted the browser as its own slot")
+    }
+
+    // 2. Selected highlight
+    func testTheSelectedRowMixFollowsTheTerminalWhenItsBrowserIsActive() {
+        let w = pairScene()
+        w.coordinator.setActiveSessionIdForTesting(w.b.id)
+        XCTAssertEqual(RecentsListView.mixSelectedId(w.coordinator), w.t.id)
+    }
+
+    // 3. Closing an unpaired browser never lands on a hidden paired browser
+    func testClosingAnUnpairedActiveBrowserNeverFallsBackToAPairedBrowser() {
+        let t = session("t")
+        let paired = browserSession("Browser 2")
+        let mine = browserSession("Browser 3")
+        let store = makeStore([t, paired, mine])
+        let coordinator = makeCoordinator(store)
+        // The terminal is not running, so the only live candidate is the paired browser.
+        coordinator.seedEmptySessionTreeForTesting(id: t.id)
+        coordinator.setStatusForTesting(.exited, for: t.id)
+        coordinator.seedBrowserSessionForTesting(id: paired.id)
+        coordinator.seedBrowserSessionForTesting(id: mine.id)
+        coordinator.seedPairedBrowserForTesting(terminal: t.id, browser: paired.id)
+        coordinator.setActiveSessionIdForTesting(mine.id)
+
+        coordinator.closeSession(id: mine.id)
+
+        XCTAssertNotEqual(coordinator.activeSessionId, paired.id)
+    }
+
+    // 4. Closing the active paired browser from its panel focuses its own terminal
+    func testClosingTheActivePairedBrowserFocusesItsOwnTerminal() {
+        let w = pairScene()
+        // `c` is the most recently active terminal in the project; `t` must still win.
+        w.store.recordActivity(sessionId: w.c.id, projectId: atlas.id)
+        w.coordinator.setActiveSessionIdForTesting(w.b.id)
+
+        w.coordinator.closeSession(id: w.b.id)
+
+        XCTAssertEqual(w.coordinator.activeSessionId, w.t.id)
+    }
+
+    // 5. Shell exit / surface close
+    func testASurfaceCloseOfTheActiveTerminalClosesItsPairedBrowser() {
+        let w = pairScene()
+        w.coordinator.setActiveSessionIdForTesting(w.t.id)
+
+        w.coordinator.terminalSurfacesEnded(sessionId: w.t.id, status: .exited)
+
+        XCTAssertFalse(w.coordinator.isSessionBrowser(w.b.id))
+        XCTAssertNil(w.coordinator.pairedBrowserByTerminal[w.t.id])
+        XCTAssertNil(w.coordinator.sessionTrees[w.t.id])
+        XCTAssertNotEqual(w.coordinator.activeSessionId, w.t.id, "moved on from the ended terminal")
+    }
+
+    func testASurfaceCloseOfABackgroundTerminalClosesItsPairedBrowser() {
+        let w = pairScene()
+        w.coordinator.setActiveSessionIdForTesting(w.a.id)
+
+        w.coordinator.terminalSurfacesEnded(sessionId: w.t.id, status: .exited)
+
+        XCTAssertFalse(w.coordinator.isSessionBrowser(w.b.id))
+        XCTAssertEqual(w.coordinator.activeSessionId, w.a.id, "a background close leaves the selection alone")
+    }
 }

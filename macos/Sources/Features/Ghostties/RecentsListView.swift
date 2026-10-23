@@ -455,9 +455,15 @@ struct RecentsListView: View {
         )
     }
 
+    /// The id the selected-row mix follows: History, else the selected row
+    /// (a paired browser's is its terminal's).
+    static func mixSelectedId(_ coordinator: SessionCoordinator) -> UUID? {
+        coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.activeSessionId
+    }
+
     private func mixSnapshot(_ sections: SidebarSessionSections) -> SelectedRowMixDriver.Snapshot {
         SelectedRowMixDriver.Snapshot(
-            selected: coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.activeSessionId,
+            selected: Self.mixSelectedId(coordinator),
             group: selectedGroupId(sections.active) ?? SelectedRowMix.noGroup,
             rows: Set(sections.pinned.map(\.id) + sections.active.map(\.id)),
             collapsed: Set(ProjectAccordionState.decode(collapsedProjectsRaw).map(\.uuidString))

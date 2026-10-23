@@ -347,9 +347,10 @@ struct WorkspaceSidebarView: View {
         sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
         coordinator: SessionCoordinator,
-        pinningAvailable: Bool = SessionPinning.isAvailable
+        pinningAvailable: Bool = SessionPinning.isAvailable,
+        pairedBrowsers: [UUID: UUID] = [:]
     ) -> [AgentSession] {
-        (RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable)
+        return (RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable)
             + RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: pinningAvailable))
             .filter { coordinator.hasLiveSurface(id: $0.id) }
     }

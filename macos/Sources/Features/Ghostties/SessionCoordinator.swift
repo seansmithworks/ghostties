@@ -1374,13 +1374,7 @@ final class SessionCoordinator: ObservableObject {
             if let controller = terminalController {
                 let liveTree = controller.surfaceTree
                 if liveTree.isEmpty {
-                    sessionTrees.removeValue(forKey: sessionId)
-                    outputSubscriptions.removeValue(forKey: sessionId)
-                    cancelTerminalSync(for: sessionId)
-                    setStatus(exitStatus, for: sessionId)
-                    gcDraftIfPresent(for: sessionId)
-                    closePairedBrowser(ofTerminal: sessionId)
-                    switchToNextSession()
+                    terminalSurfacesEnded(sessionId: sessionId, status: exitStatus)
                 } else {
                     sessionTrees[sessionId] = liveTree
                 }
@@ -1391,16 +1385,26 @@ final class SessionCoordinator: ObservableObject {
                let node = tree.root?.node(view: closedSurface) {
                 let updated = tree.removing(node)
                 if updated.isEmpty {
-                    sessionTrees.removeValue(forKey: sessionId)
-                    outputSubscriptions.removeValue(forKey: sessionId)
-                    cancelTerminalSync(for: sessionId)
-                    setStatus(exitStatus, for: sessionId)
-                    gcDraftIfPresent(for: sessionId)
-                    closePairedBrowser(ofTerminal: sessionId)
+                    terminalSurfacesEnded(sessionId: sessionId, status: exitStatus)
                 } else {
                     sessionTrees[sessionId] = updated
                 }
             }
+        }
+    }
+
+    /// The last surface of a terminal session is gone (shell exit or surface
+    /// close): drop its runtime state, close its paired browser, and move on
+    /// when it was the active session.
+    func terminalSurfacesEnded(sessionId: UUID, status: SessionStatus) {
+        sessionTrees.removeValue(forKey: sessionId)
+        outputSubscriptions.removeValue(forKey: sessionId)
+        cancelTerminalSync(for: sessionId)
+        setStatus(status, for: sessionId)
+        gcDraftIfPresent(for: sessionId)
+        closePairedBrowser(ofTerminal: sessionId)
+        if activeSessionId == sessionId {
+            switchToNextSession()
         }
     }
 
