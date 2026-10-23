@@ -2391,6 +2391,10 @@ class WorkspaceViewContainer: NSView {
         }
     }
 
+    /// Width of the browser side panel as laid out right now; 0 while it is
+    /// collapsed. `gt browser open` waits for this before replying.
+    var browserPanelWidth: CGFloat { browserPanelView.frame.width }
+
     /// Restore terminal-only display (collapse browser side panel).
     /// Called by SessionCoordinator when switching from a browser session to a terminal session.
     func showTerminalContent() {
