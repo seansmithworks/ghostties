@@ -126,9 +126,11 @@ struct RecentsListView: View {
         // only, never touches `SessionBucket.membership`. See
         // `applyPendingLaunchOverride`.
         let displayed = applyPendingLaunchOverride(active: sections.active, inactive: sections.inactive, archive: sections.archived)
+        // One view lists each paired browser under its terminal, so every
+        // position a drag or Move Up/Down sees is a displayed position.
         let displaySections = SidebarSessionSections(
             pinned: sections.pinned,
-            active: displayed.active,
+            active: seatsPairedBrowsers ? PairedBrowserRows.seated(displayed.active, pairedBrowsers: coordinator.pairedBrowserByTerminal) : displayed.active,
             inactive: displayed.inactive,
             archived: displayed.archive
         )
@@ -293,7 +295,7 @@ struct RecentsListView: View {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else {
             return sections.pinned.count + sections.active.count
         }
-        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects)
+        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects, pairedBrowsers: coordinator.pairedBrowserByTerminal)
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
         return SidebarProjectGroupItem.cascade(items, start: sections.pinned.count).end
     }
@@ -386,12 +388,15 @@ struct RecentsListView: View {
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
-        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects, pairedBrowsers: coordinator.pairedBrowserByTerminal)
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
         // One cascade through every header and row, in reading order.
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
+        // Once per render, not per row.
+        let seatedBrowsers = PairedBrowserRows.seatedBrowserIds(in: active, pairedBrowsers: coordinator.pairedBrowserByTerminal)
+        let liftedRows = draggedUnit(dragState.draggingSessionId, in: active, section: .active)
         let projectGapBefore = projectGapTarget(groups)
         let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
         // Option D: each header leads with its project's monogram tile (the
@@ -422,14 +427,16 @@ struct RecentsListView: View {
                 .environment(\.selectedRowMixGroup, group.id)
                 .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
             case .row(let session, let group):
-                if session.id != dragState.draggingSessionId {
+                if !liftedRows.contains(session.id) {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView()
                     }
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        subtitle: PairedBrowserRows.subtitle(for: session, in: group.sessions, pairedBrowsers: coordinator.pairedBrowserByTerminal)
+                            ?? (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
+                        isSeatedBrowser: seatedBrowsers.contains(session.id),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
                     .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
@@ -449,7 +456,7 @@ struct RecentsListView: View {
     private func selectedGroupId(_ active: [AgentSession]) -> SidebarProjectGroup.ID? {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else { return nil }
         return RailProjectColumn.selectedGroupId(
-            SidebarProjectGroup.make(active: active, projects: store.projects),
+            SidebarProjectGroup.make(active: active, projects: store.projects, pairedBrowsers: coordinator.pairedBrowserByTerminal),
             selectedSessionId: coordinator.sidebarSelectedSessionId
         )
     }
@@ -550,14 +557,27 @@ struct RecentsListView: View {
         store.moveProject(id: id, before: beforeId)
     }
 
+    /// True where Active lists paired browsers under their terminals (one view).
+    private var seatsPairedBrowsers: Bool {
+        SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView
+    }
+
+    /// The rows a drag of `id` lifts out of Active: the row, and for a
+    /// terminal its paired browser (`PairedBrowserRows`).
+    private func draggedUnit(_ id: UUID?, in list: [AgentSession], section: SessionSection) -> Set<UUID> {
+        guard let id else { return [] }
+        guard seatsPairedBrowsers, section == .active else { return [id] }
+        return Set(PairedBrowserRows.unit(of: id, in: list, pairedBrowsers: coordinator.pairedBrowserByTerminal))
+    }
+
     /// Where the live drag gap sits among Active's rows: before the session
     /// returned, or at the end for `.some(nil)`. Nil when no gap targets
     /// Active. Same index rule as `rowSlots`.
     private func groupedGapTarget(_ active: [AgentSession]) -> UUID?? {
-        guard let gap = dragState.gap, gap.section == .active else { return nil }
-        let working = active.filter { $0.id != dragState.draggingSessionId }
-        let index = min(gap.index ?? working.count, working.count)
-        return .some(index < working.count ? working[index].id : nil)
+        guard let gap = dragState.gap, gap.section == .active, let draggingId = dragState.draggingSessionId else { return nil }
+        return .some(PairedBrowserRows.drop(
+            dragged: draggingId, gapIndex: gap.index, in: active, pairedBrowsers: coordinator.pairedBrowserByTerminal
+        ).beforeId)
     }
 
     private struct SessionRowSlot: Identifiable {
@@ -636,10 +656,21 @@ struct RecentsListView: View {
         )
         guard action != .reject else { return false }
 
-        let workingList = targetList.filter { $0.id != draggedId }
-        let beforeId = gap.index.flatMap { idx in workingList.indices.contains(idx) ? workingList[idx].id : nil }
+        let movedIds: [UUID]
+        let beforeId: UUID?
+        if seatsPairedBrowsers, gap.section == .active {
+            let drop = PairedBrowserRows.drop(
+                dragged: draggedId, gapIndex: gap.index, in: targetList, pairedBrowsers: coordinator.pairedBrowserByTerminal
+            )
+            movedIds = drop.ids
+            beforeId = drop.beforeId
+        } else {
+            let workingList = targetList.filter { $0.id != draggedId }
+            movedIds = [draggedId]
+            beforeId = gap.index.flatMap { idx in workingList.indices.contains(idx) ? workingList[idx].id : nil }
+        }
 
-        applySectionDropAction(action, draggedId: draggedId, draggedSession: draggedSession, beforeId: beforeId, targetList: targetList)
+        applySectionDropAction(action, draggedId: draggedId, movedIds: movedIds, draggedSession: draggedSession, beforeId: beforeId, targetList: targetList)
         return true
     }
 
@@ -796,7 +827,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
+        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, isSeatedBrowser: Bool = false, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
@@ -839,7 +870,8 @@ struct RecentsListView: View {
             }
         }
         .modifier(SessionRowDragModifier(
-            isEnabled: dragInteractionsEnabledForRendering,
+            // A paired browser stays under its terminal: it moves only with it.
+            isEnabled: dragInteractionsEnabledForRendering && !isSeatedBrowser,
             session: session,
             dragState: $dragState
         ))
@@ -851,15 +883,20 @@ struct RecentsListView: View {
             dragState: $dragState,
             draggedContext: { [self] id in draggedContext(for: id) },
             performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) },
+            liftedRows: { [self] id in draggedUnit(id, in: sectionList, section: section) },
             projectDrop: projectDrop
         ))
-        .accessibilityAction(named: Text("Move Up")) {
-            guard supportsReorder else { return }
-            moveWithinSection(session: session, indexInSection: indexInSection, direction: -1, sectionList: sectionList)
-        }
-        .accessibilityAction(named: Text("Move Down")) {
-            guard supportsReorder else { return }
-            moveWithinSection(session: session, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
+        // A paired browser cannot move on its own, so it offers no Move
+        // actions. `accessibilityActions` keeps one view structure either way.
+        .accessibilityActions {
+            if supportsReorder && !isSeatedBrowser {
+                Button("Move Up") {
+                    moveWithinSection(session: session, section: section, indexInSection: indexInSection, direction: -1, sectionList: sectionList)
+                }
+                Button("Move Down") {
+                    moveWithinSection(session: session, section: section, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
+                }
+            }
         }
     }
 
@@ -896,6 +933,7 @@ struct RecentsListView: View {
     private func applySectionDropAction(
         _ action: SessionDropAction,
         draggedId: UUID,
+        movedIds: [UUID],
         draggedSession: AgentSession,
         beforeId: UUID?,
         targetList: [AgentSession]
@@ -904,7 +942,7 @@ struct RecentsListView: View {
         case .reject:
             return
         case .reorder:
-            store.moveSessionInSessionsView(id: draggedId, before: beforeId, within: targetList)
+            store.moveSessionsInSessionsView(ids: movedIds, before: beforeId, within: targetList)
         case .pin:
             store.setSessionPinned(id: draggedId, true)
             store.moveSessionInSessionsView(id: draggedId, before: beforeId, within: targetList)
@@ -928,7 +966,14 @@ struct RecentsListView: View {
     /// expressed as "insert before" the id that will end up on the other
     /// side of the swap — same rule drag-drop uses, so both paths share one
     /// insertion semantic in `WorkspaceStore.moveSessionInSessionsView`.
-    private func moveWithinSection(session: AgentSession, indexInSection: Int?, direction: Int, sectionList: [AgentSession]) {
+    private func moveWithinSection(session: AgentSession, section: SessionSection, indexInSection: Int?, direction: Int, sectionList: [AgentSession]) {
+        if seatsPairedBrowsers, section == .active {
+            guard let move = PairedBrowserRows.move(
+                session.id, direction: direction, in: sectionList, pairedBrowsers: coordinator.pairedBrowserByTerminal
+            ) else { return }
+            store.moveSessionsInSessionsView(ids: move.ids, before: move.beforeId, within: sectionList)
+            return
+        }
         guard let indexInSection else { return }
         let target = indexInSection + direction
         guard target >= 0, target < sectionList.count else { return }

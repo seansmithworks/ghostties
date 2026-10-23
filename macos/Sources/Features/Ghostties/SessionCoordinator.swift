@@ -788,7 +788,7 @@ final class SessionCoordinator: ObservableObject {
     /// open`). Runtime only, never persisted: it resets on relaunch with the
     /// browser itself. Focusing the terminal keeps its paired browser beside
     /// it instead of collapsing the panel.
-    private(set) var pairedBrowserByTerminal: [UUID: UUID] = [:]
+    @Published private(set) var pairedBrowserByTerminal: [UUID: UUID] = [:]
 
     // MARK: - Session Switching
 
