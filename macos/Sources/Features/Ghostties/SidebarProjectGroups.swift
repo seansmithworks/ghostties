@@ -393,6 +393,9 @@ struct ProjectAccordionHeader: View {
     var isEmpty: Bool = false
     /// The project holds the selected session: its tile fills with ink.
     var isSelectedProject: Bool = false
+    /// The project's resolved icon (`ProjectIconStore`'s cache), drawn in
+    /// the tile in place of the monogram; nil draws the monogram.
+    var icon: NSImage? = nil
     /// DEBUG Redlines tag (`RedlineID.header`).
     var redlineID: String? = nil
     /// The header's place in the expand cascade (`SidebarLabelCascade`).
@@ -444,7 +447,8 @@ struct ProjectAccordionHeader: View {
                         isEmpty: isEmpty,
                         isSelectedProject: isSelectedProject,
                         redlineID: redlineID.map { $0 + ".tile" },
-                        badgeCount: isCollapsed ? count : nil
+                        badgeCount: isCollapsed ? count : nil,
+                        icon: icon
                     )
                 }
                 .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
@@ -570,6 +574,9 @@ enum SidebarTileContext {
 /// scaled by `shapeScale` (`MorphTileScale`) while the monogram stays at
 /// `textSize`, unscaled.
 struct ProjectMonogramTileFace: View {
+    /// A selected project's ring on an icon tile, in points as drawn.
+    static let selectedRingWidth: CGFloat = 2
+
     let monogram: String
     let size: CGFloat
     let textSize: CGFloat
@@ -578,6 +585,9 @@ struct ProjectMonogramTileFace: View {
     var isSelectedProject: Bool = false
     /// DEBUG Redlines tag for the drawn (scaled) shape.
     var redlineID: String? = nil
+    /// The project's icon, filling the tile's shape in place of the
+    /// monogram. Same frame, same shape: only the face changes.
+    var icon: NSImage? = nil
 
     /// Re-renders on every dial write; the fill reads "Selected tile fill".
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
@@ -601,15 +611,34 @@ struct ProjectMonogramTileFace: View {
         let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
         // Tint fades out as ink fades in, so each end draws exactly one
         // fill: the plain tile at 0, solid ink at 1.
-        return shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(RailProjectTile.ink(colorScheme).opacity(inkFill)))
+        let ink = RailProjectTile.ink(colorScheme)
+        return shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(ink.opacity(inkFill)))
+            .overlay {
+                if let icon {
+                    // The icon covers the ink fill, so selection reads as an
+                    // ink ring on the tile's edge instead, on the same mix
+                    // (`inkFill`) the fill follows. Width is divided by the
+                    // shape's scale so it draws 2pt at every morph step.
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size, height: size)
+                        .clipShape(shape)
+                        .opacity(isEmpty ? 0.5 : 1)
+                        .overlay(shape.strokeBorder(ink.opacity(inkFill), lineWidth: Self.selectedRingWidth / max(shapeScale, 0.01)))
+                }
+            }
             .frame(width: size, height: size)
             // Inside the scale, so Redlines reports the drawn tile.
             .redlineFrame(redlineID)
             .scaleEffect(shapeScale)
             .overlay {
-                Text(monogram)
-                    .font(.system(size: textSize, weight: .bold))
-                    .foregroundStyle(isEmpty ? SidebarColors.dimmedProject(colorScheme) : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
+                if icon == nil {
+                    Text(monogram)
+                        .font(.system(size: textSize, weight: .bold))
+                        .foregroundStyle(isEmpty ? SidebarColors.dimmedProject(colorScheme) : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
+                }
             }
             .frame(width: size, height: size)
     }
@@ -629,6 +658,8 @@ struct MorphTileFace: View, Animatable {
     let redlineID: String?
     /// The folded project's session count; nil while it is unfolded.
     let badgeCount: Int?
+    /// The project's icon; nil draws the monogram.
+    var icon: NSImage? = nil
 
     @ChromeScheme private var colorScheme
 
@@ -649,7 +680,8 @@ struct MorphTileFace: View, Animatable {
             shapeScale: scale,
             isEmpty: isEmpty,
             isSelectedProject: isSelectedProject,
-            redlineID: redlineID
+            redlineID: redlineID,
+            icon: icon
         )
         .morphIdentityProbe(redlineID)
         .overlay(alignment: .topTrailing) {

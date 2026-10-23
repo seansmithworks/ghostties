@@ -32,6 +32,10 @@ struct RecentsListView: View {
     /// The one-view project drag (`ProjectDragState`) — same lifecycle as
     /// `dragState`, and never set at the same time as it.
     @State private var projectDragState = ProjectDragState()
+    /// Each project's icon, copied out of `ProjectIconStore`'s in-memory
+    /// cache when the list appears and whenever the store reports a change.
+    /// The render path reads this, never the resolver.
+    @State private var projectIcons: [UUID: NSImage] = [:]
     @State private var escapeMonitor: Any?
     @State private var mouseUpMonitor: Any?
     @State private var autoScrollTimer: Timer?
@@ -201,6 +205,15 @@ struct RecentsListView: View {
         .onDisappear {
             removeDragEndMonitors()
             stopAutoScroll()
+        }
+        .onAppear {
+            let icons = ProjectIconStore.shared
+            projectIcons = Dictionary(uniqueKeysWithValues: store.projects.compactMap { project in
+                icons.image(for: project.id).map { (project.id, $0) }
+            })
+        }
+        .onReceive(ProjectIconStore.shared.changes) { projectId in
+            projectIcons[projectId] = ProjectIconStore.shared.image(for: projectId)
         }
         // A rename in progress doesn't survive the trip to the rail, where
         // its field has no room.
@@ -491,6 +504,7 @@ struct RecentsListView: View {
         let header = withProjectContextMenu(projectId: group.projectId) { ProjectAccordionHeader(
             name: group.name, monogram: monogram, count: group.sessions.count,
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
+            icon: group.projectId.flatMap { projectIcons[$0] },
             redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex
         ) {
             ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
