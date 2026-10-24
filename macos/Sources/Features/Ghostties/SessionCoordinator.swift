@@ -78,9 +78,12 @@ final class SessionCoordinator: ObservableObject {
     @Published private(set) var isHistoryPresented = false
 
     /// The session the sidebar draws as selected: none while History is
-    /// selected, so exactly one row (History) carries the selected card.
+    /// selected, so exactly one row (History) carries the selected card. A
+    /// paired browser has no row of its own, so while it is up its terminal's
+    /// row is the selected one.
     var sidebarSelectedSessionId: UUID? {
-        isHistoryPresented ? nil : activeSessionId
+        guard !isHistoryPresented, let activeSessionId else { return nil }
+        return PairedBrowserRows.rowId(for: activeSessionId, pairedBrowsers: pairedBrowserByTerminal)
     }
 
     /// Selects the History row: the canvas shows the history browser
@@ -1023,7 +1026,7 @@ final class SessionCoordinator: ObservableObject {
     func focusAdjacentLiveSession(offset: Int, in sessions: [AgentSession]) -> AgentSession? {
         guard !sessions.isEmpty else { return nil }
 
-        guard let currentId = activeSessionId,
+        guard let currentId = activeSessionId.map({ PairedBrowserRows.rowId(for: $0, pairedBrowsers: pairedBrowserByTerminal) }),
               let currentIndex = sessions.firstIndex(where: { $0.id == currentId }) else {
             let target = offset > 0 ? sessions[0] : sessions[sessions.count - 1]
             focusSession(id: target.id)
@@ -1044,13 +1047,14 @@ final class SessionCoordinator: ObservableObject {
             manager.closeAllTabs()
             browserManagers.removeValue(forKey: id)
             browserBridges.removeValue(forKey: id)
+            let pairedTerminal = PairedBrowserRows.rowId(for: id, pairedBrowsers: pairedBrowserByTerminal)
             pairedBrowserByTerminal = pairedBrowserByTerminal.filter { $0.value != id }
             setStatus(.killed, for: id)
             #if DEBUG
             NSLog("[BrowserAgent] closed browser session %@", id.uuidString)
             #endif
             if activeSessionId == id {
-                switchAfterClosingActiveBrowser(projectId: closingProjectId)
+                switchAfterClosingActiveBrowser(projectId: closingProjectId, pairedTerminal: pairedTerminal == id ? nil : pairedTerminal)
             } else if shownBrowserSessionId == id {
                 // A paired browser beside the selected terminal: nothing left
                 // to show, so the panel collapses and the terminal stays.
@@ -1062,13 +1066,13 @@ final class SessionCoordinator: ObservableObject {
         guard let tree = sessionTrees[id] else { return }
 
         // Remove from our tracking first, then close surfaces via the controller.
-        pairedBrowserByTerminal.removeValue(forKey: id)
         sessionTrees.removeValue(forKey: id)
         outputSubscriptions.removeValue(forKey: id)
         cancelTerminalSync(for: id)
         setStatus(.killed, for: id)
         gcDraftIfPresent(for: id)
         Self.removeLauncherScript(for: id)
+        closePairedBrowser(ofTerminal: id)
 
         // If this was the active session, switch to another running session.
         if activeSessionId == id {
@@ -1079,6 +1083,16 @@ final class SessionCoordinator: ObservableObject {
         guard let controller = terminalController else { return }
         for surface in tree {
             controller.closeSurface(surface, withConfirmation: false)
+        }
+    }
+
+    /// A paired browser has no sidebar row of its own, so it must not outlive
+    /// its terminal: closes it and drops the pairing. No confirmation; the
+    /// terminal's own close already asked.
+    private func closePairedBrowser(ofTerminal id: UUID) {
+        guard let browserId = pairedBrowserByTerminal.removeValue(forKey: id) else { return }
+        if browserManagers[browserId] != nil {
+            closeSession(id: browserId)
         }
     }
 
@@ -1242,7 +1256,9 @@ final class SessionCoordinator: ObservableObject {
     /// `switchToNextSession()`. A running terminal in the same project wins;
     /// otherwise the most recently active running session anywhere; otherwise
     /// nothing.
-    private func switchAfterClosingActiveBrowser(projectId: UUID?) {
+    /// `pairedTerminal` is the closed browser's own terminal, which wins over
+    /// everything; a paired browser is never a candidate (it has no row).
+    private func switchAfterClosingActiveBrowser(projectId: UUID?, pairedTerminal: UUID? = nil) {
         let records = sessionRecordStore.sessions
         func isRunning(_ id: UUID) -> Bool {
             statuses[id] == .running && (sessionTrees[id] != nil || browserManagers[id] != nil)
@@ -1254,12 +1270,15 @@ final class SessionCoordinator: ObservableObject {
             records.first { $0.id == id }?.projectId
         }
 
+        let hidden = Set(pairedBrowserByTerminal.values)
+        let ownTerminal = pairedTerminal.flatMap { isRunning($0) && sessionTrees[$0] != nil ? $0 : nil }
         let sameProjectTerminal = sessionTrees.keys
             .filter { isRunning($0) && project($0) == projectId && projectId != nil }
             .max { lastActive($0) < lastActive($1) }
-        let nextId = sameProjectTerminal
+        let nextId = ownTerminal
+            ?? sameProjectTerminal
             ?? Set(sessionTrees.keys).union(browserManagers.keys)
-                .filter(isRunning)
+                .filter { isRunning($0) && !hidden.contains($0) }
                 .max { lastActive($0) < lastActive($1) }
 
         guard let nextId else {
@@ -1361,12 +1380,7 @@ final class SessionCoordinator: ObservableObject {
             if let controller = terminalController {
                 let liveTree = controller.surfaceTree
                 if liveTree.isEmpty {
-                    sessionTrees.removeValue(forKey: sessionId)
-                    outputSubscriptions.removeValue(forKey: sessionId)
-                    cancelTerminalSync(for: sessionId)
-                    setStatus(exitStatus, for: sessionId)
-                    gcDraftIfPresent(for: sessionId)
-                    switchToNextSession()
+                    terminalSurfacesEnded(sessionId: sessionId, status: exitStatus)
                 } else {
                     sessionTrees[sessionId] = liveTree
                 }
@@ -1377,15 +1391,26 @@ final class SessionCoordinator: ObservableObject {
                let node = tree.root?.node(view: closedSurface) {
                 let updated = tree.removing(node)
                 if updated.isEmpty {
-                    sessionTrees.removeValue(forKey: sessionId)
-                    outputSubscriptions.removeValue(forKey: sessionId)
-                    cancelTerminalSync(for: sessionId)
-                    setStatus(exitStatus, for: sessionId)
-                    gcDraftIfPresent(for: sessionId)
+                    terminalSurfacesEnded(sessionId: sessionId, status: exitStatus)
                 } else {
                     sessionTrees[sessionId] = updated
                 }
             }
+        }
+    }
+
+    /// The last surface of a terminal session is gone (shell exit or surface
+    /// close): drop its runtime state, close its paired browser, and move on
+    /// when it was the active session.
+    func terminalSurfacesEnded(sessionId: UUID, status: SessionStatus) {
+        sessionTrees.removeValue(forKey: sessionId)
+        outputSubscriptions.removeValue(forKey: sessionId)
+        cancelTerminalSync(for: sessionId)
+        setStatus(status, for: sessionId)
+        gcDraftIfPresent(for: sessionId)
+        closePairedBrowser(ofTerminal: sessionId)
+        if activeSessionId == sessionId {
+            switchToNextSession()
         }
     }
 
@@ -2301,6 +2326,12 @@ final class SessionCoordinator: ObservableObject {
         browserManagers[id] = manager
         sessionIdsStartedThisLaunch.insert(id)
         statuses[id] = .running
+    }
+
+    /// Test-only: records `browser` as `terminal`'s paired browser without
+    /// CEF. Never used in production.
+    func seedPairedBrowserForTesting(terminal: UUID, browser: UUID) {
+        pairedBrowserByTerminal[terminal] = browser
     }
 
     /// Test-only: seed a "live" session (running + producing recent output)

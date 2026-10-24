@@ -3518,7 +3518,8 @@ class WorkspaceViewContainer: NSView {
         return WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: store.sessions,
             statuses: store.globalStatuses,
-            coordinator: coordinator
+            coordinator: coordinator,
+            pairedBrowsers: coordinator.pairedBrowserByTerminal
         )
     }
 
