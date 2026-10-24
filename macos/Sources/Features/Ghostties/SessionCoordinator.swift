@@ -34,7 +34,7 @@ final class SessionCoordinator: ObservableObject {
 
     /// The hover popover shown over an expanded session row. Lazy because
     /// it needs `self`; owned here so it is one-per-window like the sidebar.
-    private(set) lazy var sessionPopover = SessionPopoverController(coordinator: self)
+    private(set) lazy var sessionPopover = SessionPopoverController(coordinator: self, claudeState: claudeStateStore)
 
     /// Session-hybrid: set by `WorkspaceViewContainer` after init. When present,
     /// terminal session lifecycle events (spawn, close) create/GC `SessionDraft`
@@ -232,8 +232,10 @@ final class SessionCoordinator: ObservableObject {
     /// The `ClaudeStateStore` this coordinator reads/writes. Always
     /// `.shared` in production; overridable in DEBUG builds via
     /// `claudeStateStoreForTesting` so tests never touch the real
-    /// `~/.ghostties/state/`.
-    private var claudeStateStore: ClaudeStateStore {
+    /// `~/.ghostties/state/`. The sidebar's "need you" count and row
+    /// subtitles read it here, so they follow the same store as the
+    /// indicators.
+    var claudeStateStore: ClaudeStateStore {
 #if DEBUG
         claudeStateStoreForTesting ?? .shared
 #else
@@ -868,6 +870,13 @@ final class SessionCoordinator: ObservableObject {
         sessionTrees[id] != nil || browserManagers[id] != nil
     }
 
+    /// The surface an inline Approve/Deny names as its target: the session's
+    /// first pane. The responder re-checks it against the session's own
+    /// surface before sending anything (`GuardedApprovalResponder`).
+    func approvalSurfaceId(forSession id: UUID) -> UUID? {
+        sessionTrees[id]?.first?.id
+    }
+
     /// Focuses the next/previous session in `sessions` relative to
     /// `activeSessionId`, wrapping at both ends. No-ops (returns `nil`, no
     /// beep, no crash) when `sessions` is empty. Shared by
@@ -1015,6 +1024,7 @@ final class SessionCoordinator: ObservableObject {
 
     /// Clean up runtime state for a session (after removing from the store).
     func clearRuntime(id: UUID) {
+        sessionPopover.model.forget(id)
         sessionTrees.removeValue(forKey: id)
         browserManagers.removeValue(forKey: id)
         browserBridges.removeValue(forKey: id)
@@ -1780,6 +1790,17 @@ final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Pure mapping from a hook-derived kind to the indicator; nil for `.ended`
+    /// (fall through to heuristics). Static so tests exercise the real mapping.
+    nonisolated static func claudeIndicator(kind: ClaudeState.Kind, isLongRunning: Bool) -> SessionIndicatorState? {
+        switch kind {
+        case .busy: return isLongRunning ? .longRunning : .processing
+        case .idle: return .idle
+        case .needsInput, .needsPermission: return .needsAttention
+        case .ended: return nil
+        }
+    }
+
     /// Compute the view-layer indicator state for a session.
     ///
     /// Combines lifecycle status, output recency, and shell prompt signals into
@@ -1812,19 +1833,11 @@ final class SessionCoordinator: ObservableObject {
             // filters out `.ended` and stale entries, so `.ended` never
             // reaches this switch; the case exists only for exhaustiveness.
             if let claudeState = claudeStateStore.state(for: sessionId) {
-                switch claudeState.state {
-                case .busy:
-                    if let start = processingStartTimes[sessionId],
-                       ContinuousClock.now - start > Self.longRunningThreshold {
-                        return .longRunning
-                    }
-                    return .processing
-                case .idle:
-                    return .idle
-                case .needsInput, .needsPermission:
-                    return .needsAttention
-                case .ended:
-                    break
+                let isLongRunning = processingStartTimes[sessionId].map {
+                    ContinuousClock.now - $0 > Self.longRunningThreshold
+                } ?? false
+                if let mapped = Self.claudeIndicator(kind: claudeState.state, isLongRunning: isLongRunning) {
+                    return mapped
                 }
             }
             // Check if the session has produced output recently.

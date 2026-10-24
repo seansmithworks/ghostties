@@ -297,6 +297,73 @@ extension SessionStatusGlyphKind {
     }
 }
 
+/// Whether a row genuinely needs the user: the one rule behind its "needs
+/// you" subtitle and its project's "N need you" count. A needs-attention
+/// indicator counts unless the session's Claude hook state says otherwise,
+/// so a cached indicator that outlived its prompt (the hook has since gone
+/// idle, e.g. `idle_prompt`) does not. With a hook state, genuine means
+/// `SessionAttention` finds a question; with none, the indicator is the
+/// only evidence and stands.
+enum SessionNeedsYou {
+    static func isGenuine(indicator: SessionIndicatorState, state: ClaudeState?) -> Bool {
+        guard indicator == .needsAttention else { return false }
+        guard let state else { return true }
+        return SessionAttention.make(indicator: indicator, state: state) != nil
+    }
+
+    /// The one-view row subtitle. A needs-attention row its hook state
+    /// contradicts reads what the hook state says instead.
+    static func subtitle(indicator: SessionIndicatorState, state: ClaudeState?) -> String {
+        guard indicator == .needsAttention, !isGenuine(indicator: indicator, state: state), let state else {
+            return indicator.statusGlyphKind.groupedRowSubtitle
+        }
+        let hookIndicator = SessionCoordinator.claudeIndicator(kind: state.state, isLongRunning: false) ?? .idle
+        return hookIndicator.statusGlyphKind.groupedRowSubtitle
+    }
+
+    /// The trailing label of a project header: "N need you" while any of
+    /// its rows genuinely needs the user, else its session count.
+    static func headerCountLabel(sessionCount: Int, needYou: Int) -> String {
+        needYou > 0 ? "\(needYou) need you" : "\(sessionCount)"
+    }
+}
+
+/// What a row that genuinely needs the user (`SessionNeedsYou`) shows
+/// inline (hover-approvals card 01): its question as the subtitle ("Run npm
+/// test?", "Which env name?", or "needs you" when the hook carried none),
+/// then an action line. Approve/Deny answer only a fresh bounded prompt
+/// (`approvalPrompt`) and draw only while `ApprovalFlag` is on; every other
+/// needs-you row hands off with "Answer in terminal →". Nil for a row that
+/// doesn't need the user, which gets no action line.
+struct SessionRowPrompt: Equatable {
+    let question: String?
+    /// The prompt Approve/Deny would answer, for the responder's stale guard.
+    let approvalPrompt: SessionPopoverContent.ApprovalPrompt?
+
+    var subtitle: String { question ?? SessionStatusGlyphKind.needsInput.groupedRowSubtitle }
+
+    static func make(indicator: SessionIndicatorState, state: ClaudeState?, now: Date = Date()) -> SessionRowPrompt? {
+        guard SessionNeedsYou.isGenuine(indicator: indicator, state: state) else { return nil }
+        guard let state, let attention = SessionAttention.make(indicator: indicator, state: state) else {
+            return SessionRowPrompt(question: nil, approvalPrompt: nil)
+        }
+        switch attention {
+        case let .freeform(question):
+            let text = question?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return SessionRowPrompt(question: text?.isEmpty == false ? text : nil, approvalPrompt: nil)
+        case let .bounded(prompt, command):
+            let toolName = state.structuredPrompt?.toolName ?? ""
+            let answerable = SessionPopoverContent.isFreshApproval(state, now: now) && state.structuredPrompt != nil
+            return SessionRowPrompt(
+                question: SessionPopoverContent.boundedQuestion(prompt: prompt, toolName: toolName, command: command),
+                approvalPrompt: answerable
+                    ? SessionPopoverContent.ApprovalPrompt(updatedAt: state.updatedAt, fingerprint: ApprovalFingerprint.make(state))
+                    : nil
+            )
+        }
+    }
+}
+
 // MARK: - Monograms
 
 enum ProjectMonogram {
@@ -389,6 +456,10 @@ struct ProjectAccordionHeader: View {
     /// `ProjectMonogram.monograms`' entry for this project.
     var monogram: String = "?"
     let count: Int
+    /// How many of the project's sessions genuinely need the user
+    /// (`SessionNeedsYou`): the trailing label reads "N need you" in place
+    /// of `count` while this is above 0.
+    var needYouCount: Int = 0
     let isCollapsed: Bool
     var isEmpty: Bool = false
     /// The project holds the selected session: its tile fills with ink.
@@ -474,7 +545,7 @@ struct ProjectAccordionHeader: View {
                     .background(ClusterEdgeReporter(part: .chevron))
                 Spacer(minLength: 8)
                 // Never squeezed by a long name: it keeps its own width.
-                Text("\(count)")
+                Text(SessionNeedsYou.headerCountLabel(sessionCount: count, needYou: needYouCount))
                     .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
                     .fixedSize()
@@ -485,6 +556,10 @@ struct ProjectAccordionHeader: View {
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.count), progress: progress))
                     .background(ClusterEdgeReporter(part: .count))
+                    // Sized before the name: the frame's 18pt minimum would
+                    // otherwise let a long name take the room "2 need you"
+                    // draws in, and the two would overlap.
+                    .layoutPriority(2)
             }
         }
         .coordinateSpace(name: ClusterEdgeReporter.space)
@@ -516,7 +591,7 @@ struct ProjectAccordionHeader: View {
         .modifier(ToggleKeyActivation(action: onToggle))
         .accessibilityElement(children: .ignore)
         .accessibilityAction(.default, onToggle)
-        .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
+        .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")" + (needYouCount > 0 ? ", \(needYouCount) need you" : ""))
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
         .accessibilityHint(Self.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
