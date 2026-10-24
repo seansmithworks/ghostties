@@ -1,15 +1,14 @@
 import SwiftUI
 import GhosttiesCore
 
-/// Template management, hosted in `ProjectSettingsView`. These actions used
+/// Template management, hosted in the Settings projects pane (`ProjectsSettingsPane`). These actions used
 /// to live in the composer popover's results table; the centered
 /// single-line composer has no list, so this section is now the only place
 /// templates are created, edited, duplicated, pinned and deleted.
 ///
 /// Templates are GLOBAL (`WorkspaceStore.templates`), not per project, so
 /// every change here applies immediately to the store (and to every other
-/// project) — it is NOT staged behind the settings popover's Save/Cancel,
-/// which only governs this project's icon, name and default template. That
+/// project) — it is not staged behind anything. That
 /// is the same immediate-apply behavior the deleted results table had.
 enum TemplateManagement {
 
@@ -114,7 +113,6 @@ struct ProjectTemplatesSection: View {
     }
 
     private static let rowHeight: CGFloat = 28
-    private static let listMaxHeight: CGFloat = 196
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -123,16 +121,10 @@ struct ProjectTemplatesSection: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 0) {
-                // Hugs up to `listMaxHeight`, then scrolls — the template
-                // list can run to a dozen rows and the popover must not.
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(store.templates) { template in
-                            row(for: template)
-                        }
-                    }
+                // No scroll view of its own: the Settings form owns scrolling.
+                ForEach(store.templates) { template in
+                    row(for: template)
                 }
-                .frame(height: min(CGFloat(store.templates.count) * Self.rowHeight, Self.listMaxHeight))
                 if isAddingTemplate {
                     newTemplateField
                 } else {

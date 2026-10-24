@@ -12,11 +12,22 @@ import UniformTypeIdentifiers
 /// and listen to `changes` to re-read after a refresh.
 ///
 /// Concurrency model: one generation token per project. Every `refresh`,
-/// `setOverride` and `forget` bumps it. Background work only computes (it
-/// returns a plan and never touches the cache or the override); the plan is
-/// applied on the main actor, and only if the token it started with is still
-/// current. A late result from a superseded refresh, or from before a
-/// `forget`, is dropped. `forget` keeps the bumped token as a tombstone.
+/// `forget`, and a landing `setOverride`, bumps it. Background work only
+/// computes (it returns a plan and never touches the cache or the
+/// override); the plan is applied on the main actor, and only if the token
+/// it started with is still current. A late result from a superseded
+/// refresh, or from before a `forget`, is dropped. `forget` keeps the
+/// bumped token as a tombstone.
+///
+/// A chosen image (`setOverride`) has its own token, bumped by a newer
+/// choice, by any other style change (`styleDidChange`) and by `forget`:
+/// the caller sets `iconStyle = .file` first, and the refresh that style
+/// change sets off runs while the image is still being normalized, so a
+/// refresh alone must not cancel it, but picking Auto or Monogram must.
+///
+/// A forced refresh (past the negative cache) stays forced until a refresh
+/// lands: a refresh that supersedes it is forced too, so the sidebar's
+/// own refresh for the same change can't drop the re-check.
 ///
 /// On disk:
 /// - `<caches>/project-icons/<id>.png`  resolved icon (a cache; safe to delete)
@@ -48,6 +59,9 @@ final class ProjectIconStore {
     /// would silently turn a project back into its monogram. 128px per project is tiny.
     private var memory: [UUID: NSImage] = [:]
     private var generations: [UUID: Int] = [:]
+    private var overrideTokens: [UUID: Int] = [:]
+    /// Projects with a forced refresh that hasn't landed yet.
+    private var pendingForce: Set<UUID> = []
     private static let queue = DispatchQueue(label: "ghostties.project-icons", qos: .utility)
 
     /// Directories are the final `project-icons` folders. Defaults:
@@ -91,13 +105,18 @@ final class ProjectIconStore {
     // MARK: - Refresh
 
     /// Fire-and-forget refresh for launch, project add, and Settings open.
-    func refreshInBackground(_ project: Project) {
-        _Concurrency.Task { await refresh(project) }
+    func refreshInBackground(_ project: Project, force: Bool = false) {
+        _Concurrency.Task { await refresh(project, force: force) }
     }
 
     /// Recomputes the effective image for `project` off the main thread.
-    func refresh(_ project: Project) async {
+    /// `force` skips the negative cache, which otherwise hides an icon
+    /// added under the root for up to `negativeCacheTTL` (Settings open,
+    /// and its Auto button, force).
+    func refresh(_ project: Project, force: Bool = false) async {
         let id = project.id
+        let force = force || pendingForce.contains(id)
+        if force { pendingForce.insert(id) }
         let generation = bump(id)
         let cacheDir = cacheDirectory
         let supportDir = supportDirectory
@@ -107,12 +126,14 @@ final class ProjectIconStore {
 
         switch project.iconStyle ?? .auto {
         case .monogram:
+            pendingForce.remove(id)
             setImage(nil, for: id)
             return
         case .file:
             let override = await Self.onQueue { Self.loadPNG(Self.file(supportDir, id, "png")) }
             guard isCurrent(id, generation) else { return }
             if let override {
+                pendingForce.remove(id)
                 setImage(override.image, for: id)
                 return
             }
@@ -122,10 +143,11 @@ final class ProjectIconStore {
         }
 
         let outcome = await Self.onQueue {
-            Self.resolveOnDisk(root: root, id: id, dir: cacheDir, now: clock, limits: limits)
+            Self.resolveOnDisk(root: root, id: id, dir: cacheDir, now: clock, limits: limits, force: force)
         }
         if outcome.ranResolver { resolverRuns += 1 }
         guard isCurrent(id, generation) else { return }
+        pendingForce.remove(id)
         apply(outcome.plan, in: cacheDir)
         setImage(outcome.image?.image, for: id)
     }
@@ -150,20 +172,42 @@ final class ProjectIconStore {
         }
     }
 
+    // MARK: - Style change
+
+    /// `project.iconStyle` just changed (Settings). Cancels a chosen image
+    /// still being copied, deletes the copy unless the style is `.file`,
+    /// and refreshes. The cancel and delete happen now, before this
+    /// returns; the task is the refresh.
+    @discardableResult
+    func styleDidChange(_ project: Project, force: Bool = false) -> _Concurrency.Task<Void, Never> {
+        let id = project.id
+        overrideTokens[id] = (overrideTokens[id] ?? 0) + 1
+        if project.iconStyle != .file {
+            try? FileManager.default.removeItem(at: Self.file(supportDirectory, id, "png"))
+        }
+        return _Concurrency.Task { await refresh(project, force: force) }
+    }
+
     // MARK: - Override
 
     /// Normalizes the chosen image to <=128px PNG and copies it into
-    /// Application Support. The caller then sets `iconStyle = .file`.
-    /// If the project is refreshed or removed while this runs, the result is dropped.
+    /// Application Support. Set `iconStyle = .file` before calling: a
+    /// refresh while this runs doesn't cancel it (see the type's doc), and
+    /// landing supersedes any refresh still in flight. A newer choice, any
+    /// other style change (`styleDidChange`), or the project's removal
+    /// drops this one.
     func setOverride(projectId: UUID, from source: URL) async throws {
-        let generation = bump(projectId)
+        let token = (overrideTokens[projectId] ?? 0) + 1
+        overrideTokens[projectId] = token
         let decoded = await Self.onQueue { () -> Decoded? in
             guard let cg = ProjectIconResolver.normalizedThumbnail(fromFileAt: source),
                   let data = Self.pngData(cg) else { return nil }
             return Decoded(image: cg, png: data)
         }
         guard let decoded else { throw StoreError.unreadableImage }
-        guard isCurrent(projectId, generation) else { return }
+        guard overrideTokens[projectId] == token else { return }
+        _ = bump(projectId)
+        pendingForce.remove(projectId) // the refresh this supersedes never lands
         apply(Plan(writes: [(Self.file(supportDirectory, projectId, "png"), decoded.png)], removals: []),
               in: supportDirectory)
         setImage(decoded.image, for: projectId)
@@ -175,6 +219,8 @@ final class ProjectIconStore {
     /// invalidates any in-flight work for it.
     func forget(projectId id: UUID) {
         _ = bump(id) // tombstone: late results from before this call are dropped
+        overrideTokens[id] = (overrideTokens[id] ?? 0) + 1
+        pendingForce.remove(id)
         for ext in ["png", "key", "none"] {
             try? FileManager.default.removeItem(at: Self.file(cacheDirectory, id, ext))
         }
@@ -258,7 +304,7 @@ final class ProjectIconStore {
     /// the resolver. Runs on the utility queue and only reads; it returns the
     /// cache writes for the main actor to apply if still current.
     private nonisolated static func resolveOnDisk(
-        root: URL, id: UUID, dir: URL, now: Date, limits: ProjectIconResolver.Limits
+        root: URL, id: UUID, dir: URL, now: Date, limits: ProjectIconResolver.Limits, force: Bool
     ) -> Outcome {
         let rootMtime = mtime(of: root)
         let noneURL = file(dir, id, "none")
@@ -266,7 +312,7 @@ final class ProjectIconStore {
         let keyURL = file(dir, id, "key")
 
         // Negative cache: same root mtime, checked within the TTL.
-        if let rootMtime,
+        if !force, let rootMtime,
            let text = try? String(contentsOf: noneURL, encoding: .utf8) {
             let parts = text.split(separator: "\n").compactMap { Double($0) }
             if parts.count == 2, parts[0] == rootMtime, now.timeIntervalSince1970 - parts[1] < negativeCacheTTL {
