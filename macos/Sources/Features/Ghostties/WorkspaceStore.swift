@@ -22,12 +22,14 @@ final class WorkspaceStore: ObservableObject {
     /// `TestAction`), and this branch leans on `WorkspaceStore`'s DEBUG-only
     /// test initializer, so it cannot exist in a Release build regardless.
     static let shared: WorkspaceStore = {
+        let store: WorkspaceStore
         #if DEBUG
-        if CaptureFixture.isActive {
-            return CaptureFixture.makeStore()
-        }
+        store = CaptureFixture.isActive ? CaptureFixture.makeStore() : WorkspaceStore()
+        #else
+        store = WorkspaceStore()
         #endif
-        return WorkspaceStore()
+        ProjectIconStore.shared.follow(store.$projects)
+        return store
     }()
 
     /// `sectionedProjects`/`sessionGroups(forProject:)` below are memoized —
