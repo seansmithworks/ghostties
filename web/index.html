@@ -4,16 +4,38 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ghostties — one window, every agent</title>
-  <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
+  <meta name="description" content="Ghostties is a free macOS terminal for running several AI coding agents at once: every Claude Code and Codex session in one window, grouped by project, with status you can read at a glance. A fork of Ghostty, in beta.">
+  <link rel="canonical" href="https://ghostties.org/">
+  <meta name="theme-color" content="#06060e">
+  <meta property="og:site_name" content="Ghostties">
   <meta property="og:title" content="Ghostties — one window, every agent">
-  <meta property="og:description" content="A multi-agent workspace terminal. Now in beta.">
+  <meta property="og:description" content="A macOS terminal for running several coding agents at once. Every session in one window, grouped by project, with live status. A fork of Ghostty, in beta.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ghostties.org/">
   <meta property="og:image" content="https://ghostties.org/assets/social-card.png">
   <meta property="og:image:width" content="2560">
   <meta property="og:image:height" content="1280">
+  <meta property="og:image:alt" content="Eight pixel ghosts under a terminal showing npx ghostties-install and Ghostties installed">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Ghostties — one window, every agent">
+  <meta name="twitter:description" content="A macOS terminal for running several coding agents at once. Every session in one window, grouped by project, with live status.">
   <meta name="twitter:image" content="https://ghostties.org/assets/social-card.png">
+  <meta name="twitter:image:alt" content="Eight pixel ghosts under a terminal showing npx ghostties-install and Ghostties installed">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Ghostties",
+    "url": "https://ghostties.org/",
+    "description": "A macOS terminal for running several AI coding agents at once, with a project sidebar and live session status. A fork of Ghostty.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS 13 or later, Apple Silicon",
+    "license": "https://opensource.org/licenses/MIT",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "downloadUrl": "https://ghostties.org/download",
+    "sameAs": ["https://github.com/SeanSmithWorks/ghostties"]
+  }
+  </script>
   <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
@@ -54,22 +76,23 @@
         <div class="head">
           <h1 class="h-xl">TOO MANY<br><span class="amber">TERMINALS.</span></h1>
           <p class="lead" style="margin-top: 24px;">
-            Ghostties runs every Claude Code session in <strong>one window</strong> —
-            a sidebar of live agents, with status you can read at a glance.
+            Ghostties is a Mac terminal for running several coding agents at once. Every
+            Claude Code and Codex session in <strong>one window</strong>, grouped
+            by project, with status you can read at a glance.
           </p>
         </div>
 
         <div class="install-row">
-          <button type="button" class="cab-btn primary term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">
-            BREW INSTALL <span class="cab-cmd"><small>--cask seansmithworks/tap/ghostties</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
+          <button type="button" class="cab-btn primary term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" title="Copy: brew install --cask seansmithworks/tap/ghostties">
+            BREW INSTALL <span class="cab-cmd"><small>--cask seansmithworks/tap/ghostties</small><span class="copy-icon" aria-hidden="true">⧉</span></span><span class="visually-hidden">, copy the command</span>
           </button>
-          <button type="button" class="cab-btn secondary term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">
-            NPX <span class="cab-cmd"><small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
+          <button type="button" class="cab-btn secondary term-btn" data-copy="npx ghostties-install" title="Copy: npx ghostties-install">
+            NPX <span class="cab-cmd"><small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span></span><span class="visually-hidden">, copy the command</span>
           </button>
-          <a class="cab-btn tertiary" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.5.0-beta.26/Ghostties.dmg" download>.DMG</a>
+          <a class="cab-btn tertiary" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.5.0-beta.26/Ghostties.dmg" download>.DMG<span class="visually-hidden">, download the disk image</span></a>
         </div>
         <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
-        <p class="body-text" style="margin-top: 8px;">macOS 13+, Apple Silicon. Currently in beta.</p>
+        <p class="body-text" style="margin-top: 8px;">Free and open source. macOS 13+, Apple Silicon. Currently in beta. <a class="text-link" href="/download">All install options</a></p>
 
         <!-- Hero product asset — a real, verified capture (not a video yet).
              The 14s hero film is still being recorded; when hero-dark.mp4 /
@@ -81,6 +104,43 @@
             <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing live Claude Code sessions in one window, each labeled by project and status" width="1280" height="705">
           </picture>
         </figure>
+      </section>
+
+      <!-- ============================================================
+           02 — WHAT IT DOES. Every line is backed by README.md "What it
+           adds" or a shipped CHANGELOG.md entry; don't add a claim here
+           that isn't in one of those first.
+           ============================================================ -->
+      <section id="features" aria-labelledby="features-title">
+        <h2 class="h-m" id="features-title">What It Adds</h2>
+        <p class="lead">Ghostty&rsquo;s terminal, with a workspace layer on top.</p>
+        <ul class="feature-grid">
+          <li class="feature-cell">
+            <h3>Project sidebar</h3>
+            <p>Sessions grouped under their project. Fold, pin and drag projects to reorder. Cmd+S collapses the list to a rail of icons.</p>
+          </li>
+          <li class="feature-cell">
+            <h3>Status at a glance</h3>
+            <p>Every agent session says whether it&rsquo;s working, waiting on you<span aria-hidden="true"> (<code>?</code>)</span>, done<span aria-hidden="true"> (<code>✓</code>)</span> or stopped on an error<span aria-hidden="true"> (<code>✕</code>)</span>.</p>
+          </li>
+          <li class="feature-cell">
+            <h3>Hover for context</h3>
+            <p>Hover a session to see what it wants to run and why, or your last prompt and its current step.</p>
+          </li>
+          <li class="feature-cell">
+            <h3>One composer</h3>
+            <p>Cmd+T starts a Shell, Claude Code, Codex or Browser session in any project.</p>
+          </li>
+          <li class="feature-cell">
+            <h3>Resume a session</h3>
+            <p>Pick up a past Claude Code or Codex conversation where it left off, from Cmd+T or the row&rsquo;s menu.</p>
+          </li>
+          <li class="feature-cell">
+            <h3>Embedded browser</h3>
+            <p>The thing you&rsquo;re building, next to the thing building it.</p>
+          </li>
+        </ul>
+        <p class="body-text" style="margin-top: 16px;">Status and hover details for Claude Code need a one-time hook setup. See <a class="text-link" href="/download">first launch</a>.</p>
       </section>
 
       <!-- 02 — SIDEBAR: removed 2026-08-27. The Projects capture read as a duplicate
@@ -96,7 +156,7 @@
         <h2 class="h-m">Still Ghostty</h2>
         <p class="lead" style="max-width: 64ch;">
           Ghostties is a fork of
-          <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>,
+          <a class="text-link" href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>,
           not a rewrite — your config, themes and keybinds load unchanged, the terminal
           engine underneath is still upstream Ghostty, and the sidebar is an additional
           surface, not a replacement.
@@ -128,9 +188,9 @@
           </div>
         </div>
         <p class="body-text channels-note">
-          Current release is <strong>v0.5.0-beta.26</strong> on the beta channel.
-          Auto-update ships via Sparkle — installs check for a new build on
-          launch and apply it in the background.
+          Current release is <strong>v0.5.0-beta.26</strong>. Until v1.0, every
+          install gets each beta through Sparkle, which checks for a new build
+          on launch.
         </p>
       </section>
 
