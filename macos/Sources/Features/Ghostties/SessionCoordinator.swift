@@ -875,21 +875,51 @@ final class SessionCoordinator: ObservableObject {
     /// to a pane, so the answer would be a guess) or has no surface; the row
     /// then offers "Answer in terminal" instead.
     func approvalSurfaceId(forSession id: UUID) -> UUID? {
-        guard let tree = sessionTrees[id] else { return nil }
+        guard let tree = liveTree(for: id) else { return nil }
         return ApprovalSurfaceResolver.surface(among: tree.map(\.id))
     }
 
     /// Whether the session has more than one pane, so an inline answer has no
     /// single surface to go to.
     func isSplit(session id: UUID) -> Bool {
-        (sessionTrees[id]?.map(\.id).count ?? 0) > 1
+        (liveTree(for: id)?.map(\.id).count ?? 0) > 1
     }
+
+    /// What a sidebar row passes to `SessionRowPrompt.make`: false for a split
+    /// session, whose row then offers "Answer in terminal".
+    func canAnswerInline(session id: UUID) -> Bool {
+        !isSplit(session: id)
+    }
+
+    /// The session's current tree. `sessionTrees` is stale for the ACTIVE
+    /// session (the controller owns its live tree and splits made there are
+    /// copied back only on a switch), so the active one reads the controller.
+    /// Every approvals read goes through here: one source.
+    private func liveTree(for id: UUID) -> SplitTree<Ghostty.SurfaceView>? {
+        guard let stored = sessionTrees[id] else { return nil }
+        guard id == activeSessionId else { return stored }
+#if DEBUG
+        if let liveActiveTreeForTesting { return liveActiveTreeForTesting }
+#endif
+        return terminalController?.surfaceTree ?? stored
+    }
+
+#if DEBUG
+    /// Test-only: stands in for the window controller's live tree, which
+    /// needs a window. nil in production.
+    var liveActiveTreeForTesting: SplitTree<Ghostty.SurfaceView>?
+
+    /// Test-only: a stored (possibly stale) tree for a session.
+    func seedSessionTreeForTesting(id: UUID, tree: SplitTree<Ghostty.SurfaceView>) {
+        sessionTrees[id] = tree
+    }
+#endif
 
     /// Sends an Approve/Deny answer to the one surface with this id. The
     /// responder has already proven it is the answering session's own pane.
     /// Returns whether the keys reached a live surface.
     func sendApproval(_ decision: ApprovalDecision, toSurface surfaceId: UUID) -> Bool {
-        let view = sessionTrees.values.lazy.compactMap { $0.first(where: { $0.id == surfaceId }) }.first
+        let view = sessionTrees.keys.lazy.compactMap { self.liveTree(for: $0)?.first(where: { $0.id == surfaceId }) }.first
         return ApprovalKeys.deliver(decision, to: view?.surfaceModel)
     }
 

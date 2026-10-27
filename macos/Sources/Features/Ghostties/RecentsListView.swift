@@ -507,7 +507,7 @@ struct RecentsListView: View {
         SessionRowPrompt.make(
             indicator: store.globalIndicatorStates[id] ?? .inactive,
             state: coordinator.claudeStateStore.state(for: id),
-            canAnswerInline: !coordinator.isSplit(session: id)
+            canAnswerInline: coordinator.canAnswerInline(session: id)
         )
     }
 

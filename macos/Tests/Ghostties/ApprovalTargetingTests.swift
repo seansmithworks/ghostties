@@ -63,6 +63,75 @@ final class ApprovalTargetingTests: XCTestCase {
         XCTAssertEqual(sent, 0)
     }
 
+    // MARK: Coordinator wiring (real surfaces; the stale-tree case)
+
+    private static var apps: [Ghostty.App] = []
+
+    private func makeViews(_ count: Int) throws -> [Ghostty.SurfaceView] {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ApprovalTargetingTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        let configURL = dir.appendingPathComponent("config.ghostty")
+        try "confirm-close-surface = false\n".write(to: configURL, atomically: true, encoding: .utf8)
+        let app = Ghostty.App(configPath: configURL.path)
+        Self.apps.append(app)
+        let cApp = try XCTUnwrap(app.app)
+        var config = Ghostty.SurfaceConfiguration()
+        config.command = "/bin/cat"
+        config.workingDirectory = NSTemporaryDirectory()
+        return (0..<count).map { _ in Ghostty.SurfaceView(cApp, baseConfig: config) }
+    }
+
+    /// The active session was split live (Cmd+D): the controller's tree has two
+    /// panes while `sessionTrees` still holds the one-pane snapshot.
+    func testActiveSessionSplitLiveHasNoTargetAndRowHandsOff() throws {
+        let views = try makeViews(2)
+        let coordinator = SessionCoordinator()
+        coordinator.seedSessionTreeForTesting(id: sid, tree: SplitTree(view: views[0]))
+        coordinator.setActiveSessionIdForTesting(sid)
+        coordinator.liveActiveTreeForTesting = try SplitTree(view: views[0])
+            .inserting(view: views[1], at: views[0], direction: .right)
+
+        XCTAssertNil(coordinator.approvalSurfaceId(forSession: sid), "stale one-pane snapshot must not win")
+        XCTAssertTrue(coordinator.isSplit(session: sid))
+        // canAnswerInline(session:) is exactly what RecentsListView.rowPrompt passes (a view-level test is not feasible).
+        XCTAssertNil(SessionRowPrompt.make(indicator: .needsAttention, state: permissionState(),
+                                           now: shownAt.addingTimeInterval(1),
+                                           canAnswerInline: coordinator.canAnswerInline(session: sid))?.approvalPrompt)
+    }
+
+    /// A background session is read from its stored tree, whatever the active
+    /// session's live tree looks like.
+    func testBackgroundSinglePaneSessionTargetsItsPane() throws {
+        let views = try makeViews(3)
+        let other = UUID()
+        let coordinator = SessionCoordinator()
+        coordinator.seedSessionTreeForTesting(id: sid, tree: SplitTree(view: views[0]))
+        coordinator.seedSessionTreeForTesting(id: other, tree: SplitTree(view: views[1]))
+        coordinator.setActiveSessionIdForTesting(other)
+        coordinator.liveActiveTreeForTesting = try SplitTree(view: views[1])
+            .inserting(view: views[2], at: views[1], direction: .right)
+
+        XCTAssertEqual(coordinator.approvalSurfaceId(forSession: sid), views[0].id)
+        XCTAssertFalse(coordinator.isSplit(session: sid))
+        XCTAssertNil(coordinator.approvalSurfaceId(forSession: other), "the active one is split")
+    }
+
+    func testActiveUnsplitSessionTargetsItsPane() throws {
+        let views = try makeViews(1)
+        let coordinator = SessionCoordinator()
+        coordinator.seedSessionTreeForTesting(id: sid, tree: SplitTree(view: views[0]))
+        coordinator.setActiveSessionIdForTesting(sid)
+        coordinator.liveActiveTreeForTesting = SplitTree(view: views[0])
+        XCTAssertEqual(coordinator.approvalSurfaceId(forSession: sid), views[0].id)
+    }
+
+    func testSessionWithNoTreeHasNoTarget() {
+        let coordinator = SessionCoordinator()
+        XCTAssertNil(coordinator.approvalSurfaceId(forSession: sid))
+        XCTAssertFalse(coordinator.sendApproval(.approve, toSurface: UUID()), "and nothing is delivered")
+    }
+
     // MARK: Delivery
 
     func testDeliveryToAMissingSurfaceReportsFailure() {
