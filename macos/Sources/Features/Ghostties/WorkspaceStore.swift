@@ -795,6 +795,7 @@ final class WorkspaceStore: ObservableObject {
         sessions.removeAll { $0.projectId == id }
         projects.removeAll { $0.id == id }
         if lastSelectedProjectId == id { lastSelectedProjectId = nil }
+        ProjectIconStore.shared.forget(projectId: id)
         // Project removal is a structural change — release any held freeze snapshot
         // so the deleted project disappears immediately and remaining projects re-bucket.
         releaseSnapshot()
