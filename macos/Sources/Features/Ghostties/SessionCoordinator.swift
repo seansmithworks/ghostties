@@ -871,18 +871,26 @@ final class SessionCoordinator: ObservableObject {
     }
 
     /// The surface an inline Approve/Deny names as its target: the session's
-    /// first pane. The responder re-checks it against the session's own
-    /// surface before sending anything (`GuardedApprovalResponder`).
+    /// only pane. Nil when the session is split (nothing maps Claude's state
+    /// to a pane, so the answer would be a guess) or has no surface; the row
+    /// then offers "Answer in terminal" instead.
     func approvalSurfaceId(forSession id: UUID) -> UUID? {
-        sessionTrees[id]?.first?.id
+        guard let tree = sessionTrees[id] else { return nil }
+        return ApprovalSurfaceResolver.surface(among: tree.map(\.id))
+    }
+
+    /// Whether the session has more than one pane, so an inline answer has no
+    /// single surface to go to.
+    func isSplit(session id: UUID) -> Bool {
+        (sessionTrees[id]?.map(\.id).count ?? 0) > 1
     }
 
     /// Sends an Approve/Deny answer to the one surface with this id. The
     /// responder has already proven it is the answering session's own pane.
-    func sendApproval(_ decision: ApprovalDecision, toSurface surfaceId: UUID) {
-        guard let view = sessionTrees.values.lazy.compactMap({ $0.first(where: { $0.id == surfaceId }) }).first,
-              let surface = view.surfaceModel else { return }
-        ApprovalKeys.deliver(decision, to: surface)
+    /// Returns whether the keys reached a live surface.
+    func sendApproval(_ decision: ApprovalDecision, toSurface surfaceId: UUID) -> Bool {
+        let view = sessionTrees.values.lazy.compactMap { $0.first(where: { $0.id == surfaceId }) }.first
+        return ApprovalKeys.deliver(decision, to: view?.surfaceModel)
     }
 
     /// Focuses the next/previous session in `sessions` relative to

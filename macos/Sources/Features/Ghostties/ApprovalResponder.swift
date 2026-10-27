@@ -43,6 +43,8 @@ enum ApprovalOutcome: Equatable {
     case disabled
     case stale
     case wrongSurface
+    /// The guard passed but no key reached a surface (it was gone).
+    case undelivered
 }
 
 /// Off by default; the buttons stay hidden/inert until the flag is turned on.
@@ -69,8 +71,24 @@ struct GuardedApprovalResponder: ApprovalResponder {
     let currentState: (UUID) -> ClaudeState?
     /// The surface that belongs to this session (nil if it has none).
     let ownSurface: (UUID) -> UUID?
-    /// (decision, surfaceId). See `ApprovalKeys` for the real delivery.
-    let send: (ApprovalDecision, UUID) -> Void
+    /// (decision, surfaceId) -> whether a key actually reached the surface.
+    /// See `ApprovalKeys` for the real delivery.
+    let send: (ApprovalDecision, UUID) -> Bool
+
+    init(isEnabled: @escaping () -> Bool, currentState: @escaping (UUID) -> ClaudeState?,
+         ownSurface: @escaping (UUID) -> UUID?, send: @escaping (ApprovalDecision, UUID) -> Bool) {
+        self.isEnabled = isEnabled
+        self.currentState = currentState
+        self.ownSurface = ownSurface
+        self.send = send
+    }
+
+    /// For senders that cannot fail (tests, fakes): delivery always counts.
+    init(isEnabled: @escaping () -> Bool, currentState: @escaping (UUID) -> ClaudeState?,
+         ownSurface: @escaping (UUID) -> UUID?, send: @escaping (ApprovalDecision, UUID) -> Void) {
+        self.init(isEnabled: isEnabled, currentState: currentState, ownSurface: ownSurface,
+                  send: { send($0, $1); return true })
+    }
 
     func respond(_ decision: ApprovalDecision, to target: ApprovalTarget) -> ApprovalOutcome {
         guard isEnabled() else { return .disabled }
@@ -80,8 +98,7 @@ struct GuardedApprovalResponder: ApprovalResponder {
               ApprovalFingerprint.make(live) == target.fingerprint,
               live.structuredPrompt?.toolName != "AskUserQuestion" else { return .stale }
         guard ownSurface(target.sessionId) == target.surfaceId else { return .wrongSurface }
-        send(decision, target.surfaceId)
-        return .sent
+        return send(decision, target.surfaceId) ? .sent : .undelivered
     }
 }
 
@@ -92,6 +109,15 @@ protocol ApprovalKeySink {
 }
 
 extension Ghostty.Surface: ApprovalKeySink {}
+
+/// Which surface an answer may go to. Claude's state is keyed by Ghostties
+/// session only (`GHOSTTIES_SESSION_ID`); nothing names the pane running it. So
+/// the target is unambiguous only when the session has exactly one pane.
+enum ApprovalSurfaceResolver {
+    static func surface(among paneIds: [UUID]) -> UUID? {
+        paneIds.count == 1 ? paneIds[0] : nil
+    }
+}
 
 /// The one place a decision becomes keys.
 enum ApprovalKeys {
@@ -106,8 +132,17 @@ enum ApprovalKeys {
         }
     }
 
+    /// Sends the pair of events. `sink` is nil when the surface has no live model.
     @MainActor
-    static func deliver(_ decision: ApprovalDecision, to sink: some ApprovalKeySink) {
+    @discardableResult
+    static func deliver(_ decision: ApprovalDecision, to sink: (some ApprovalKeySink)?) -> Bool {
+        guard let sink else { return false }
+        sendKeys(decision, to: sink)
+        return true
+    }
+
+    @MainActor
+    private static func sendKeys(_ decision: ApprovalDecision, to sink: some ApprovalKeySink) {
         sink.sendKeyEvent(event(for: decision, action: .press))
         sink.sendKeyEvent(event(for: decision, action: .release))
     }

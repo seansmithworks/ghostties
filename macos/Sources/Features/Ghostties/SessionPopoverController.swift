@@ -117,7 +117,7 @@ final class SessionPopoverController {
         ownSurface: { [weak self] in self?.approvalSurfaceId(forSession: $0) },
         send: { [weak self] decision, surfaceId in
             // `ownSurface` already proved surfaceId is this session's own pane.
-            self?.coordinator?.sendApproval(decision, toSurface: surfaceId)
+            self?.coordinator?.sendApproval(decision, toSurface: surfaceId) ?? false
         }
     )
 

@@ -342,7 +342,8 @@ struct SessionRowPrompt: Equatable {
 
     var subtitle: String { question ?? SessionStatusGlyphKind.needsInput.groupedRowSubtitle }
 
-    static func make(indicator: SessionIndicatorState, state: ClaudeState?, now: Date = Date()) -> SessionRowPrompt? {
+    /// `canAnswerInline` is false when no single surface can be targeted (a split session); the row then hands off.
+    static func make(indicator: SessionIndicatorState, state: ClaudeState?, now: Date = Date(), canAnswerInline: Bool = true) -> SessionRowPrompt? {
         guard SessionNeedsYou.isGenuine(indicator: indicator, state: state) else { return nil }
         guard let state, let attention = SessionAttention.make(indicator: indicator, state: state) else {
             return SessionRowPrompt(question: nil, approvalPrompt: nil)
@@ -353,7 +354,7 @@ struct SessionRowPrompt: Equatable {
             return SessionRowPrompt(question: text?.isEmpty == false ? text : nil, approvalPrompt: nil)
         case let .bounded(prompt, command):
             let toolName = state.structuredPrompt?.toolName ?? ""
-            let answerable = SessionPopoverContent.isFreshApproval(state, now: now) && state.structuredPrompt != nil
+            let answerable = canAnswerInline && SessionPopoverContent.isFreshApproval(state, now: now) && state.structuredPrompt != nil
             return SessionRowPrompt(
                 question: SessionPopoverContent.boundedQuestion(prompt: prompt, toolName: toolName, command: command),
                 approvalPrompt: answerable

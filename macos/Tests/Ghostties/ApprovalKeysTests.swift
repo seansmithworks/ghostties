@@ -16,6 +16,7 @@ final class ApprovalKeysTests: XCTestCase {
         XCTAssertEqual(surface.events.map(\.key), [.digit1, .digit1])
         XCTAssertEqual(surface.events.map(\.action), [.press, .release])
         XCTAssertEqual(surface.events.first?.text, "1")
+        XCTAssertEqual(surface.events.first?.unshiftedCodepoint, 0x31)
         XCTAssertEqual(surface.events.first?.mods, [])
     }
 
