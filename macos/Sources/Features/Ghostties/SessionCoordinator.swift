@@ -793,6 +793,26 @@ final class SessionCoordinator: ObservableObject {
     /// it instead of collapsing the panel.
     @Published private(set) var pairedBrowserByTerminal: [UUID: UUID] = [:]
 
+    #if DEBUG
+    /// Browser session -> its page's DevTools target id, as `gt browser
+    /// open` reported it. Runtime only, like the pairing.
+    private var devToolsTargetByBrowser: [UUID: String] = [:]
+
+    /// DevTools targets an agent is attached to through the gateway right
+    /// now (`BrowserAgentAttachments.drivenTargets`).
+    @Published private(set) var agentAttachedTargets: Set<String> = []
+
+    /// The gateway's attached targets changed.
+    func agentAttachmentsChanged(_ targets: Set<String>) {}
+
+    /// The terminal whose agent drives `browserId`: its paired terminal,
+    /// while a gateway client is attached to the browser's page. Nil when no
+    /// client is attached, or the browser has no paired terminal to name.
+    func agentDriver(ofBrowser browserId: UUID) -> AgentSession? {
+        nil
+    }
+    #endif
+
     // MARK: - Session Switching
 
     /// Switch the terminal area to show a specific session.
@@ -2332,6 +2352,12 @@ final class SessionCoordinator: ObservableObject {
     /// CEF. Never used in production.
     func seedPairedBrowserForTesting(terminal: UUID, browser: UUID) {
         pairedBrowserByTerminal[terminal] = browser
+    }
+
+    /// Test-only: records `target` as `browser`'s DevTools target id, as
+    /// `gt browser open` would. Never used in production.
+    func seedDevToolsTargetForTesting(browser: UUID, target: String) {
+        devToolsTargetByBrowser[browser] = target
     }
 
     /// Test-only: seed a "live" session (running + producing recent output)

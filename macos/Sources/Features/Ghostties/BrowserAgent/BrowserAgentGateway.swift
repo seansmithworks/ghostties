@@ -61,6 +61,14 @@ final class BrowserAgentGateway: @unchecked Sendable {
     }
     private var _openHandler: (@Sendable (UUID, String) async -> BrowserAgentHTTP.Response)?
 
+    /// Called with the full set of driven targets whenever it changes (an
+    /// agent attached to or let go of a page), on a gateway queue.
+    var onDrivenTargetsChange: (@Sendable (Set<String>) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return _onDrivenTargetsChange }
+        set { lock.lock(); _onDrivenTargetsChange = newValue; lock.unlock() }
+    }
+    private var _onDrivenTargetsChange: (@Sendable (Set<String>) -> Void)?
+
     private var http: BrowserAgentHTTP.Server?
     private var publisher: BrowserControlPublisher?
 
