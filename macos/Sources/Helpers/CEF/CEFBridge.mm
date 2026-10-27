@@ -6,6 +6,11 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
+#if DEBUG
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#endif
 
 #if DEBUG
 #include <execinfo.h>
@@ -30,6 +35,9 @@
 static BOOL _isInitialized = NO;
 static NSTimer *_messageLoopTimer = nil;
 static BOOL _priorLaunchLeftUnclearedAttempt = NO;
+#if DEBUG
+static int _remoteDebuggingPort = 0;
+#endif
 
 // ---------------------------------------------------------------------------
 // CefApp implementation for external message pump integration
@@ -265,6 +273,31 @@ static void GhosttiesInstallExitDiagnostics(void) {
     _priorLaunchLeftUnclearedAttempt = NO;
 }
 
+#if DEBUG
++ (int)remoteDebuggingPort {
+    return _remoteDebuggingPort;
+}
+
++ (int)pickFreeLoopbackPort {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return 0;
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_len = sizeof(addr);
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+    int port = 0;
+    socklen_t len = sizeof(addr);
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0 &&
+        getsockname(fd, (struct sockaddr *)&addr, &len) == 0) {
+        port = ntohs(addr.sin_port);
+    }
+    close(fd);
+    return port;
+}
+#endif
+
 #pragma mark - Lifecycle
 
 + (void)initializeIfNeeded {
@@ -342,6 +375,20 @@ static void GhosttiesInstallExitDiagnostics(void) {
     }
 
     settings.remote_debugging_port = 0;
+#if DEBUG
+    // Debug builds only: a random loopback port for CDP. Never published to
+    // agents; they go through the filtering gateway (BrowserAgentGateway),
+    // which reads this port. Release keeps remote debugging off and never
+    // compiles any of this.
+    {
+        int port = [self pickFreeLoopbackPort];
+        if (port > 0) {
+            settings.remote_debugging_port = port;
+            _remoteDebuggingPort = port;
+            NSLog(@"[CEFBridge] DEBUG CDP on 127.0.0.1:%d", port);
+        }
+    }
+#endif
 
     // ---- Main args ------------------------------------------------------
 

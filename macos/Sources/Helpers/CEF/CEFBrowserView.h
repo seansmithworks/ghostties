@@ -18,6 +18,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// Lets UI that showed an inline failure state (including after a retry)
 /// know it can dismiss it.
 - (void)browserViewDidCreate:(CEFBrowserView *)view;
+/// Fired when the page asks to close itself or is closed from outside the
+/// app (DevTools `Target.closeTarget`, `Page.close`, `window.close()`).
+/// Never fired for closes the app started via `-closeBrowser` or dealloc.
+/// The delegate decides what closing means; CEF is told the close is handled
+/// either way (see `DoClose` in CEFBrowserView.mm).
+- (void)browserViewDidRequestClose:(CEFBrowserView *)view;
 @end
 
 /// Hosts a single CEF browser instance as an NSView.
@@ -59,12 +65,36 @@ NS_ASSUME_NONNULL_BEGIN
 /// Close DevTools (works for both popup and inline).
 - (void)closeDevTools;
 - (void)closeBrowser;
+/// YES for the URL schemes `-loadURL:` accepts (http, https, about). Lets a
+/// caller reject a URL before creating anything for it.
++ (BOOL)isAllowedURL:(NSString *)url;
+/// Asks Chromium for this browser's DevTools target id (the id CDP clients
+/// see in `/json/list` and `Target.getTargets`). Waits for the browser to
+/// materialise, then runs `Target.getTargetInfo` in-process. Calls
+/// `completion` on the main thread with the id, or nil if it could not be
+/// determined within `timeout` seconds.
+- (void)fetchDevToolsTargetIdWithTimeout:(NSTimeInterval)timeout
+                              completion:(void (^)(NSString * _Nullable targetId))completion;
 /// Attempt browser creation again after a failure. No-op if a browser
 /// already exists or is already pending. Unsafe to rely on alone when
 /// `creationFailedDueToPreviousCrash` is YES — it will simply re-detect the
 /// same uncleared sentinel and fail again without risking another crash,
 /// but it will not recover. Use `-resetProfileDataAndRetry:` in that case.
 - (void)retryCreateBrowser;
+
+#if DEBUG
+/// TEST-ONLY. Runs a parameterless DevTools method on this browser in-process
+/// (e.g. `Page.close`), standing in for an agent's CDP call. Returns NO if the
+/// browser does not exist yet or CEF rejected the message.
+- (BOOL)executeDevToolsMethodForTesting:(NSString *)method;
+
+/// TEST-ONLY. Delivers the life-span callbacks (created, DoClose,
+/// OnBeforeClose) for `other`'s browser to THIS view's handler, exactly what
+/// happens when inline DevTools, which shares this view's CEF client, opens
+/// and closes. Real DevTools cannot be used in the test host (ShowDevTools
+/// crashes it), so this stands in for it.
+- (void)simulateSharedClientEventsForTesting:(CEFBrowserView *)other;
+#endif
 
 /// Moves the CEF profile directory aside (never deletes — cookies/logins
 /// are preserved at the new path), clears the crash sentinel, then retries

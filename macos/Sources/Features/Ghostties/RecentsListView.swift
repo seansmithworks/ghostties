@@ -119,7 +119,8 @@ struct RecentsListView: View {
         let sections = SidebarSessionSections.make(
             sessions: store.sessions,
             statuses: store.globalStatuses,
-            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch,
+            pairedBrowsers: coordinator.pairedBrowserByTerminal
         )
 
         // Item 6: hold a just-relaunched session in Active's drop slot until
@@ -469,9 +470,15 @@ struct RecentsListView: View {
         )
     }
 
+    /// The id the selected-row mix follows: History, else the selected row
+    /// (a paired browser's is its terminal's).
+    static func mixSelectedId(_ coordinator: SessionCoordinator) -> UUID? {
+        coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.sidebarSelectedSessionId
+    }
+
     private func mixSnapshot(_ sections: SidebarSessionSections) -> SelectedRowMixDriver.Snapshot {
         SelectedRowMixDriver.Snapshot(
-            selected: coordinator.isHistoryPresented ? SelectedRowMix.historyRowID : coordinator.activeSessionId,
+            selected: Self.mixSelectedId(coordinator),
             group: selectedGroupId(sections.active) ?? SelectedRowMix.noGroup,
             rows: Set(sections.pinned.map(\.id) + sections.active.map(\.id)),
             collapsed: Set(ProjectAccordionState.decode(collapsedProjectsRaw).map(\.uuidString))
@@ -836,6 +843,7 @@ struct RecentsListView: View {
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
             subtitle: subtitle,
+            hasPairedBrowser: PairedBrowserRows.hasBrowser(session.id, pairedBrowsers: coordinator.pairedBrowserByTerminal),
             isActive: coordinator.sidebarSelectedSessionId == session.id,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),

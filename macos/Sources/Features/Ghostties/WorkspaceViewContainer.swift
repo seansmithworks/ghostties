@@ -1319,7 +1319,7 @@ class WorkspaceViewContainer: NSView {
                 DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
                     guard let self else { return }
                     let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
-                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab))
+                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab), pairedBrowsers: self.coordinator.pairedBrowserByTerminal)
                     self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
                     tick(remaining - 1)
                 }
@@ -2394,6 +2394,9 @@ class WorkspaceViewContainer: NSView {
     /// Called by SessionCoordinator when switching to or creating a browser session.
     func showBrowserContent(_ manager: BrowserTabManager, bridge: BrowserSessionBridge?) {
         embedBrowserInPanel(manager)
+        #if DEBUG
+        refreshBrowserDrivenBy()
+        #endif
 
         // Wire the bridge if provided (overrides the one found in embedBrowserInPanel).
         if let bridge = bridge {
@@ -2406,6 +2409,10 @@ class WorkspaceViewContainer: NSView {
         }
     }
 
+    /// Width of the browser side panel as laid out right now; 0 while it is
+    /// collapsed. `gt browser open` waits for this before replying.
+    var browserPanelWidth: CGFloat { browserPanelView.frame.width }
+
     /// Restore terminal-only display (collapse browser side panel).
     /// Called by SessionCoordinator when switching from a browser session to a terminal session.
     func showTerminalContent() {
@@ -2415,6 +2422,9 @@ class WorkspaceViewContainer: NSView {
             animateBrowserPanel(visible: false)
         }
         _activeBrowserManager = nil
+        #if DEBUG
+        refreshBrowserDrivenBy()
+        #endif
     }
 
     /// Weak reference to the active browser manager for navigation actions.
@@ -3510,12 +3520,12 @@ class WorkspaceViewContainer: NSView {
         coordinator: SessionCoordinator
     ) -> [AgentSession] {
         if sidebarMode == .collapsed {
-            return store.railSessions(layout: projectsLayout).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: projectsLayout, pairedBrowsers: coordinator.pairedBrowserByTerminal).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         // One view lists exactly the rail's sessions: Pinned, then Active
         // project by project.
         if sidebarViewMode != "taskFirst" && projectsLayout == .oneView {
-            return store.railSessions(layout: .oneView).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: .oneView, pairedBrowsers: coordinator.pairedBrowserByTerminal).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
             return store.sessionsInVisualOrder(coordinator: coordinator, layout: projectsLayout)
@@ -3523,7 +3533,8 @@ class WorkspaceViewContainer: NSView {
         return WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: store.sessions,
             statuses: store.globalStatuses,
-            coordinator: coordinator
+            coordinator: coordinator,
+            pairedBrowsers: coordinator.pairedBrowserByTerminal
         )
     }
 
@@ -4193,7 +4204,36 @@ class WorkspaceViewContainer: NSView {
                 self.railHover.dismiss(pointerInside: self.pointerIsOverRail)
             }
             .store(in: &cancellables)
+
+        #if DEBUG
+        // "Driven by": who drives the shown browser, and in what colour, can
+        // change with an attach, a pairing, a rename or the project's activity.
+        Publishers.MergeMany(
+            coordinator.$agentAttachedTargets.map { _ in () }.eraseToAnyPublisher(),
+            coordinator.$pairedBrowserByTerminal.map { _ in () }.eraseToAnyPublisher(),
+            store.$sessions.map { _ in () }.eraseToAnyPublisher(),
+            store.$projects.map { _ in () }.eraseToAnyPublisher(),
+            store.$globalIndicatorStates.map { _ in () }.eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.refreshBrowserDrivenBy() }
+        .store(in: &cancellables)
+        #endif
     }
+
+    #if DEBUG
+    /// Shows or hides "Driven by" on the browser panel for the browser it is
+    /// showing. The colour is the driving terminal's project ghost colour,
+    /// the one its sidebar ghost wears.
+    private func refreshBrowserDrivenBy() {
+        let driver = coordinator.shownBrowserSessionId.flatMap { coordinator.agentDriver(ofBrowser: $0) }
+        let project = driver.flatMap { driver in store.projects.first { $0.id == driver.projectId } }
+        browserPanelView.setDrivenBy(
+            name: project == nil ? nil : driver?.name,
+            color: project.map { NSColor(store.projectGhostColor(for: $0)) }
+        )
+    }
+    #endif
 
     /// Mounts the history browser over the terminal, inside the canvas card,
     /// while History is selected; unmounts it otherwise. Focus goes to the
