@@ -780,10 +780,37 @@ enum CaptureFixture {
               width > 0, height > 0 else { return nil }
         return CGSize(width: width, height: height)
     }
-    /// `GHOSTTIES_CAPTURE_SETTINGS=1`: opens the Settings window on its
-    /// Appearance tab shortly after launch, so the pane can be captured
-    /// without a keystroke.
-    static var opensSettings: Bool { env("GHOSTTIES_CAPTURE_SETTINGS") == "1" }
+    /// `GHOSTTIES_CAPTURE_SETTINGS`: opens the Settings window shortly after
+    /// launch, so a pane can be captured without a keystroke. `1` is App
+    /// Settings' Appearance tab, `app` its General tab, `projects` the
+    /// projects pane on the current project, `projects:<name>` on that one.
+    static var settingsHook: SettingsHook? { parseSettingsHook(env("GHOSTTIES_CAPTURE_SETTINGS")) }
+
+    enum SettingsHook: Equatable {
+        case app(GhosttiesSettingsWindowController.Tab)
+        case projects(name: String?)
+    }
+
+    static func parseSettingsHook(_ raw: String?) -> SettingsHook? {
+        switch raw {
+        case nil: return nil
+        case "1": return .app(.appearance)
+        case "app": return .app(.general)
+        case "projects": return .projects(name: nil)
+        case let value? where value.hasPrefix("projects:"):
+            return .projects(name: String(value.dropFirst("projects:".count)))
+        default: return nil
+        }
+    }
+
+    /// `GHOSTTIES_CAPTURE_PROJECT_ICON=<project>=<png path>`: the projects
+    /// pane's Choose Image… for that fixture project, with that file, as if
+    /// picked in the open panel.
+    static var projectIconHook: (projectName: String, path: String)? {
+        guard let raw = env("GHOSTTIES_CAPTURE_PROJECT_ICON"),
+              let split = raw.firstIndex(of: "=") else { return nil }
+        return (String(raw[..<split]), String(raw[raw.index(after: split)...]))
+    }
 
     /// `GHOSTTIES_CAPTURE_THEME_PICKS=<light>|<dark>`: the Appearance pick
     /// for this launch, written to the fixture's throwaway defaults suite

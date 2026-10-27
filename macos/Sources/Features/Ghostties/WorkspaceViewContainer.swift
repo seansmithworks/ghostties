@@ -3784,8 +3784,8 @@ class WorkspaceViewContainer: NSView {
     /// Instant session creation — Cmd+Shift+T (always) and Cmd+T when the
     /// `ghostties.newSessionOpensComposer` preference is off. Resolves the
     /// same smart-default cascade the composer uses, then creates directly
-    /// with the project's default template (falling back to `.shell`), with
-    /// no UI. Mirrors the deleted
+    /// with the project's new-session default from Settings
+    /// (`SessionTemplateResolver.newSessionTemplate`), with no UI. Mirrors the deleted
     /// `WorkspaceSidebarView.createNewSessionForSelectedProject()`, but uses
     /// the cascade pick instead of the sidebar's `selectedProjectId`.
     private func instantCreateSession() {
@@ -3793,13 +3793,7 @@ class WorkspaceViewContainer: NSView {
         guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
               let project = store.projects.first(where: { $0.id == projectId }) else { return }
 
-        let template: AgentTemplate
-        if let defaultId = project.defaultTemplateId,
-           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
-            template = defaultTemplate
-        } else {
-            template = AgentTemplate.shell
-        }
+        let template = SessionTemplateResolver.newSessionTemplate(for: project, store: store)
 
         // F1 (Phase 3 review): without this, a session created via the
         // cascade pick into a collapsed project spawns with no visible
