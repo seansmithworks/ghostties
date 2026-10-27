@@ -877,6 +877,14 @@ final class SessionCoordinator: ObservableObject {
         sessionTrees[id]?.first?.id
     }
 
+    /// Sends an Approve/Deny answer to the one surface with this id. The
+    /// responder has already proven it is the answering session's own pane.
+    func sendApproval(_ decision: ApprovalDecision, toSurface surfaceId: UUID) {
+        guard let view = sessionTrees.values.lazy.compactMap({ $0.first(where: { $0.id == surfaceId }) }).first,
+              let surface = view.surfaceModel else { return }
+        ApprovalKeys.deliver(decision, to: surface)
+    }
+
     /// Focuses the next/previous session in `sessions` relative to
     /// `activeSessionId`, wrapping at both ends. No-ops (returns `nil`, no
     /// beep, no crash) when `sessions` is empty. Shared by
