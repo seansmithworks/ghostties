@@ -6,6 +6,36 @@ import SwiftUI
 @MainActor
 final class SessionPopoverModel: ObservableObject {
     @Published var content: SessionPopoverContent?
+    /// "Answer in terminal →": focus the card's session.
+    var onAnswerInTerminal: (() -> Void)?
+    /// The prompt each session's Approve/Deny last sent an answer to, from
+    /// its sidebar row. The row disables its Approve/Deny while it is still
+    /// the prompt showing, so one prompt is never answered twice;
+    /// a new prompt (another `updatedAt` or fingerprint) enables them
+    /// again. A tap the responder turned away records nothing.
+    @Published private(set) var answered: [UUID: SessionPopoverContent.ApprovalPrompt] = [:]
+
+    func isAnswered(_ prompt: SessionPopoverContent.ApprovalPrompt?, for sessionId: UUID) -> Bool {
+        prompt != nil && answered[sessionId] == prompt
+    }
+
+    fileprivate func markAnswered(_ prompt: SessionPopoverContent.ApprovalPrompt, for sessionId: UUID) {
+        answered[sessionId] = prompt
+    }
+
+    /// Forgets `sessionId`'s answer once it shows a different prompt. A
+    /// moment with no prompt keeps it, so the same prompt coming back is
+    /// still answered and can't be sent twice; `forget` clears it on
+    /// teardown.
+    func prune(_ sessionId: UUID, showing prompt: SessionPopoverContent.ApprovalPrompt?) {
+        guard let prompt, let recorded = answered[sessionId], recorded != prompt else { return }
+        answered[sessionId] = nil
+    }
+
+    /// Forgets a removed session.
+    func forget(_ sessionId: UUID) {
+        if answered[sessionId] != nil { answered[sessionId] = nil }
+    }
 }
 
 /// Hosting view whose hit-testing covers only the card, not the transparent
@@ -39,7 +69,8 @@ final class SessionPopoverController {
     private weak var coordinator: SessionCoordinator?
     private let workspace: WorkspaceStore
     private let claudeState: ClaudeStateStore
-    private let model = SessionPopoverModel()
+    /// The card's model; sidebar rows also read its `answered` record.
+    let model = SessionPopoverModel()
 
     private var anchors: [UUID: WeakAnchor] = [:]
     private var hosting: SessionPopoverHostingView?
@@ -75,7 +106,20 @@ final class SessionPopoverController {
         self.coordinator = coordinator
         self.workspace = workspace
         self.claudeState = claudeState
+        model.onAnswerInTerminal = { [weak self] in self?.answerInTerminal() }
     }
+
+    /// Answers Approve/Deny: stale-guarded real keypresses into the session's
+    /// own surface, behind `ApprovalFlag` (off by default).
+    lazy var approvalResponder: any ApprovalResponder = GuardedApprovalResponder(
+        isEnabled: { ApprovalFlag.isEnabled },
+        currentState: { [weak self] in self?.claudeState.state(for: $0) },
+        ownSurface: { [weak self] in self?.approvalSurfaceId(forSession: $0) },
+        send: { [weak self] decision, surfaceId in
+            // `ownSurface` already proved surfaceId is this session's own pane.
+            self?.coordinator?.sendApproval(decision, toSurface: surfaceId) ?? false
+        }
+    )
 
     var isVisible: Bool { hosting?.superview != nil && currentSessionId != nil }
 
@@ -162,6 +206,43 @@ final class SessionPopoverController {
     }
 
     // MARK: - Actions
+
+    /// "Answer in terminal →": the same focus a row click does, and the card
+    /// goes away.
+    private func answerInTerminal() {
+        guard let id = currentSessionId else { return }
+        dismiss()
+        coordinator?.focusSession(id: id)
+    }
+
+    /// Approve/Deny from a sidebar row's inline action line: the one path
+    /// into the responder.
+    /// Nothing reaches the responder once a prompt has been answered (nil,
+    /// as with the flag off or no surface); the responder's own guard then
+    /// checks the prompt is still live. Only a sent answer marks the prompt
+    /// answered, so a stale or misdirected tap leaves Approve/Deny enabled.
+    @discardableResult
+    func respond(_ decision: ApprovalDecision, sessionId id: UUID, prompt: SessionPopoverContent.ApprovalPrompt) -> ApprovalOutcome? {
+        guard ApprovalFlag.isEnabled, !model.isAnswered(prompt, for: id),
+              let surfaceId = approvalSurfaceId(forSession: id) else { return nil }
+        let outcome = approvalResponder.respond(decision, to: ApprovalTarget(
+            sessionId: id, updatedAt: prompt.updatedAt, surfaceId: surfaceId, fingerprint: prompt.fingerprint
+        ))
+        if outcome == .sent { model.markAnswered(prompt, for: id) }
+        return outcome
+    }
+
+    private func approvalSurfaceId(forSession id: UUID) -> UUID? {
+#if DEBUG
+        if let approvalSurfaceIdForTesting { return approvalSurfaceIdForTesting(id) }
+#endif
+        return coordinator?.approvalSurfaceId(forSession: id)
+    }
+
+#if DEBUG
+    /// Stands in for a live session surface, which a test can't create.
+    var approvalSurfaceIdForTesting: ((UUID) -> UUID?)?
+#endif
 
     func dismiss() {
         showWork?.cancel()
@@ -392,6 +473,7 @@ final class SessionPopoverController {
     /// anchor registers as the sidebar lays out. No-op outside fixture mode.
     func openForCaptureFixtureIfNeeded() {
         guard CaptureFixture.isActive, let id = CaptureFixture.popoverTargetSessionId else { return }
+        CaptureFixture.applyApprovalsKnobIfNeeded()
         func attempt(_ remaining: Int) {
             if let anchor = anchors[id]?.view, anchor.window != nil, anchor.bounds.height > 0 {
                 isPinnedOpen = true

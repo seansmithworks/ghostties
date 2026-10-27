@@ -33,6 +33,11 @@ struct RecentsRowView: View, Equatable {
     /// project is the header above the row (`SidebarProjectsLayout.oneView`).
     /// Nil keeps the project name.
     var subtitle: String? = nil
+    /// Set while the session genuinely needs the user: the row draws an
+    /// action line under its question (`SessionRowPrompt`).
+    var prompt: SessionRowPrompt? = nil
+    /// `ApprovalFlag` as the list read it: Approve/Deny draw only while on.
+    var approvalsEnabled: Bool = false
     /// An agent's browser is attached to this terminal (`gt browser open`):
     /// the row shows a browser icon after its status, since the browser has
     /// no row of its own (`PairedBrowserRows`).
@@ -44,6 +49,10 @@ struct RecentsRowView: View, Equatable {
     let onTap: () -> Void
     var onCommitRename: () -> Void = {}
     var onCancelRename: () -> Void = {}
+    /// "Answer in terminal →": focus this session.
+    var onAnswerInTerminal: () -> Void = {}
+    /// Approve/Deny on the bounded prompt `prompt` names.
+    var onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void = { _, _ in }
 
     /// This row's place in the expand cascade: one index through every
     /// section and project header in reading order (`SidebarLabelCascade`)
@@ -64,6 +73,10 @@ struct RecentsRowView: View, Equatable {
     var dialEpoch: Int = 0
 
     @EnvironmentObject private var coordinator: SessionCoordinator
+    /// The bounded prompt whose answer window (`ClaudeStateStore.staleInterval`)
+    /// has run out while it showed: its Approve/Deny give way to "Answer in
+    /// terminal" without waiting for anything else to redraw the row.
+    @State private var expiredApproval: SessionPopoverContent.ApprovalPrompt?
 
     /// Every field that affects rendered output. Deliberately excludes
     /// `editingName`/`isRenameFocused`/the closures — those are live
@@ -75,6 +88,8 @@ struct RecentsRowView: View, Equatable {
             && lhs.indicatorState == rhs.indicatorState
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.subtitle == rhs.subtitle
+            && lhs.prompt == rhs.prompt
+            && lhs.approvalsEnabled == rhs.approvalsEnabled
             && lhs.hasPairedBrowser == rhs.hasPairedBrowser
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
@@ -94,7 +109,8 @@ struct RecentsRowView: View, Equatable {
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id),
             mixID: session.id,
-            popover: (session.id, coordinator.sessionPopover)
+            popover: (session.id, coordinator.sessionPopover),
+            actions: actionLine
         ) {
             if isEditing {
                 TextField("Session name", text: $editingName)
@@ -134,6 +150,49 @@ struct RecentsRowView: View, Equatable {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
+        .modifier(SessionRowPromptAccessibility(
+            actions: SessionRowPromptAccessibility.actions(prompt: prompt, approval: liveApproval, isEditing: isEditing),
+            onAnswerInTerminal: onAnswerInTerminal, onApprovalDecision: onApprovalDecision
+        ))
+        .task(id: prompt?.approvalPrompt) { await expireWhenStale(prompt?.approvalPrompt) }
+        // An answer recorded for an earlier prompt is forgotten once the
+        // row shows a different one.
+        .onAppear { coordinator.sessionPopover.model.prune(session.id, showing: prompt?.approvalPrompt) }
+        .onChange(of: prompt?.approvalPrompt) { coordinator.sessionPopover.model.prune(session.id, showing: $0) }
+    }
+
+    /// The prompt Approve/Deny answer: a fresh bounded prompt, while the
+    /// flag is on. Nil shows "Answer in terminal →" instead.
+    private var liveApproval: SessionPopoverContent.ApprovalPrompt? {
+        guard approvalsEnabled, let approval = prompt?.approvalPrompt, approval != expiredApproval else { return nil }
+        return approval
+    }
+
+    /// Sleeps until `approval` ages past the answer window, then retires it.
+    private func expireWhenStale(_ approval: SessionPopoverContent.ApprovalPrompt?) async {
+        guard let approval else { return }
+        let remaining = approval.updatedAt.addingTimeInterval(ClaudeStateStore.staleInterval).timeIntervalSinceNow
+        if remaining > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+        }
+        expiredApproval = approval
+    }
+
+    /// A needs-you row's action line: Approve/Deny for a live bounded
+    /// prompt, else "Answer in terminal →". Every needs-you row has one, the
+    /// rule drag reflow measures by (`SidebarListRowHeight`); while the row
+    /// is being renamed it keeps its room but hides, so nothing below moves.
+    private var actionLine: SessionRowActionLine? {
+        guard prompt != nil else { return nil }
+        return SessionRowActionLine(
+            sessionId: session.id,
+            approval: liveApproval,
+            isHidden: isEditing,
+            answers: coordinator.sessionPopover.model,
+            onApprovalDecision: onApprovalDecision,
+            onAnswerInTerminal: onAnswerInTerminal
+        )
     }
 
     // MARK: - Accessibility
@@ -141,6 +200,7 @@ struct RecentsRowView: View, Equatable {
     private var accessibilityLabel: String {
         Self.accessibilityLabel(
             name: session.name, projectName: projectName, kind: indicatorState.statusGlyphKind,
+            question: prompt?.question,
             hookUnconfirmed: hookUnconfirmed, hasPairedBrowser: hasPairedBrowser,
             lastOutput: session.displayTimestamp, isActive: isActive
         )
@@ -151,11 +211,13 @@ struct RecentsRowView: View, Equatable {
     /// project, spoken status, the hook hint, last output, active.
     static func accessibilityLabel(
         name: String, projectName: String, kind: SessionStatusGlyphKind,
+        question: String? = nil,
         hookUnconfirmed: Bool = false, hasPairedBrowser: Bool = false, lastOutput: Date? = nil, isActive: Bool
     ) -> String {
         // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
         // renders from — this row previously stated no status at all.
         var parts = [name, "in \(projectName)", kind.spokenStatus]
+        if let question { parts.append(question) }
         if hookUnconfirmed {
             parts.append("Approve the Ghostties hook in Codex")
         }
@@ -202,6 +264,157 @@ struct RecentsRowView: View, Equatable {
         f.dateFormat = "MMM d"
         return f
     }()
+}
+
+// MARK: - Row height
+
+/// A sidebar list row's height at rest, the same on the sidebar and the
+/// rail: the title band (the row height dial) plus the room a needs-you
+/// row holds for its action line. Drag reflow splits a row and sizes its
+/// gap with this, so both follow what is drawn.
+enum SidebarListRowHeight {
+    static func actionLine(hasActions: Bool) -> CGFloat {
+        hasActions ? SessionRowActionLine.addedHeight : 0
+    }
+
+    static func row(hasActions: Bool) -> CGFloat {
+        SidebarDialTuning.rowHeight() + actionLine(hasActions: hasActions)
+    }
+}
+
+// MARK: - Inline action line
+
+/// The action line's controls as VoiceOver actions: the row is one combined
+/// element, so its buttons are offered as named actions on it.
+struct SessionRowPromptAccessibility: ViewModifier {
+    enum Action: Equatable {
+        case approve(SessionPopoverContent.ApprovalPrompt)
+        case deny(SessionPopoverContent.ApprovalPrompt)
+        case answerInTerminal
+
+        var title: String {
+            switch self {
+            case .approve: return "Approve"
+            case .deny: return "Deny"
+            case .answerInTerminal: return "Answer in terminal"
+            }
+        }
+    }
+
+    let actions: [Action]
+    let onAnswerInTerminal: () -> Void
+    let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
+
+    /// The named actions a needs-you row offers: none while it is being
+    /// renamed, when its action line is hidden.
+    static func actions(prompt: SessionRowPrompt?, approval: SessionPopoverContent.ApprovalPrompt?, isEditing: Bool) -> [Action] {
+        guard prompt != nil, !isEditing else { return [] }
+        if let approval { return [.approve(approval), .deny(approval)] }
+        return [.answerInTerminal]
+    }
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                Button(action.title) { perform(action) }
+            }
+        }
+    }
+
+    private func perform(_ action: Action) {
+        switch action {
+        case .approve(let approval): onApprovalDecision(.approve, approval)
+        case .deny(let approval): onApprovalDecision(.deny, approval)
+        case .answerInTerminal: onAnswerInTerminal()
+        }
+    }
+}
+
+/// A needs-you row's action line, under its question (hover-approvals card
+/// 01): Approve (ink fill) and Deny (quiet) for a bounded prompt while
+/// `ApprovalFlag` is on, otherwise "Answer in terminal →".
+struct SessionRowActionLine: View {
+    let sessionId: UUID
+    /// The prompt Approve/Deny answer; nil shows "Answer in terminal →".
+    let approval: SessionPopoverContent.ApprovalPrompt?
+    /// Drawn invisible and inert (the row is being renamed); the row keeps
+    /// the line's room either way.
+    var isHidden: Bool = false
+
+    /// Whether the line's controls take clicks, keyboard focus (Full
+    /// Keyboard Access) or VoiceOver: never while hidden.
+    var acceptsInput: Bool { !isHidden }
+    /// Which prompts a tap already answered.
+    @ObservedObject var answers: SessionPopoverModel
+    let onApprovalDecision: (ApprovalDecision, SessionPopoverContent.ApprovalPrompt) -> Void
+    let onAnswerInTerminal: () -> Void
+
+    /// One control height and corner (on the 4pt scale, where card 01's
+    /// 20pt is not), with card 01's 8pt side padding and 4pt gap.
+    static let controlHeight: CGFloat = 24
+    static let controlHorizontalPadding: CGFloat = 8
+    static let controlCornerRadius: CGFloat = 6
+    static let controlSpacing: CGFloat = 4
+    /// Approve/Deny once a tap has answered the prompt they show.
+    static let answeredOpacity: Double = 0.4
+    /// Room the line adds under the row's title band: the controls, then
+    /// the band's own bottom inset again, so the row keeps its margins.
+    static let bottomInset: CGFloat = 8
+    static var addedHeight: CGFloat { controlHeight + bottomInset }
+
+    @ChromeScheme private var colorScheme
+
+    var body: some View {
+        let theme = ChromeTheme.active(colorScheme)
+        let size = SidebarDialTuning.rowSubtitleSize()
+        HStack(spacing: Self.controlSpacing) {
+            if let approval {
+                let answered = answers.isAnswered(approval, for: sessionId)
+                Group {
+                    chip("Approve", size: size, fill: Color(theme.ink), text: Color(theme.canvas)) {
+                        onApprovalDecision(.approve, approval)
+                    }
+                    chip("Deny", size: size, fill: theme.ink(.composerRow), text: SidebarColors.primaryText(colorScheme)) {
+                        onApprovalDecision(.deny, approval)
+                    }
+                }
+                // Answered once: off until the prompt changes.
+                .disabled(answered)
+                .opacity(answered ? Self.answeredOpacity : 1)
+            } else {
+                Button(action: onAnswerInTerminal) {
+                    Text("Answer in terminal →")
+                        .font(.system(size: size, weight: .medium))
+                        .underline()
+                        .foregroundStyle(SidebarColors.primaryText(colorScheme))
+                        .frame(height: Self.controlHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Shows this session's terminal")
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .opacity(isHidden ? 0 : 1)
+        // Disabled controls take no keyboard focus; this combines with the
+        // chips' own `.disabled(answered)`.
+        .disabled(!acceptsInput)
+        .allowsHitTesting(acceptsInput)
+        .accessibilityHidden(!acceptsInput)
+    }
+
+    private func chip(_ title: String, size: CGFloat, fill: Color, text: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(text)
+                .padding(.horizontal, Self.controlHorizontalPadding)
+                .frame(height: Self.controlHeight)
+                .background(fill, in: RoundedRectangle(cornerRadius: Self.controlCornerRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 // MARK: - Shared Row Chrome
@@ -256,6 +469,10 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     var popover: (sessionId: UUID, controller: SessionPopoverController)? = nil
     /// The tooltip the row shows on the rail, where its labels are gone.
     var railHelp: String? = nil
+    /// A needs-you row's action line, under the labels. The row grows by
+    /// its height in the sidebar and loses it on the rail, where only the
+    /// glyph shows; the glyph never moves off the title band.
+    var actions: SessionRowActionLine? = nil
     @ViewBuilder let title: () -> Title
     /// The status glyph at a given side (the morph's size for this frame).
     @ViewBuilder let glyph: (CGFloat) -> Glyph
@@ -275,55 +492,81 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         let progress = morphOverride ?? widthModel.morph
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
+        let bandHeight = SidebarDialTuning.rowHeight()
+        // The labels' leading edge in the row's content: the glyph slot,
+        // then the stack spacing (same sum the HStack lays out), so the
+        // action line starts under the title.
+        let labelLeading = dials.sidebarTileSize + WorkspaceLayout.sidebarIconLabelSpacing
+        // The action line's room is held in every state, the rail included
+        // (where the line itself fades out), so no tile or glyph below a
+        // needs-you row ever moves across the morph or the hover reveal.
+        let actionsHeight = SidebarListRowHeight.actionLine(hasActions: actions != nil)
         // The selection (`SelectedRowMix`): this instant's outline, tint,
         // and, for a new row, its growing slot and fading-in content.
         SelectedRowMixRowReader(id: mixID, isActive: isActive) { look in
-            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-                // Hover is a tile-sized chip behind the glyph in every list
-                // (option D); the group card is drawn only around a project
-                // group.
-                MorphGlyphSlot(
-                    progress: progress,
-                    slotWidth: dials.sidebarTileSize,
-                    glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
-                    chipSizes: (dials.sidebarChipSize, dials.railChipSize),
-                    // The chip is hover only; selection is the row's outline.
-                    isHovered: isHovered && !isActive,
-                    chipID: redlineID + ".chip",
-                    glyph: glyph
-                )
-                .redlineFrame(redlineID + ".glyph")
-                .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+                    // Hover is a tile-sized chip behind the glyph in every list
+                    // (option D); the group card is drawn only around a project
+                    // group.
+                    MorphGlyphSlot(
+                        progress: progress,
+                        slotWidth: dials.sidebarTileSize,
+                        glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
+                        chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                        // The chip is hover only; selection is the row's outline.
+                        isHovered: isHovered && !isActive,
+                        chipID: redlineID + ".chip",
+                        glyph: glyph
+                    )
+                    .redlineFrame(redlineID + ".glyph")
+                    .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
 
-                // Title + subtitle stacked
-                VStack(alignment: .leading, spacing: 1) {
-                    title()
+                    // Title + subtitle stacked
+                    VStack(alignment: .leading, spacing: 1) {
+                        title()
 
-                    Text(subtitle)
-                        .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
-                        .foregroundStyle(SidebarColors.secondaryText(colorScheme))
-                        .lineLimit(1)
+                        Text(subtitle)
+                            .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
+                            .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+                            .lineLimit(1)
+                    }
+                    .redlineFrame(redlineID + ".label")
+                    .modifier(MorphLabelFade(staggerIndex: staggerIndex))
+
+                    Spacer(minLength: 4)
+
+                    if let trailingSymbol {
+                        Image(systemName: trailingSymbol)
+                            .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
+                            .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+                            .modifier(MorphLabelFade(staggerIndex: staggerIndex))
+                            .accessibilityHidden(true)
+                    }
                 }
-                .redlineFrame(redlineID + ".label")
-                .modifier(MorphLabelFade(staggerIndex: staggerIndex))
-
-                Spacer(minLength: 4)
-
-                if let trailingSymbol {
-                    Image(systemName: trailingSymbol)
-                        .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
-                        .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+                // The title band: the glyph and labels centre in it whether or
+                // not an action line follows.
+                .frame(height: bandHeight)
+                if let actions {
+                    actions
+                        .padding(.leading, labelLeading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: actionsHeight, alignment: .top)
+                        .clipped()
                         .modifier(MorphLabelFade(staggerIndex: staggerIndex))
-                        .accessibilityHidden(true)
                 }
             }
             .opacity(look.content)
             .redlineFrame(redlineID + ".content")
             .padding(.leading, SidebarDialTuning.rowLeadingPadding())
             .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-            // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch. A new
-            // row's slot, gap included, grows from nothing (N4).
-            .frame(height: SidebarDialTuning.rowHeight() * look.height)
+            // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch, plus
+            // a needs-you row's action line. A new row's slot, gap included,
+            // grows from nothing (N4).
+            .frame(height: (bandHeight + actionsHeight) * look.height)
+            // A row that starts or stops needing you grows or shrinks on the
+            // fold's spring, the way an accordion opens and closes.
+            .animation(SidebarUISpring.fold.animation(entering: actions != nil), value: actions != nil)
             .redlineFrame(redlineID)
             // The row-wide tint and its outline, drawn round the chip on the rail.
             .background {
@@ -332,7 +575,10 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     progress: progress,
                     chipCenterX: dials.rowLeadingPadding + dials.sidebarTileSize / 2,
                     chipTravel: metrics.tileTravel,
-                    chipSizes: (dials.sidebarChipSize, dials.railChipSize)
+                    chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                    // The content centres in the row, so the band's centre
+                    // sits half the action line above the row's.
+                    chipCenterYOffset: -actionsHeight / 2
                 )
             }
             .padding(.top, look.height == 1 ? 0 : SidebarDialTuning.rowGap() * (look.height - 1))

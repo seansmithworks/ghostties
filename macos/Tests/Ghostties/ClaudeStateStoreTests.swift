@@ -74,12 +74,12 @@ final class ClaudeStateStoreTests: XCTestCase {
         XCTAssertEqual(state?.state, .needsPermission)
     }
 
-    func testDerivesNeedsInputFromNotificationIdlePrompt() {
+    func testDerivesIdleFromNotificationIdlePrompt() {
         guard let w = fixture(hook: #"""
         {"cwd":"/tmp","hook_event_name":"Notification","message":"idle","notification_type":"idle_prompt","prompt_id":"p1","session_id":"claude-5","transcript_path":"/tmp/t.jsonl"}
         """#) else { return }
         let state = ClaudeStateStore.derive(from: w)
-        XCTAssertEqual(state?.state, .needsInput)
+        XCTAssertEqual(state?.state, .idle, "idle_prompt is a finished session, not one that needs you")
     }
 
     func testDerivesEndedFromSessionEnd() {

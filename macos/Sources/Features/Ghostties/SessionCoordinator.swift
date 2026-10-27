@@ -34,7 +34,7 @@ final class SessionCoordinator: ObservableObject {
 
     /// The hover popover shown over an expanded session row. Lazy because
     /// it needs `self`; owned here so it is one-per-window like the sidebar.
-    private(set) lazy var sessionPopover = SessionPopoverController(coordinator: self)
+    private(set) lazy var sessionPopover = SessionPopoverController(coordinator: self, claudeState: claudeStateStore)
 
     /// Session-hybrid: set by `WorkspaceViewContainer` after init. When present,
     /// terminal session lifecycle events (spawn, close) create/GC `SessionDraft`
@@ -235,8 +235,10 @@ final class SessionCoordinator: ObservableObject {
     /// The `ClaudeStateStore` this coordinator reads/writes. Always
     /// `.shared` in production; overridable in DEBUG builds via
     /// `claudeStateStoreForTesting` so tests never touch the real
-    /// `~/.ghostties/state/`.
-    private var claudeStateStore: ClaudeStateStore {
+    /// `~/.ghostties/state/`. The sidebar's "need you" count and row
+    /// subtitles read it here, so they follow the same store as the
+    /// indicators.
+    var claudeStateStore: ClaudeStateStore {
 #if DEBUG
         claudeStateStoreForTesting ?? .shared
 #else
@@ -1049,6 +1051,59 @@ final class SessionCoordinator: ObservableObject {
         sessionTrees[id] != nil || browserManagers[id] != nil
     }
 
+    /// The surface an inline Approve/Deny names as its target: the session's
+    /// only pane. Nil when the session is split (nothing maps Claude's state
+    /// to a pane, so the answer would be a guess) or has no surface; the row
+    /// then offers "Answer in terminal" instead.
+    func approvalSurfaceId(forSession id: UUID) -> UUID? {
+        guard let tree = liveTree(for: id) else { return nil }
+        return ApprovalSurfaceResolver.surface(among: tree.map(\.id))
+    }
+
+    /// Whether the session has more than one pane, so an inline answer has no
+    /// single surface to go to.
+    func isSplit(session id: UUID) -> Bool {
+        (liveTree(for: id)?.map(\.id).count ?? 0) > 1
+    }
+
+    /// What a sidebar row passes to `SessionRowPrompt.make`: false for a split
+    /// session, whose row then offers "Answer in terminal".
+    func canAnswerInline(session id: UUID) -> Bool {
+        !isSplit(session: id)
+    }
+
+    /// The session's current tree. `sessionTrees` is stale for the ACTIVE
+    /// session (the controller owns its live tree and splits made there are
+    /// copied back only on a switch), so the active one reads the controller.
+    /// Every approvals read goes through here: one source.
+    private func liveTree(for id: UUID) -> SplitTree<Ghostty.SurfaceView>? {
+        guard let stored = sessionTrees[id] else { return nil }
+        guard id == activeSessionId else { return stored }
+#if DEBUG
+        if let liveActiveTreeForTesting { return liveActiveTreeForTesting }
+#endif
+        return terminalController?.surfaceTree ?? stored
+    }
+
+#if DEBUG
+    /// Test-only: stands in for the window controller's live tree, which
+    /// needs a window. nil in production.
+    var liveActiveTreeForTesting: SplitTree<Ghostty.SurfaceView>?
+
+    /// Test-only: a stored (possibly stale) tree for a session.
+    func seedSessionTreeForTesting(id: UUID, tree: SplitTree<Ghostty.SurfaceView>) {
+        sessionTrees[id] = tree
+    }
+#endif
+
+    /// Sends an Approve/Deny answer to the one surface with this id. The
+    /// responder has already proven it is the answering session's own pane.
+    /// Returns whether the keys reached a live surface.
+    func sendApproval(_ decision: ApprovalDecision, toSurface surfaceId: UUID) -> Bool {
+        let view = sessionTrees.keys.lazy.compactMap { self.liveTree(for: $0)?.first(where: { $0.id == surfaceId }) }.first
+        return ApprovalKeys.deliver(decision, to: view?.surfaceModel)
+    }
+
     /// Focuses the next/previous session in `sessions` relative to
     /// `activeSessionId`, wrapping at both ends. No-ops (returns `nil`, no
     /// beep, no crash) when `sessions` is empty. Shared by
@@ -1217,6 +1272,7 @@ final class SessionCoordinator: ObservableObject {
 
     /// Clean up runtime state for a session (after removing from the store).
     func clearRuntime(id: UUID) {
+        sessionPopover.model.forget(id)
         sessionTrees.removeValue(forKey: id)
         browserManagers.removeValue(forKey: id)
         browserBridges.removeValue(forKey: id)
@@ -2011,6 +2067,17 @@ final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Pure mapping from a hook-derived kind to the indicator; nil for `.ended`
+    /// (fall through to heuristics). Static so tests exercise the real mapping.
+    nonisolated static func claudeIndicator(kind: ClaudeState.Kind, isLongRunning: Bool) -> SessionIndicatorState? {
+        switch kind {
+        case .busy: return isLongRunning ? .longRunning : .processing
+        case .idle: return .idle
+        case .needsInput, .needsPermission: return .needsAttention
+        case .ended: return nil
+        }
+    }
+
     /// Compute the view-layer indicator state for a session.
     ///
     /// Combines lifecycle status, output recency, and shell prompt signals into
@@ -2043,19 +2110,11 @@ final class SessionCoordinator: ObservableObject {
             // filters out `.ended` and stale entries, so `.ended` never
             // reaches this switch; the case exists only for exhaustiveness.
             if let claudeState = claudeStateStore.state(for: sessionId) {
-                switch claudeState.state {
-                case .busy:
-                    if let start = processingStartTimes[sessionId],
-                       ContinuousClock.now - start > Self.longRunningThreshold {
-                        return .longRunning
-                    }
-                    return .processing
-                case .idle:
-                    return .idle
-                case .needsInput, .needsPermission:
-                    return .needsAttention
-                case .ended:
-                    break
+                let isLongRunning = processingStartTimes[sessionId].map {
+                    ContinuousClock.now - $0 > Self.longRunningThreshold
+                } ?? false
+                if let mapped = Self.claudeIndicator(kind: claudeState.state, isLongRunning: isLongRunning) {
+                    return mapped
                 }
             }
             // Check if the session has produced output recently.

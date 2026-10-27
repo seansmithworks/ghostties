@@ -44,11 +44,17 @@ struct RecentsListView: View {
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
+    @AppStorage(ApprovalFlag.defaultsKey) private var approvalsEnabled = false
 
     #if DEBUG
     /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).
     @Environment(\.morphProbe) private var morphProbe
     #endif
+
+    /// `SessionPinning.isAvailable`, except where a test renders the
+    /// Pinned section (`init(previewDragState:pinningAvailable:)`).
+    private var pinningAvailable = SessionPinning.isAvailable
 
     init() {
         #if DEBUG
@@ -66,10 +72,15 @@ struct RecentsListView: View {
     /// control case). This branch must live inside `body` itself, not a
     /// separately-called method, so `@EnvironmentObject` resolves normally
     /// through SwiftUI's own view-graph processing. Never referenced by the
-    /// shipped app.
-    init(previewDragState: SessionDragState, previewProjectDragState: ProjectDragState = ProjectDragState()) {
+    /// shipped app. `pinningAvailable` lets a test render the Pinned
+    /// section, which the shipped app hides (`SessionPinning`).
+    init(
+        previewDragState: SessionDragState, previewProjectDragState: ProjectDragState = ProjectDragState(),
+        pinningAvailable: Bool = SessionPinning.isAvailable
+    ) {
         self._dragState = State(initialValue: previewDragState)
         self._projectDragState = State(initialValue: previewProjectDragState)
+        self.pinningAvailable = pinningAvailable
         self.skipScrollViewForTesting = true
     }
     #endif
@@ -124,6 +135,7 @@ struct RecentsListView: View {
             sessions: store.sessions,
             statuses: store.globalStatuses,
             sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch,
+            pinningAvailable: pinningAvailable,
             pairedBrowsers: coordinator.pairedBrowserByTerminal
         )
 
@@ -263,7 +275,7 @@ struct RecentsListView: View {
     private func slotContent(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
         switch slot {
         case .pinnedRows:
-            sectionRows(sections.pinned, section: .pinned)
+            sectionRows(sections.pinned, section: .pinned, gapHeight: draggedRowHeight)
         case .pinnedEnd:
             endDropZone(section: .pinned, sectionList: sections.pinned)
         case .activeRows:
@@ -284,7 +296,10 @@ struct RecentsListView: View {
             if SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView {
                 groupedActiveRows(sections.active, cascadeStart: sections.pinned.count)
             } else {
-                sectionRows(sections.active, section: .active, cascadeStart: sections.pinned.count)
+                sectionRows(
+                    sections.active, section: .active, cascadeStart: sections.pinned.count,
+                    gapHeight: draggedRowHeight
+                )
             }
         case .activeEnd:
             endDropZone(section: .active, sectionList: sections.active)
@@ -375,7 +390,10 @@ struct RecentsListView: View {
     /// session's own row is omitted entirely — its original slot collapses
     /// so there is never a double gap (item 1).
     @ViewBuilder
-    private func sectionRows(_ list: [AgentSession], section: SessionSection, cascadeStart: Int = 0) -> some View {
+    private func sectionRows(
+        _ list: [AgentSession], section: SessionSection, cascadeStart: Int = 0,
+        gapHeight: CGFloat = SessionDragReflow.rowHeight
+    ) -> some View {
         ForEach(rowSlots(for: list, section: section)) { slot in
             switch slot.kind {
             case .session(let session):
@@ -384,7 +402,7 @@ struct RecentsListView: View {
                     staggerIndex: cascadeStart + (list.firstIndex(where: { $0.id == session.id }) ?? 0)
                 )
             case .gap:
-                SessionDragGapView()
+                SessionDragGapView(height: gapHeight)
             }
         }
     }
@@ -415,7 +433,12 @@ struct RecentsListView: View {
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
         let projectGapBefore = projectGapTarget(groups)
-        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
+        // A row that needs you draws an action line (card 01), so drag
+        // reflow measures it at its full height.
+        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items) {
+            SidebarListRowHeight.row(hasActions: rowPrompt($0) != nil)
+        }
+        let gapHeight = draggedRowHeight
         // Option D: each header leads with its project's monogram tile (the
         // rail's), and the group holding the selected session sits on one
         // card (`ProjectGroupCard`), its rows marked by chips.
@@ -453,11 +476,16 @@ struct RecentsListView: View {
             case .row(let session, let group):
                 if session.id != dragState.draggingSessionId {
                     if gapBeforeId == .some(session.id) {
-                        SessionDragGapView()
+                        SessionDragGapView(height: gapHeight)
                     }
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        // A row that isn't asking anything says what the
+                        // session is doing.
+                        subtitle: SessionNeedsYou.subtitle(
+                            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
+                            state: coordinator.claudeStateStore.state(for: session.id)
+                        ),
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
@@ -466,11 +494,30 @@ struct RecentsListView: View {
             }
         }
         if gapBeforeId == .some(nil) {
-            SessionDragGapView()
+            SessionDragGapView(height: gapHeight)
         }
         if projectGapBefore == .some(nil) {
             ProjectDragGapView()
         }
+    }
+
+    /// The inline prompt of a row that genuinely needs you
+    /// (`SessionRowPrompt`), in every layout and section: the only rows
+    /// that draw an action line.
+    private func rowPrompt(_ id: UUID) -> SessionRowPrompt? {
+        SessionRowPrompt.make(
+            indicator: store.globalIndicatorStates[id] ?? .inactive,
+            state: coordinator.claudeStateStore.state(for: id),
+            canAnswerInline: coordinator.canAnswerInline(session: id)
+        )
+    }
+
+    /// The live session gap's height: the dragged row's own drawn height,
+    /// whose slot collapses while it is in flight, so the list's total
+    /// height never changes mid-drag.
+    private var draggedRowHeight: CGFloat {
+        guard let id = dragState.draggingSessionId else { return SessionDragReflow.rowHeight }
+        return SidebarListRowHeight.row(hasActions: rowPrompt(id) != nil)
     }
 
     /// The selected session's project group, or none (nothing selected,
@@ -510,6 +557,12 @@ struct RecentsListView: View {
     ) -> some View {
         let header = withProjectContextMenu(projectId: group.projectId) { ProjectAccordionHeader(
             name: group.name, monogram: monogram, count: group.sessions.count,
+            needYouCount: group.sessions.filter {
+                SessionNeedsYou.isGenuine(
+                    indicator: store.globalIndicatorStates[$0.id] ?? .inactive,
+                    state: coordinator.claudeStateStore.state(for: $0.id)
+                )
+            }.count,
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
             icon: group.projectId.flatMap { projectIcons[$0] },
             redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex
@@ -841,6 +894,9 @@ struct RecentsListView: View {
         subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
+        // A row that needs you says what it asks and draws its action line,
+        // wherever it sits (card 01).
+        let prompt = rowPrompt(session.id)
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
         // Archive has no manual order (always newest-first) — no reorder
@@ -856,7 +912,9 @@ struct RecentsListView: View {
             projectName: projectName,
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
-            subtitle: subtitle,
+            subtitle: prompt?.subtitle ?? subtitle,
+            prompt: prompt,
+            approvalsEnabled: approvalsEnabled,
             hasPairedBrowser: PairedBrowserRows.hasBrowser(session.id, pairedBrowsers: coordinator.pairedBrowserByTerminal),
             isActive: coordinator.sidebarSelectedSessionId == session.id,
             isEditing: editingSessionId == session.id,
@@ -865,6 +923,10 @@ struct RecentsListView: View {
             onTap: { coordinator.focusSession(id: session.id) },
             onCommitRename: { commitRename(session: session) },
             onCancelRename: { cancelRename() },
+            onAnswerInTerminal: { coordinator.focusSession(id: session.id) },
+            onApprovalDecision: { decision, approval in
+                coordinator.sessionPopover.respond(decision, sessionId: session.id, prompt: approval)
+            },
             staggerIndex: staggerIndex,
             dialEpoch: SidebarDialTuning.epoch()
         )
@@ -894,7 +956,8 @@ struct RecentsListView: View {
             dragState: $dragState,
             draggedContext: { [self] id in draggedContext(for: id) },
             performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) },
-            projectDrop: projectDrop
+            projectDrop: projectDrop,
+            rowHeight: SidebarListRowHeight.row(hasActions: prompt != nil)
         ))
         .accessibilityAction(named: Text("Move Up")) {
             guard supportsReorder else { return }
