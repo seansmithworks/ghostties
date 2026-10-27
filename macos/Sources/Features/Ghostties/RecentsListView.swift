@@ -506,7 +506,8 @@ struct RecentsListView: View {
     private func rowPrompt(_ id: UUID) -> SessionRowPrompt? {
         SessionRowPrompt.make(
             indicator: store.globalIndicatorStates[id] ?? .inactive,
-            state: coordinator.claudeStateStore.state(for: id)
+            state: coordinator.claudeStateStore.state(for: id),
+            canAnswerInline: coordinator.canAnswerInline(session: id)
         )
     }
 

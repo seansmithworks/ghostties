@@ -109,9 +109,17 @@ final class SessionPopoverController {
         model.onAnswerInTerminal = { [weak self] in self?.answerInTerminal() }
     }
 
-    /// Answers Approve/Deny. The shipped default sends nothing; C3 supplies
-    /// the real key delivery behind `ApprovalFlag`.
-    var approvalResponder: any ApprovalResponder = NoOpApprovalResponder()
+    /// Answers Approve/Deny: stale-guarded real keypresses into the session's
+    /// own surface, behind `ApprovalFlag` (off by default).
+    lazy var approvalResponder: any ApprovalResponder = GuardedApprovalResponder(
+        isEnabled: { ApprovalFlag.isEnabled },
+        currentState: { [weak self] in self?.claudeState.state(for: $0) },
+        ownSurface: { [weak self] in self?.approvalSurfaceId(forSession: $0) },
+        send: { [weak self] decision, surfaceId in
+            // `ownSurface` already proved surfaceId is this session's own pane.
+            self?.coordinator?.sendApproval(decision, toSurface: surfaceId) ?? false
+        }
+    )
 
     var isVisible: Bool { hosting?.superview != nil && currentSessionId != nil }
 
