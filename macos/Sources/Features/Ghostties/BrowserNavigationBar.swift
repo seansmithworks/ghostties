@@ -9,6 +9,12 @@ final class BrowserNavigationBar: NSView {
     let reloadButton: NSButton
     let urlField: NSTextField
     let devToolsButton: NSButton
+    #if DEBUG
+    /// "Driven by <session>" while an agent is attached; hidden otherwise.
+    let drivenByPill = BrowserDrivenByPill()
+    private var urlFieldTrailingToDevTools: NSLayoutConstraint!
+    private var urlFieldTrailingToPill: NSLayoutConstraint!
+    #endif
 
     override init(frame: NSRect) {
         backButton = Self.makeSymbolButton(
@@ -56,6 +62,16 @@ final class BrowserNavigationBar: NSView {
         }
         addSubview(urlField)
         addSubview(devToolsButton)
+        let urlFieldTrailing = urlField.trailingAnchor.constraint(equalTo: devToolsButton.leadingAnchor, constant: -8)
+        #if DEBUG
+        addSubview(drivenByPill)
+        urlFieldTrailingToDevTools = urlFieldTrailing
+        urlFieldTrailingToPill = urlField.trailingAnchor.constraint(equalTo: drivenByPill.leadingAnchor, constant: -8)
+        NSLayoutConstraint.activate([
+            drivenByPill.trailingAnchor.constraint(equalTo: devToolsButton.leadingAnchor, constant: -8),
+            drivenByPill.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        #endif
 
         // Disable forward/back by default (no history yet).
         backButton.isEnabled = false
@@ -76,7 +92,7 @@ final class BrowserNavigationBar: NSView {
 
             // URL field — flexible width
             urlField.leadingAnchor.constraint(equalTo: reloadButton.trailingAnchor, constant: 8),
-            urlField.trailingAnchor.constraint(equalTo: devToolsButton.leadingAnchor, constant: -8),
+            urlFieldTrailing,
             urlField.centerYAnchor.constraint(equalTo: centerYAnchor),
 
             // DevTools button at trailing edge
@@ -84,6 +100,20 @@ final class BrowserNavigationBar: NSView {
             devToolsButton.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
+
+    #if DEBUG
+    /// Shows the pill naming the driving session, or hides it (nil).
+    func setDrivenBy(name: String?, color: NSColor?) {
+        let shown = name != nil
+        if let name { drivenByPill.name = name }
+        drivenByPill.color = color
+        drivenByPill.isHidden = !shown
+        // Off before on, so the two never hold the field at once.
+        let (on, off) = shown ? (urlFieldTrailingToPill!, urlFieldTrailingToDevTools!) : (urlFieldTrailingToDevTools!, urlFieldTrailingToPill!)
+        off.isActive = false
+        on.isActive = true
+    }
+    #endif
 
     // MARK: - Factory
 

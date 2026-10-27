@@ -532,9 +532,11 @@ final class WorkspaceStore: ObservableObject {
         coordinator: SessionCoordinator,
         layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()
     ) -> [AgentSession] {
-        projectsInDisplayOrder(layout: layout).flatMap { project in
+        let rows = projectsInDisplayOrder(layout: layout).flatMap { project in
             sessionGroups(forProject: project.id, startedThisLaunch: coordinator.sessionIdsStartedThisLaunch).flatMap { $0.1 }
         }.filter { coordinator.hasLiveSurface(id: $0.id) }
+        // A paired browser is its terminal's stop, never one of its own.
+        return PairedBrowserRows.visible(rows, pairedBrowsers: coordinator.pairedBrowserByTerminal)
     }
 
     /// Pinned + Active sessions, in the same order `RecentsListView` renders
@@ -550,8 +552,10 @@ final class WorkspaceStore: ObservableObject {
     /// project by project, as the list and rail group it.
     func railSessions(
         layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout(),
-        pinningAvailable: Bool = SessionPinning.isAvailable
+        pinningAvailable: Bool = SessionPinning.isAvailable,
+        pairedBrowsers: [UUID: UUID] = [:]
     ) -> [AgentSession] {
+        let sessions = PairedBrowserRows.visible(sessions, pairedBrowsers: pairedBrowsers)
         let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses, pinningAvailable: pinningAvailable)
         let ordered = layout == .oneView
             ? SidebarProjectGroup.make(active: active, projects: projects).flatMap(\.sessions)

@@ -30,12 +30,14 @@ enum RailProjectColumn {
     /// The rail column: the tile plus this margin on every side (option D:
     /// 4, a 38pt column round the 30pt tile).
     static let defaultColumnInset: CGFloat = 4
-    /// The "Column tint" dial's default: the dark flat fill the glass card
-    /// replaced (`ProjectGroupCardGlass`); the Colors panel's contrast
-    /// readout still reads it.
+    /// The column's and the expanded group card's fill in dark: white at
+    /// this opacity over the chrome (beta.26 sidebar contrast, was 6%).
+    /// The "Column tint" dial.
     static let defaultColumnTintOpacity: Double = 0.04
-    /// The light flat fill's lift the glass card replaced; the Colors
-    /// panel's contrast readout still reads it.
+    /// The column's and the expanded group card's fill in light: a lift,
+    /// white at this opacity over the chrome (beta.26 sidebar contrast,
+    /// was a 6% black shade), so secondary text
+    /// reads on it at the same contrast as on the chrome.
     static let lightColumnLiftOpacity: Double = 0.45
     /// The selected project's tile: 1 is full ink, 0 the plain tile tint.
     static let defaultSelectedTileFill: Double = 1
@@ -43,8 +45,8 @@ enum RailProjectColumn {
     /// rim.
     static let selectedChipTintOpacity: Double = 0.10
     /// The selected row's fill: `ink` at `selectedChipTintOpacity` in light,
-    /// black at the same opacity in dark. White over the dark glass card
-    /// fails AA for `inkSecondary` (3.35:1); black keeps it at 4.98:1.
+    /// black at the same opacity in dark. White over the dark group card
+    /// fails AA for `inkSecondary` (4.14:1); black keeps it at 6.03:1.
     static func selectedChipTint(_ scheme: ColorScheme) -> Color {
         (scheme == .dark ? Color.black : tintInk(scheme)).opacity(selectedChipTintOpacity)
     }
@@ -74,6 +76,16 @@ enum RailProjectColumn {
     /// The column's corner, concentric with the chip inside it (option D:
     /// 8 + 4 = 12). The expanded group card takes the same corner.
     static var columnCornerRadius: CGFloat { chipCornerRadius + columnInset }
+
+    /// The column's and the expanded group card's fill: white in both
+    /// appearances, a lift over the chrome, at `columnFillOpacity`.
+    static func columnFill(_ colorScheme: ColorScheme) -> Color {
+        Color.white.opacity(columnFillOpacity(colorScheme))
+    }
+    /// `columnFill`'s opacity: the light lift, or the dark "Column tint" dial.
+    static func columnFillOpacity(_ colorScheme: ColorScheme) -> Double {
+        colorScheme == .dark ? columnTintOpacity : lightColumnLiftOpacity
+    }
 
     /// The ink the chip tints are laid in: solid black in
     /// light, white in dark (`ChromeTheme.ink`), so an opacity here is the
@@ -257,102 +269,12 @@ private struct ProjectGroupCardShape: View, Animatable {
         ).card(hasRows: hasRows)
         let top = unionMinY + card.tileTrim - card.topInset
         let bottom = max(top, unionMaxY - (hasRows ? card.chipTrim : card.tileTrim) + card.verticalInset)
-        ProjectGroupCardGlass(cornerRadius: card.cornerRadius)
+        RoundedRectangle(cornerRadius: card.cornerRadius, style: .continuous)
+            .fill(RailProjectColumn.columnFill(colorScheme))
             .frame(width: card.width, height: bottom - top)
             .redlineFrame(isPrimary ? RedlineID.groupCard : nil)
             .morphIdentityProbe(isPrimary ? RedlineID.groupCard : nil)
             .position(x: card.minX - originX + card.width / 2, y: (top + bottom) / 2)
-    }
-}
-
-/// The active-group card's material (r8 05's glass, contract "Glass"), in
-/// tokens over the chrome. Dark: `ink` 11% at the top to 6% at the bottom
-/// (the mock's 12% top stop leaves `inkSecondary` under the header at
-/// 4.39:1; 11% keeps it at AA), a 1px inner top highlight of `ink` at 16%,
-/// a 0.5pt inner hairline of `ink` at 8%, a `0 2 12` glow of `shadow` at
-/// 6%. Light: `canvas` 90% to 55%, a 1px `canvas` top highlight, a 0.5pt
-/// `ink` hairline at 6%, a `0 2 12` shadow of `shadow` at 8%. The mock's
-/// backdrop blur is invisible over the flat chrome, so it is left out.
-struct ProjectGroupCardGlass: View {
-    let cornerRadius: CGFloat
-
-    @ChromeScheme private var colorScheme
-
-    /// The dark gradient's top stop: the mock's 12% less the AA margin.
-    static let darkTopStop: Double = 0.11
-
-    private struct Stops {
-        let top: Color, bottom: Color, highlight: Color, hairline: Color, shadow: Color
-    }
-
-    private static func stops(_ theme: ChromeTheme) -> Stops {
-        let ink = Color(theme.ink), canvas = Color(theme.canvas), shadow = Color(theme.shadow)
-        return theme.polarity == .dark
-            ? Stops(top: ink.opacity(darkTopStop), bottom: ink.opacity(0.06), highlight: ink.opacity(0.16),
-                    hairline: ink.opacity(0.08), shadow: shadow.opacity(0.06))
-            : Stops(top: canvas.opacity(0.9), bottom: canvas.opacity(0.55), highlight: canvas,
-                    hairline: ink.opacity(0.06), shadow: shadow.opacity(0.08))
-    }
-
-    /// The card's top stop over the chrome, opaque: the worst case for the
-    /// muted text under its header, and the colour that stands for the
-    /// card wherever one flat colour must.
-    static func representative(_ scheme: ColorScheme) -> NSColor {
-        let theme = ChromeTheme.active(scheme)
-        let chrome = theme.chrome.usingColorSpace(.sRGB) ?? theme.chrome
-        let (fill, alpha) = theme.polarity == .dark ? (theme.ink, darkTopStop) : (theme.canvas, 0.9)
-        let top = fill.usingColorSpace(.sRGB) ?? fill
-        func over(_ f: CGFloat, _ b: CGFloat) -> CGFloat { f * alpha + b * (1 - alpha) }
-        return NSColor(
-            srgbRed: over(top.redComponent, chrome.redComponent),
-            green: over(top.greenComponent, chrome.greenComponent),
-            blue: over(top.blueComponent, chrome.blueComponent), alpha: 1
-        )
-    }
-
-    var body: some View {
-        let stops = Self.stops(ChromeTheme.active(colorScheme))
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        shape
-            .fill(LinearGradient(colors: [stops.top, stops.bottom], startPoint: .top, endPoint: .bottom))
-            // Inner top highlight: the shape less itself 1pt lower.
-            .overlay {
-                GlassRimShape(cornerRadius: cornerRadius, kind: .topHighlight)
-                    .fill(stops.highlight, style: FillStyle(eoFill: true))
-                    .clipShape(shape)
-            }
-            .overlay { shape.strokeBorder(stops.hairline, lineWidth: 0.5) }
-            // An outer shadow only, as CSS draws it: the glow, masked to
-            // outside the shape (the fill is translucent, so a shadow of it
-            // would be too).
-            .background {
-                shape.fill(Color.black)
-                    .shadow(color: stops.shadow, radius: 6, x: 0, y: 2)
-                    .mask {
-                        GlassRimShape(cornerRadius: cornerRadius, kind: .outside)
-                            .fill(style: FillStyle(eoFill: true))
-                    }
-            }
-    }
-}
-
-/// Even-odd regions for the glass's rim, so nothing needs a blend mode
-/// (offscreen renders draw `.destinationOut` as solid black).
-private struct GlassRimShape: Shape {
-    enum Kind { case topHighlight, outside }
-    let cornerRadius: CGFloat
-    let kind: Kind
-
-    func path(in rect: CGRect) -> Path {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        var path = shape.path(in: rect)
-        switch kind {
-        case .topHighlight:
-            path.addPath(shape.path(in: rect.offsetBy(dx: 0, dy: 1)))
-        case .outside:
-            path.addRect(rect.insetBy(dx: -24, dy: -24))
-        }
-        return path
     }
 }
 

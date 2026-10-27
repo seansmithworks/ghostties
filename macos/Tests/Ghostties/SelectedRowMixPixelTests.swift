@@ -9,10 +9,9 @@ import Testing
 ///
 /// 1. The resting selected row: a 1pt `inkSecondary` outline at 0.4 round the
 ///    row over the selected-row tint, no leading stripe, in light AND dark.
-/// 2. The active-group card (the glass card) in the sidebar list and on the
-///    rail: distinguishable from the chrome in dark (Sean's failing case: the
-///    4% white card, a 0.034 lift on #242424, reads as no card), inside the
-///    band the mock's glass sets, and keeping `inkSecondary` at AA on it.
+/// 2. The active-group card in the sidebar list and on the rail: the flat
+///    beta.26 fill (`RailProjectColumn.columnFill`, white at 45% light / 4%
+///    dark over the chrome), keeping `inkSecondary` at AA on it.
 ///
 /// Raw bitmap bytes, never `colorAt(...).usingColorSpace`: `cacheDisplay` tags
 /// the bitmap with the display profile and the conversion shifts every value.
@@ -136,10 +135,14 @@ struct SelectedRowMixPixelTests {
     }
 
     /// What the resting row sits on. In dark the selected session's project
-    /// always holds the glass card, so the row renders over the card's
-    /// representative colour; light stays on the bare chrome.
+    /// always holds the group card, so the row renders over the card's fill
+    /// flattened onto the chrome; light stays on the bare chrome.
     private func rowBase(_ scheme: ColorScheme) -> NSColor {
-        scheme == .dark ? ProjectGroupCardGlass.representative(scheme) : theme(scheme).chrome
+        let chrome = theme(scheme).chrome
+        guard scheme == .dark, let c = chrome.usingColorSpace(.sRGB) else { return chrome }
+        let a = CGFloat(RailProjectColumn.columnFillOpacity(scheme))
+        return NSColor(srgbRed: c.redComponent * (1 - a) + a, green: c.greenComponent * (1 - a) + a,
+                       blue: c.blueComponent * (1 - a) + a, alpha: 1)
     }
 
     /// The row's base under the resting tint.
@@ -191,10 +194,14 @@ struct SelectedRowMixPixelTests {
     func restingRowTint(scheme: ColorScheme) throws {
         let (r, row) = try renderRow(scheme)
         let want = try tinted(scheme), bare = try rgb(rowBase(scheme))
-        #expect(abs(lum(bare) - lum(want)) > 0.02, "\(scheme): tint indistinguishable from its base (card in dark, chrome in light); gate vacuous (\(abs(lum(bare) - lum(want))))")
+        let gap = abs(lum(bare) - lum(want))
+        // Half the tint's own step, capped at 0.02: a row drawn without the
+        // tint always lands outside it (dark's flat card leaves a 0.017 step).
+        let tolerance = min(0.02, gap / 2)
+        #expect(gap > 0.01, "\(scheme): tint indistinguishable from its base (card in dark, chrome in light); gate vacuous (\(gap))")
         for fx in [0.25, 0.5, 0.75] {
             let got = try pixel(r, x: row.minX + row.width * fx, y: row.minY + 3.5)
-            #expect(abs(got.r - want.r) < 0.02 && abs(got.g - want.g) < 0.02 && abs(got.b - want.b) < 0.02,
+            #expect(abs(got.r - want.r) < tolerance && abs(got.g - want.g) < tolerance && abs(got.b - want.b) < tolerance,
                     "\(scheme) tint at \(fx): \(got) vs \(want)")
         }
     }
@@ -297,18 +304,12 @@ struct SelectedRowMixPixelTests {
         return CardProbe(lift: median(lifts), top: byLum[byLum.count / 2], runHeight: h)
     }
 
-    /// The band the mock's glass sets for the card's body, in luminance over the chrome.
-    /// Dark: ink between the gradient's 6% and 12% stops. Light: the canvas
-    /// between its 55% and 90% stops. 10% slack each side.
+    /// The card's body lift over the chrome, in luminance: white at
+    /// `columnFillOpacity` (the flat beta.26 fill). 10% slack each side.
     private func liftBand(_ scheme: ColorScheme) throws -> ClosedRange<Double> {
-        let t = theme(scheme)
-        let chrome = lum(try rgb(t.chrome))
-        if scheme == .dark {
-            let span = lum(try rgb(t.ink)) - chrome
-            return (0.06 * span * 0.9)...(0.12 * span * 1.1)
-        }
-        let span = lum(try rgb(t.canvas)) - chrome
-        return (0.55 * span * 0.9)...(0.9 * span * 1.1)
+        let chrome = lum(try rgb(theme(scheme).chrome))
+        let lift = RailProjectColumn.columnFillOpacity(scheme) * (1 - chrome)
+        return (lift * 0.9)...(lift * 1.1)
     }
 
     private func cardCase(rail: Bool, scheme: ColorScheme) throws {
@@ -321,30 +322,20 @@ struct SelectedRowMixPixelTests {
         let x = rail ? width / 2 + RailProjectTile.size(.rail) / 2 + 2 : listWidth * 0.72
         let probe = try #require(try probeCard(on, off, x: x, height: height), "\(label): no active-group card found down x=\(x)")
         let band = try liftBand(scheme)
-        #expect(band.contains(probe.lift), "\(label): card lift \(probe.lift) outside the glass band \(band)")
+        #expect(band.contains(probe.lift), "\(label): card lift \(probe.lift) outside the flat-fill band \(band)")
         // Muted text (project name, count, subtitles) stays AA on the card's brightest body.
         let ink2 = try rgb(theme(scheme).inkSecondary)
         let ratio = contrast(ink2, probe.top)
         #expect(ratio >= 4.5, "\(label): inkSecondary on the card's top \(probe.top) is \(ratio):1, below AA")
     }
 
-    @Test("Active-group card in the sidebar list: inside the glass band and AA for muted text", arguments: [ColorScheme.light, .dark])
+    @Test("Active-group card in the sidebar list: the flat fill and AA for muted text", arguments: [ColorScheme.light, .dark])
     func sidebarCard(scheme: ColorScheme) throws {
         try cardCase(rail: false, scheme: scheme)
     }
 
-    @Test("Active-group card (column) on the rail: inside the glass band and AA for muted text", arguments: [ColorScheme.light, .dark])
+    @Test("Active-group card (column) on the rail: the flat fill and AA for muted text", arguments: [ColorScheme.light, .dark])
     func railCard(scheme: ColorScheme) throws {
         try cardCase(rail: true, scheme: scheme)
-    }
-
-    @Test("Dark: the card is plainly distinguishable from the chrome (beats the old 4% white card)")
-    func darkCardBeatsTheOldFill() throws {
-        let (on, _) = try renderGroups(rail: false, selected: true, scheme: .dark)
-        let (off, _) = try renderGroups(rail: false, selected: false, scheme: .dark)
-        let probe = try #require(try probeCard(on, off, x: listWidth * 0.72, height: CGFloat(on.rep.pixelsHigh) / on.scale))
-        let t = theme(.dark)
-        let old = 0.04 * (lum(try rgb(t.ink)) - lum(try rgb(t.chrome)))
-        #expect(probe.lift >= old * 1.3, "dark card lift \(probe.lift) is not clearly above the old 4% card's \(old)")
     }
 }

@@ -29,6 +29,11 @@ final class BrowserPanelView: NSView {
         return view
     }()
 
+    #if DEBUG
+    /// Ring in the driving terminal's ghost colour while an agent is attached.
+    private let drivenByRing = BrowserDrivenByRing()
+    #endif
+
     /// Whether inline DevTools are currently visible.
     private(set) var isDevToolsVisible = false
 
@@ -64,6 +69,17 @@ final class BrowserPanelView: NSView {
         addSubview(contentArea)
         addSubview(failureStateView)
         addSubview(devToolsArea)
+        #if DEBUG
+        // Last, so it draws over the page and DevTools.
+        addSubview(drivenByRing)
+        drivenByRing.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            drivenByRing.topAnchor.constraint(equalTo: topAnchor),
+            drivenByRing.leadingAnchor.constraint(equalTo: leadingAnchor),
+            drivenByRing.trailingAnchor.constraint(equalTo: trailingAnchor),
+            drivenByRing.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        #endif
 
         navigationBar.translatesAutoresizingMaskIntoConstraints = false
         tabBar.translatesAutoresizingMaskIntoConstraints = false
@@ -112,6 +128,16 @@ final class BrowserPanelView: NSView {
             devToolsHeightConstraint,
         ])
     }
+
+    #if DEBUG
+    /// "Driven by <name>": the ring and the navigation bar's pill, both in
+    /// `color`. Nil hides both.
+    func setDrivenBy(name: String?, color: NSColor?) {
+        drivenByRing.color = color
+        drivenByRing.isHidden = name == nil
+        navigationBar.setDrivenBy(name: name, color: color)
+    }
+    #endif
 
     // MARK: - Inline DevTools
 

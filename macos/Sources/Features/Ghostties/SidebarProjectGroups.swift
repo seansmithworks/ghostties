@@ -281,6 +281,39 @@ enum ProjectSelection {
     }
 }
 
+// MARK: - Paired browser rows
+
+/// A browser an agent opened with `gt browser open` is paired with that
+/// terminal at runtime only (`SessionCoordinator.pairedBrowserByTerminal`,
+/// terminal id to browser id). Clicking either puts the same screen up, so
+/// the pair is ONE sidebar row, the terminal's: the browser has no row of
+/// its own, and the terminal's row carries a browser icon. Ending the
+/// pairing needs no cleanup here: the browser is an ordinary row again the
+/// next time a list is built.
+enum PairedBrowserRows {
+    /// The glyph for a browser everywhere in the sidebar (the composer's
+    /// browser template).
+    static let symbolName = "globe"
+
+    /// `sessions` without the browsers paired to a terminal.
+    static func visible(_ sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> [AgentSession] {
+        guard !pairedBrowsers.isEmpty else { return sessions }
+        let hidden = Set(pairedBrowsers.values)
+        return sessions.filter { !hidden.contains($0.id) }
+    }
+
+    /// True when `terminalId` has a paired browser: its row shows the icon.
+    static func hasBrowser(_ terminalId: UUID, pairedBrowsers: [UUID: UUID]) -> Bool {
+        pairedBrowsers[terminalId] != nil
+    }
+
+    /// The row that stands for `sessionId`: its terminal when it is a paired
+    /// browser, itself otherwise.
+    static func rowId(for sessionId: UUID, pairedBrowsers: [UUID: UUID]) -> UUID {
+        pairedBrowsers.first { $0.value == sessionId }?.key ?? sessionId
+    }
+}
+
 // MARK: - Row subtitle
 
 extension SessionStatusGlyphKind {
