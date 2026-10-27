@@ -1,0 +1,38 @@
+# Builds the SwiftUI iPhone app at `ios/` for the iOS Simulator. Runs only
+# when it changes. No signing: this checks that it compiles.
+
+name: Test (iOS)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ios/**"
+      - ".github/workflows/test-ios.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "ios/**"
+      - ".github/workflows/test-ios.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build for the iOS Simulator
+        run: |
+          xcodebuild build \
+            -project ios/Ghostties.xcodeproj \
+            -scheme "Ghostties iOS" \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO
