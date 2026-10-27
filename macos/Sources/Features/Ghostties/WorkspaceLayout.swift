@@ -389,6 +389,13 @@ enum WorkspaceLayout {
     /// (`RecentsListView.sectionsContent`).
     static let recentsRowGap: CGFloat = 4
 
+    /// The one-view list's only separator between pinned projects and the
+    /// alphabetical rest (mild2wild 2026-10-21 card 01): clear space added
+    /// to the usual break between project groups. The card's rows touch
+    /// (40pt pitch) and the break opens a 16pt gap (56pt pitch); here the
+    /// usual break stays and the pinned break is 16pt more, the same step.
+    static let projectPinnedBreak: CGFloat = 16
+
     /// Session name / inline-rename field text size in `RecentsRowView`.
     static let recentsRowTitleSize: CGFloat = 14
 

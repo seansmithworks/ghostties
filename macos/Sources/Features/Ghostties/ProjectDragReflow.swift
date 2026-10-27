@@ -126,6 +126,7 @@ struct ProjectDragGapView: View {
     var body: some View {
         Color.clear
             .frame(height: ProjectAccordionHeader.height(.sidebar) + SidebarProjectGroupItem.spacerHeight)
+            .redlineFrame(RedlineID.projectDragGap)
             .transition(.opacity.combined(with: .scale(scale: 0.01, anchor: .center)))
     }
 }

@@ -357,9 +357,19 @@ enum CaptureFixture {
         if let mode = initialSidebarMode {
             store.updateSidebarMode(mode)
         }
+        // `GHOSTTIES_CAPTURE_PINNED_PROJECTS`: only the listed projects stay
+        // pinned, through the same `togglePin` the menu calls.
+        let env = ProcessInfo.processInfo.environment
+        if env["GHOSTTIES_CAPTURE_PINNED_PROJECTS"] != nil {
+            let pinned = Set(projectOrder(env["GHOSTTIES_CAPTURE_PINNED_PROJECTS"]))
+            for project in store.projects where project.isPinned != pinned.contains(project.name) {
+                store.togglePin(id: project.id)
+            }
+        }
         // Listed projects first, in the given order, through the same
         // `moveProject` a header drop calls; the rest keep their order.
-        for name in projectOrder(ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_PROJECT_ORDER"]).reversed() {
+        // `moveProject` keeps each project in its pin group.
+        for name in projectOrder(env["GHOSTTIES_CAPTURE_PROJECT_ORDER"]).reversed() {
             guard let id = store.projects.first(where: { $0.name == name })?.id else { continue }
             store.moveProject(id: id, before: store.projects.first?.id)
         }

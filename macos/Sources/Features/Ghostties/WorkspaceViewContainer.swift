@@ -3464,7 +3464,7 @@ class WorkspaceViewContainer: NSView {
     /// `store.lastSelectedProjectId` (the list restores from it on mount);
     /// the list mirrors it via `.workspaceDidSelectProjectFromShortcut`.
     private func selectAdjacentProject(offset: Int) {
-        let order = store.flatProjectsInVisualOrder
+        let order = store.projectsInDisplayOrder()
         guard !order.isEmpty else { return }
         let activeProject = coordinator.activeSessionId.flatMap { id in
             store.sessions.first(where: { $0.id == id })?.projectId
@@ -3528,7 +3528,7 @@ class WorkspaceViewContainer: NSView {
             return store.railSessions(layout: .oneView, pairedBrowsers: coordinator.pairedBrowserByTerminal).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
-            return store.sessionsInVisualOrder(coordinator: coordinator)
+            return store.sessionsInVisualOrder(coordinator: coordinator, layout: projectsLayout)
         }
         return WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: store.sessions,

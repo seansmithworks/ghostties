@@ -63,8 +63,9 @@ struct RecentsListView: View {
     /// separately-called method, so `@EnvironmentObject` resolves normally
     /// through SwiftUI's own view-graph processing. Never referenced by the
     /// shipped app.
-    init(previewDragState: SessionDragState) {
+    init(previewDragState: SessionDragState, previewProjectDragState: ProjectDragState = ProjectDragState()) {
         self._dragState = State(initialValue: previewDragState)
+        self._projectDragState = State(initialValue: previewProjectDragState)
         self.skipScrollViewForTesting = true
     }
     #endif
@@ -387,9 +388,16 @@ struct RecentsListView: View {
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
-        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let allGroups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let groups = allGroups
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
-        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        // The pinned break comes from the whole list, so a pinned drag
+        // never moves it (`pinnedBreakGroupId`).
+        let pinnedBreakId = SidebarProjectGroupItem.pinnedBreakGroupId(allGroups)
+        let items = SidebarProjectGroupItem.items(
+            groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw),
+            pinnedBreakBefore: pinnedBreakId
+        )
         // One cascade through every header and row, in reading order.
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
@@ -405,14 +413,21 @@ struct RecentsListView: View {
         let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
         // Every group whose card is lit or fading carries its card's anchors.
         let cardGroups = mix.cardGroups(selected: selectedGroupId)
+        // A drop at the end of Pinned opens its gap above the pinned break,
+        // where it lands, not below it among the alphabetical projects.
+        // Every other gap opens directly above its header.
+        let gapAbovePinnedBreak = pinnedBreakId != nil && projectGapBefore == .some(pinnedBreakId)
         ForEach(items) { item in
             switch item {
-            case .spacer:
+            case .spacer(let groupId, let height):
+                if gapAbovePinnedBreak, groupId == pinnedBreakId {
+                    ProjectDragGapView()
+                }
                 Color.clear
-                    .frame(height: SidebarProjectGroupItem.spacerHeight)
+                    .frame(height: height)
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
-                if projectGapBefore == .some(group.id) {
+                if projectGapBefore == .some(group.id), !(gapAbovePinnedBreak && group.id == pinnedBreakId) {
                     ProjectDragGapView()
                 }
                 projectHeader(
@@ -470,9 +485,11 @@ struct RecentsListView: View {
         )
     }
 
-    /// One project's accordion header. A real project's header is a drag
-    /// source and a project drop target, with Move Up/Down for VoiceOver;
-    /// the "Unknown" group (no project) is neither.
+    /// One project's accordion header. A real project's header is a
+    /// project drop target; a pinned one is also a drag source, with Move
+    /// Up/Down for VoiceOver (`SidebarProjectGroup.isReorderable`: the
+    /// alphabetical block has no manual order to change). The "Unknown"
+    /// group (no project) is neither.
     @ViewBuilder
     private func projectHeader(
         _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
@@ -487,7 +504,7 @@ struct RecentsListView: View {
                 ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
             }
         } }
-        if let projectId = group.projectId, let dropSlot {
+        if let projectId = group.projectId, let dropSlot, group.isReorderable {
             let movable = header
                 .accessibilityAction(named: Text("Move Up")) { moveProject(projectId, by: -1) }
                 .accessibilityAction(named: Text("Move Down")) { moveProject(projectId, by: 1) }
@@ -513,6 +530,10 @@ struct RecentsListView: View {
             } else {
                 movable
             }
+        } else if group.projectId != nil, let dropSlot, dragInteractionsEnabledForRendering {
+            // Still a drop target, so a pinned drag over the alphabetical
+            // block keeps its gap at the pinned block's end.
+            header.onDrop(of: [.text], delegate: ProjectSlotDropDelegate(target: projectDropTarget(dropSlot), session: nil))
         } else {
             header
         }
