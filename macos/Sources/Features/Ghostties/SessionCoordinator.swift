@@ -748,6 +748,9 @@ final class SessionCoordinator: ObservableObject {
         else {
             return .json(504, ["error": "the browser did not report its DevTools target"])
         }
+        if let browserId = browserManagers.first(where: { $0.value === manager })?.key {
+            devToolsTargetByBrowser[browserId] = targetId
+        }
         return .json(200, [
             "endpoint": endpoint,
             "targetId": targetId,
@@ -803,13 +806,19 @@ final class SessionCoordinator: ObservableObject {
     @Published private(set) var agentAttachedTargets: Set<String> = []
 
     /// The gateway's attached targets changed.
-    func agentAttachmentsChanged(_ targets: Set<String>) {}
+    func agentAttachmentsChanged(_ targets: Set<String>) {
+        guard targets != agentAttachedTargets else { return }
+        agentAttachedTargets = targets
+    }
 
     /// The terminal whose agent drives `browserId`: its paired terminal,
     /// while a gateway client is attached to the browser's page. Nil when no
     /// client is attached, or the browser has no paired terminal to name.
     func agentDriver(ofBrowser browserId: UUID) -> AgentSession? {
-        nil
+        guard let target = devToolsTargetByBrowser[browserId], agentAttachedTargets.contains(target),
+              let terminal = pairedBrowserByTerminal.first(where: { $0.value == browserId })?.key
+        else { return nil }
+        return sessionStore.sessions.first { $0.id == terminal }
     }
     #endif
 
@@ -1071,6 +1080,7 @@ final class SessionCoordinator: ObservableObject {
             pairedBrowserByTerminal = pairedBrowserByTerminal.filter { $0.value != id }
             setStatus(.killed, for: id)
             #if DEBUG
+            devToolsTargetByBrowser.removeValue(forKey: id)
             NSLog("[BrowserAgent] closed browser session %@", id.uuidString)
             #endif
             if activeSessionId == id {

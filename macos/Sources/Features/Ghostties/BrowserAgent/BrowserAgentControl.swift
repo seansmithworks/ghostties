@@ -17,6 +17,20 @@ enum BrowserAgentControl {
         BrowserAgentGateway.shared.openHandler = { sessionId, url in
             await BrowserAgentControl.open(sessionId: sessionId, url: url)
         }
+        // The main queue keeps the gateway's order (each call is the whole
+        // set, so the last one must land last); a Task hop does not promise it.
+        BrowserAgentGateway.shared.onDrivenTargetsChange = { targets in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { BrowserAgentControl.drivenTargetsChanged(targets) }
+            }
+        }
+    }
+
+    /// Every window hears it: a target id belongs to at most one of them.
+    static func drivenTargetsChanged(_ targets: Set<String>) {
+        for coordinator in entries.compactMap(\.coordinator) {
+            coordinator.agentAttachmentsChanged(targets)
+        }
     }
 
     /// Routes to the coordinator that owns the terminal `sessionId`.
