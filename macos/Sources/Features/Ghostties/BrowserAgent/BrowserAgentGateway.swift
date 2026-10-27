@@ -61,6 +61,28 @@ final class BrowserAgentGateway: @unchecked Sendable {
     }
     private var _openHandler: (@Sendable (UUID, String) async -> BrowserAgentHTTP.Response)?
 
+    /// Called with the full set of driven targets whenever it changes (an
+    /// agent attached to or let go of a page), on a gateway queue.
+    var onDrivenTargetsChange: (@Sendable (Set<String>) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return _onDrivenTargetsChange }
+        set { lock.lock(); _onDrivenTargetsChange = newValue; lock.unlock() }
+    }
+    private var _onDrivenTargetsChange: (@Sendable (Set<String>) -> Void)?
+
+    private var attachments = BrowserAgentAttachments()
+
+    /// Applies `change` to the attachments and reports the driven set if it
+    /// moved. Reports under the lock, so changes from different routes'
+    /// queues arrive in order.
+    fileprivate func updateAttachments(_ change: (inout BrowserAgentAttachments) -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        let before = attachments.drivenTargets
+        change(&attachments)
+        let after = attachments.drivenTargets
+        if after != before { _onDrivenTargetsChange?(after) }
+    }
+
     private var http: BrowserAgentHTTP.Server?
     private var publisher: BrowserControlPublisher?
 
@@ -320,10 +342,24 @@ final class BrowserAgentGateway: @unchecked Sendable {
             sessionsLock.lock()
             sessions[key] = session
             sessionsLock.unlock()
-            session.onClose = { [weak self] in
+            // The client is attached to a page route's page for as long as
+            // its socket is open; to any other page while CEF says so.
+            let client = UUID()
+            let pagePrefix = "/devtools/page/"
+            let target = path.hasPrefix(pagePrefix) ? String(path.dropFirst(pagePrefix.count)) : nil
+            gateway.updateAttachments {
+                $0.connect(client: client)
+                if let target { $0.attach(client: client, target: target) }
+            }
+            session.onUpstreamText = { [weak gateway] text in
+                guard BrowserAgentAttachments.mayBeAttachEvent(text) else { return }
+                gateway?.updateAttachments { $0.observe(upstreamFrame: text, client: client) }
+            }
+            session.onClose = { [weak self, weak gateway] in
                 self?.sessionsLock.lock()
                 self?.sessions.removeValue(forKey: key)
                 self?.sessionsLock.unlock()
+                gateway?.updateAttachments { $0.removeClient(client) }
             }
             session.start()
         }
@@ -339,6 +375,8 @@ final class BrowserAgentGateway: @unchecked Sendable {
         private let stateLock = NSLock()
         private var closed = false
         var onClose: (() -> Void)?
+        /// Every text frame CEF sends this client, before it is forwarded.
+        var onUpstreamText: ((String) -> Void)?
 
         init(client: NWConnection, upstreamURL: URL, queue: DispatchQueue) {
             self.client = client
@@ -421,7 +459,9 @@ final class BrowserAgentGateway: @unchecked Sendable {
                     self.close()
                 case .success(let message):
                     switch message {
-                    case .string(let text): self.sendToClient(Data(text.utf8), opcode: .text)
+                    case .string(let text):
+                        self.onUpstreamText?(text)
+                        self.sendToClient(Data(text.utf8), opcode: .text)
                     case .data(let data): self.sendToClient(data, opcode: .binary)
                     @unknown default: break
                     }

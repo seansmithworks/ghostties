@@ -748,6 +748,9 @@ final class SessionCoordinator: ObservableObject {
         else {
             return .json(504, ["error": "the browser did not report its DevTools target"])
         }
+        if let browserId = browserManagers.first(where: { $0.value === manager })?.key {
+            devToolsTargetByBrowser[browserId] = targetId
+        }
         return .json(200, [
             "endpoint": endpoint,
             "targetId": targetId,
@@ -792,6 +795,32 @@ final class SessionCoordinator: ObservableObject {
     /// browser itself. Focusing the terminal keeps its paired browser beside
     /// it instead of collapsing the panel.
     @Published private(set) var pairedBrowserByTerminal: [UUID: UUID] = [:]
+
+    #if DEBUG
+    /// Browser session -> its page's DevTools target id, as `gt browser
+    /// open` reported it. Runtime only, like the pairing.
+    private var devToolsTargetByBrowser: [UUID: String] = [:]
+
+    /// DevTools targets an agent is attached to through the gateway right
+    /// now (`BrowserAgentAttachments.drivenTargets`).
+    @Published private(set) var agentAttachedTargets: Set<String> = []
+
+    /// The gateway's attached targets changed.
+    func agentAttachmentsChanged(_ targets: Set<String>) {
+        guard targets != agentAttachedTargets else { return }
+        agentAttachedTargets = targets
+    }
+
+    /// The terminal whose agent drives `browserId`: its paired terminal,
+    /// while a gateway client is attached to the browser's page. Nil when no
+    /// client is attached, or the browser has no paired terminal to name.
+    func agentDriver(ofBrowser browserId: UUID) -> AgentSession? {
+        guard let target = devToolsTargetByBrowser[browserId], agentAttachedTargets.contains(target),
+              let terminal = pairedBrowserByTerminal.first(where: { $0.value == browserId })?.key
+        else { return nil }
+        return sessionStore.sessions.first { $0.id == terminal }
+    }
+    #endif
 
     // MARK: - Session Switching
 
@@ -1051,6 +1080,7 @@ final class SessionCoordinator: ObservableObject {
             pairedBrowserByTerminal = pairedBrowserByTerminal.filter { $0.value != id }
             setStatus(.killed, for: id)
             #if DEBUG
+            devToolsTargetByBrowser.removeValue(forKey: id)
             NSLog("[BrowserAgent] closed browser session %@", id.uuidString)
             #endif
             if activeSessionId == id {
@@ -2332,6 +2362,12 @@ final class SessionCoordinator: ObservableObject {
     /// CEF. Never used in production.
     func seedPairedBrowserForTesting(terminal: UUID, browser: UUID) {
         pairedBrowserByTerminal[terminal] = browser
+    }
+
+    /// Test-only: records `target` as `browser`'s DevTools target id, as
+    /// `gt browser open` would. Never used in production.
+    func seedDevToolsTargetForTesting(browser: UUID, target: String) {
+        devToolsTargetByBrowser[browser] = target
     }
 
     /// Test-only: seed a "live" session (running + producing recent output)

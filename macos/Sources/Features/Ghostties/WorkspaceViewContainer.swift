@@ -2379,6 +2379,9 @@ class WorkspaceViewContainer: NSView {
     /// Called by SessionCoordinator when switching to or creating a browser session.
     func showBrowserContent(_ manager: BrowserTabManager, bridge: BrowserSessionBridge?) {
         embedBrowserInPanel(manager)
+        #if DEBUG
+        refreshBrowserDrivenBy()
+        #endif
 
         // Wire the bridge if provided (overrides the one found in embedBrowserInPanel).
         if let bridge = bridge {
@@ -2404,6 +2407,9 @@ class WorkspaceViewContainer: NSView {
             animateBrowserPanel(visible: false)
         }
         _activeBrowserManager = nil
+        #if DEBUG
+        refreshBrowserDrivenBy()
+        #endif
     }
 
     /// Weak reference to the active browser manager for navigation actions.
@@ -4189,7 +4195,36 @@ class WorkspaceViewContainer: NSView {
                 self.railHover.dismiss(pointerInside: self.pointerIsOverRail)
             }
             .store(in: &cancellables)
+
+        #if DEBUG
+        // "Driven by": who drives the shown browser, and in what colour, can
+        // change with an attach, a pairing, a rename or the project's activity.
+        Publishers.MergeMany(
+            coordinator.$agentAttachedTargets.map { _ in () }.eraseToAnyPublisher(),
+            coordinator.$pairedBrowserByTerminal.map { _ in () }.eraseToAnyPublisher(),
+            store.$sessions.map { _ in () }.eraseToAnyPublisher(),
+            store.$projects.map { _ in () }.eraseToAnyPublisher(),
+            store.$globalIndicatorStates.map { _ in () }.eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.refreshBrowserDrivenBy() }
+        .store(in: &cancellables)
+        #endif
     }
+
+    #if DEBUG
+    /// Shows or hides "Driven by" on the browser panel for the browser it is
+    /// showing. The colour is the driving terminal's project ghost colour,
+    /// the one its sidebar ghost wears.
+    private func refreshBrowserDrivenBy() {
+        let driver = coordinator.shownBrowserSessionId.flatMap { coordinator.agentDriver(ofBrowser: $0) }
+        let project = driver.flatMap { driver in store.projects.first { $0.id == driver.projectId } }
+        browserPanelView.setDrivenBy(
+            name: project == nil ? nil : driver?.name,
+            color: project.map { NSColor(store.projectGhostColor(for: $0)) }
+        )
+    }
+    #endif
 
     /// Mounts the history browser over the terminal, inside the canvas card,
     /// while History is selected; unmounts it otherwise. Focus goes to the
