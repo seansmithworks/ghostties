@@ -38,6 +38,10 @@ struct RecentsRowView: View, Equatable {
     var prompt: SessionRowPrompt? = nil
     /// `ApprovalFlag` as the list read it: Approve/Deny draw only while on.
     var approvalsEnabled: Bool = false
+    /// An agent's browser is attached to this terminal (`gt browser open`):
+    /// the row shows a browser icon after its status, since the browser has
+    /// no row of its own (`PairedBrowserRows`).
+    var hasPairedBrowser: Bool = false
     let isActive: Bool
     var isEditing: Bool = false
     @Binding var editingName: String
@@ -86,6 +90,7 @@ struct RecentsRowView: View, Equatable {
             && lhs.subtitle == rhs.subtitle
             && lhs.prompt == rhs.prompt
             && lhs.approvalsEnabled == rhs.approvalsEnabled
+            && lhs.hasPairedBrowser == rhs.hasPairedBrowser
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
@@ -100,6 +105,7 @@ struct RecentsRowView: View, Equatable {
         SidebarListRowChrome(
             subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
             isActive: isActive,
+            trailingSymbol: hasPairedBrowser ? PairedBrowserRows.symbolName : nil,
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id),
             mixID: session.id,
@@ -195,7 +201,8 @@ struct RecentsRowView: View, Equatable {
         Self.accessibilityLabel(
             name: session.name, projectName: projectName, kind: indicatorState.statusGlyphKind,
             question: prompt?.question,
-            hookUnconfirmed: hookUnconfirmed, lastOutput: session.displayTimestamp, isActive: isActive
+            hookUnconfirmed: hookUnconfirmed, hasPairedBrowser: hasPairedBrowser,
+            lastOutput: session.displayTimestamp, isActive: isActive
         )
     }
 
@@ -205,7 +212,7 @@ struct RecentsRowView: View, Equatable {
     static func accessibilityLabel(
         name: String, projectName: String, kind: SessionStatusGlyphKind,
         question: String? = nil,
-        hookUnconfirmed: Bool = false, lastOutput: Date? = nil, isActive: Bool
+        hookUnconfirmed: Bool = false, hasPairedBrowser: Bool = false, lastOutput: Date? = nil, isActive: Bool
     ) -> String {
         // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
         // renders from — this row previously stated no status at all.
@@ -214,6 +221,7 @@ struct RecentsRowView: View, Equatable {
         if hookUnconfirmed {
             parts.append("Approve the Ghostties hook in Codex")
         }
+        if hasPairedBrowser { parts.append("browser open") }
         if let ts = lastOutput {
             // "last output" — not a bare relative token — so a screen reader
             // has a noun for what this measures. Browsing (focus/selection)
@@ -444,6 +452,9 @@ struct SidebarListRowTitle: View {
 struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     let subtitle: String
     let isActive: Bool
+    /// An SF Symbol shown after the labels (a small accessory such as the
+    /// paired-browser icon), faded with them on the rail; nil shows none.
+    var trailingSymbol: String? = nil
     /// The row's place in the expand cascade, one index across every
     /// section and header (`SidebarLabelCascade`) — feeds
     /// `WorkspaceLayout.morphFadeWindow`.
@@ -524,6 +535,14 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     .modifier(MorphLabelFade(staggerIndex: staggerIndex))
 
                     Spacer(minLength: 4)
+
+                    if let trailingSymbol {
+                        Image(systemName: trailingSymbol)
+                            .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
+                            .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+                            .modifier(MorphLabelFade(staggerIndex: staggerIndex))
+                            .accessibilityHidden(true)
+                    }
                 }
                 // The title band: the glyph and labels centre in it whether or
                 // not an action line follows.

@@ -13,6 +13,9 @@
 #import "include/cef_browser.h"
 #import "include/cef_client.h"
 #import "include/cef_life_span_handler.h"
+#import "include/cef_devtools_message_observer.h"
+#import "include/cef_registration.h"
+#include <vector>
 #import "include/cef_display_handler.h"
 #import "include/cef_load_handler.h"
 #import "include/wrapper/cef_helpers.h"
@@ -57,6 +60,12 @@ static bool GhosttiesIsAllowedSchemeCef(const CefString &url) {
 - (void)_startCreationWatchdog;
 - (void)_browserDidCreate:(CefRefPtr<CefBrowser>)browser;
 - (void)_browserDidClose;
+- (BOOL)_isAppInitiatedClose;
+- (BOOL)_isMainBrowser:(CefRefPtr<CefBrowser>)browser;
+- (BOOL)_hasMainBrowser;
+- (BOOL)_isPageBrowser:(CefRefPtr<CefBrowser>)browser;
+- (void)_noteOutsideCloseAccepted;
+- (void)_browserDidRequestClose;
 #endif
 @end
 
@@ -73,7 +82,7 @@ public:
                          const CefString &url) override {
         if (!frame->IsMain()) return;
         CEFBrowserView *v = view_;
-        if (!v) return;
+        if (!v || ![v _isPageBrowser:browser]) return;
         NSString *nsURL = [NSString stringWithUTF8String:url.ToString().c_str()];
         dispatch_async(dispatch_get_main_queue(), ^{
             [v _didChangeURL:nsURL];
@@ -83,7 +92,7 @@ public:
     void OnTitleChange(CefRefPtr<CefBrowser> browser,
                        const CefString &title) override {
         CEFBrowserView *v = view_;
-        if (!v) return;
+        if (!v || ![v _isPageBrowser:browser]) return;
         NSString *nsTitle = [NSString stringWithUTF8String:title.ToString().c_str()];
         dispatch_async(dispatch_get_main_queue(), ^{
             [v _didChangeTitle:nsTitle];
@@ -106,7 +115,7 @@ public:
                               bool canGoBack,
                               bool canGoForward) override {
         CEFBrowserView *v = view_;
-        if (!v) return;
+        if (!v || ![v _isPageBrowser:browser]) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             [v _didChangeLoadingState:isLoading
                             canGoBack:canGoBack
@@ -161,7 +170,9 @@ public:
         NSLog(@"[CEFDiag] OnAfterCreated fired — browser materialised.");
 #endif
         CEFBrowserView *v = view_;
-        if (v) {
+        // Inline DevTools shares this client, so it reports here too; only the
+        // first browser the view creates is the page.
+        if (v && ![v _hasMainBrowser]) {
             [v _browserDidCreate:browser];
         }
     }
@@ -171,15 +182,28 @@ public:
     // (it raises "Close Window?" and, on a repeat, closes every terminal).
     // Returning true tells CEF we own the close: it proceeds to destroy the
     // browser and fires OnBeforeClose, where the view is removed.
+    //
+    // A close the app did not start (`Page.close`, `Target.closeTarget`,
+    // `window.close()`) is reported to the delegate so the UI can drop the
+    // tab. Always returns true: the delegate decides what closing means, and
+    // it must never fall through to the window.
     bool DoClose(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
+        CEFBrowserView *v = view_;
+        // DevTools (same client) closing is not the page closing.
+        if (v && [v _isMainBrowser:browser] && ![v _isAppInitiatedClose]) {
+            [v _noteOutsideCloseAccepted];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [v _browserDidRequestClose];
+            });
+        }
         return true;
     }
 
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
         CEFBrowserView *v = view_;
-        if (v) {
+        if (v && [v _isMainBrowser:browser]) {
             [v _browserDidClose];
         }
     }
@@ -217,6 +241,52 @@ private:
     IMPLEMENT_REFCOUNTING(GhosttiesCefClient);
 };
 
+#pragma mark - GhosttiesTargetIdObserver
+
+/// Message ids for in-process DevTools calls. Explicit ids must keep
+/// increasing per browser, so every caller draws from one counter.
+static int GhosttiesNextDevToolsMessageId() {
+    static int next = 1000000;
+    return next++;
+}
+
+/// One-shot observer for a single `Target.getTargetInfo` call. Reads
+/// `targetInfo.targetId` out of the method result and hands it to the
+/// completion on the main queue.
+class GhosttiesTargetIdObserver : public CefDevToolsMessageObserver {
+public:
+    explicit GhosttiesTargetIdObserver(void (^completion)(NSString * _Nullable))
+        : completion_([completion copy]) {}
+
+    void SetMessageId(int messageId) { messageId_ = messageId; }
+
+    void OnDevToolsMethodResult(CefRefPtr<CefBrowser> browser,
+                                int message_id,
+                                bool success,
+                                const void* result,
+                                size_t result_size) override {
+        if (message_id != messageId_ || !completion_) return;
+        NSString *targetId = nil;
+        if (success && result && result_size > 0) {
+            NSData *data = [NSData dataWithBytes:result length:result_size];
+            id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if ([json isKindOfClass:[NSDictionary class]]) {
+                id info = ((NSDictionary *)json)[@"targetInfo"];
+                id tid = [info isKindOfClass:[NSDictionary class]] ? ((NSDictionary *)info)[@"targetId"] : nil;
+                if ([tid isKindOfClass:[NSString class]] && [(NSString *)tid length] > 0) targetId = tid;
+            }
+        }
+        void (^done)(NSString * _Nullable) = completion_;
+        completion_ = nil;
+        dispatch_async(dispatch_get_main_queue(), ^{ done(targetId); });
+    }
+
+private:
+    int messageId_ = 0;
+    void (^completion_)(NSString * _Nullable);
+    IMPLEMENT_REFCOUNTING(GhosttiesTargetIdObserver);
+};
+
 #endif // GHOSTTIES_CEF_AVAILABLE
 
 #pragma mark - CEFBrowserView private interface
@@ -225,8 +295,14 @@ private:
 #if GHOSTTIES_CEF_AVAILABLE
     CefRefPtr<CefBrowser> _browser;
     CefRefPtr<GhosttiesCefClient> _client;
+    /// Keeps DevTools observers registered until they have delivered.
+    std::vector<CefRefPtr<CefRegistration>> _devToolsRegistrations;
 #endif
 }
+
+/// Work waiting for `OnAfterCreated` (e.g. a target-id lookup issued right
+/// after creating the view). Drained in -_browserDidCreate:.
+@property (nonatomic, strong) NSMutableArray<void (^)(void)> *afterCreateBlocks;
 
 #if DEBUG
 /// Set from OnAfterCreated (via -_browserDidCreate:), read by the
@@ -244,6 +320,14 @@ private:
 @property (nonatomic, readwrite) BOOL creationFailed;
 @property (nonatomic, readwrite) BOOL creationFailedDueToPreviousCrash;
 @property (nonatomic, readwrite) BOOL isDevToolsOpen;
+/// Set once the app itself asks the browser to close (-closeBrowser or
+/// dealloc), so `DoClose` can tell that apart from a close that came from
+/// the page or a DevTools client.
+@property (nonatomic) BOOL appInitiatedClose;
+/// Set when `DoClose` accepted a close that did not come from the app. CEF
+/// then considers the close under way, so a later `CloseBrowser` is a no-op
+/// and the browser has to be finished by tearing down its native view.
+@property (nonatomic) BOOL outsideCloseAccepted;
 /// Pending URL captured at init time; consumed the moment creation is
 /// actually attempted (deferred until the view is in a window).
 @property (nonatomic, copy, nullable) NSString *pendingURL;
@@ -273,6 +357,7 @@ private:
     self.browserCreated = NO;
 
     self.pendingURL = url ?: @"about:blank";
+    self.afterCreateBlocks = [NSMutableArray array];
 
 #if GHOSTTIES_CEF_AVAILABLE
     [CEFBridgeManager initializeIfNeeded];
@@ -311,6 +396,7 @@ private:
     _creationWatchdogTimer = nil;
 #if GHOSTTIES_CEF_AVAILABLE
     if (_browser) {
+        _appInitiatedClose = YES;
         // NOTE: this view does NOT own the browser-open-attempt sentinel —
         // see CEFBridgeManager. The sentinel is process-global (one CEF
         // process can host several CEFBrowserView tabs at once, via
@@ -331,6 +417,10 @@ private:
 }
 
 #pragma mark - Navigation
+
++ (BOOL)isAllowedURL:(NSString *)url {
+    return GhosttiesIsAllowedScheme(url);
+}
 
 - (void)loadURL:(NSString *)url {
 #if GHOSTTIES_CEF_AVAILABLE
@@ -421,13 +511,88 @@ private:
 - (void)closeBrowser {
 #if GHOSTTIES_CEF_AVAILABLE
     if (_browser) {
+        self.appInitiatedClose = YES;
         _browser->GetHost()->CloseBrowser(true);
+        if (self.outsideCloseAccepted) {
+            // DoClose already accepted this close (see the property), so the
+            // call above did nothing. CEF's contract for DoClose() == true is
+            // that the app completes the close by tearing down the host
+            // view hierarchy; OnBeforeClose follows from that.
+            for (NSView *child in [self.subviews copy]) {
+                [child removeFromSuperview];
+            }
+        }
         // _browser is nilled in OnBeforeClose callback
     }
 #else
     NSLog(@"[CEFBrowserView] closeBrowser: stub — CEF not available");
 #endif
 }
+
+#pragma mark - DevTools target id
+
+- (void)fetchDevToolsTargetIdWithTimeout:(NSTimeInterval)timeout
+                              completion:(void (^)(NSString * _Nullable))completion {
+    // Whichever of result / timeout lands first wins; the other is a no-op.
+    __block BOOL finished = NO;
+    void (^finish)(NSString * _Nullable) = ^(NSString * _Nullable targetId) {
+        if (finished) return;
+        finished = YES;
+        completion(targetId);
+    };
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ finish(nil); });
+#if GHOSTTIES_CEF_AVAILABLE
+    __weak CEFBrowserView *weakSelf = self;
+    void (^run)(void) = ^{
+        CEFBrowserView *strongSelf = weakSelf;
+        if (!strongSelf || !strongSelf->_browser) { finish(nil); return; }
+        CefRefPtr<GhosttiesTargetIdObserver> observer(new GhosttiesTargetIdObserver(finish));
+        CefRefPtr<CefRegistration> registration =
+            strongSelf->_browser->GetHost()->AddDevToolsMessageObserver(observer);
+        strongSelf->_devToolsRegistrations.push_back(registration);
+        // CEF can deliver the result before ExecuteDevToolsMethod returns, so
+        // the id must be chosen up front rather than read from the return
+        // value.
+        int messageId = GhosttiesNextDevToolsMessageId();
+        observer->SetMessageId(messageId);
+        int rc = strongSelf->_browser->GetHost()->ExecuteDevToolsMethod(
+                messageId, "Target.getTargetInfo", nullptr);
+        if (rc == 0) {
+            finish(nil);
+        }
+    };
+    if (_browser) {
+        run();
+    } else {
+        [self.afterCreateBlocks addObject:[run copy]];
+    }
+#else
+    dispatch_async(dispatch_get_main_queue(), ^{ finish(nil); });
+#endif
+}
+
+#if DEBUG
+- (void)simulateSharedClientEventsForTesting:(CEFBrowserView *)other {
+#if GHOSTTIES_CEF_AVAILABLE
+    if (!_client || !other->_browser) return;
+    CefRefPtr<CefLifeSpanHandler> handler = _client->GetLifeSpanHandler();
+    handler->OnAfterCreated(other->_browser);
+    handler->DoClose(other->_browser);
+    handler->OnBeforeClose(other->_browser);
+#endif
+}
+
+- (BOOL)executeDevToolsMethodForTesting:(NSString *)method {
+#if GHOSTTIES_CEF_AVAILABLE
+    if (!_browser) return NO;
+    return _browser->GetHost()->ExecuteDevToolsMethod(
+        GhosttiesNextDevToolsMessageId(), CefString([method UTF8String]), nullptr) != 0;
+#else
+    return NO;
+#endif
+}
+#endif
 
 #pragma mark - Layout
 
@@ -745,10 +910,43 @@ private:
     if ([self.delegate respondsToSelector:@selector(browserViewDidCreate:)]) {
         [self.delegate browserViewDidCreate:self];
     }
+    NSArray<void (^)(void)> *waiting = [self.afterCreateBlocks copy];
+    [self.afterCreateBlocks removeAllObjects];
+    for (void (^block)(void) in waiting) block();
+}
+
+- (BOOL)_hasMainBrowser {
+    return _browser != nullptr;
+}
+
+/// The page's browser, or any browser before the page's own exists (its
+/// loading events can precede OnAfterCreated). Excludes inline DevTools,
+/// which shares the client.
+- (BOOL)_isPageBrowser:(CefRefPtr<CefBrowser>)browser {
+    return !_browser || [self _isMainBrowser:browser];
+}
+
+- (BOOL)_isMainBrowser:(CefRefPtr<CefBrowser>)browser {
+    return _browser && browser && _browser->GetIdentifier() == browser->GetIdentifier();
+}
+
+- (BOOL)_isAppInitiatedClose {
+    return self.appInitiatedClose;
+}
+
+- (void)_noteOutsideCloseAccepted {
+    self.outsideCloseAccepted = YES;
+}
+
+- (void)_browserDidRequestClose {
+    if ([self.delegate respondsToSelector:@selector(browserViewDidRequestClose:)]) {
+        [self.delegate browserViewDidRequestClose:self];
+    }
 }
 
 - (void)_browserDidClose {
     _browser = nullptr;
+    _devToolsRegistrations.clear();
     [self removeFromSuperview];
 }
 #endif

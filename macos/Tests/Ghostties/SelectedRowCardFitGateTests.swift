@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 @testable import Ghostty
 
-/// Amendment 5 (`docs/plans/selected-row-mix-contract.md`): the glass
+/// Amendment 5 (`docs/plans/selected-row-mix-contract.md`): the
 /// active-group card wraps the selected-row plate with an even 4pt gap on
 /// every side, measured from the card edge to the plate's drawn box, with
 /// concentric corners (plate radius 8 + gap 4 = card radius 12). The card's

@@ -385,8 +385,8 @@ enum SidebarColorsDialPanel: FocusedDialPanel {
 
     /// Recomputes the contrast rows from the panel's own colours.
     static func derive(_ model: inout Model, defaults: UserDefaults) {
-        // The flat group card the glass replaced (`ProjectGroupCardGlass`): a white lift over
-        // the chrome in both appearances; in dark, the "Column tint" dial.
+        // The group card (`RailProjectColumn.columnFill`): a white lift over the chrome
+        // in both appearances; in dark, the "Column tint" dial.
         func cardOpacity(_ scheme: ColorScheme) -> Double {
             scheme == .dark
                 ? min(max(SidebarDialTuning.railColumnTintOpacity(defaults: defaults), 0), 1)
