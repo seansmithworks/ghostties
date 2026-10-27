@@ -346,9 +346,10 @@ final class BrowserAgentGateway: @unchecked Sendable {
             // its socket is open; to any other page while CEF says so.
             let client = UUID()
             let pagePrefix = "/devtools/page/"
-            if path.hasPrefix(pagePrefix) {
-                let target = String(path.dropFirst(pagePrefix.count))
-                gateway.updateAttachments { $0.attach(client: client, target: target) }
+            let target = path.hasPrefix(pagePrefix) ? String(path.dropFirst(pagePrefix.count)) : nil
+            gateway.updateAttachments {
+                $0.connect(client: client)
+                if let target { $0.attach(client: client, target: target) }
             }
             session.onUpstreamText = { [weak gateway] text in
                 guard BrowserAgentAttachments.mayBeAttachEvent(text) else { return }

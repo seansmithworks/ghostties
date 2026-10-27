@@ -10,6 +10,9 @@ import Foundation
 /// `Target.attachedToTarget` and `Target.detachedFromTarget` events in what
 /// CEF sends back, keyed by CDP session id. A target is driven while any
 /// client holds it.
+///
+/// A client holds nothing until `connect` and nothing after `removeClient`:
+/// a frame still in flight when its socket closed cannot drive a page again.
 struct BrowserAgentAttachments: Equatable {
     /// The CDP session key for the target a page route itself names.
     static let routeKey = ""
@@ -17,12 +20,21 @@ struct BrowserAgentAttachments: Equatable {
     /// Client -> (CDP session id -> target id).
     private var targetsByClient: [UUID: [String: String]] = [:]
 
+    /// Clients whose socket is open.
+    private var liveClients: Set<UUID> = []
+
     /// Every target at least one client is attached to.
     var drivenTargets: Set<String> {
         Set(targetsByClient.values.flatMap(\.values))
     }
 
+    /// The client's socket opened. Only a connected client can attach.
+    mutating func connect(client: UUID) {
+        liveClients.insert(client)
+    }
+
     mutating func attach(client: UUID, target: String, cdpSession: String = routeKey) {
+        guard liveClients.contains(client) else { return }
         targetsByClient[client, default: [:]][cdpSession] = target
     }
 
@@ -33,6 +45,7 @@ struct BrowserAgentAttachments: Equatable {
 
     /// The client's socket closed: everything it held is released.
     mutating func removeClient(_ client: UUID) {
+        liveClients.remove(client)
         targetsByClient.removeValue(forKey: client)
     }
 

@@ -18,13 +18,17 @@ struct BrowserDrivenByTests {
 
     @Test func aClientOnAPageRouteDrivesThatPage() {
         var attachments = BrowserAgentAttachments()
-        attachments.attach(client: UUID(), target: Self.page)
+        let client = UUID()
+        attachments.connect(client: client)
+        attachments.attach(client: client, target: Self.page)
         #expect(attachments.drivenTargets == [Self.page])
     }
 
     @Test func oneOfTwoClientsLeavingKeepsThePageDriven() {
         var attachments = BrowserAgentAttachments()
         let first = UUID(), second = UUID()
+        attachments.connect(client: first)
+        attachments.connect(client: second)
         attachments.attach(client: first, target: Self.page)
         attachments.attach(client: second, target: Self.page)
         attachments.removeClient(first)
@@ -34,6 +38,8 @@ struct BrowserDrivenByTests {
     @Test func theLastClientLeavingEndsIt() {
         var attachments = BrowserAgentAttachments()
         let first = UUID(), second = UUID()
+        attachments.connect(client: first)
+        attachments.connect(client: second)
         attachments.attach(client: first, target: Self.page)
         attachments.attach(client: second, target: Self.page)
         attachments.removeClient(first)
@@ -46,6 +52,7 @@ struct BrowserDrivenByTests {
     @Test func aBrowserRouteClientDrivesThePagesItAttachesTo() {
         var attachments = BrowserAgentAttachments()
         let client = UUID()
+        attachments.connect(client: client)
         attachments.observe(upstreamFrame: #"{"method":"Target.attachedToTarget","params":{"sessionId":"S1","targetInfo":{"targetId":"\#(Self.page)","type":"page","title":"","url":"about:blank","attached":true},"waitingForDebugger":false}}"#, client: client)
         #expect(attachments.drivenTargets == [Self.page])
 
@@ -53,10 +60,25 @@ struct BrowserDrivenByTests {
         #expect(attachments.drivenTargets.isEmpty)
     }
 
+    @Test func aLateFrameForAClosedClientCannotDriveAgain() {
+        var attachments = BrowserAgentAttachments()
+        let client = UUID()
+        attachments.connect(client: client)
+        attachments.attach(client: client, target: Self.page)
+        #expect(attachments.drivenTargets == [Self.page])
+        attachments.removeClient(client)
+        // An upstream receive already in flight when the socket closed.
+        attachments.observe(upstreamFrame: #"{"method":"Target.attachedToTarget","params":{"sessionId":"S9","targetInfo":{"targetId":"\#(Self.page)","type":"page"},"waitingForDebugger":false}}"#, client: client)
+        attachments.attach(client: client, target: Self.page)
+        #expect(attachments.drivenTargets.isEmpty, "a closed client drove the page again")
+    }
+
     @Test func workersAndOtherFramesAreNotPages() {
         var attachments = BrowserAgentAttachments()
-        attachments.observe(upstreamFrame: #"{"method":"Target.attachedToTarget","params":{"sessionId":"S2","targetInfo":{"targetId":"W1","type":"service_worker"},"waitingForDebugger":false}}"#, client: UUID())
-        attachments.observe(upstreamFrame: #"{"id":4,"result":{"data":"Target.attachedToTarget"}}"#, client: UUID())
+        let client = UUID()
+        attachments.connect(client: client)
+        attachments.observe(upstreamFrame: #"{"method":"Target.attachedToTarget","params":{"sessionId":"S2","targetInfo":{"targetId":"W1","type":"service_worker"},"waitingForDebugger":false}}"#, client: client)
+        attachments.observe(upstreamFrame: #"{"id":4,"result":{"data":"Target.attachedToTarget"}}"#, client: client)
         #expect(attachments.drivenTargets.isEmpty)
     }
 
