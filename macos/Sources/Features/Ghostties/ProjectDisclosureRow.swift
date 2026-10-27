@@ -142,7 +142,10 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     /// Drag-drop reordering still respects the project's flat `sortOrder` —
     /// drag is bucket-local for now (R-D requirements).
     private var sessionGroups: [(SessionBucket, [AgentSession])] {
+        // A paired browser shares its terminal's row, so it is never listed.
         store.sessionGroups(forProject: project.id, startedThisLaunch: sessionIdsStartedThisLaunch)
+            .map { ($0.0, PairedBrowserRows.visible($0.1, pairedBrowsers: coordinator.pairedBrowserByTerminal)) }
+            .filter { !$0.1.isEmpty }
     }
 
     @ViewBuilder
@@ -186,7 +189,8 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         SessionRow(
             session: session,
             indicatorState: coordinator.indicatorState(for: session.id),
-            isActive: coordinator.activeSessionId == session.id,
+            isActive: coordinator.activeSessionId.map { PairedBrowserRows.rowId(for: $0, pairedBrowsers: coordinator.pairedBrowserByTerminal) } == session.id,
+            hasPairedBrowser: PairedBrowserRows.hasBrowser(session.id, pairedBrowsers: coordinator.pairedBrowserByTerminal),
             isEditing: editingSessionId == session.id,
             agentTemplateName: agentTemplateName(for: session),
             editingName: editingSessionId == session.id ? $editingName : .constant(""),
