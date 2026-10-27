@@ -423,7 +423,7 @@ final class VisualPassUITests: XCTestCase {
     // MARK: - 17. Onboarding
 
     func testOnboarding() throws {
-        // OnboardingSheet is presented from `WorkspaceSidebarView` based on a
+        // OnboardingSheet is presented by `onboardingSheet()` on the sidebar container, based on a
         // persisted `hasSeenOnboarding` flag, not from any AppDelegate menu
         // item — grep of AppDelegate found no onboarding reference.
         unreachable("onboarding", "not reachable from a menu item; gated by a persisted hasSeenOnboarding flag with no menu trigger")

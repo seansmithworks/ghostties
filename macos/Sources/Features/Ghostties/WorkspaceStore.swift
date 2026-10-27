@@ -221,6 +221,13 @@ final class WorkspaceStore: ObservableObject {
         // Seed bundled presets to ~/.ghostties/presets/ on first launch.
         PresetLoader.seedIfNeeded()
         HookInstaller.seedIfNeeded()
+        // Merge our hook into ~/.claude/settings.json (idempotent). Not from
+        // a unit-test host or a capture run (both would write the developer's
+        // real settings), and only once the script it points at exists.
+        if !isRunningUnderXCTest, !CaptureFixture.isActive,
+           FileManager.default.fileExists(atPath: HookInstaller.scriptPath) {
+            ClaudeHookRegistrar.register(scriptPath: HookInstaller.scriptPath)
+        }
 
         // Load file-based presets from ~/.ghostties/presets/ and sanitize them.
         let presetsResult = PresetLoader.loadPresetsResult()
