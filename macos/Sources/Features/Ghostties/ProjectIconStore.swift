@@ -5,7 +5,7 @@ import GhosttiesCore
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Owns the 128px icon image for each project. Not wired into any view yet.
+/// Owns the 128px icon image for each project, drawn in its sidebar tile.
 ///
 /// Resolution happens off the main thread on a utility queue and never on a
 /// render path: views call `image(for:)`, which is an in-memory lookup only,
@@ -128,6 +128,26 @@ final class ProjectIconStore {
         guard isCurrent(id, generation) else { return }
         apply(outcome.plan, in: cacheDir)
         setImage(outcome.image?.image, for: id)
+    }
+
+    // MARK: - Following the workspace
+
+    private var followed: [UUID: String] = [:]
+    private var followCancellable: AnyCancellable?
+
+    /// Refreshes every project in `projects` now, then any project that is
+    /// added or whose root or icon style changes. The app's one store calls
+    /// this once at launch; removal is `forget`'s job (`WorkspaceStore`).
+    func follow(_ projects: Published<[Project]>.Publisher) {
+        followCancellable = projects.sink { [weak self] list in
+            guard let self else { return }
+            for project in list {
+                let key = "\(project.rootPath)\n\(project.iconStyle?.rawValue ?? "")"
+                guard followed[project.id] != key else { continue }
+                followed[project.id] = key
+                refreshInBackground(project)
+            }
+        }
     }
 
     // MARK: - Override
