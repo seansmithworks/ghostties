@@ -35,7 +35,7 @@ final class NeedsYouRowRailHeightTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
+        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
@@ -214,7 +214,7 @@ final class NeedsYouRowRailHeightTests: XCTestCase {
     /// needs-you row than beside a working one, flag off and on.
     func testANeedsYouRowAddsNoVerticalMoveAcrossTheMorph() throws {
         for flag in [false, true] {
-            if flag { UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey) } else { UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey) }
+            UserDefaults.standard.set(flag, forKey: ApprovalFlag.defaultsKey)
             let control = try morphMoves(needsYou: false)
             let needsYou = try morphMoves(needsYou: true)
             XCTAssertNotNil(needsYou[1]?[lowerTile], "flag \(flag): control: the lower project's tile is drawn on the rail")

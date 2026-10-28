@@ -35,7 +35,7 @@ final class HoverApprovalsGateTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
+        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
@@ -164,7 +164,7 @@ final class HoverApprovalsGateTests: XCTestCase {
 
     // (c) Approve/Deny stay off with the flag off; "Answer in terminal" is always there.
     func testApproveDenyAbsentWhileFlagOffAndAnswerInTerminalAlwaysPresent() {
-        XCTAssertFalse(ApprovalFlag.isEnabled, "precondition: the flag defaults off")
+        XCTAssertFalse(ApprovalFlag.isEnabled, "precondition: the flag is explicitly off")
         for (label, hook, id) in [("bounded", bashPermission, bashId), ("freeform", askQuestion, askId)] {
             let card = cardText(hook: hook, id: id)
             XCTAssertFalse(card.text.contains("approve"), "\(label): no Approve while the flag is off")
