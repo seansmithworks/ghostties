@@ -45,7 +45,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
+        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
@@ -204,7 +204,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
     // MARK: - (i) the inline action line
 
     func testFlagOffBoundedRowShowsAnswerInTerminalAndNoApproveDeny() {
-        XCTAssertFalse(ApprovalFlag.isEnabled, "precondition: the flag defaults off")
+        XCTAssertFalse(ApprovalFlag.isEnabled, "precondition: the flag is explicitly off")
         let shown = listText([bash])
         XCTAssertTrue(shown.contains("answer in terminal"), "flag off: the bounded row shows an inline \"Answer in terminal\"; list shows \(shown.debugDescription)")
         XCTAssertFalse(shown.contains("approve"), "flag off: no Approve; list shows \(shown.debugDescription)")
@@ -220,7 +220,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
 
     func testFreeformRowAlwaysShowsAnswerInTerminalNeverApproveDeny() {
         for flag in [false, true] {
-            if flag { UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey) }
+            UserDefaults.standard.set(flag, forKey: ApprovalFlag.defaultsKey)
             let shown = listText([ask])
             XCTAssertTrue(shown.contains("answer in terminal"), "flag \(flag): the freeform row shows an inline \"Answer in terminal\"; list shows \(shown.debugDescription)")
             XCTAssertFalse(shown.contains("approve"), "flag \(flag): a freeform row never shows Approve; list shows \(shown.debugDescription)")

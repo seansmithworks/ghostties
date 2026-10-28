@@ -45,7 +45,7 @@ struct RecentsListView: View {
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
     /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
-    @AppStorage(ApprovalFlag.defaultsKey) private var approvalsEnabled = false
+    @AppStorage(ApprovalFlag.defaultsKey) private var approvalsEnabled = true
 
     #if DEBUG
     /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).

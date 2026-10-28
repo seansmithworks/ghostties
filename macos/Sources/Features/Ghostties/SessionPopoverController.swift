@@ -110,7 +110,7 @@ final class SessionPopoverController {
     }
 
     /// Answers Approve/Deny: stale-guarded real keypresses into the session's
-    /// own surface, behind `ApprovalFlag` (off by default).
+    /// own surface, behind `ApprovalFlag` (on by default).
     lazy var approvalResponder: any ApprovalResponder = GuardedApprovalResponder(
         isEnabled: { ApprovalFlag.isEnabled },
         currentState: { [weak self] in self?.claudeState.state(for: $0) },

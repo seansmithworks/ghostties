@@ -27,7 +27,7 @@ final class HoverApprovalsFollowupTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
+        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
         previousTab = UserDefaults.standard.object(forKey: tabKey)
     }
 
