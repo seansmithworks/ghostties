@@ -54,6 +54,26 @@ struct SessionComposerDefaultShellTests {
         #expect(index == nil)
     }
 
+    /// ⌘T, type the repo, Return (BACKLOG 2026-10-20): "repo " resolves the
+    /// project and leaves nothing to rank templates by, so Browser leading
+    /// lane 1 used to be selected. Typing only a repo must pick Shell.
+    @Test func typedRepoWithNoTemplateTextSelectsShellNotBrowser() {
+        let options = [option(.browser), option(.shell), option(.claudeCode), projectRow()]
+        let index = SessionComposerPalette.typedSelectionIndex(
+            in: options, rawQuery: "repo ", templateFilterQuery: "", projectWordIndex: nil
+        )
+        #expect(options[index ?? 0].template?.kind == .shell)
+    }
+
+    /// Browser stays reachable: typing its name selects it.
+    @Test func typedBrowserStillSelectsBrowser() {
+        let options = [option(.shell), option(.claudeCode), option(.browser), projectRow()]
+        let index = SessionComposerPalette.typedSelectionIndex(
+            in: options, rawQuery: "repo brow", templateFilterQuery: "brow", projectWordIndex: nil
+        )
+        #expect(options[index ?? 0].template?.kind == .browser)
+    }
+
     /// A custom shell-kind template ahead of the built-in Shell: both the
     /// hoist and the selection must prefer the built-in Shell id.
     @Test func defaultShellIdBeatsAnotherShellKindTemplate() {

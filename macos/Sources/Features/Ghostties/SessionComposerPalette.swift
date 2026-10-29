@@ -1098,20 +1098,36 @@ struct SessionComposerPalette: View {
            let index = options.firstIndex(where: { $0.id == resolvedTemplateId }) {
             return UInt(index)
         }
+        return Self.typedSelectionIndex(
+            in: options,
+            rawQuery: composerStore.searchText,
+            templateFilterQuery: templateFilterQuery,
+            projectWordIndex: Self.projectWordIndex(
+                in: options,
+                projectIds: Set(filteredProjectOptions.map(\.id)),
+                rawQuery: composerStore.searchText,
+                currentProjectName: currentProject?.name
+            )
+        ).map { UInt($0) }
+    }
+
+    /// The text-driven half of `bestSelectionIndex`, a pure static so the
+    /// Shell default is testable against a typed field.
+    static func typedSelectionIndex(
+        in options: [ComposerOption],
+        rawQuery: String,
+        templateFilterQuery: String,
+        projectWordIndex: Int?
+    ) -> Int? {
         // Blank field: the default is Shell, regardless of pins, recents
         // or the project's own default template (see `restStateSelectionIndex`).
-        if composerStore.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return Self.restStateSelectionIndex(in: options).map { UInt($0) }
+        if rawQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return restStateSelectionIndex(in: options)
         }
-        if let index = Self.projectWordIndex(
-            in: options,
-            projectIds: Set(filteredProjectOptions.map(\.id)),
-            rawQuery: composerStore.searchText,
-            currentProjectName: currentProject?.name
-        ) {
-            return UInt(index)
+        if let projectWordIndex {
+            return projectWordIndex
         }
-        return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
+        return SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
     /// The first word sits in the grammar's project slot (`repo cco -n
