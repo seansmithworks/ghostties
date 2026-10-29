@@ -1128,6 +1128,15 @@ struct SessionComposerPalette: View {
         if templateFilterQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return restStateSelectionIndex(in: options)
         }
+        // Text that matches nothing is the same as no text: `bestMatchIndex`
+        // signals "no match" by returning 0, which committed whatever led the
+        // list ("repo xyz" + Return opened a leading Browser). A remainder
+        // that is only a session name (`-n "x"`) lands here too; Shell is
+        // still the right default.
+        let hasMatch = options.contains {
+            SessionComposerRanking.matchTier(title: $0.title, subtitle: $0.subtitle, query: templateFilterQuery) != nil
+        }
+        guard hasMatch else { return restStateSelectionIndex(in: options) }
         return SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
