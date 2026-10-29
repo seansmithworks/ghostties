@@ -60,7 +60,7 @@ struct SessionComposerDefaultShellTests {
     @Test func typedRepoWithNoTemplateTextSelectsShellNotBrowser() {
         let options = [option(.browser), option(.shell), option(.claudeCode), projectRow()]
         let index = SessionComposerPalette.typedSelectionIndex(
-            in: options, rawQuery: "repo ", templateFilterQuery: "", projectWordIndex: nil
+            in: options, templateFilterQuery: "", projectWordIndex: nil
         )
         #expect(options[index ?? 0].template?.kind == .shell)
     }
@@ -69,7 +69,7 @@ struct SessionComposerDefaultShellTests {
     @Test func typedBrowserStillSelectsBrowser() {
         let options = [option(.shell), option(.claudeCode), option(.browser), projectRow()]
         let index = SessionComposerPalette.typedSelectionIndex(
-            in: options, rawQuery: "repo brow", templateFilterQuery: "brow", projectWordIndex: nil
+            in: options, templateFilterQuery: "brow", projectWordIndex: nil
         )
         #expect(options[index ?? 0].template?.kind == .browser)
     }

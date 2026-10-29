@@ -1100,7 +1100,6 @@ struct SessionComposerPalette: View {
         }
         return Self.typedSelectionIndex(
             in: options,
-            rawQuery: composerStore.searchText,
             templateFilterQuery: templateFilterQuery,
             projectWordIndex: Self.projectWordIndex(
                 in: options,
@@ -1115,17 +1114,19 @@ struct SessionComposerPalette: View {
     /// Shell default is testable against a typed field.
     static func typedSelectionIndex(
         in options: [ComposerOption],
-        rawQuery: String,
         templateFilterQuery: String,
         projectWordIndex: Int?
     ) -> Int? {
-        // Blank field: the default is Shell, regardless of pins, recents
-        // or the project's own default template (see `restStateSelectionIndex`).
-        if rawQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return restStateSelectionIndex(in: options)
-        }
         if let projectWordIndex {
             return projectWordIndex
+        }
+        // Nothing typed ranks the templates — a blank field, or only a
+        // project/branch ("repo " + Return, BACKLOG 2026-10-20): the default
+        // is Shell, regardless of pins, recents or the project's own default
+        // template (see `restStateSelectionIndex`). `bestMatchIndex` returns
+        // 0 for an empty query, which committed whatever led the list.
+        if templateFilterQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return restStateSelectionIndex(in: options)
         }
         return SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
