@@ -283,6 +283,28 @@ enum WorkspaceLayout {
     /// Minimum width for the terminal panel when browser is visible.
     static let terminalMinWidth: CGFloat = 300
 
+    /// The widest the sidebar can be with the terminal card beside it
+    /// (pinned, a push reveal): what leaves the card `terminalMinWidth`
+    /// between the sidebar's gutter and the trailing margin.
+    static func sidebarRoomBesideTerminal(containerWidth: CGFloat, margin: CGFloat) -> CGFloat {
+        containerWidth - terminalMinWidth - margin * 2
+    }
+
+    /// The sidebar's width range with the terminal card beside it: never
+    /// below `sidebarMinWidth`, so in a window too narrow for both minimums
+    /// the terminal gives way (`sidebarFitsBesideTerminal` says when).
+    static func sidebarWidthRangeBesideTerminal(containerWidth: CGFloat, margin: CGFloat) -> ClosedRange<CGFloat> {
+        let room = sidebarRoomBesideTerminal(containerWidth: containerWidth, margin: margin)
+        return sidebarMinWidth...min(sidebarMaxWidth, max(room, sidebarMinWidth))
+    }
+
+    /// Whether the sidebar at its minimum fits beside the terminal at its
+    /// minimum. A reveal that can't push without crossing one floats over
+    /// the card instead.
+    static func sidebarFitsBesideTerminal(containerWidth: CGFloat, margin: CGFloat) -> Bool {
+        sidebarRoomBesideTerminal(containerWidth: containerWidth, margin: margin) >= sidebarMinWidth
+    }
+
     // MARK: - Session Status-Dot Colors
 
     /// Session status dot: "your turn" / waiting for input. Calm muted blue #5B8DEF.

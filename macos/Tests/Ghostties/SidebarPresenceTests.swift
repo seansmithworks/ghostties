@@ -455,12 +455,12 @@ struct ClosedSidebarEdgeStripTests {
         )
     }
 
-    private func makeWindow(mode: SidebarMode, store: WorkspaceStore? = nil) -> (WorkspaceViewContainer, NSWindow) {
+    private func makeWindow(mode: SidebarMode, store: WorkspaceStore? = nil, width: CGFloat = 900) -> (WorkspaceViewContainer, NSWindow) {
         let store = store ?? makeStore()
         store.updateSidebarMode(mode)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         let window = NSWindow(
-            contentRect: .init(x: 0, y: 0, width: 900, height: 620),
+            contentRect: .init(x: 0, y: 0, width: width, height: 620),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false
         )
@@ -539,6 +539,49 @@ struct ClosedSidebarEdgeStripTests {
 
             container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
             #expect(container.sidebarModeForTesting == .overlay)
+        }
+    }
+
+    /// The closed strip's hover reveal in a narrow window: the pushed
+    /// card never goes below `terminalMinWidth` through the open, held
+    /// to it as pinned is.
+    @Test func hoverRevealInANarrowWindowKeepsTheTerminalAtItsMinimum() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed, width: 560)
+            defer { close(window) }
+            spin(0.5)
+            container.updateTrackingAreas()
+            let strip = try #require(container.trackingAreas.first)
+            let windowWidth = window.frame.width
+            container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
+            for _ in 0..<40 {
+                spin(0.02)
+                #expect(container.cardFrameForTesting.width >= WorkspaceLayout.terminalMinWidth - 0.5)
+            }
+            #expect(container.cardFrameForTesting.minX >= container.sidebarFrameForTesting.maxX)
+            // The hover zone ends at the card, not over it.
+            let zone = try #require(container.trackingAreas.first)
+            #expect(zone.rect.maxX <= container.cardFrameForTesting.minX + 0.5)
+            #expect(window.frame.width == windowWidth)
+        }
+    }
+
+    /// Too narrow for the sidebar's minimum beside the terminal's: the
+    /// strip reveals the overlay instead of pushing the card.
+    @Test func hoverRevealTooNarrowToFitOverlaysInstead() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed, width: 450)
+            defer { close(window) }
+            spin(0.5)
+            container.updateTrackingAreas()
+            let strip = try #require(container.trackingAreas.first)
+            let card = container.cardFrameForTesting
+            container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+            #expect(container.sidebarModeForTesting == .overlay)
+            spin(0.6)
+            #expect(container.cardFrameForTesting.width >= WorkspaceLayout.terminalMinWidth - 0.5)
+            #expect(container.cardFrameForTesting == card)
         }
     }
 

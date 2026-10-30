@@ -353,6 +353,24 @@ class WorkspaceViewContainer: NSView {
         return min(max(CGFloat(stored), WorkspaceLayout.sidebarMinWidth), WorkspaceLayout.sidebarMaxWidth)
     }
 
+    /// The sidebar's width with the terminal card beside it — pinned, the
+    /// closed strip's hover reveal, a push reveal from the rail: the desired
+    /// `currentSidebarWidth`, held to what leaves the card
+    /// `terminalMinWidth` (`WorkspaceLayout.sidebarWidthRangeBesideTerminal`).
+    /// One rule for all three, so a reveal is exactly pinned's geometry.
+    private var sidebarWidthBesideTerminal: CGFloat {
+        let range = WorkspaceLayout.sidebarWidthRangeBesideTerminal(
+            containerWidth: bounds.width, margin: SidebarDialTuning.windowMargin()
+        )
+        return min(max(currentSidebarWidth, range.lowerBound), range.upperBound)
+    }
+
+    /// Whether a reveal can push the card at all: the sidebar's minimum
+    /// beside the terminal's. When not, it overlays the card instead.
+    private var revealCanPushTerminal: Bool {
+        WorkspaceLayout.sidebarFitsBesideTerminal(containerWidth: bounds.width, margin: SidebarDialTuning.windowMargin())
+    }
+
     /// Resolved sidebar width for the current view mode.
     private var currentSidebarWidth: CGFloat {
         get {
@@ -1462,7 +1480,8 @@ class WorkspaceViewContainer: NSView {
         // Re-clamp the sidebar width when the window shrinks. The sidebar
         // previously never re-clamped on resize, so a sidebar sitting near
         // its max could exceed the available space once the window got
-        // small enough. Pinned mode only — closed mode is always width 0,
+        // small enough. Pinned geometry only (pinned, the closed strip's
+        // hover reveal, a push reveal from the rail) — closed mode is always width 0,
         // and overlay floats over the terminal rather than sharing its
         // space. Runs BEFORE the browser split clamp below: the browser
         // math reads `resizableWidth`, which reads the sidebar's live
@@ -1495,11 +1514,8 @@ class WorkspaceViewContainer: NSView {
         // also bail outright while a mode-transition animation is in
         // flight — the animation itself is already driving the constraint
         // to the right place.
-        if sidebarMode.layoutMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating && !isMorphStepHeld {
-            let inset = SidebarDialTuning.windowMargin()
-            let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
-            let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
-            let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
+        if geometryMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating && !isMorphStepHeld {
+            let reclamped = sidebarWidthBesideTerminal
             if reclamped != widthModel.width {
                 sidebarWidthConstraint.constant = reclamped
                 widthModel.width = reclamped
@@ -1754,7 +1770,7 @@ class WorkspaceViewContainer: NSView {
     ///
     /// Re-entrant: a second toggle mid-flight writes new targets and lands
     /// the old clock.
-    private func beginSidebarMorph(to newMode: SidebarMode, reduceMotion: Bool) {
+    private func beginSidebarMorph(to newMode: SidebarMode, expandedWidth: CGFloat, reduceMotion: Bool) {
         guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
         coordinator.sessionPopover.dismiss()
         NotificationCenter.default.post(name: .workspaceSidebarWillMorph, object: window)
@@ -1766,10 +1782,10 @@ class WorkspaceViewContainer: NSView {
         let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
         widthModel.railWidth = railWidth
         if newMode == .pinned {
-            widthModel.expandedWidth = currentSidebarWidth
+            widthModel.expandedWidth = expandedWidth
         }
         let targetMorph: CGFloat = newMode == .collapsed ? 1 : 0
-        let targetWidth = newMode == .collapsed ? railWidth : currentSidebarWidth
+        let targetWidth = newMode == .collapsed ? railWidth : expandedWidth
         widthModel.isMorphing = true
         if reduceMotion {
             morphClock?.land()
@@ -2190,9 +2206,9 @@ class WorkspaceViewContainer: NSView {
         // Upper bound: the design-token max, but never wider than leaves room
         // for the terminal's minimum usable width (mirrors the browser drag
         // handle's clamp against `WorkspaceLayout.terminalMinWidth`).
-        let inset = SidebarDialTuning.windowMargin()
-        let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
-        let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
+        let upperBound = WorkspaceLayout.sidebarWidthRangeBesideTerminal(
+            containerWidth: bounds.width, margin: SidebarDialTuning.windowMargin()
+        ).upperBound
         // A closed peek only resizes: no snapping to the rail, no pinning.
         // It writes the same width pinned uses.
         if sidebarMode.isClosedPeek {
@@ -2273,7 +2289,7 @@ class WorkspaceViewContainer: NSView {
     private var openRevealZone: CGRect {
         let margin = SidebarDialTuning.windowMargin()
         if sidebarMode == .hoverRevealed {
-            let width = currentSidebarWidth + WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: margin)
+            let width = sidebarWidthBesideTerminal + WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: margin)
             return CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height)
         }
         return WorkspaceLayout.overlayRevealZone(in: bounds, sidebarWidth: currentSidebarWidth, margin: margin)
@@ -2536,13 +2552,14 @@ class WorkspaceViewContainer: NSView {
         if morphs {
             beginSidebarMorph(
                 to: newMode,
+                expandedWidth: sidebarWidthBesideTerminal,
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             )
         } else if isCollapsePair {
             applyCollapseCrossfadeSidebarView(
                 previousMode: previousMode,
                 newMode: newMode,
-                targetWidth: newMode == .collapsed ? WorkspaceLayout.collapsedRailWidth(in: self) : currentSidebarWidth,
+                targetWidth: newMode == .collapsed ? WorkspaceLayout.collapsedRailWidth(in: self) : sidebarWidthBesideTerminal,
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             )
         } else {
@@ -2830,9 +2847,10 @@ class WorkspaceViewContainer: NSView {
 
         switch newMode {
         case .pinned, .hoverRevealed:
-            set(sidebarWidthConstraint, currentSidebarWidth)
-            widthModel.expandedWidth = currentSidebarWidth
-            if updatesWidthModel { widthModel.width = currentSidebarWidth }
+            let width = sidebarWidthBesideTerminal
+            set(sidebarWidthConstraint, width)
+            widthModel.expandedWidth = width
+            if updatesWidthModel { widthModel.width = width }
             set(sidebarHostLeadingConstraint, 0)
             set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
@@ -2959,7 +2977,9 @@ class WorkspaceViewContainer: NSView {
     private func setRailRevealed(_ reveal: Bool) {
         guard sidebarMode == .collapsed, reveal != railRevealTarget else { return }
         if reveal {
-            railRevealStyle = SidebarDialTuning.hoverRevealStyle()
+            // A push that can't leave both minimums overlays instead.
+            let style = SidebarDialTuning.hoverRevealStyle()
+            railRevealStyle = style == .push && !revealCanPushTerminal ? .overlay : style
             beginRailRevealPresentation()
         }
         railRevealTarget = reveal
@@ -2969,18 +2989,20 @@ class WorkspaceViewContainer: NSView {
         let from: SidebarMode = reveal ? .collapsed : .pinned
         let to: SidebarMode = reveal ? .pinned : .collapsed
         let inset = SidebarDialTuning.windowMargin()
-        let targetWidth = reveal ? currentSidebarWidth : railRevealRestingWidth
-        let targetGutter = reveal ? WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset) : 0
         let pushes = railRevealStyle == .push
+        // Push: pinned's width. Overlay floats, so it keeps the desired one.
+        let revealedWidth = pushes ? sidebarWidthBesideTerminal : currentSidebarWidth
+        let targetWidth = reveal ? revealedWidth : railRevealRestingWidth
+        let targetGutter = reveal ? WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset) : 0
         // Push: the card's gap to the sidebar, rail -> pinned and back.
         let cardGap = WorkspaceLayout.sidebarTrailingGutter(for: to, margin: inset)
 
         let morphs = sidebarBodyMorphs
         if morphs {
-            beginSidebarMorph(to: to, reduceMotion: reduceMotion)
+            beginSidebarMorph(to: to, expandedWidth: revealedWidth, reduceMotion: reduceMotion)
         } else {
             applyCollapseCrossfadeSidebarView(previousMode: from, newMode: to, targetWidth: targetWidth, reduceMotion: reduceMotion)
-            if reveal { widthModel.expandedWidth = currentSidebarWidth }
+            if reveal { widthModel.expandedWidth = revealedWidth }
         }
 
         if reveal { installRailRevealClickMonitor() } else { removeRailRevealClickMonitor() }
@@ -3269,8 +3291,9 @@ class WorkspaceViewContainer: NSView {
     /// The closed strip's reveal: what `mouseEntered` runs once the pointer
     /// is in the strip's own tracking area.
     private func revealFromClosedStrip() {
-        // "Hover shows full sidebar": the real pinned layout, not a pin.
-        if SidebarDialTuning.hoverBarPushesCanvas() {
+        // "Hover shows full sidebar": the real pinned layout, not a pin —
+        // unless the window can't fit both minimums, then the hover bar.
+        if SidebarDialTuning.hoverBarPushesCanvas() && revealCanPushTerminal {
             transitionTo(.hoverRevealed)
         } else {
             transitionTo(.overlay)

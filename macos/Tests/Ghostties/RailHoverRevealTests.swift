@@ -218,7 +218,7 @@ struct RailHoverRevealContainerTests {
         }
     }
 
-    private func makeRig() -> Rig {
+    private func makeRig(width: CGFloat = 900) -> Rig {
         let project = Project(name: "atlas-api", rootPath: "~/Code/atlas-api")
         let session = AgentSession(name: "auth refactor", templateId: AgentTemplate.claudeCode.id, projectId: project.id)
         let store = WorkspaceStore(
@@ -229,7 +229,7 @@ struct RailHoverRevealContainerTests {
         store.updateSidebarMode(.collapsed)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         let window = NSWindow(
-            contentRect: .init(x: 0, y: 0, width: 900, height: 620),
+            contentRect: .init(x: 0, y: 0, width: width, height: 620),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false
         )
@@ -331,6 +331,66 @@ struct RailHoverRevealContainerTests {
         #expect(!container.isRailRevealedForTesting)
         #expect(abs(container.sidebarFrameForTesting.width - rail) < 0.5)
         #expect(container.cardFrameForTesting == card)
+    }
+
+    /// Push in a narrow window: the sidebar comes out only as wide as
+    /// leaves the card `terminalMinWidth`, as pinned does, at every frame
+    /// of the reveal and the collapse, and the window never grows.
+    @Test func pushRevealInANarrowWindowKeepsTheTerminalAtItsMinimum() {
+        let rig = makeRig(width: 560)
+        defer { rig.close() }
+        let container = rig.container
+        let windowWidth = rig.window.frame.width
+        let card = container.cardFrameForTesting
+        let rail = container.sidebarFrameForTesting.width
+
+        reveal(container, .push)
+        for _ in 0..<50 {
+            spin(0.02)
+            #expect(container.cardFrameForTesting.width >= WorkspaceLayout.terminalMinWidth - 0.5)
+        }
+        #expect(container.isRailRevealedForTesting)
+        #expect(container.sidebarFrameForTesting.width >= WorkspaceLayout.sidebarMinWidth)
+        #expect(container.cardFrameForTesting.minX >= container.sidebarFrameForTesting.maxX)
+        #expect(rig.window.frame.width == windowWidth)
+
+        container.railHoverForTesting.dismiss(pointerInside: false)
+        for _ in 0..<50 {
+            spin(0.02)
+            #expect(container.cardFrameForTesting.width >= WorkspaceLayout.terminalMinWidth - 0.5)
+        }
+        #expect(abs(container.sidebarFrameForTesting.width - rail) < 0.5)
+        #expect(container.cardFrameForTesting == card)
+        #expect(rig.window.frame.width == windowWidth)
+    }
+
+    /// Push in a window too narrow for the sidebar's minimum beside the
+    /// terminal's: the reveal overlays the card instead, so the card never
+    /// moves or resizes.
+    @Test func pushRevealTooNarrowToFitOverlaysTheCard() {
+        let rig = makeRig(width: 450)
+        defer { rig.close() }
+        let container = rig.container
+        let windowWidth = rig.window.frame.width
+        let card = container.cardFrameForTesting
+        #expect(card.width >= WorkspaceLayout.terminalMinWidth)
+
+        reveal(container, .push)
+        for _ in 0..<50 {
+            spin(0.02)
+            #expect(container.cardFrameForTesting == card)
+        }
+        #expect(container.isRailRevealedForTesting)
+        #expect(container.sidebarFrameForTesting.width >= WorkspaceLayout.sidebarMinWidth)
+        #expect(container.sidebarFrameForTesting.maxX > card.minX)
+
+        container.railHoverForTesting.dismiss(pointerInside: false)
+        for _ in 0..<50 {
+            spin(0.02)
+            #expect(container.cardFrameForTesting == card)
+        }
+        #expect(!container.isRailRevealedForTesting)
+        #expect(rig.window.frame.width == windowWidth)
     }
 
     /// Push: already the pinned geometry, so Cmd+S changes nothing on screen.
