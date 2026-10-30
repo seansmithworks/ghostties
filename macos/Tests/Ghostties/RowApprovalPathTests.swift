@@ -4,7 +4,7 @@ import XCTest
 /// A sidebar row's Approve/Deny go through the same responder, and the same
 /// stale guard, as the hover card's, and one prompt is answered once.
 @MainActor
-final class RowApprovalPathTests: XCTestCase {
+final class RowApprovalPathTests: PrivateDefaultsTestCase {
     private let sid = UUID()
     private let surface = UUID()
     private let shownAt = Date(timeIntervalSince1970: 1_700_000_000)
@@ -12,12 +12,7 @@ final class RowApprovalPathTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
-    }
-
-    override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
-        super.tearDown()
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
     }
 
     private func state(updatedAt: Date) -> ClaudeState {

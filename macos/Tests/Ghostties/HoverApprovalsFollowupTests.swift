@@ -12,7 +12,7 @@ import GhosttiesCore
 /// Fixture state only: invented hook payloads in a temp `ClaudeStateStore`,
 /// no `~/.claude` or `~/.ghostties` read.
 @MainActor
-final class HoverApprovalsFollowupTests: XCTestCase {
+final class HoverApprovalsFollowupTests: PrivateDefaultsTestCase {
     private let bashId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000E1")!
     private let askId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000E2")!
     private let workingId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000E3")!
@@ -22,18 +22,14 @@ final class HoverApprovalsFollowupTests: XCTestCase {
     private let busyTool = #"{"cwd":"/tmp","hook_event_name":"PreToolUse","session_id":"c-3","tool_name":"Bash","tool_use_id":"tu-3","tool_input":{"command":"ls"}}"#
 
     private let tabKey = "ghostties.sidebarTab"
-    private var previousTab: Any?
     private var tempDirs: [URL] = []
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
-        previousTab = UserDefaults.standard.object(forKey: tabKey)
+        defaults.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
-        if let previousTab { UserDefaults.standard.set(previousTab, forKey: tabKey) } else { UserDefaults.standard.removeObject(forKey: tabKey) }
         for dir in tempDirs { try? FileManager.default.removeItem(at: dir) }
         tempDirs = []
         super.tearDown()
@@ -94,7 +90,7 @@ final class HoverApprovalsFollowupTests: XCTestCase {
     private enum Placement: String, CaseIterable { case pinned, flat }
 
     private func list(_ kinds: [Kind], _ placement: Placement, drag: SessionDragState = SessionDragState()) -> some View {
-        UserDefaults.standard.set((placement == .flat ? SidebarTab.sessions : SidebarTab.projects).rawValue, forKey: tabKey)
+        defaults.set((placement == .flat ? SidebarTab.sessions : SidebarTab.projects).rawValue, forKey: tabKey)
         let w = world(kinds, pinned: placement == .pinned)
         return RecentsListView(previewDragState: drag, pinningAvailable: placement == .pinned)
             .environmentObject(w.store)
@@ -164,7 +160,7 @@ final class HoverApprovalsFollowupTests: XCTestCase {
     }
 
     func testPinnedAndFlatBoundedRowsShowApproveDenyWithFlagOn() {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         for placement in Placement.allCases {
             let shown = text(in: render(list([.bash], placement), size: CGSize(width: 320, height: 320)))
             XCTAssertTrue(shown.contains("approve") && shown.contains("deny"),

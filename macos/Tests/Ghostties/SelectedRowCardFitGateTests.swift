@@ -34,13 +34,11 @@ struct SelectedRowCardFitGateTests {
         let container: WorkspaceViewContainer
         let window: NSWindow
         let sessions: [AgentSession]   // atlas-api's two sessions come first
-        let restoreTab: () -> Void
 
         func close() {
             window.contentView = nil
             window.orderOut(nil)
             window.close()
-            restoreTab()
         }
     }
 
@@ -50,9 +48,6 @@ struct SelectedRowCardFitGateTests {
     }
 
     private func makeRig() -> Rig {
-        let tabKey = "ghostties.sidebarTab"
-        let previousTab = UserDefaults.standard.object(forKey: tabKey)
-        UserDefaults.standard.set(SidebarTab.projects.rawValue, forKey: tabKey)
         let sessions = [
             AgentSession(name: "auth refactor", templateId: AgentTemplate.claudeCode.id, projectId: atlas.id),
             AgentSession(name: "schema pass", templateId: AgentTemplate.claudeCode.id, projectId: atlas.id),
@@ -86,10 +81,7 @@ struct SelectedRowCardFitGateTests {
             spin(0.05)
         }
         return Rig(
-            container: container, window: window, sessions: sessions,
-            restoreTab: {
-                if let previousTab { UserDefaults.standard.set(previousTab, forKey: tabKey) } else { UserDefaults.standard.removeObject(forKey: tabKey) }
-            }
+            container: container, window: window, sessions: sessions
         )
     }
 

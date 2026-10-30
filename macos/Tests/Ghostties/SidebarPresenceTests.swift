@@ -728,7 +728,7 @@ struct ClosedSidebarEdgeStripTests {
     /// Clears the saved sidebar widths; the returned closure puts the test
     /// host's own back.
     private func clearSavedWidths() -> () -> Void {
-        let defaults = UserDefaults.standard
+        let defaults = AppDefaults.store
         let saved = Self.widthKeys.map { defaults.object(forKey: $0) }
         Self.widthKeys.forEach { defaults.removeObject(forKey: $0) }
         return {
@@ -739,7 +739,7 @@ struct ClosedSidebarEdgeStripTests {
     }
 
     private var savedWidths: [Double] {
-        Self.widthKeys.compactMap { UserDefaults.standard.object(forKey: $0) as? Double }
+        Self.widthKeys.compactMap { AppDefaults.store.object(forKey: $0) as? Double }
     }
 
     // MARK: The hover reveal's edge drags (Sean, 2026-10-21)

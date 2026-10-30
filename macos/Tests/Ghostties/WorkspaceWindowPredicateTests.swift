@@ -35,15 +35,8 @@ struct WorkspaceWindowPredicateTests {
         return window
     }
 
-    /// Hosted tests use the Dev domain as `.standard`; always restore.
     private func withMode(_ mode: String?, _ body: () -> Void) {
-        let defaults = UserDefaults.standard
-        let previous = defaults.object(forKey: Self.modeKey)
-        defer {
-            if let previous { defaults.set(previous, forKey: Self.modeKey) } else { defaults.removeObject(forKey: Self.modeKey) }
-        }
-        if let mode { defaults.set(mode, forKey: Self.modeKey) } else { defaults.removeObject(forKey: Self.modeKey) }
-        body()
+        withDials({ if let mode { $0.set(mode, forKey: Self.modeKey) } }, body)
     }
 
     @Test func projectFirstWorkspaceWindowPassesBoth() {

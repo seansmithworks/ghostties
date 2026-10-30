@@ -69,15 +69,8 @@ struct SelectedRowMixPixelTests {
 
     private func snapshot<V: View>(_ view: V, size: CGSize, scheme: ColorScheme, background: NSColor? = nil) throws -> Render {
         let chrome = background ?? theme(scheme).chrome
-        // The list and rail read the sidebar tab from store-less `@AppStorage`;
-        // pin the Projects tab in a private suite.
-        let tabSuiteName = "com.seansmithdesign.ghostties.tests.selected-row-mix.\(UUID().uuidString)"
-        let tabSuite = try #require(UserDefaults(suiteName: tabSuiteName))
-        defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
-        tabSuite.set(SidebarTab.projects.rawValue, forKey: "ghostties.sidebarTab")
         let hosting = NSHostingView(rootView: view
             .frame(width: size.width, height: size.height, alignment: .top)
-            .defaultAppStorage(tabSuite)
             .background(Color(nsColor: chrome))
             .environment(\.colorScheme, scheme))
         hosting.frame = NSRect(origin: .zero, size: size)

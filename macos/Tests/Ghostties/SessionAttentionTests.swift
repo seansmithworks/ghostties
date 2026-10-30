@@ -306,15 +306,11 @@ final class SessionAttentionTests: XCTestCase {
     }
 
     func testApprovalFlagIsOnByDefaultAndOffWhenSetFalse() {
-        let defaults = UserDefaults.standard
-        let saved = defaults.object(forKey: ApprovalFlag.defaultsKey)
-        defer {
-            if let saved { defaults.set(saved, forKey: ApprovalFlag.defaultsKey) }
-            else { defaults.removeObject(forKey: ApprovalFlag.defaultsKey) }
+        withDials {
+            XCTAssertTrue(ApprovalFlag.isEnabled, "inline approvals must be ON when the key is absent")
         }
-        defaults.removeObject(forKey: ApprovalFlag.defaultsKey)
-        XCTAssertTrue(ApprovalFlag.isEnabled, "inline approvals must be ON when the key is absent")
-        defaults.set(false, forKey: ApprovalFlag.defaultsKey)
-        XCTAssertFalse(ApprovalFlag.isEnabled)
+        withDials({ $0.set(false, forKey: ApprovalFlag.defaultsKey) }) {
+            XCTAssertFalse(ApprovalFlag.isEnabled)
+        }
     }
 }
