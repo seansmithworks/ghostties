@@ -38,15 +38,18 @@ final class PermissionPromptOrderTests: XCTestCase {
     // MARK: - Fixtures
 
     private struct Tool {
+        let name: String
         let requestFields: String
         let question: String
     }
 
     private let edit = Tool(
+        name: "Edit",
         requestFields: #""tool_name":"Edit","tool_input":{"file_path":"/repo/README.md","old_string":"a","new_string":"b"}"#,
         question: "Edit README.md?"
     )
     private let bash = Tool(
+        name: "Bash",
         requestFields: #""tool_name":"Bash","tool_input":{"command":"npm test","description":"Run tests"}"#,
         question: "Run npm test?"
     )
@@ -55,8 +58,15 @@ final class PermissionPromptOrderTests: XCTestCase {
         #"{"cwd":"/repo","hook_event_name":"PermissionRequest","permission_mode":"default","permission_suggestions":[],"prompt_id":"\#(turn)","session_id":"c-1",\#(tool.requestFields),"transcript_path":"/tmp/t.jsonl"}"#
     }
 
-    private func notification(turn: String = "turn-1") -> String {
-        #"{"cwd":"/repo","hook_event_name":"Notification","message":"Claude needs your permission","notification_type":"permission_prompt","prompt_id":"\#(turn)","session_id":"c-1","transcript_path":"/tmp/t.jsonl"}"#
+    /// The message names the tool, as Claude Code's does; `nil` leaves it unsaid.
+    private func notification(turn: String? = "turn-1", tool: String? = nil) -> String {
+        let message = tool.map { "Claude needs your permission to use \($0)" } ?? "Claude needs your permission"
+        let promptId = turn.map { #""prompt_id":"\#($0)","# } ?? ""
+        return #"{"cwd":"/repo","hook_event_name":"Notification","message":"\#(message)","notification_type":"permission_prompt",\#(promptId)"session_id":"c-1","transcript_path":"/tmp/t.jsonl"}"#
+    }
+
+    private func notification(for tool: Tool, turn: String? = "turn-1") -> String {
+        notification(turn: turn, tool: tool.name)
     }
 
     private func event(_ name: String, turn: String = "turn-1", fields: String = "") -> String {
@@ -163,7 +173,7 @@ final class PermissionPromptOrderTests: XCTestCase {
         assertRowOffersApproveDeny(tool, in: list, file: file, line: line)
         let shown = row()?.approvalPrompt
 
-        land(notification(), at: 6)
+        land(notification(for: tool), at: 6)
         XCTAssertEqual(row()?.question, tool.question, "the row's model still names the tool", file: file, line: line)
         assertRowOffersApproveDeny(tool, in: list, file: file, line: line)
         // The row kept what it drew, so that exact prompt must still be answerable.
@@ -171,7 +181,7 @@ final class PermissionPromptOrderTests: XCTestCase {
     }
 
     private func notificationThenRequest(_ tool: Tool, file: StaticString = #filePath, line: UInt = #line) throws {
-        land(notification(), at: 0)
+        land(notification(for: tool), at: 0)
         let list = LiveList(id: id, claude: claude)
         _ = list.text()
 
@@ -196,7 +206,7 @@ final class PermissionPromptOrderTests: XCTestCase {
         assertRowOffersApproveDeny(edit, in: list)
         let old = row()?.approvalPrompt
 
-        land(notification(), at: 6)
+        land(notification(for: edit), at: 6)
         land(request(bash), at: 7)
         XCTAssertEqual(row()?.question, bash.question)
         assertRowOffersApproveDeny(bash, in: list)
@@ -209,8 +219,39 @@ final class PermissionPromptOrderTests: XCTestCase {
     func testANotificationFromANewTurnIsANewPrompt() throws {
         land(request(edit), at: 0)
         let old = row()?.approvalPrompt
-        land(notification(turn: "turn-2"), at: 6)
+        land(notification(turn: "turn-2", tool: "Edit"), at: 6)
         XCTAssertEqual(claude.state(for: id)?.state, .needsPermission)
+        XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
+        XCTAssertEqual(try tap(old), .stale)
+    }
+
+    /// The watcher coalesces PostToolUse(Edit) + PermissionRequest(Bash) +
+    /// Notification into one read: only the Notification is seen. It names
+    /// Bash, so the pending Edit prompt must not survive under it.
+    func testACoalescedNotificationForAnotherToolNeverKeepsTheOldTool() throws {
+        land(request(edit), at: 0)
+        let old = row()?.approvalPrompt
+        land(notification(for: bash), at: 6)
+        XCTAssertEqual(claude.state(for: id)?.state, .needsPermission)
+        XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
+        XCTAssertEqual(try tap(old), .stale, "Approve for Edit must not reach a Bash prompt")
+    }
+
+    /// A message that names no tool proves nothing about which prompt is up.
+    func testANotificationThatNamesNoToolNeverKeepsTheOldTool() throws {
+        land(request(edit), at: 0)
+        let old = row()?.approvalPrompt
+        land(notification(), at: 6)
+        XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
+        XCTAssertEqual(try tap(old), .stale)
+    }
+
+    /// No `prompt_id` on either side (older Claude Code) is not "the same turn".
+    func testANilPromptIdIsNeverTheSameTurn() throws {
+        land(#"{"cwd":"/repo","hook_event_name":"PermissionRequest","session_id":"c-1",\#(edit.requestFields)}"#, at: 0)
+        XCTAssertNil(claude.state(for: id)?.structuredPrompt?.promptId)
+        let old = row()?.approvalPrompt
+        land(notification(turn: nil, tool: "Edit"), at: 6)
         XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
         XCTAssertEqual(try tap(old), .stale)
     }
@@ -227,7 +268,7 @@ final class PermissionPromptOrderTests: XCTestCase {
         for (index, (hook, kind)) in resolutions.enumerated() {
             let base = index * 100
             land(request(edit), at: base)
-            land(notification(), at: base + 6)
+            land(notification(for: edit), at: base + 6)
             XCTAssertEqual(claude.state(for: id)?.state, .needsPermission, hook)
             land(hook, at: base + 7)
             XCTAssertEqual(claude.state(for: id)?.state, kind, hook)
@@ -241,7 +282,7 @@ final class PermissionPromptOrderTests: XCTestCase {
     func testALateNotificationDoesNotReviveAResolvedPrompt() {
         land(request(edit), at: 0)
         land(event("PostToolUse", fields: #","tool_name":"Edit","tool_use_id":"tu-1","tool_input":{}"#), at: 1)
-        land(notification(), at: 6)
+        land(notification(for: edit), at: 6)
         XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
     }
 
@@ -268,7 +309,7 @@ final class PermissionPromptOrderTests: XCTestCase {
 
         land(request(edit), at: 2)
         XCTAssertEqual(redraws, 1)
-        land(notification(), at: 8)
+        land(notification(for: edit), at: 8)
         XCTAssertEqual(redraws, 1, "the same prompt: nothing to redraw")
         land(request(bash), at: 9)
         XCTAssertEqual(redraws, 2)

@@ -673,12 +673,19 @@ final class ClaudeStateStore {
     /// overwrite the record of a still-pending prompt. It must not erase one:
     /// keep the previous genuine attention state.
     /// - `idle_prompt` (Claude "finished ~60s ago") never speaks for a prompt.
-    /// - `permission_prompt` carries no tool, so it can only restate the
-    ///   pending prompt. Same prompt = one still pending (nothing has resolved
-    ///   it, or `previous` would not be attention) in the same turn
-    ///   (`prompt_id`); keeping `previous` whole also keeps the `updatedAt` and
-    ///   fingerprint the row's Approve was drawn with. From a later turn it is
-    ///   a new prompt whose `PermissionRequest` went unseen.
+    /// - `permission_prompt` carries no tool field, only a message
+    ///   ("Claude needs your permission to use Bash"). It may restate the
+    ///   pending prompt only when that is provable: a non-nil `prompt_id`
+    ///   equal to `previous`'s (per turn, not per prompt, so necessary but not
+    ///   sufficient) AND, when `previous` is a tool prompt, a message naming
+    ///   that same tool. The watcher coalesces events, so a `PermissionRequest`
+    ///   for another tool can be skipped; the message is the only witness. Any
+    ///   doubt (nil id, other turn, message names no or another tool) falls
+    ///   through to the tool-less `derived`, which makes Approve go stale.
+    ///   Residual: the message carries no target, so two back-to-back prompts
+    ///   for the same tool inside one window are indistinguishable.
+    ///   A pending question (`needsInput`) offers no Approve, so a matching
+    ///   turn is enough to keep it.
     /// `PermissionRequest` names its tool, so it always replaces; so does a
     /// real `Stop` or any other event.
     static func resolve(_ derived: ClaudeState, previous: ClaudeState?, wrapper: ClaudeHookWrapper) -> ClaudeState {
@@ -688,11 +695,24 @@ final class ClaudeStateStore {
         case "idle_prompt":
             return previous
         case "permission_prompt":
-            guard let prompt = previous.structuredPrompt, prompt.promptId == wrapper.hook.promptId else { return derived }
+            guard let prompt = previous.structuredPrompt,
+                  let turn = prompt.promptId, turn == wrapper.hook.promptId else { return derived }
+            if previous.state == .needsPermission {
+                guard !prompt.toolName.isEmpty,
+                      toolNamed(by: wrapper.hook.message) == prompt.toolName else { return derived }
+            }
             return previous
         default:
             return derived
         }
+    }
+
+    /// The tool a `permission_prompt` message names: the text after
+    /// "permission to use ", or nil when it does not say.
+    static func toolNamed(by message: String?) -> String? {
+        guard let message, let range = message.range(of: "permission to use ") else { return nil }
+        let name = message[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
     }
 
     /// Test-only override for where `refresh()` persists a resume record,
