@@ -9,6 +9,11 @@ import GhosttiesCore
 /// (tool and input) and `Notification/permission_prompt` (a message and
 /// nothing else). Whichever lands last, the row keeps offering Approve/Deny
 /// for the tool, and a genuinely new prompt or a resolution still takes over.
+/// Claude Code's real `permission_prompt` message names no tool, so the tool
+/// comes from the hook's pending-permission sidecar (`<id>.permission.json`):
+/// written on `PermissionRequest`, untouched by `Notification`, deleted by any
+/// other event. `land` mimics the hook's file routing; `landCoalesced` and
+/// `landMainOnly` model the watcher skipping events.
 /// Payload keys are the ones measured in `gate-evidence.md` E2.
 @MainActor
 final class PermissionPromptOrderTests: XCTestCase {
@@ -58,25 +63,55 @@ final class PermissionPromptOrderTests: XCTestCase {
         #"{"cwd":"/repo","hook_event_name":"PermissionRequest","permission_mode":"default","permission_suggestions":[],"prompt_id":"\#(turn)","session_id":"c-1",\#(tool.requestFields),"transcript_path":"/tmp/t.jsonl"}"#
     }
 
-    /// The message names the tool, as Claude Code's does; `nil` leaves it unsaid.
-    private func notification(turn: String? = "turn-1", tool: String? = nil) -> String {
-        let message = tool.map { "Claude needs your permission to use \($0)" } ?? "Claude needs your permission"
+    /// Claude Code's real message: it names no tool.
+    private func notification(turn: String? = "turn-1") -> String {
         let promptId = turn.map { #""prompt_id":"\#($0)","# } ?? ""
-        return #"{"cwd":"/repo","hook_event_name":"Notification","message":"\#(message)","notification_type":"permission_prompt",\#(promptId)"session_id":"c-1","transcript_path":"/tmp/t.jsonl"}"#
-    }
-
-    private func notification(for tool: Tool, turn: String? = "turn-1") -> String {
-        notification(turn: turn, tool: tool.name)
+        return #"{"cwd":"/repo","hook_event_name":"Notification","message":"Claude needs your permission","notification_type":"permission_prompt",\#(promptId)"session_id":"c-1","transcript_path":"/tmp/t.jsonl"}"#
     }
 
     private func event(_ name: String, turn: String = "turn-1", fields: String = "") -> String {
         #"{"cwd":"/repo","hook_event_name":"\#(name)","prompt_id":"\#(turn)","session_id":"c-1"\#(fields)}"#
     }
 
-    private func land(_ hook: String, at second: Int) {
-        let json = #"{"ghosttiesSessionId":"\#(id.uuidString)","updatedAt":\#(t0 + second),"hook":\#(hook)}"#
+    private func envelope(_ hook: String, at second: Int) -> String {
+        #"{"ghosttiesSessionId":"\#(id.uuidString)","updatedAt":\#(t0 + second),"hook":\#(hook)}"#
+    }
+
+    private var mainURL: URL { dir.appendingPathComponent("\(id.uuidString).json") }
+    private var sidecarURL: URL { dir.appendingPathComponent("\(id.uuidString).permission.json") }
+
+    private func write(_ json: String, to url: URL) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? json.write(to: dir.appendingPathComponent("\(id.uuidString).json"), atomically: true, encoding: .utf8)
+        try? json.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// One hook event, routed as `ghostties-status.sh` routes it:
+    /// PermissionRequest -> main + sidecar; Notification -> main only;
+    /// anything else -> main, sidecar deleted.
+    private func land(_ hook: String, at second: Int) {
+        let json = envelope(hook, at: second)
+        if hook.contains(#""hook_event_name":"PermissionRequest""#) {
+            write(json, to: sidecarURL)
+        }
+        write(json, to: mainURL)
+        if !hook.contains(#""hook_event_name":"PermissionRequest""#), !hook.contains(#""hook_event_name":"Notification""#) {
+            try? FileManager.default.removeItem(at: sidecarURL)
+        }
+        claude.refreshForTesting()
+    }
+
+    /// The watcher coalesced: the store reads only `hook` from the main file,
+    /// while the sidecar holds `pending`, the request that really is up.
+    private func landCoalesced(_ hook: String, at second: Int, pending: String, pendingAt: Int) {
+        write(envelope(pending, at: pendingAt), to: sidecarURL)
+        write(envelope(hook, at: second), to: mainURL)
+        claude.refreshForTesting()
+    }
+
+    /// The main file with no sidecar beside it (an older hook, or a failed write).
+    private func landMainOnly(_ hook: String, at second: Int) {
+        try? FileManager.default.removeItem(at: sidecarURL)
+        write(envelope(hook, at: second), to: mainURL)
         claude.refreshForTesting()
     }
 
@@ -173,7 +208,7 @@ final class PermissionPromptOrderTests: XCTestCase {
         assertRowOffersApproveDeny(tool, in: list, file: file, line: line)
         let shown = row()?.approvalPrompt
 
-        land(notification(for: tool), at: 6)
+        land(notification(), at: 6)
         XCTAssertEqual(row()?.question, tool.question, "the row's model still names the tool", file: file, line: line)
         assertRowOffersApproveDeny(tool, in: list, file: file, line: line)
         // The row kept what it drew, so that exact prompt must still be answerable.
@@ -181,7 +216,7 @@ final class PermissionPromptOrderTests: XCTestCase {
     }
 
     private func notificationThenRequest(_ tool: Tool, file: StaticString = #filePath, line: UInt = #line) throws {
-        land(notification(for: tool), at: 0)
+        land(notification(), at: 0)
         let list = LiveList(id: id, claude: claude)
         _ = list.text()
 
@@ -206,7 +241,7 @@ final class PermissionPromptOrderTests: XCTestCase {
         assertRowOffersApproveDeny(edit, in: list)
         let old = row()?.approvalPrompt
 
-        land(notification(for: edit), at: 6)
+        land(notification(), at: 6)
         land(request(bash), at: 7)
         XCTAssertEqual(row()?.question, bash.question)
         assertRowOffersApproveDeny(bash, in: list)
@@ -214,46 +249,44 @@ final class PermissionPromptOrderTests: XCTestCase {
         XCTAssertEqual(try tap(row()?.approvalPrompt), .sent)
     }
 
-    /// The new turn's own `PermissionRequest` was never seen, so all that is
-    /// known is the message. Keeping the old tool would approve the wrong thing.
-    func testANotificationFromANewTurnIsANewPrompt() throws {
-        land(request(edit), at: 0)
-        let old = row()?.approvalPrompt
-        land(notification(turn: "turn-2", tool: "Edit"), at: 6)
-        XCTAssertEqual(claude.state(for: id)?.state, .needsPermission)
-        XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
-        XCTAssertEqual(try tap(old), .stale)
-    }
-
     /// The watcher coalesces PostToolUse(Edit) + PermissionRequest(Bash) +
-    /// Notification into one read: only the Notification is seen. It names
-    /// Bash, so the pending Edit prompt must not survive under it.
-    func testACoalescedNotificationForAnotherToolNeverKeepsTheOldTool() throws {
+    /// Notification into one read: the store sees only the Notification, with
+    /// Edit as its previous state. The sidecar holds Bash, so Bash it is.
+    func testACoalescedNotificationShowsTheSidecarsToolNeverThePreviousOne() throws {
         land(request(edit), at: 0)
         let old = row()?.approvalPrompt
-        land(notification(for: bash), at: 6)
+        landCoalesced(notification(), at: 6, pending: request(bash, turn: "turn-2"), pendingAt: 5)
+        XCTAssertEqual(claude.state(for: id)?.state, .needsPermission)
+        XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "Bash")
+        XCTAssertEqual(row()?.question, bash.question)
+        XCTAssertEqual(try tap(old), .stale, "Approve for Edit must not reach a Bash prompt")
+        XCTAssertEqual(try tap(row()?.approvalPrompt), .sent)
+    }
+
+    /// No sidecar: the tool is unknown, so the row is tool-less and the
+    /// Approve it showed for the request is stale.
+    func testANotificationWithNoSidecarIsToolLessAndStale() throws {
+        land(request(edit), at: 0)
+        let old = row()?.approvalPrompt
+        landMainOnly(notification(), at: 6)
         XCTAssertEqual(claude.state(for: id)?.state, .needsPermission)
         XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
-        XCTAssertEqual(try tap(old), .stale, "Approve for Edit must not reach a Bash prompt")
-    }
-
-    /// A message that names no tool proves nothing about which prompt is up.
-    func testANotificationThatNamesNoToolNeverKeepsTheOldTool() throws {
-        land(request(edit), at: 0)
-        let old = row()?.approvalPrompt
-        land(notification(), at: 6)
-        XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
         XCTAssertEqual(try tap(old), .stale)
     }
 
-    /// No `prompt_id` on either side (older Claude Code) is not "the same turn".
-    func testANilPromptIdIsNeverTheSameTurn() throws {
-        land(#"{"cwd":"/repo","hook_event_name":"PermissionRequest","session_id":"c-1",\#(edit.requestFields)}"#, at: 0)
-        XCTAssertNil(claude.state(for: id)?.structuredPrompt?.promptId)
-        let old = row()?.approvalPrompt
-        land(notification(turn: nil, tool: "Edit"), at: 6)
+    /// A notification read before any request (nothing written yet) is tool-less too.
+    func testANotificationAloneIsToolLess() {
+        land(notification(), at: 0)
         XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
-        XCTAssertEqual(try tap(old), .stale)
+    }
+
+    /// A sidecar left behind is not a prompt: only a `permission_prompt`
+    /// main file reads it.
+    func testASidecarAloneNeverCreatesAPrompt() {
+        land(event("Stop"), at: 1)
+        write(envelope(request(edit), at: 0), to: sidecarURL)
+        claude.refreshForTesting()
+        XCTAssertNil(claude.state(for: id)?.structuredPrompt)
     }
 
     func testEveryResolutionClearsThePrompt() {
@@ -268,7 +301,7 @@ final class PermissionPromptOrderTests: XCTestCase {
         for (index, (hook, kind)) in resolutions.enumerated() {
             let base = index * 100
             land(request(edit), at: base)
-            land(notification(for: edit), at: base + 6)
+            land(notification(), at: base + 6)
             XCTAssertEqual(claude.state(for: id)?.state, .needsPermission, hook)
             land(hook, at: base + 7)
             XCTAssertEqual(claude.state(for: id)?.state, kind, hook)
@@ -282,7 +315,8 @@ final class PermissionPromptOrderTests: XCTestCase {
     func testALateNotificationDoesNotReviveAResolvedPrompt() {
         land(request(edit), at: 0)
         land(event("PostToolUse", fields: #","tool_name":"Edit","tool_use_id":"tu-1","tool_input":{}"#), at: 1)
-        land(notification(for: edit), at: 6)
+        XCTAssertNil(FileManager.default.contents(atPath: sidecarURL.path), "the resolution deleted the sidecar")
+        land(notification(), at: 6)
         XCTAssertEqual(claude.state(for: id)?.structuredPrompt?.toolName, "")
     }
 
@@ -309,7 +343,7 @@ final class PermissionPromptOrderTests: XCTestCase {
 
         land(request(edit), at: 2)
         XCTAssertEqual(redraws, 1)
-        land(notification(for: edit), at: 8)
+        land(notification(), at: 8)
         XCTAssertEqual(redraws, 1, "the same prompt: nothing to redraw")
         land(request(bash), at: 9)
         XCTAssertEqual(redraws, 2)

@@ -68,6 +68,24 @@ struct HookInstallerTests {
         #expect(permissions == 0o700)
     }
 
+    /// An install seeded by the previous app version (marker 3) must be
+    /// rewritten by the current `seedVersion`, or the sidecar fix never ships.
+    @Test
+    func testSeedVersionAdvancePastTheSidecarlessScriptRewritesExistingInstalls() throws {
+        #expect(HookInstaller.seedVersion >= 4)
+        let sourceURL = try makeSourceScript(contents: "#!/bin/sh\necho new\n")
+        defer { try? FileManager.default.removeItem(at: sourceURL.deletingLastPathComponent()) }
+        let destDir = makeDestDirectory()
+        defer { try? FileManager.default.removeItem(atPath: destDir) }
+
+        #expect(HookInstaller.seed(from: sourceURL, into: destDir, version: 3))
+        let destPath = (destDir as NSString).appendingPathComponent(HookInstaller.scriptName)
+        try "#!/bin/sh\necho old\n".write(toFile: destPath, atomically: true, encoding: .utf8)
+
+        #expect(HookInstaller.seed(from: sourceURL, into: destDir, version: HookInstaller.seedVersion))
+        #expect(try String(contentsOfFile: destPath, encoding: .utf8) == "#!/bin/sh\necho new\n")
+    }
+
     @Test
     func testSeedIsNoOpAtSameVersion() throws {
         let sourceURL = try makeSourceScript(contents: "#!/bin/sh\necho original\n")

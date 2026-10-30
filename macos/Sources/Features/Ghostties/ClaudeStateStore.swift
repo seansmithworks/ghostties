@@ -420,7 +420,7 @@ final class ClaudeStateStore {
 
     // MARK: - Writes
 
-    /// Delete both state files for a session. Called from `SessionCoordinator
+    /// Delete the state files for a session. Called from `SessionCoordinator
     /// .setStatus(_:for:)`'s terminal branch, the same seam that already
     /// clears both indicator caches, so a closed session's Claude state
     /// cannot outlive the session that owned it.
@@ -430,6 +430,7 @@ final class ClaudeStateStore {
         let fm = FileManager.default
         try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).json"))
         try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).todos.json"))
+        try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).permission.json"))
     }
 
     /// Delete `*.json` state files, and orphaned `*.tmp` files, older than
@@ -465,7 +466,8 @@ final class ClaudeStateStore {
 
     /// Rebuild `states` from scratch by listing `directoryURL` and decoding
     /// every `<uuid>.json` file (never `*.todos.json`, which is out of
-    /// scope this phase). One bad file is skipped, not fatal to the whole
+    /// scope this phase, and never `*.permission.json`, which is read only
+    /// as a companion of its session's main file). One bad file is skipped, not fatal to the whole
     /// refresh. Full rebuild (not an incremental merge) is deliberate: the
     /// hook overwrites its one file per session on every event, and a
     /// rebuild is also how a deleted file's session naturally drops out.
@@ -500,7 +502,8 @@ final class ClaudeStateStore {
         var seen: Set<UUID> = []
         for url in entries {
             let name = url.lastPathComponent
-            guard name.hasSuffix(".json"), !name.hasSuffix(".todos.json") else { continue }
+            guard name.hasSuffix(".json"), !name.hasSuffix(".todos.json"),
+                  !name.hasSuffix(".permission.json") else { continue }
             let stem = String(name.dropLast(".json".count))
             guard let ghosttiesSessionId = UUID(uuidString: stem) else { continue }
             guard let data = try? Data(contentsOf: url) else { continue }
@@ -524,7 +527,9 @@ final class ClaudeStateStore {
             }
 
             guard let derived = Self.derive(from: wrapper) else { continue }
-            let state = Self.resolve(derived, previous: states[derived.ghosttiesSessionId], wrapper: wrapper)
+            let sidecar = (try? Data(contentsOf: directoryURL.appendingPathComponent("\(stem).permission.json")))
+                .flatMap { try? JSONDecoder().decode(ClaudeHookWrapper.self, from: $0) }
+            let state = Self.resolve(derived, previous: states[derived.ghosttiesSessionId], wrapper: wrapper, pendingPermission: sidecar)
             newStates[state.ghosttiesSessionId] = state
         }
         states = newStates
@@ -670,49 +675,60 @@ final class ClaudeStateStore {
     }
 
     /// The state file is last-event-wins, so a less specific notification can
-    /// overwrite the record of a still-pending prompt. It must not erase one:
-    /// keep the previous genuine attention state.
-    /// - `idle_prompt` (Claude "finished ~60s ago") never speaks for a prompt.
-    /// - `permission_prompt` carries no tool field, only a message
-    ///   ("Claude needs your permission to use Bash"). It may restate the
-    ///   pending prompt only when that is provable: a non-nil `prompt_id`
-    ///   equal to `previous`'s (per turn, not per prompt, so necessary but not
-    ///   sufficient) AND, when `previous` is a tool prompt, a message naming
-    ///   that same tool. The watcher coalesces events, so a `PermissionRequest`
-    ///   for another tool can be skipped; the message is the only witness. Any
-    ///   doubt (nil id, other turn, message names no or another tool) falls
-    ///   through to the tool-less `derived`, which makes Approve go stale.
-    ///   Residual: the message carries no target, so two back-to-back prompts
-    ///   for the same tool inside one window are indistinguishable.
-    ///   A pending question (`needsInput`) offers no Approve, so a matching
-    ///   turn is enough to keep it.
+    /// overwrite the record of a still-pending prompt. It must not erase one.
+    /// - `idle_prompt` (Claude "finished ~60s ago") never speaks for a prompt:
+    ///   keep the previous genuine attention state.
+    /// - `permission_prompt` carries no tool field, only a message ("Claude
+    ///   needs your permission"), and lands seconds after the
+    ///   `PermissionRequest` it belongs to. The hook therefore keeps that
+    ///   request in a sidecar (`<id>.permission.json`), written on
+    ///   `PermissionRequest`, left alone by `Notification`, deleted by every
+    ///   other event. A sidecar that exists beside a `permission_prompt` main
+    ///   file is thus the request still pending, whatever the watcher
+    ///   coalesced, and supplies the tool and its input. No sidecar means the
+    ///   tool is unknown: the tool-less `derived`, which makes Approve stale.
+    ///   (A `prompt_id` check would add nothing here: the sidecar's lifetime
+    ///   already encodes "still pending".)
+    /// - A pending question (`needsInput`) offers no Approve and has no
+    ///   sidecar; a `permission_prompt` in the same turn leaves it alone.
     /// `PermissionRequest` names its tool, so it always replaces; so does a
     /// real `Stop` or any other event.
-    static func resolve(_ derived: ClaudeState, previous: ClaudeState?, wrapper: ClaudeHookWrapper) -> ClaudeState {
-        guard wrapper.hook.hookEventName == "Notification",
-              let previous, previous.state == .needsPermission || previous.state == .needsInput else { return derived }
+    static func resolve(
+        _ derived: ClaudeState,
+        previous: ClaudeState?,
+        wrapper: ClaudeHookWrapper,
+        pendingPermission: ClaudeHookWrapper? = nil
+    ) -> ClaudeState {
+        guard wrapper.hook.hookEventName == "Notification" else { return derived }
         switch wrapper.hook.notificationType {
         case "idle_prompt":
+            guard let previous, previous.state == .needsPermission || previous.state == .needsInput else { return derived }
             return previous
         case "permission_prompt":
-            guard let prompt = previous.structuredPrompt,
-                  let turn = prompt.promptId, turn == wrapper.hook.promptId else { return derived }
-            if previous.state == .needsPermission {
-                guard !prompt.toolName.isEmpty,
-                      toolNamed(by: wrapper.hook.message) == prompt.toolName else { return derived }
+            if let previous, previous.state == .needsInput,
+               let turn = previous.structuredPrompt?.promptId, turn == wrapper.hook.promptId {
+                return previous
             }
-            return previous
+            guard let pending = pendingPermission,
+                  pending.hook.hookEventName == "PermissionRequest",
+                  let tool = pending.hook.toolName, !tool.isEmpty else { return derived }
+            // The pending request, verbatim: same prompt (message and all, which
+            // is part of the approval fingerprint) and same time, so the Approve
+            // already on screen for it stays answerable.
+            return ClaudeState(
+                ghosttiesSessionId: derived.ghosttiesSessionId,
+                claudeSessionId: derived.claudeSessionId,
+                cwd: derived.cwd,
+                state: .needsPermission,
+                structuredPrompt: StructuredPrompt(
+                    toolName: tool, toolUseId: nil, toolInput: pending.hook.toolInput,
+                    promptId: pending.hook.promptId
+                ),
+                updatedAt: Date(timeIntervalSince1970: pending.updatedAt)
+            )
         default:
             return derived
         }
-    }
-
-    /// The tool a `permission_prompt` message names: the text after
-    /// "permission to use ", or nil when it does not say.
-    static func toolNamed(by message: String?) -> String? {
-        guard let message, let range = message.range(of: "permission to use ") else { return nil }
-        let name = message[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? nil : name
     }
 
     /// Test-only override for where `refresh()` persists a resume record,
