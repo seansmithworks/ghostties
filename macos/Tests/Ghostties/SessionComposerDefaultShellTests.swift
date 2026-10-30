@@ -54,6 +54,69 @@ struct SessionComposerDefaultShellTests {
         #expect(index == nil)
     }
 
+    /// ⌘T, type the repo, Return (BACKLOG 2026-10-20): "repo " resolves the
+    /// project and leaves nothing to rank templates by, so Browser leading
+    /// lane 1 used to be selected. Typing only a repo must pick Shell.
+    @Test func typedRepoWithNoTemplateTextSelectsShellNotBrowser() {
+        let options = [option(.browser), option(.shell), option(.claudeCode), projectRow()]
+        let index = SessionComposerPalette.typedSelectionIndex(
+            in: options, templateFilterQuery: "", projectWordIndex: nil
+        )
+        #expect(options[index ?? 0].template?.kind == .shell)
+    }
+
+    /// Same bug class, non-empty remainder: "repo xyz" where no template
+    /// matches "xyz". `bestMatchIndex` falls back to 0 on no match, which
+    /// committed the leading Browser. No match must fall back to Shell.
+    @Test func typedUnmatchedRemainderSelectsShellNotBrowser() {
+        let options = [option(.browser), option(.shell), option(.claudeCode), projectRow()]
+        let index = SessionComposerPalette.typedSelectionIndex(
+            in: options, templateFilterQuery: "xyz", projectWordIndex: nil
+        )
+        #expect(options[index ?? 0].template?.kind == .shell)
+    }
+
+    /// Through the real parser: "repo " must yield an empty remainder, and
+    /// that remainder (what `templateFilterQuery` reads) must select Shell.
+    @Test func parsedRepoOnlyQueryYieldsEmptyRemainderAndSelectsShell() {
+        let project = Project(name: "repo", rootPath: "/Users/sean/Code/repo")
+        let parsed = SessionComposerCommandParser.parse(query: "repo ", projects: [project], isLocked: false)
+        #expect(parsed.projectId == project.id)
+        #expect(parsed.remainderText.isEmpty)
+        let options = [option(.browser), option(.shell), option(.claudeCode), projectRow()]
+        let index = SessionComposerPalette.typedSelectionIndex(
+            in: options, templateFilterQuery: parsed.remainderText, projectWordIndex: nil
+        )
+        #expect(options[index ?? 0].template?.kind == .shell)
+    }
+
+    /// Through the real parser: "repo xyz" leaves "xyz" as the remainder and
+    /// still selects Shell; "repo brow" still selects Browser.
+    @Test func parsedUnmatchedRemainderSelectsShellAndMatchStillWins() {
+        let project = Project(name: "repo", rootPath: "/Users/sean/Code/repo")
+        let options = [option(.browser), option(.shell), option(.claudeCode), projectRow()]
+        let miss = SessionComposerCommandParser.parse(query: "repo xyz", projects: [project], isLocked: false)
+        #expect(miss.remainderText == "xyz")
+        let missIndex = SessionComposerPalette.typedSelectionIndex(
+            in: options, templateFilterQuery: miss.remainderText, projectWordIndex: nil
+        )
+        #expect(options[missIndex ?? 0].template?.kind == .shell)
+        let hit = SessionComposerCommandParser.parse(query: "repo brow", projects: [project], isLocked: false)
+        let hitIndex = SessionComposerPalette.typedSelectionIndex(
+            in: options, templateFilterQuery: hit.remainderText, projectWordIndex: nil
+        )
+        #expect(options[hitIndex ?? 0].template?.kind == .browser)
+    }
+
+    /// Browser stays reachable: typing its name selects it.
+    @Test func typedBrowserStillSelectsBrowser() {
+        let options = [option(.shell), option(.claudeCode), option(.browser), projectRow()]
+        let index = SessionComposerPalette.typedSelectionIndex(
+            in: options, templateFilterQuery: "brow", projectWordIndex: nil
+        )
+        #expect(options[index ?? 0].template?.kind == .browser)
+    }
+
     /// A custom shell-kind template ahead of the built-in Shell: both the
     /// hoist and the selection must prefer the built-in Shell id.
     @Test func defaultShellIdBeatsAnotherShellKindTemplate() {

@@ -1098,20 +1098,46 @@ struct SessionComposerPalette: View {
            let index = options.firstIndex(where: { $0.id == resolvedTemplateId }) {
             return UInt(index)
         }
-        // Blank field: the default is Shell, regardless of pins, recents
-        // or the project's own default template (see `restStateSelectionIndex`).
-        if composerStore.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return Self.restStateSelectionIndex(in: options).map { UInt($0) }
-        }
-        if let index = Self.projectWordIndex(
+        return Self.typedSelectionIndex(
             in: options,
-            projectIds: Set(filteredProjectOptions.map(\.id)),
-            rawQuery: composerStore.searchText,
-            currentProjectName: currentProject?.name
-        ) {
-            return UInt(index)
+            templateFilterQuery: templateFilterQuery,
+            projectWordIndex: Self.projectWordIndex(
+                in: options,
+                projectIds: Set(filteredProjectOptions.map(\.id)),
+                rawQuery: composerStore.searchText,
+                currentProjectName: currentProject?.name
+            )
+        ).map { UInt($0) }
+    }
+
+    /// The text-driven half of `bestSelectionIndex`, a pure static so the
+    /// Shell default is testable against a typed field.
+    static func typedSelectionIndex(
+        in options: [ComposerOption],
+        templateFilterQuery: String,
+        projectWordIndex: Int?
+    ) -> Int? {
+        if let projectWordIndex {
+            return projectWordIndex
         }
-        return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
+        // Nothing typed ranks the templates — a blank field, or only a
+        // project/branch ("repo " + Return, BACKLOG 2026-10-20): the default
+        // is Shell, regardless of pins, recents or the project's own default
+        // template (see `restStateSelectionIndex`). `bestMatchIndex` returns
+        // 0 for an empty query, which committed whatever led the list.
+        if templateFilterQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return restStateSelectionIndex(in: options)
+        }
+        // Text that matches nothing is the same as no text: `bestMatchIndex`
+        // signals "no match" by returning 0, which committed whatever led the
+        // list ("repo xyz" + Return opened a leading Browser). A remainder
+        // that is only a session name (`-n "x"`) lands here too; Shell is
+        // still the right default.
+        let hasMatch = options.contains {
+            SessionComposerRanking.matchTier(title: $0.title, subtitle: $0.subtitle, query: templateFilterQuery) != nil
+        }
+        guard hasMatch else { return restStateSelectionIndex(in: options) }
+        return SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
     /// The first word sits in the grammar's project slot (`repo cco -n
