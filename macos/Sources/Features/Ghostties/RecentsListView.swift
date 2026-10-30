@@ -46,6 +46,9 @@ struct RecentsListView: View {
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
     /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
     @AppStorage(ApprovalFlag.defaultsKey) private var approvalsEnabled = true
+    /// Bumped by `ClaudeStateStore.promptsDidChange`: a row's prompt can change
+    /// under an unchanged indicator, and `ClaudeStateStore` isn't observable.
+    @State private var promptRevision = 0
 
     #if DEBUG
     /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).
@@ -225,6 +228,7 @@ struct RecentsListView: View {
                 icons.image(for: project.id).map { (project.id, $0) }
             })
         }
+        .onReceive(coordinator.claudeStateStore.promptsDidChange) { promptRevision &+= 1 }
         .onReceive(ProjectIconStore.shared.changes) { projectId in
             projectIcons[projectId] = ProjectIconStore.shared.image(for: projectId)
         }
@@ -505,7 +509,8 @@ struct RecentsListView: View {
     /// (`SessionRowPrompt`), in every layout and section: the only rows
     /// that draw an action line.
     private func rowPrompt(_ id: UUID) -> SessionRowPrompt? {
-        SessionRowPrompt.make(
+        _ = promptRevision
+        return SessionRowPrompt.make(
             indicator: store.globalIndicatorStates[id] ?? .inactive,
             state: coordinator.claudeStateStore.state(for: id),
             canAnswerInline: coordinator.canAnswerInline(session: id)

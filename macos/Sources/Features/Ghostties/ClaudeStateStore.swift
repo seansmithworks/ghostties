@@ -53,10 +53,14 @@ struct ClaudeHookPayload: Decodable {
     let isInterrupt: Bool?
     /// `Notification`'s `message` text (identifies a notification-origin prompt).
     let message: String?
+    /// The user turn this event belongs to: every event of one turn shares
+    /// it, so it tells two turns apart, never two prompts within one turn.
+    let promptId: String?
 
     enum CodingKeys: String, CodingKey {
         case isInterrupt = "is_interrupt"
         case message
+        case promptId = "prompt_id"
         case hookEventName = "hook_event_name"
         case toolName = "tool_name"
         case toolInput = "tool_input"
@@ -86,6 +90,7 @@ struct ClaudeHookPayload: Decodable {
         toolUseId = try? c.decodeIfPresent(String.self, forKey: .toolUseId)
         isInterrupt = try? c.decodeIfPresent(Bool.self, forKey: .isInterrupt)
         message = try? c.decodeIfPresent(String.self, forKey: .message)
+        promptId = try? c.decodeIfPresent(String.self, forKey: .promptId)
     }
 }
 
@@ -290,6 +295,8 @@ struct StructuredPrompt: Equatable {
     var toolInput: ToolInputSummary? = nil
     /// A `Notification`-origin prompt's message text (no tool fields exist).
     var message: String? = nil
+    /// The hook's `prompt_id`; see `ClaudeStateStore.resolve`.
+    var promptId: String? = nil
 }
 
 /// Decoded, derived state for one Ghostties session, keyed by
@@ -344,11 +351,18 @@ final class ClaudeStateStore {
     /// apart from `states` on purpose -- nothing that feeds the indicator
     /// caches reads it, so ingesting summaries cannot change what they publish.
     private var summaries: [UUID: SessionSummary] = [:]
+    /// What `promptsDidChange` compares against: each pending prompt's identity.
+    private var pendingPrompts: [UUID: String] = [:]
     private var watcher: TaskFileWatcher?
 
     /// Fires after every `refresh()` rebuilds `states`, so a live consumer
     /// (the session popover) can re-derive instead of trusting a snapshot.
     let didRefresh = PassthroughSubject<Void, Never>()
+
+    /// Fires when a pending prompt changes, even though the session's
+    /// indicator stays `.needsAttention`: the only thing that tells the
+    /// sidebar rows to redraw what they ask.
+    let promptsDidChange = PassthroughSubject<Void, Never>()
 
     nonisolated static var defaultDirectoryURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -516,6 +530,13 @@ final class ClaudeStateStore {
         states = newStates
         // A session whose file is gone has gone away.
         summaries = summaries.filter { seen.contains($0.key) }
+        let prompts = newStates.compactMapValues { state in
+            state.structuredPrompt.map { _ in "\(state.updatedAt.timeIntervalSince1970)|\(ApprovalFingerprint.make(state))" }
+        }
+        if prompts != pendingPrompts {
+            pendingPrompts = prompts
+            promptsDidChange.send()
+        }
         didRefresh.send()
     }
 
@@ -595,7 +616,7 @@ final class ClaudeStateStore {
             // session needs them, it is not "working". The question text rides
             // in `structuredPrompt.toolInput` (hooks docs: tool_input.questions).
             kind = .needsInput
-            structuredPrompt = StructuredPrompt(toolName: "AskUserQuestion", toolUseId: hook.toolUseId, toolInput: hook.toolInput)
+            structuredPrompt = StructuredPrompt(toolName: "AskUserQuestion", toolUseId: hook.toolUseId, toolInput: hook.toolInput, promptId: hook.promptId)
         case "PostToolUseFailure" where hook.isInterrupt == true:
             // `Stop` is skipped on user interrupt (hooks docs), so nothing
             // else would end "working": an aborted tool call lands on idle.
@@ -612,12 +633,12 @@ final class ClaudeStateStore {
         case "PermissionRequest":
             kind = .needsPermission
             // toolUseId is nil — see StructuredPrompt's doc comment above.
-            structuredPrompt = StructuredPrompt(toolName: hook.toolName ?? "", toolUseId: nil, toolInput: hook.toolInput)
+            structuredPrompt = StructuredPrompt(toolName: hook.toolName ?? "", toolUseId: nil, toolInput: hook.toolInput, promptId: hook.promptId)
         case "Notification":
             switch hook.notificationType {
             case "permission_prompt":
                 kind = .needsPermission
-                structuredPrompt = StructuredPrompt(toolName: "", toolUseId: nil, message: hook.message)
+                structuredPrompt = StructuredPrompt(toolName: "", toolUseId: nil, message: hook.message, promptId: hook.promptId)
             case "idle_prompt":
                 // "Claude finished responding ~60s ago": a finished session,
                 // not one waiting on the user. Never attention.
@@ -648,15 +669,30 @@ final class ClaudeStateStore {
         )
     }
 
-    /// The state file is last-event-wins, so an `idle_prompt` (Claude "finished
-    /// ~60s ago") can overwrite the record of a still-pending prompt. It must
-    /// not erase one: keep the previous genuine attention state. A real `Stop`
-    /// or any other event still replaces it.
+    /// The state file is last-event-wins, so a less specific notification can
+    /// overwrite the record of a still-pending prompt. It must not erase one:
+    /// keep the previous genuine attention state.
+    /// - `idle_prompt` (Claude "finished ~60s ago") never speaks for a prompt.
+    /// - `permission_prompt` carries no tool, so it can only restate the
+    ///   pending prompt. Same prompt = one still pending (nothing has resolved
+    ///   it, or `previous` would not be attention) in the same turn
+    ///   (`prompt_id`); keeping `previous` whole also keeps the `updatedAt` and
+    ///   fingerprint the row's Approve was drawn with. From a later turn it is
+    ///   a new prompt whose `PermissionRequest` went unseen.
+    /// `PermissionRequest` names its tool, so it always replaces; so does a
+    /// real `Stop` or any other event.
     static func resolve(_ derived: ClaudeState, previous: ClaudeState?, wrapper: ClaudeHookWrapper) -> ClaudeState {
         guard wrapper.hook.hookEventName == "Notification",
-              wrapper.hook.notificationType == "idle_prompt",
               let previous, previous.state == .needsPermission || previous.state == .needsInput else { return derived }
-        return previous
+        switch wrapper.hook.notificationType {
+        case "idle_prompt":
+            return previous
+        case "permission_prompt":
+            guard let prompt = previous.structuredPrompt, prompt.promptId == wrapper.hook.promptId else { return derived }
+            return previous
+        default:
+            return derived
+        }
     }
 
     /// Test-only override for where `refresh()` persists a resume record,
