@@ -1241,7 +1241,7 @@ final class WorkspaceStore: ObservableObject {
     /// at the default location (D10). Stores the CHOSEN project's PARENT
     /// directory, not the project itself, so the next pick starts one level
     /// up from the last add rather than re-suggesting the same folder.
-    @AppStorage("ghostties.lastProjectPickerDirectory")
+    @AppStorage("ghostties.lastProjectPickerDirectory", store: AppDefaults.sharedStore)
     private static var lastProjectPickerDirectoryPath: String = ""
 
     #if DEBUG

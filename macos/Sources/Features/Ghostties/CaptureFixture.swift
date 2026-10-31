@@ -120,9 +120,9 @@ enum CaptureFixture {
     }
 
     /// The defaults the composer store and the Cmd+T pref read/write:
-    /// the throwaway suite in fixture mode, `.standard` otherwise.
+    /// the throwaway suite in fixture mode, `AppDefaults` otherwise.
     static func defaults(fixtureActive: Bool) -> UserDefaults {
-        guard fixtureActive else { return .standard }
+        guard fixtureActive else { return AppDefaults.sharedStore }
         // Fixture mode must never fall back to `.standard`: that is Sean's Dev domain.
         guard let suite = fixtureDefaults else {
             preconditionFailure("could not create the capture defaults suite \(defaultsSuiteName)")

@@ -46,7 +46,7 @@ struct InboxZoneView: View {
     @ObservedObject private var triageStore: OrphanTriageStore = .shared
 
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @AppStorage("ghostties.defaultTaskTemplate") private var defaultTaskTemplate: String = ""
+    @AppStorage("ghostties.defaultTaskTemplate", store: AppDefaults.store) private var defaultTaskTemplate: String = ""
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ChromeScheme private var colorScheme

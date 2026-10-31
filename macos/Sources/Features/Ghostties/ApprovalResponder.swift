@@ -50,7 +50,7 @@ enum ApprovalOutcome: Equatable {
 /// On by default; an explicit `false` under the key hides/disables the buttons.
 enum ApprovalFlag {
     static let defaultsKey = "ghostties.inlineApprovals"
-    static var isEnabled: Bool { UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true }
+    static var isEnabled: Bool { AppDefaults.store.object(forKey: defaultsKey) as? Bool ?? true }
 }
 
 @MainActor

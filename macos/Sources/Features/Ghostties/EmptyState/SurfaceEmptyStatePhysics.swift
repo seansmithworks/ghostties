@@ -16,7 +16,7 @@ struct SurfaceEmptyStatePhysics: View {
     @ObservedObject var surfaceView: Ghostty.SurfaceView
     @State private var hasReceivedOutput: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("ghostties.emptyStatePhysics.wordmark") private var wordmarkEnabled = false
+    @AppStorage("ghostties.emptyStatePhysics.wordmark", store: AppDefaults.store) private var wordmarkEnabled = false
 
     private var isEmpty: Bool {
         surfaceView.title.isEmpty && !hasReceivedOutput

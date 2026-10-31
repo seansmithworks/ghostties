@@ -241,7 +241,7 @@ enum ComposerSingleLineReset {
         ]
     }
 
-    static func reset(defaults: UserDefaults = .standard) {
+    static func reset(defaults: UserDefaults = AppDefaults.store) {
         for key in resetKeys {
             defaults.removeObject(forKey: key)
         }
@@ -415,7 +415,7 @@ enum ComposerSingleLineShadowDials {
 
     /// Writes a preset's three values into the dials — the picker's only
     /// action; the dials themselves are what every render actually reads.
-    static func apply(_ preset: ComposerSingleLineShadowPreset, defaults: UserDefaults = .standard) {
+    static func apply(_ preset: ComposerSingleLineShadowPreset, defaults: UserDefaults = AppDefaults.store) {
         let values = preset.dialValues
         defaults.set(Double(values.radius), forKey: radiusStorageKey)
         defaults.set(Double(values.yOffset), forKey: yOffsetStorageKey)
@@ -571,7 +571,7 @@ struct ComposerDebugTuningControl: View {
     /// (`styleOverrideForTesting`, etc.): production leaves it `.standard`;
     /// a test injects an isolated suite so it never races other parallel
     /// Swift Testing processes reading/writing the same keys.
-    init(defaults: UserDefaults = .standard, onChange: @escaping () -> Void = {}) {
+    init(defaults: UserDefaults = AppDefaults.store, onChange: @escaping () -> Void = {}) {
         _singleLineFieldSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultFieldSize), ComposerSingleLineTuning.fieldSizeStorageKey, store: defaults)
         _singleLineRowSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultRowSize), ComposerSingleLineTuning.rowSizeStorageKey, store: defaults)
         _singleLineWidth = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultWidth), ComposerSingleLineTuning.widthStorageKey, store: defaults)

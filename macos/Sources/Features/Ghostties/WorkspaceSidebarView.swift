@@ -36,8 +36,8 @@ struct WorkspaceSidebarView: View {
     /// Tracks which projects are expanded (per-window, not persisted).
     @State private var expandedProjectIds: Set<UUID> = []
 
-    @AppStorage("ghostties.hasSeenOnboarding") private var hasSeenOnboarding = false
-    @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    @AppStorage("ghostties.hasSeenOnboarding", store: AppDefaults.store) private var hasSeenOnboarding = false
+    @AppStorage("ghostties.sidebarTab", store: AppDefaults.store) private var sidebarTab: SidebarTab = .projects
     #if DEBUG
     /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE` in One view: the fold the accordion reads.
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var captureCollapsedRaw = ""

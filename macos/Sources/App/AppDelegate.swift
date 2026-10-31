@@ -913,12 +913,12 @@ class AppDelegate: NSObject,
         return item
     }
 
-    /// Flips `buildInfoBadgeStorageKey` in `UserDefaults.standard` — the same
+    /// Flips `buildInfoBadgeStorageKey` in `AppDefaults.store` — the same
     /// store `@AppStorage` in `BuildInfoBadgeView` observes, so the badge
     /// updates immediately with no relaunch required.
     @objc private func toggleBuildInfoBadge(_ sender: NSMenuItem) {
-        let current = UserDefaults.standard.bool(forKey: buildInfoBadgeStorageKey)
-        UserDefaults.standard.set(!current, forKey: buildInfoBadgeStorageKey)
+        let current = AppDefaults.store.bool(forKey: buildInfoBadgeStorageKey)
+        AppDefaults.store.set(!current, forKey: buildInfoBadgeStorageKey)
     }
     #endif
 
@@ -1019,7 +1019,7 @@ class AppDelegate: NSObject,
             else { return event }
 
             // Guard: only in task-first sidebar mode (where the composer lives).
-            let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+            let mode = AppDefaults.store.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
             guard mode == "taskFirst" else { return event }
 
             // Post the notification — TaskSidebarView observes it and calls
@@ -1101,7 +1101,7 @@ class AppDelegate: NSObject,
     /// dead. Non-workspace windows (e.g. Quick Terminal) always fall through.
     static func isProjectFirstWorkspaceWindow(_ window: NSWindow) -> Bool {
         guard window.contentView is WorkspaceViewContainer else { return false }
-        let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+        let mode = AppDefaults.store.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
         return mode == "projectFirst"
     }
 
@@ -2111,7 +2111,7 @@ extension AppDelegate: NSMenuItemValidation {
 
         #if DEBUG
         case #selector(toggleBuildInfoBadge(_:)):
-            item.state = UserDefaults.standard.bool(forKey: buildInfoBadgeStorageKey) ? .on : .off
+            item.state = AppDefaults.store.bool(forKey: buildInfoBadgeStorageKey) ? .on : .off
             return true
         #endif
 
