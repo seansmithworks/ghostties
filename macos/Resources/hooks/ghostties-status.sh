@@ -55,6 +55,13 @@
 #      rename so directory watchers see a real rename(2), not an in-place
 #      write. "agent" and "launcher" are omitted when empty, not written as
 #      null/"" — ClaudeHookWrapper.agent/launcher are Decodable optionals.
+#   4. Keeps a pending-permission sidecar, <id>.permission.json. Claude Code's
+#      Notification/permission_prompt ("Claude needs your permission") names
+#      no tool and lands ~6s after the PermissionRequest, overwriting it in
+#      the one-file-per-session state. So a PermissionRequest is written to
+#      BOTH <id>.json and the sidecar; a Notification leaves the sidecar
+#      alone; any other event means the prompt resolved or moved on, so it
+#      deletes the sidecar. ClaudeStateStore takes the pending tool from it.
 #
 # Invocation: registered plainly for Claude Code
 # ("$HOME"/.ghostties/hooks/ghostties-status.sh). CodexHookRegistrar
@@ -102,6 +109,14 @@ state_dir="$HOME/.ghostties/state"
 mkdir -p "$state_dir" || exit 0
 chmod 700 "$state_dir" || exit 0
 
+event=""
+case "$payload" in
+    *'"hook_event_name":"PermissionRequest"'*|*'"hook_event_name": "PermissionRequest"'*)
+        event="permission_request" ;;
+    *'"hook_event_name":"Notification"'*|*'"hook_event_name": "Notification"'*)
+        event="notification" ;;
+esac
+
 case "$payload" in
     *'"tool_name":"TodoWrite"'*'"hook_event_name":"PostToolUse"'*|*'"tool_name": "TodoWrite"'*'"hook_event_name": "PostToolUse"'*|*'"hook_event_name":"PostToolUse"'*'"tool_name":"TodoWrite"'*|*'"hook_event_name": "PostToolUse"'*'"tool_name": "TodoWrite"'*)
         dest="$state_dir/$GHOSTTIES_SESSION_ID.todos.json"
@@ -111,16 +126,35 @@ case "$payload" in
         ;;
 esac
 
-tmp="$dest.$$.tmp"
+permission_dest="$state_dir/$GHOSTTIES_SESSION_ID.permission.json"
 
-if [ -n "$launcher" ]; then
-    printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"agent":"%s","launcher":"%s","hook":%s}' \
-        "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$agent" "$launcher" "$payload" > "$tmp" || exit 0
-else
-    printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"agent":"%s","hook":%s}' \
-        "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$agent" "$payload" > "$tmp" || exit 0
+# write_envelope <dest>: same-directory temp file + rename, as ever.
+write_envelope() {
+    _dest="$1"
+    _tmp="$_dest.$$.tmp"
+    if [ -n "$launcher" ]; then
+        printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"agent":"%s","launcher":"%s","hook":%s}' \
+            "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$agent" "$launcher" "$payload" > "$_tmp" || { rm -f "$_tmp"; return 1; }
+    else
+        printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"agent":"%s","hook":%s}' \
+            "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$agent" "$payload" > "$_tmp" || { rm -f "$_tmp"; return 1; }
+    fi
+    mv -f "$_tmp" "$_dest" || { rm -f "$_tmp"; return 1; }
+}
+
+# The sidecar first, so it already exists whenever the main file shows the
+# PermissionRequest.
+if [ "$event" = "permission_request" ]; then
+    write_envelope "$permission_dest" || exit 0
 fi
 
-mv -f "$tmp" "$dest" || { rm -f "$tmp"; exit 0; }
+write_envelope "$dest" || exit 0
+
+# Anything but a PermissionRequest or a Notification means the prompt
+# resolved or Claude moved on. Deleted after the main write, so a reader never
+# sees the sidecar vanish while the main file still says "permission_prompt".
+if [ -z "$event" ]; then
+    rm -f "$permission_dest"
+fi
 
 exit 0
