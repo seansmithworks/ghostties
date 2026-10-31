@@ -3907,6 +3907,15 @@ class WorkspaceViewContainer: NSView {
         terminalShadowHost.addSubview(terminalContainer)
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
 
+        // Intrinsic width here is the terminal's IDEAL size (the requested
+        // window size, the Debug banner's one-line width), read for default
+        // sizing. It must not act as a floor: at the default compression
+        // resistance it outranks the window's stay-put priority, so a narrow
+        // window grows to fit it, past the minimum
+        // `sidebarWidthRangeBesideTerminal` works from.
+        terminalContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         // Browser panel lives inside browser shadow host.
         browserPanelView.translatesAutoresizingMaskIntoConstraints = false
         browserShadowHost.addSubview(browserPanelView)
