@@ -43,9 +43,9 @@ struct RecentsListView: View {
 
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
-    @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    @AppStorage("ghostties.sidebarTab", store: AppDefaults.store) private var sidebarTab: SidebarTab = .projects
     /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
-    @AppStorage(ApprovalFlag.defaultsKey) private var approvalsEnabled = true
+    @AppStorage(ApprovalFlag.defaultsKey, store: AppDefaults.store) private var approvalsEnabled = true
     /// Bumped by `ClaudeStateStore.promptsDidChange`: a row's prompt can change
     /// under an unchanged indicator, and `ClaudeStateStore` isn't observable.
     @State private var promptRevision = 0

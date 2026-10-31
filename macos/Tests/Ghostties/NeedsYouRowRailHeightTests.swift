@@ -21,7 +21,7 @@ import GhosttiesCore
 /// morph progress with `applyMorphStep`, frames from
 /// `redlineRegistryForTesting`.
 @MainActor
-final class NeedsYouRowRailHeightTests: XCTestCase {
+final class NeedsYouRowRailHeightTests: PrivateDefaultsTestCase {
     private let bashId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000E1")!
     private let askId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000E2")!
     private let workingId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000E3")!
@@ -35,11 +35,10 @@ final class NeedsYouRowRailHeightTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
         for dir in tempDirs { try? FileManager.default.removeItem(at: dir) }
         tempDirs = []
         super.tearDown()
@@ -114,13 +113,9 @@ final class NeedsYouRowRailHeightTests: XCTestCase {
         try withDials({
             $0.set(true, forKey: SidebarDialTuning.redlinesKey)
             $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey)
+            // This scope replaces the test's own suite; carry the flag across.
+            $0.set(ApprovalFlag.isEnabled, forKey: ApprovalFlag.defaultsKey)
         }) {
-            let tabKey = "ghostties.sidebarTab"
-            let previousTab = UserDefaults.standard.object(forKey: tabKey)
-            UserDefaults.standard.set(SidebarTab.projects.rawValue, forKey: tabKey)
-            defer {
-                if let previousTab { UserDefaults.standard.set(previousTab, forKey: tabKey) } else { UserDefaults.standard.removeObject(forKey: tabKey) }
-            }
             let (store, claude, sessions) = makeWorld(needsYou: needsYou)
             store.updateSidebarMode(reveal ? .closed : .pinned)
             let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
@@ -214,7 +209,7 @@ final class NeedsYouRowRailHeightTests: XCTestCase {
     /// needs-you row than beside a working one, flag off and on.
     func testANeedsYouRowAddsNoVerticalMoveAcrossTheMorph() throws {
         for flag in [false, true] {
-            UserDefaults.standard.set(flag, forKey: ApprovalFlag.defaultsKey)
+            defaults.set(flag, forKey: ApprovalFlag.defaultsKey)
             let control = try morphMoves(needsYou: false)
             let needsYou = try morphMoves(needsYou: true)
             XCTAssertNotNil(needsYou[1]?[lowerTile], "flag \(flag): control: the lower project's tile is drawn on the rail")
@@ -227,7 +222,7 @@ final class NeedsYouRowRailHeightTests: XCTestCase {
     /// The hover reveal draws every tile and glyph where the rail had it,
     /// relative to the control world, with Approve/Deny on.
     func testTheHoverRevealAddsNoVerticalMoveBesideANeedsYouRow() throws {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         func revealMoves(needsYou: Bool) throws -> [String: Move] {
             var rail: [String: CGRect] = [:]
             try withSidebar(needsYou: needsYou, morph: [1]) { _, frames, _ in rail = frames }

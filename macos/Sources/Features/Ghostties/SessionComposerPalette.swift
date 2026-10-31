@@ -1523,7 +1523,7 @@ struct SessionComposerPalette: View {
     /// text size, row size, and container width are live dials
     /// (`ComposerSingleLineTuning`).
     private var tuningDefaults: UserDefaults {
-        tuningDefaultsForTesting ?? .standard
+        tuningDefaultsForTesting ?? AppDefaults.store
     }
 
     private var newStyleFieldFontSize: CGFloat {

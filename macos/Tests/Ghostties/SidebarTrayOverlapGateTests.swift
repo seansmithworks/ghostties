@@ -35,10 +35,6 @@ struct SidebarTrayOverlapGateTests {
     /// Enough threads that the list overflows the 620pt window.
     @Test func theListRunsUnderTheTrayWithNoOpaqueBandBetween() throws {
         try withDials({ $0.set(true, forKey: SidebarDialTuning.redlinesKey) }) {
-            let tabKey = "ghostties.sidebarTab"
-            let previousTab = UserDefaults.standard.object(forKey: tabKey)
-            UserDefaults.standard.set(SidebarTab.projects.rawValue, forKey: tabKey)
-
             let projects = (1...3).map { Project(name: "project-\($0)", rootPath: "~/Code/project-\($0)") }
             var sessions: [AgentSession] = []
             for p in projects {
@@ -72,7 +68,6 @@ struct SidebarTrayOverlapGateTests {
                 window.contentView = nil
                 window.orderOut(nil)
                 window.close()
-                if let previousTab { UserDefaults.standard.set(previousTab, forKey: tabKey) } else { UserDefaults.standard.removeObject(forKey: tabKey) }
             }
             for _ in 0..<16 {
                 container.layoutSubtreeIfNeeded()

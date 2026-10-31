@@ -3,7 +3,7 @@ import XCTest
 
 /// Which surface an answer may reach, and that "sent" means a key was delivered.
 @MainActor
-final class ApprovalTargetingTests: XCTestCase {
+final class ApprovalTargetingTests: PrivateDefaultsTestCase {
     private let sid = UUID()
     private let surface = UUID()
     private let shownAt = Date(timeIntervalSince1970: 1_700_000_000)
@@ -11,12 +11,7 @@ final class ApprovalTargetingTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
-    }
-
-    override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
-        super.tearDown()
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
     }
 
     private func permissionState() -> ClaudeState {

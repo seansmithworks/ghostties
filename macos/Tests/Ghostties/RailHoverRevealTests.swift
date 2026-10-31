@@ -364,6 +364,29 @@ struct RailHoverRevealContainerTests {
         #expect(rig.window.frame.width == windowWidth)
     }
 
+    /// The terminal's ideal width is not a minimum: wider than a narrow
+    /// window, it neither grows the window at rest nor through a push
+    /// reveal, under any engine.
+    @Test func aWideIdealTerminalWidthNeverGrowsTheWindow() {
+        let rig = makeRig(width: 560)
+        defer { rig.close() }
+        let container = rig.container
+        let windowWidth = rig.window.frame.width
+        container.terminalContainer.initialContentSize = NSSize(width: 800, height: 600)
+        container.terminalContainer.invalidateIntrinsicContentSize()
+        container.invalidateIntrinsicContentSize()
+        container.needsLayout = true
+        container.layoutSubtreeIfNeeded()
+        #expect(rig.window.frame.width == windowWidth)
+
+        reveal(container, .push)
+        for _ in 0..<50 {
+            spin(0.02)
+            #expect(rig.window.frame.width == windowWidth)
+            #expect(container.cardFrameForTesting.width >= WorkspaceLayout.terminalMinWidth - 0.5)
+        }
+    }
+
     /// Push in a window too narrow for the sidebar's minimum beside the
     /// terminal's: the reveal overlays the card instead, so the card never
     /// moves or resizes.

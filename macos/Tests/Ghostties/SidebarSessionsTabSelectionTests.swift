@@ -34,7 +34,7 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
     }
 
     private func render(selectPinned: Bool, rail: Bool = false) throws -> Render {
-        try withDials {
+        try withDials({ $0.set(SidebarTab.sessions.rawValue, forKey: "ghostties.sidebarTab") }) {
             let project = Project(name: "atlas-api", rootPath: "~/Code/atlas-api")
             let sessions = (0..<3).map { i in
                 AgentSession(
@@ -57,12 +57,6 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
             let width: CGFloat = rail ? try railWidth() : 260
             let height: CGFloat = 400
             let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
-            // The list reads the tab from store-less `@AppStorage`; pin it to
-            // Sessions in a private suite, never the Dev app's domain.
-            let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
-            let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
-            defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
-            tabSuite.set(SidebarTab.sessions.rawValue, forKey: "ghostties.sidebarTab")
             let column = rail ? AnyView(SidebarRailColumn().asRail(width: width)) : AnyView(VStack(spacing: 0) {
                 RecentsListView()
                 Spacer(minLength: 0)
@@ -73,7 +67,6 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
                 .environmentObject(store)
                 .environmentObject(coordinator)
                 .environmentObject(SidebarWidthModel(width: width))
-                .defaultAppStorage(tabSuite)
                 .background(Color(nsColor: chrome))
             let hosting = NSHostingView(rootView: root)
             hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)

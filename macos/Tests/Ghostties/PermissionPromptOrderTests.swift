@@ -27,7 +27,7 @@ final class PermissionPromptOrderTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        AppDefaults.store.set(true, forKey: ApprovalFlag.defaultsKey)
         dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PermissionPromptOrder-\(UUID().uuidString)", isDirectory: true)
         claude = ClaudeStateStore(directoryURL: dir)
@@ -35,7 +35,7 @@ final class PermissionPromptOrderTests: XCTestCase {
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
+        AppDefaults.store.removeObject(forKey: ApprovalFlag.defaultsKey)
         try? FileManager.default.removeItem(at: dir)
         super.tearDown()
     }

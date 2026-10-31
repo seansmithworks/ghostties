@@ -322,7 +322,7 @@ class WorkspaceViewContainer: NSView {
     /// Read the current sidebar view mode from UserDefaults. Defaults to
     /// project-first if the key is missing or holds an unknown value.
     private var currentSidebarViewMode: String {
-        let raw = UserDefaults.standard.string(forKey: Self.sidebarViewModeDefaultsKey) ?? "projectFirst"
+        let raw = AppDefaults.store.string(forKey: Self.sidebarViewModeDefaultsKey) ?? "projectFirst"
         return raw == "taskFirst" ? "taskFirst" : "projectFirst"
     }
 
@@ -346,7 +346,7 @@ class WorkspaceViewContainer: NSView {
     /// token when unset. Persisted values are re-clamped to the current
     /// min/max tokens in case those tokens changed since the value was saved.
     private static func persistedSidebarWidth(forMode mode: String) -> CGFloat {
-        let stored = UserDefaults.standard.double(forKey: sidebarWidthDefaultsKey(forMode: mode))
+        let stored = AppDefaults.store.double(forKey: sidebarWidthDefaultsKey(forMode: mode))
         guard stored > 0 else {
             return mode == "taskFirst" ? WorkspaceLayout.taskSidebarWidth : WorkspaceLayout.sidebarWidth
         }
@@ -460,7 +460,7 @@ class WorkspaceViewContainer: NSView {
     /// UserDefaults key for the Cmd+T preference — composer (default) vs.
     /// instant create. Mirrors `Ghostty.Config.autoUpdateChannel`'s
     /// resolution pattern (`ghostties.autoUpdateChannel`): a plain
-    /// `UserDefaults.standard` read, since this container is an AppKit
+    /// `AppDefaults.store` read, since this container is an AppKit
     /// `NSView` and can't use the `@AppStorage` property wrapper directly.
     /// Documented in `SettingsView.swift` beside the update-channel line.
     private static let newSessionOpensComposerDefaultsKey = "ghostties.newSessionOpensComposer"
@@ -485,7 +485,7 @@ class WorkspaceViewContainer: NSView {
         #if DEBUG
         Self.newSessionOpensComposer(in: Self.composerPreferenceDefaults(fixtureActive: CaptureFixture.isActive))
         #else
-        Self.newSessionOpensComposer(in: .standard)
+        Self.newSessionOpensComposer(in: AppDefaults.store)
         #endif
     }
 
@@ -1336,7 +1336,7 @@ class WorkspaceViewContainer: NSView {
                 guard remaining > 0 else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
                     guard let self else { return }
-                    let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+                    let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
                     let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab), pairedBrowsers: self.coordinator.pairedBrowserByTerminal)
                     self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
                     tick(remaining - 1)
@@ -1657,7 +1657,7 @@ class WorkspaceViewContainer: NSView {
     /// `.sessionsList`), rather than crossfading.
     private var sidebarBodyMorphs: Bool {
         guard currentSidebarViewMode != "taskFirst" else { return false }
-        let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+        let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
         return SidebarBodyKind.resolve(tab: tab, dial: SidebarDialTuning.projectsLayout()) != .projectsList
     }
 
@@ -2300,7 +2300,7 @@ class WorkspaceViewContainer: NSView {
     /// drag tick — to avoid excessive UserDefaults writes.
     private func persistSidebarWidth() {
         let key = Self.sidebarWidthDefaultsKey(forMode: currentSidebarViewMode)
-        UserDefaults.standard.set(Double(currentSidebarWidth), forKey: key)
+        AppDefaults.store.set(Double(currentSidebarWidth), forKey: key)
     }
 
     /// Embed a browser manager's active tab view into `browserPanelView.contentArea`.
@@ -3516,7 +3516,7 @@ class WorkspaceViewContainer: NSView {
     /// The sessions the switching shortcuts act on, for this container's
     /// current state.
     private func shortcutSessions() -> [AgentSession] {
-        let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+        let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
         return Self.shortcutSessions(
             sidebarMode: sidebarMode,
             sidebarViewMode: currentSidebarViewMode,
@@ -3906,6 +3906,15 @@ class WorkspaceViewContainer: NSView {
         // the terminal clips its own corners via masksToBounds.
         terminalShadowHost.addSubview(terminalContainer)
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        // Intrinsic width here is the terminal's IDEAL size (the requested
+        // window size, the Debug banner's one-line width), read for default
+        // sizing. It must not act as a floor: at the default compression
+        // resistance it outranks the window's stay-put priority, so a narrow
+        // window grows to fit it, past the minimum
+        // `sidebarWidthRangeBesideTerminal` works from.
+        terminalContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         // Browser panel lives inside browser shadow host.
         browserPanelView.translatesAutoresizingMaskIntoConstraints = false

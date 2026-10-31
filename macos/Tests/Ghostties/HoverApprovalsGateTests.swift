@@ -21,7 +21,7 @@ import GhosttiesCore
 /// needs a live surface (`SessionCoordinator.focusSession` returns early
 /// without one), the same limit `FocusRunningTaskTests` notes.
 @MainActor
-final class HoverApprovalsGateTests: XCTestCase {
+final class HoverApprovalsGateTests: PrivateDefaultsTestCase {
     private let bashId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000C1")!
     private let askId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000C2")!
     private let idleId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000C3")!
@@ -35,11 +35,10 @@ final class HoverApprovalsGateTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
         for dir in tempDirs { try? FileManager.default.removeItem(at: dir) }
         tempDirs = []
         super.tearDown()
@@ -176,7 +175,7 @@ final class HoverApprovalsGateTests: XCTestCase {
     /// Control for the absence test above: with the flag on, a bounded prompt
     /// does render Approve and Deny, so "absent while off" is not vacuous.
     func testApproveDenyRenderForABoundedPromptWhenFlagOn() {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         let card = cardText(hook: bashPermission, id: bashId)
         // Sean decision 2026-10-22: actions live in the row only
         XCTAssertTrue(card.text.contains("run npm test?"), "flag on: the card still shows the question; card shows \(card.text.debugDescription)")

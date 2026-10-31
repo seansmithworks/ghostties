@@ -27,7 +27,7 @@ import GhosttiesCore
 /// Not gated here: that Approve/Deny/"Answer in terminal" fire (needs a live
 /// surface; see `HoverApprovalsGateTests`).
 @MainActor
-final class HoverApprovalsInlineGateTests: XCTestCase {
+final class HoverApprovalsInlineGateTests: PrivateDefaultsTestCase {
     private let bashId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000D1")!
     private let askId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000D2")!
     private let idleId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000D3")!
@@ -45,11 +45,10 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
         for dir in tempDirs { try? FileManager.default.removeItem(at: dir) }
         tempDirs = []
         super.tearDown()
@@ -212,7 +211,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
     }
 
     func testFlagOnBoundedRowShowsInlineApproveAndDeny() {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         let shown = listText([bash])
         XCTAssertTrue(shown.contains("approve"), "flag on: the bounded row shows an inline Approve; list shows \(shown.debugDescription)")
         XCTAssertTrue(shown.contains("deny"), "flag on: the bounded row shows an inline Deny; list shows \(shown.debugDescription)")
@@ -220,7 +219,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
 
     func testFreeformRowAlwaysShowsAnswerInTerminalNeverApproveDeny() {
         for flag in [false, true] {
-            UserDefaults.standard.set(flag, forKey: ApprovalFlag.defaultsKey)
+            defaults.set(flag, forKey: ApprovalFlag.defaultsKey)
             let shown = listText([ask])
             XCTAssertTrue(shown.contains("answer in terminal"), "flag \(flag): the freeform row shows an inline \"Answer in terminal\"; list shows \(shown.debugDescription)")
             XCTAssertFalse(shown.contains("approve"), "flag \(flag): a freeform row never shows Approve; list shows \(shown.debugDescription)")
@@ -231,7 +230,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
     // MARK: - (j) rows that don't need you have no action line, no question
 
     func testRowsThatDoNotNeedYouHaveNoActionLineAndNoQuestion() {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         // The needs-you rows prove the same list DOES draw questions and an
         // action line when asked to, so the absences below are not vacuous.
         let needing = listText([bash, ask])
@@ -267,13 +266,11 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
     /// `redlines` off draws no badge, so OCR can't read through it; rects
     /// need it on.
     private func withContainer(_ rows: [Row], morph steps: [CGFloat], redlines: Bool = true, _ body: (WorkspaceViewContainer, CGFloat) throws -> Void) throws {
-        try withDials({ $0.set(redlines, forKey: SidebarDialTuning.redlinesKey) }) {
-            let tabKey = "ghostties.sidebarTab"
-            let previousTab = UserDefaults.standard.object(forKey: tabKey)
-            UserDefaults.standard.set(SidebarTab.projects.rawValue, forKey: tabKey)
-            defer {
-                if let previousTab { UserDefaults.standard.set(previousTab, forKey: tabKey) } else { UserDefaults.standard.removeObject(forKey: tabKey) }
-            }
+        try withDials({
+            $0.set(redlines, forKey: SidebarDialTuning.redlinesKey)
+            // This scope replaces the test's own suite; carry the flag across.
+            $0.set(ApprovalFlag.isEnabled, forKey: ApprovalFlag.defaultsKey)
+        }) {
             let w = world(rows)
             w.store.updateSidebarMode(.pinned)
             let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: w.store)
@@ -312,7 +309,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
 
     // (k) inline actions live in the expanded/revealed layout only.
     func testInlineActionsShowExpandedAndNeverOnTheCollapsedRail() throws {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         var expanded = "", rail = ""
         var railGlyph: CGRect?
         // Rects with Redlines on (its badge sits at mid-height and can
@@ -336,7 +333,7 @@ final class HoverApprovalsInlineGateTests: XCTestCase {
 
     // (l) no tile shift: an action line never moves the glyph/tile column.
     func testActionLineDoesNotShiftTheTileOrGlyphColumn() throws {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         try withContainer([bash, working], morph: [0]) { container, _ in
             let shown = containerText(container)
             XCTAssertTrue(shown.contains("approve"), "precondition: the needs-you row draws its action line; it shows \(shown.debugDescription)")

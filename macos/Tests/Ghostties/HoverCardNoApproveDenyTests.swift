@@ -11,18 +11,17 @@ import GhosttiesCore
 ///
 /// Fixture state only: an invented hook payload in a temp `ClaudeStateStore`.
 @MainActor
-final class HoverCardNoApproveDenyTests: XCTestCase {
+final class HoverCardNoApproveDenyTests: PrivateDefaultsTestCase {
     private let bashId = UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000F1")!
     private let bashPermission = #"{"cwd":"/tmp","hook_event_name":"PermissionRequest","session_id":"c-1","tool_name":"Bash","tool_input":{"command":"npm test"}}"#
     private var tempDir: URL?
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.set(false, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(false, forKey: ApprovalFlag.defaultsKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: ApprovalFlag.defaultsKey)
         if let tempDir { try? FileManager.default.removeItem(at: tempDir) }
         super.tearDown()
     }
@@ -58,7 +57,7 @@ final class HoverCardNoApproveDenyTests: XCTestCase {
     }
 
     func testHoverCardNeverShowsApproveOrDeny() {
-        UserDefaults.standard.set(true, forKey: ApprovalFlag.defaultsKey)
+        defaults.set(true, forKey: ApprovalFlag.defaultsKey)
         let project = Project(name: "atlas-api", rootPath: "/Users/example/work/atlas-api")
         let session = AgentSession(
             id: bashId, name: "deploy preview", templateId: UUID(), projectId: project.id,

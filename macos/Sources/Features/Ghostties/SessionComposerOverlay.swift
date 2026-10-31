@@ -89,7 +89,7 @@ struct SessionComposerOverlay: View {
             // macOS-14 branch) owns staying narrow and out of the way.
             if !Self.isMarketingCaptureFixtureActive {
                 ComposerDebugTuningControl(
-                    defaults: composerDefaultsForTesting ?? .standard,
+                    defaults: composerDefaultsForTesting ?? AppDefaults.store,
                     onChange: { composerStore.focusSearchFieldTrigger = true }
                 )
                 .padding(12)
