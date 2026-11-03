@@ -53,6 +53,7 @@ document without answering the questions in it.
 - `src/` — shared Zig core (upstream's terminal)
 - `macos/` — the macOS app
 - `cli/` — Swift package: `gt` CLI, `ghostties-mcp` server, `GhosttiesCore`
+- `ios/` — SwiftUI iPhone app for talking to agents; see `ios/README.md`
 - `macos/Sources/Features/Ghostties/` — workspace sidebar (the fork's main addition)
 - `macos/Sources/Features/Terminal/` — upstream terminal, integration points
 - `macos/Tests/Workspace/` — sidebar unit tests
