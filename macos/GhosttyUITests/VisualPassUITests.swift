@@ -49,7 +49,8 @@ final class VisualPassUITests: XCTestCase {
     @discardableResult
     private func launchFixtureApp(
         state: String,
-        extraEnvironment: [String: String] = [:]
+        extraEnvironment: [String: String] = [:],
+        extraArguments: [String] = []
     ) throws -> XCUIApplication {
         let app = XCUIApplication()
         // `-ghostties.hasSeenOnboarding YES` — the standard NSUserDefaults CLI
@@ -61,7 +62,7 @@ final class VisualPassUITests: XCTestCase {
         app.launchArguments.append(contentsOf: [
             "-ApplePersistenceIgnoreState", "YES",
             "-ghostties.hasSeenOnboarding", "YES",
-        ])
+        ] + extraArguments)
         app.launchEnvironment["GHOSTTIES_CAPTURE_FIXTURE"] = "1"
         for (key, value) in extraEnvironment {
             app.launchEnvironment[key] = value
@@ -350,24 +351,10 @@ final class VisualPassUITests: XCTestCase {
             )
         }
 
-        let defaultsDomain = "com.seansmithdesign.ghostties.dev"
-        let setResult = Process()
-        setResult.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
-        setResult.arguments = ["write", defaultsDomain, "ghostties.sidebarViewMode", "taskFirst"]
-        try? setResult.run()
-        setResult.waitUntilExit()
-
-        defer {
-            let deleteResult = Process()
-            deleteResult.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
-            deleteResult.arguments = ["delete", defaultsDomain, "ghostties.sidebarViewMode"]
-            try? deleteResult.run()
-            deleteResult.waitUntilExit()
-        }
-
         let app = try launchFixtureApp(
             state: "task-first",
-            extraEnvironment: ["GHOSTTIES_TASKS_DIR": taskDir.path]
+            extraEnvironment: ["GHOSTTIES_TASKS_DIR": taskDir.path],
+            extraArguments: ["-ghostties.sidebarViewMode", "taskFirst"]
         )
         Thread.sleep(forTimeInterval: 0.5)
         try capture(app.windows.firstMatch, state: "task-first")

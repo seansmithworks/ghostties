@@ -22,12 +22,14 @@ final class WorkspaceStore: ObservableObject {
     /// `TestAction`), and this branch leans on `WorkspaceStore`'s DEBUG-only
     /// test initializer, so it cannot exist in a Release build regardless.
     static let shared: WorkspaceStore = {
+        let store: WorkspaceStore
         #if DEBUG
-        if CaptureFixture.isActive {
-            return CaptureFixture.makeStore()
-        }
+        store = CaptureFixture.isActive ? CaptureFixture.makeStore() : WorkspaceStore()
+        #else
+        store = WorkspaceStore()
         #endif
-        return WorkspaceStore()
+        ProjectIconStore.shared.follow(store.$projects)
+        return store
     }()
 
     /// `sectionedProjects`/`sessionGroups(forProject:)` below are memoized —
@@ -83,7 +85,8 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Current sidebar mode. Persisted across launches.
-    /// `.overlay` is transient — always saved as `.closed`.
+    /// `.overlay` and `.hoverRevealed` are transient — always saved as
+    /// `.closed` (`SidebarMode.persisted`).
     /// Only `WorkspaceViewContainer.transitionTo(_:)` should mutate this
     /// (via `updateSidebarMode`) to keep the UI and store in sync.
     private(set) var sidebarMode: SidebarMode = .pinned {
@@ -471,6 +474,14 @@ final class WorkspaceStore: ObservableObject {
         sectionedProjects.flatMap { $0.1 }
     }
 
+    /// The projects in the order the sidebar's project list shows them: one
+    /// view's `ProjectListOrder` (pinned, then by name, the same order
+    /// `SidebarProjectGroup.make` renders), else the tabs layout's sections.
+    /// Next/Previous Project steps this.
+    func projectsInDisplayOrder(layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()) -> [Project] {
+        layout == .oneView ? ProjectListOrder.pinnedFirst(projects) : flatProjectsInVisualOrder
+    }
+
     /// Deterministic signature of the current section layout — an ordered list
     /// of project IDs. Views can attach `.animation(.default, value:)` to this
     /// so SwiftUI animates only when the actual ordering changes, not on every
@@ -514,13 +525,18 @@ final class WorkspaceStore: ObservableObject {
 
     /// All sessions with a live surface (visible in the sidebar, regardless of
     /// running/completed/exited/killed status), flattened in the same visual
-    /// order as `flatProjectsInVisualOrder` + `sessionGroups(forProject:)`.
+    /// order as `projectsInDisplayOrder(layout:)` + `sessionGroups(forProject:)`.
     /// Powers Cmd+Shift+[/] session cycling — see
     /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`.
-    func sessionsInVisualOrder(coordinator: SessionCoordinator) -> [AgentSession] {
-        flatProjectsInVisualOrder.flatMap { project in
+    func sessionsInVisualOrder(
+        coordinator: SessionCoordinator,
+        layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()
+    ) -> [AgentSession] {
+        let rows = projectsInDisplayOrder(layout: layout).flatMap { project in
             sessionGroups(forProject: project.id, startedThisLaunch: coordinator.sessionIdsStartedThisLaunch).flatMap { $0.1 }
         }.filter { coordinator.hasLiveSurface(id: $0.id) }
+        // A paired browser is its terminal's stop, never one of its own.
+        return PairedBrowserRows.visible(rows, pairedBrowsers: coordinator.pairedBrowserByTerminal)
     }
 
     /// Pinned + Active sessions, in the same order `RecentsListView` renders
@@ -536,8 +552,10 @@ final class WorkspaceStore: ObservableObject {
     /// project by project, as the list and rail group it.
     func railSessions(
         layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout(),
-        pinningAvailable: Bool = SessionPinning.isAvailable
+        pinningAvailable: Bool = SessionPinning.isAvailable,
+        pairedBrowsers: [UUID: UUID] = [:]
     ) -> [AgentSession] {
+        let sessions = PairedBrowserRows.visible(sessions, pairedBrowsers: pairedBrowsers)
         let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses, pinningAvailable: pinningAvailable)
         let ordered = layout == .oneView
             ? SidebarProjectGroup.make(active: active, projects: projects).flatMap(\.sessions)
@@ -779,6 +797,7 @@ final class WorkspaceStore: ObservableObject {
         sessions.removeAll { $0.projectId == id }
         projects.removeAll { $0.id == id }
         if lastSelectedProjectId == id { lastSelectedProjectId = nil }
+        ProjectIconStore.shared.forget(projectId: id)
         // Project removal is a structural change — release any held freeze snapshot
         // so the deleted project disappears immediately and remaining projects re-bucket.
         releaseSnapshot()
@@ -787,9 +806,9 @@ final class WorkspaceStore: ObservableObject {
 
     /// Reposition a project so it sits immediately BEFORE `beforeId` — or
     /// last, if `beforeId` is nil or not found — within its own pin group.
-    /// `projects` order, pinned first (`ProjectListOrder`), is the one-view
-    /// list's group order and the rail's tile order, and it is persisted
-    /// as-is, so this is the whole reorder. A move never crosses the
+    /// `projects` order is the pinned block's order in the one-view list
+    /// and the rail (`ProjectListOrder`; the rest sort by name there), and
+    /// it is persisted as-is, so this is the whole reorder. A move never crosses the
     /// pinned/unpinned boundary: a target in the other group lands the
     /// project at its own group's near edge (a pinned project at the end of
     /// Pinned, an unpinned one at the top of the rest). Only the moved
@@ -1044,10 +1063,36 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
-    /// Clear a project's default template (user picked "None" / "Always ask").
-    func clearDefaultTemplate(for projectId: UUID) {
+    /// Settings' icon choice. Nil is Auto.
+    func setIconStyle(_ style: ProjectIconStyle?, for projectId: UUID) {
         guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
-        projects[index].defaultTemplateId = nil
+        projects[index].iconStyle = style
+        persist()
+    }
+
+    /// Settings' new-session control. Keeps `defaultTemplateId` (the task
+    /// cascade, Option+"+", the composer's template order) in step: a
+    /// specific template is also the project's default template; Shell and
+    /// Last used leave it unset.
+    func setNewSessionDefault(_ value: NewSessionDefault, for projectId: UUID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
+        projects[index].newSessionDefault = value
+        if case .template(let templateId) = value {
+            projects[index].defaultTemplateId = templateId
+        } else {
+            projects[index].defaultTemplateId = nil
+        }
+        persist()
+    }
+
+    /// A session was created from `template` in this project: it becomes
+    /// the project's Last used, unless it's a browser session (#256: the
+    /// browser never becomes a default by accident).
+    func recordSessionCreated(template: AgentTemplate, projectId: UUID) {
+        guard template.kind != .browser,
+              let index = projects.firstIndex(where: { $0.id == projectId }),
+              projects[index].lastTemplateId != template.id else { return }
+        projects[index].lastTemplateId = template.id
         persist()
     }
 
@@ -1196,7 +1241,7 @@ final class WorkspaceStore: ObservableObject {
     /// at the default location (D10). Stores the CHOSEN project's PARENT
     /// directory, not the project itself, so the next pick starts one level
     /// up from the last add rather than re-suggesting the same folder.
-    @AppStorage("ghostties.lastProjectPickerDirectory")
+    @AppStorage("ghostties.lastProjectPickerDirectory", store: AppDefaults.sharedStore)
     private static var lastProjectPickerDirectoryPath: String = ""
 
     #if DEBUG
@@ -1512,13 +1557,13 @@ final class WorkspaceStore: ObservableObject {
             try? await _Concurrency.Task.sleep(for: .milliseconds(100))
             guard !_Concurrency.Task.isCancelled else { return }
             let customTemplates = templates.filter { !$0.isDefault }
-            // Overlay is transient — persist as closed so next launch starts closed.
-            let persistedMode: SidebarMode = sidebarMode == .overlay ? .closed : sidebarMode
+            // A peek out of closed (overlay, hover reveal) persists as closed
+            // so next launch starts closed.
             let state = WorkspacePersistence.State(
                 projects: projects,
                 sessions: sessions,
                 templates: customTemplates,
-                sidebarMode: persistedMode,
+                sidebarMode: sidebarMode.persisted,
                 lastSelectedProjectId: lastSelectedProjectId,
                 hasShownPinMigrationNotice: hasShownPinMigrationNotice,
                 hasDismissedPinMigrationNotice: hasDismissedPinMigrationNotice

@@ -35,6 +35,8 @@ enum RedlineID {
     /// A one-view project header; its tile is `<id>.tile`, its name
     /// `<id>.label`, its chevron frame `<id>.chevron`.
     static func header(_ groupId: String) -> String { "header.\(groupId)" }
+    /// The gap a dragged project group opens (`ProjectDragGapView`).
+    static let projectDragGap = "project.dragGap"
     /// One tray button's cell; its hover chip is `<id>.chip`.
     static func trayCell(_ itemId: String) -> String { "tray.cell.\(itemId)" }
 }

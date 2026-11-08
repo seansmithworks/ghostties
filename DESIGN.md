@@ -124,7 +124,7 @@ Every chrome colour that changes with the theme lives in one value type, `Chrome
 
 Named steps on those five:
 
-- `Step.row` ink at 4% (light) / 6% (dark): the active and hovered session row. `Step.composerRow` 6% / 10%: the highlighted row in the Cmd+T composer. `Step.tile` 7%: a project tile's plain fill in dark. The selected row's tint (`selectedRowTint`) is 10% `ink` in light and 10% black in dark: white over the dark glass card drops `inkSecondary` to 3.35:1, under AA, while black keeps it at 4.98:1.
+- `Step.row` ink at 4% (light) / 6% (dark): the active and hovered session row. `Step.composerRow` 6% / 10%: the highlighted row in the Cmd+T composer. `Step.tile` 7%: a project tile's plain fill in dark. The selected row's tint (`selectedRowTint`) is 10% `ink` in light and 10% black in dark: white over the dark group card (`RailProjectColumn.columnFill`, white 4% over the chrome) drops `inkSecondary` to 4.14:1, under AA, while black keeps it at 6.03:1.
 - `Lift.container` and `Lift.border`: the chrome lifted toward white. `container` is the expanded project group's surface (white in light, `0.16` grey in dark); `border` is the tray glass's rim (`#2A2A2A` in dark).
 
 One value sits outside the five because no step of them reproduces the shipped colour: `tileFillBase` (`#28221E`, the light tile fill's base), a candidate to merge into `ink` when a design pass allows a visible shift. A project tile's monogram and the selected project's fill are plain `ink` (`#000000` / `#FFFFFF`); the separate `tileInk` (`#232120` / `#F0EFED`) was merged into it.
@@ -236,7 +236,7 @@ Background is layered `.regularMaterial` (a translucent system blur) with the su
 
 **Trailing picker controls and results list — REMOVED.** The field row's trailing project/branch controls, the inline pickers, and the results list (`ComposerResultsTable`/`ComposerRow`, pins/recents lanes, "New template" row) are gone with the anchored popover composer (2026-10-04): there is one composer, the centered single-line card, and no list under the field. Every "+" opens it (a project row's "+" pre-fills that project).
 
-**Templates — managed in Project settings.** Template create / edit / duplicate / pin / delete lives in `ProjectSettingsView`'s **Templates** section (`ProjectTemplatesSection`), labeled "Templates · shared across projects" because templates are global (`WorkspaceStore.templates`). Compact 28pt rows (13pt name, `pin.fill` indicator at 10pt, trailing "…" menu and context menu), `+ New template` as the last row, list capped at 196pt then scrolls. Template changes apply immediately — they are not staged behind the popover's Save/Cancel, which governs only the project's icon, name and default template.
+**Templates — managed in Settings.** Template create / edit / duplicate / pin / delete lives in the Settings projects pane's Templates section (`ProjectTemplatesSection`), labeled "Templates · shared across projects" because templates are global (`WorkspaceStore.templates`). Compact 28pt rows (13pt name, `pin.fill` indicator at 10pt, trailing "…" menu and context menu), `+ New template` as the last row. Template changes apply immediately. The project's name, icon and new-session default sit above them in the same pane (`ProjectsSettingsPane`); the name saves as you type.
 
 ### Row / hover states
 

@@ -120,9 +120,9 @@ enum CaptureFixture {
     }
 
     /// The defaults the composer store and the Cmd+T pref read/write:
-    /// the throwaway suite in fixture mode, `.standard` otherwise.
+    /// the throwaway suite in fixture mode, `AppDefaults` otherwise.
     static func defaults(fixtureActive: Bool) -> UserDefaults {
-        guard fixtureActive else { return .standard }
+        guard fixtureActive else { return AppDefaults.sharedStore }
         // Fixture mode must never fall back to `.standard`: that is Sean's Dev domain.
         guard let suite = fixtureDefaults else {
             preconditionFailure("could not create the capture defaults suite \(defaultsSuiteName)")
@@ -357,9 +357,19 @@ enum CaptureFixture {
         if let mode = initialSidebarMode {
             store.updateSidebarMode(mode)
         }
+        // `GHOSTTIES_CAPTURE_PINNED_PROJECTS`: only the listed projects stay
+        // pinned, through the same `togglePin` the menu calls.
+        let env = ProcessInfo.processInfo.environment
+        if env["GHOSTTIES_CAPTURE_PINNED_PROJECTS"] != nil {
+            let pinned = Set(projectOrder(env["GHOSTTIES_CAPTURE_PINNED_PROJECTS"]))
+            for project in store.projects where project.isPinned != pinned.contains(project.name) {
+                store.togglePin(id: project.id)
+            }
+        }
         // Listed projects first, in the given order, through the same
         // `moveProject` a header drop calls; the rest keep their order.
-        for name in projectOrder(ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_PROJECT_ORDER"]).reversed() {
+        // `moveProject` keeps each project in its pin group.
+        for name in projectOrder(env["GHOSTTIES_CAPTURE_PROJECT_ORDER"]).reversed() {
             guard let id = store.projects.first(where: { $0.name == name })?.id else { continue }
             store.moveProject(id: id, before: store.projects.first?.id)
         }
@@ -387,6 +397,7 @@ enum CaptureFixture {
     /// store's statuses, which `makeStore` already set.
     @MainActor
     static func seedCoordinator(_ coordinator: SessionCoordinator, store: WorkspaceStore) {
+        installAttentionStoreIfNeeded(on: coordinator)
         for (fs, session) in zip(fixtureSessions, sessions) {
             switch fs.state {
             case .processing, .longRunning:
@@ -404,6 +415,45 @@ enum CaptureFixture {
         }
     }
 
+    // MARK: - Attention fixture (hover approvals, C2)
+
+    /// `GHOSTTIES_CAPTURE_ATTENTION=1`: two switchboard sessions genuinely
+    /// need you, through invented Claude hook states in a throwaway
+    /// directory the coordinator reads instead of `~/.ghostties/state/`:
+    /// "flaky ci" asks to run `npm test` (bounded), "deps bump" asks a
+    /// question (freeform). The header then reads "2 need you".
+    static var attentionKnob: Bool { env("GHOSTTIES_CAPTURE_ATTENTION") == "1" }
+
+    private static let attentionHooks: [(session: String, hook: String)] = [
+        ("flaky ci", #"{"cwd":"/tmp","hook_event_name":"PermissionRequest","session_id":"fixture-1","tool_name":"Bash","tool_input":{"command":"npm test"}}"#),
+        ("deps bump", #"{"cwd":"/tmp","hook_event_name":"PreToolUse","session_id":"fixture-2","tool_name":"AskUserQuestion","tool_use_id":"fixture-tu","tool_input":{"questions":[{"question":"Which env name?","header":"Env","options":[{"label":"staging"},{"label":"prod"}],"multiSelect":false}]}}"#),
+    ]
+
+    @MainActor
+    static func installAttentionStoreIfNeeded(on coordinator: SessionCoordinator) {
+        guard attentionKnob, coordinator.claudeStateStoreForTesting == nil else { return }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ghostties-capture-attention-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for (name, hook) in attentionHooks {
+            guard let id = sessions.first(where: { $0.name == name })?.id else { continue }
+            let json = #"{"ghosttiesSessionId":"\#(id.uuidString)","updatedAt":\#(Int(Date().timeIntervalSince1970)),"hook":\#(hook)}"#
+            try? json.write(to: dir.appendingPathComponent("\(id.uuidString).json"), atomically: true, encoding: .utf8)
+        }
+        let claude = ClaudeStateStore(directoryURL: dir)
+        claude.resumeWriterForTesting = { _, _ in }
+        claude.refreshForTesting()
+        coordinator.claudeStateStoreForTesting = claude
+    }
+
+    /// `GHOSTTIES_CAPTURE_APPROVALS=1`: `ApprovalFlag` reads on for this
+    /// process only (the registration domain is never written to disk), so
+    /// a capture can show Approve/Deny.
+    static func applyApprovalsKnobIfNeeded() {
+        guard env("GHOSTTIES_CAPTURE_APPROVALS") == "1" else { return }
+        UserDefaults.standard.register(defaults: [ApprovalFlag.defaultsKey: true])
+    }
+
     // MARK: - Session popover fixture
 
     /// `GHOSTTIES_CAPTURE_POPOVER` (`needs-bash`, `needs-edit`, `running`, `done`):
@@ -413,6 +463,8 @@ enum CaptureFixture {
     enum PopoverScenario: String {
         case needsBash = "needs-bash"
         case needsEdit = "needs-edit"
+        /// A freeform question (AskUserQuestion).
+        case needsAsk = "needs-ask"
         case running
         case done
     }
@@ -428,7 +480,7 @@ enum CaptureFixture {
     /// (processing) row for `running`.
     static var popoverTargetSessionId: UUID? {
         switch popoverScenario {
-        case .needsBash, .needsEdit: return sessions.first { $0.name == "auth migration" }?.id
+        case .needsBash, .needsEdit, .needsAsk: return sessions.first { $0.name == "auth migration" }?.id
         case .running: return sessions.first?.id
         case .done: return sessions.first { $0.name == "flaky ci" }?.id
         case nil: return nil
@@ -466,6 +518,18 @@ enum CaptureFixture {
                 tool: "Edit",
                 input: ToolInputSummary(description: "Raise the request timeout to 30s", filePath: "src/server/config.ts")
             ))
+        case .needsAsk:
+            return PopoverOverride(approval: ClaudeState(
+                ghosttiesSessionId: id,
+                claudeSessionId: "fixture-claude-session",
+                cwd: "~/work/dab",
+                state: .needsInput,
+                structuredPrompt: StructuredPrompt(
+                    toolName: "AskUserQuestion", toolUseId: "fixture-tu",
+                    toolInput: ToolInputSummary(questions: ["Which env name?"])
+                ),
+                updatedAt: Date()
+            ), indicator: .needsAttention)
         case .running:
             return PopoverOverride(approval: nil, summary: SessionSummary(
                 prompt: "fix the flaky router tests",
@@ -770,10 +834,37 @@ enum CaptureFixture {
               width > 0, height > 0 else { return nil }
         return CGSize(width: width, height: height)
     }
-    /// `GHOSTTIES_CAPTURE_SETTINGS=1`: opens the Settings window on its
-    /// Appearance tab shortly after launch, so the pane can be captured
-    /// without a keystroke.
-    static var opensSettings: Bool { env("GHOSTTIES_CAPTURE_SETTINGS") == "1" }
+    /// `GHOSTTIES_CAPTURE_SETTINGS`: opens the Settings window shortly after
+    /// launch, so a pane can be captured without a keystroke. `1` is App
+    /// Settings' Appearance tab, `app` its General tab, `projects` the
+    /// projects pane on the current project, `projects:<name>` on that one.
+    static var settingsHook: SettingsHook? { parseSettingsHook(env("GHOSTTIES_CAPTURE_SETTINGS")) }
+
+    enum SettingsHook: Equatable {
+        case app(GhosttiesSettingsWindowController.Tab)
+        case projects(name: String?)
+    }
+
+    static func parseSettingsHook(_ raw: String?) -> SettingsHook? {
+        switch raw {
+        case nil: return nil
+        case "1": return .app(.appearance)
+        case "app": return .app(.general)
+        case "projects": return .projects(name: nil)
+        case let value? where value.hasPrefix("projects:"):
+            return .projects(name: String(value.dropFirst("projects:".count)))
+        default: return nil
+        }
+    }
+
+    /// `GHOSTTIES_CAPTURE_PROJECT_ICON=<project>=<png path>`: the projects
+    /// pane's Choose Image… for that fixture project, with that file, as if
+    /// picked in the open panel.
+    static var projectIconHook: (projectName: String, path: String)? {
+        guard let raw = env("GHOSTTIES_CAPTURE_PROJECT_ICON"),
+              let split = raw.firstIndex(of: "=") else { return nil }
+        return (String(raw[..<split]), String(raw[raw.index(after: split)...]))
+    }
 
     /// `GHOSTTIES_CAPTURE_THEME_PICKS=<light>|<dark>`: the Appearance pick
     /// for this launch, written to the fixture's throwaway defaults suite

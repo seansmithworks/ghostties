@@ -156,7 +156,7 @@ struct BuildInfoSnapshot {
 /// its content (`.fixedSize()`) so it never intercepts clicks outside its
 /// own bounds — it must not swallow terminal clicks.
 struct BuildInfoBadgeView: View {
-    @AppStorage(buildInfoBadgeStorageKey) private var isEnabled: Bool = buildInfoBadgeDefaultEnabled
+    @AppStorage(buildInfoBadgeStorageKey, store: AppDefaults.store) private var isEnabled: Bool = buildInfoBadgeDefaultEnabled
     @State private var justCopied = false
     @ChromeScheme private var colorScheme
 

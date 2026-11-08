@@ -41,6 +41,36 @@ final class SessionEnvironmentStampTests: XCTestCase {
         XCTAssertEqual(result["GHOSTTIES_SESSION_ID"], "override")
     }
 
+    /// A terminal learns where the browser gateway is from its own
+    /// environment; `gt browser open` reads exactly these two names.
+    func testBrowserControlIsStampedWhenGiven() {
+        let result = SessionCoordinator.spawnEnvironment(
+            template: .shell,
+            taskFilePath: nil,
+            taskId: nil,
+            extra: [:],
+            sessionId: UUID(),
+            browserControl: (endpoint: "http://127.0.0.1:5555", token: "tok")
+        )
+
+        XCTAssertEqual(result["GHOSTTIES_CDP_ENDPOINT"], "http://127.0.0.1:5555")
+        XCTAssertEqual(result["GHOSTTIES_BROWSER_TOKEN"], "tok")
+    }
+
+    func testBrowserControlIsAbsentWhenNil() {
+        let result = SessionCoordinator.spawnEnvironment(
+            template: .shell,
+            taskFilePath: nil,
+            taskId: nil,
+            extra: [:],
+            sessionId: UUID(),
+            browserControl: nil
+        )
+
+        XCTAssertNil(result["GHOSTTIES_CDP_ENDPOINT"])
+        XCTAssertNil(result["GHOSTTIES_BROWSER_TOKEN"])
+    }
+
     /// Guards against a regression where deleting the `GHOSTTIES_TASK_FILE`
     /// assignment in `spawnEnvironment` still passes the whole suite, because
     /// both existing tests use `.shell` (empty `environmentVariables`) with

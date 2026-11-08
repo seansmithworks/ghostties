@@ -43,13 +43,18 @@ struct SelectedRowOutlineSurface: View {
     let chipCenterX: CGFloat
     let chipTravel: CGFloat
     let chipSizes: (from: CGFloat, to: CGFloat)
+    /// How far the chip's centre sits from the row's vertical centre: 0,
+    /// except on a row with an action line under its title band, where the
+    /// chip stays centred on the band.
+    var chipCenterYOffset: CGFloat = 0
 
     var body: some View {
         Group {
             if look.outline > 0 || look.tint > 0 {
                 SelectedRowOutlineShape(
                     progress: progress, look: look,
-                    chipCenterX: chipCenterX, chipTravel: chipTravel, chipSizes: chipSizes
+                    chipCenterX: chipCenterX, chipTravel: chipTravel, chipSizes: chipSizes,
+                    chipCenterYOffset: chipCenterYOffset
                 )
             }
         }
@@ -66,6 +71,7 @@ private struct SelectedRowOutlineShape: View, Animatable {
     let chipCenterX: CGFloat
     let chipTravel: CGFloat
     let chipSizes: (from: CGFloat, to: CGFloat)
+    let chipCenterYOffset: CGFloat
 
     @ChromeScheme private var colorScheme
 
@@ -81,7 +87,7 @@ private struct SelectedRowOutlineShape: View, Animatable {
             let row = CGRect(origin: .zero, size: proxy.size)
             let side = SidebarMorphMetrics.lerp(chipSizes.from, chipSizes.to, progress)
             let chip = CGRect(
-                x: chipCenterX + chipTravel * progress - side / 2, y: (row.height - side) / 2,
+                x: chipCenterX + chipTravel * progress - side / 2, y: (row.height - side) / 2 + chipCenterYOffset,
                 width: side, height: side
             )
             let box = SelectedRowOutline.box(row: row, chip: chip, morph: Double(progress))

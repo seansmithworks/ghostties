@@ -121,15 +121,33 @@ extension Ghostty {
             ghostty_app_tick(app)
         }
 
+        // MARK: - Ghostties fork fence (open_config opens Settings)
+        // The `open_config` keybind (Cmd+, by default) opens the app's
+        // Settings window, the same as the app menu's "Settings…". The
+        // config file stays reachable from App Settings ("Open Config
+        // File"), which calls `openConfig()` below directly.
         private static func openConfig(_ app: ghostty_app_t) {
-            guard let app_ud = ghostty_app_userdata(app) else { return }
-            let app = Unmanaged<App>.fromOpaque(app_ud).takeUnretainedValue()
-            app.openConfig()
+            _Concurrency.Task { @MainActor in
+                GhosttiesSettingsWindowController.shared.show()
+            }
         }
+        // MARK: - End Ghostties fork fence (open_config opens Settings)
+
+        #if DEBUG
+        /// Ghostties test seam: when set, `openConfig()` hands the config
+        /// path here instead of opening it in an editor.
+        static var openConfigFileOverrideForTesting: ((String) -> Void)?
+        #endif
 
         func openConfig() {
             let str = configPath ?? Ghostty.AllocatedString(ghostty_config_open_path()).string
             guard !str.isEmpty else { return }
+            #if DEBUG
+            if let override = Self.openConfigFileOverrideForTesting {
+                override(str)
+                return
+            }
+            #endif
             let fileURL = URL(fileURLWithPath: str).absoluteString
             var action = ghostty_action_open_url_s()
             action.kind = GHOSTTY_ACTION_OPEN_URL_KIND_TEXT

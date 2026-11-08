@@ -21,6 +21,10 @@ final class BrowserSessionBridge: NSObject, CEFBrowserViewDelegate {
     /// browser materialises (including after a retry).
     var onCreationSucceeded: (() -> Void)?
 
+    /// Called with the tab whose browser was closed from outside the app (an
+    /// agent's `Target.closeTarget` / `Page.close`, or `window.close()`).
+    var onCloseRequested: ((UUID) -> Void)?
+
     init(sessionId: UUID, tabManager: BrowserTabManager) {
         self.sessionId = sessionId
         self.tabManager = tabManager
@@ -65,5 +69,10 @@ final class BrowserSessionBridge: NSObject, CEFBrowserViewDelegate {
 
     func browserViewDidCreate(_ view: CEFBrowserView) {
         onCreationSucceeded?()
+    }
+
+    func browserViewDidRequestClose(_ view: CEFBrowserView) {
+        guard let tabId = tabManager?.browserViews.first(where: { $0.value === view })?.key else { return }
+        onCloseRequested?(tabId)
     }
 }

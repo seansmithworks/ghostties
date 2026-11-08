@@ -10,20 +10,19 @@ import Testing
 /// `addProjectViaFolderPicker` itself calls `NSOpenPanel.runModal()`, which
 /// blocks on UI and cannot run in a unit test. What IS testable — and is
 /// the genuinely risky mechanic here — is whether `@AppStorage` on a static
-/// property actually persists through `UserDefaults.standard` under the
-/// key. This test writes through `WorkspaceStore`'s `#if DEBUG` accessor
-/// (exercising the real wrapper), then reads `UserDefaults.standard` under
-/// the key as a literal string, so a typo in the `@AppStorage` key in
-/// production would make this test fail. It saves and restores the real
-/// value so the suite doesn't leak state into other tests or the
-/// developer's actual defaults.
+/// property actually persists through its store under the key. This test
+/// writes through `WorkspaceStore`'s `#if DEBUG` accessor (exercising the
+/// real wrapper), then reads `AppDefaults.sharedStore` (the test bundle's
+/// throwaway suite) under the key as a literal string, so a typo in the
+/// `@AppStorage` key in production would make this test fail. It saves and
+/// restores the value so the suite doesn't leak state into other tests.
 struct WorkspaceStoreProjectPickerTests {
 
     @Test("Last-used picker directory round-trips through the real @AppStorage-backed UserDefaults key")
     @MainActor
     func lastPickerDirectoryRoundTripsThroughAppStorage() {
         let key = "ghostties.lastProjectPickerDirectory"
-        let defaults = UserDefaults.standard
+        let defaults = AppDefaults.sharedStore
         let saved = defaults.string(forKey: key)
         defer {
             if let saved {

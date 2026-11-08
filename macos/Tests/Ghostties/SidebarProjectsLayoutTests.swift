@@ -54,14 +54,15 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let f2 = session("build fix", fieldwork)
         let groups = SidebarProjectGroup.make(active: [a1, f1, a2, o1, f2], projects: [atlas, empty, fieldwork, orbit])
 
-        XCTAssertEqual(groups.map(\.name), ["atlas-api", "quiet", "fieldwork", "orbit-web"])
+        // Unpinned projects read by name (`ProjectListOrder`).
+        XCTAssertEqual(groups.map(\.name), ["atlas-api", "fieldwork", "orbit-web", "quiet"])
         XCTAssertEqual(groups.map { $0.sessions.map(\.name) }, [
             ["Claude Code 4", "auth refactor"],
-            [],
             ["docs pass", "build fix"],
             ["landing hero"],
+            [],
         ])
-        XCTAssertEqual(groups.map(\.isEmpty), [false, true, false, false])
+        XCTAssertEqual(groups.map(\.isEmpty), [false, false, false, true])
     }
 
     /// An empty project is a header with no rows, and never folds — even
@@ -77,7 +78,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             case .row(let s, _): return s.name
             }
         }
-        XCTAssertEqual(shape, ["quiet", "-", "atlas-api", "a"])
+        XCTAssertEqual(shape, ["atlas-api", "a", "-", "quiet"])
     }
 
     // MARK: - Header click

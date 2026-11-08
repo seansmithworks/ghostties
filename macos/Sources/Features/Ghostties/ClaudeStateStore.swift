@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 /// Raw on-disk shape written by `ghostties-status.sh` to
@@ -48,8 +49,18 @@ struct ClaudeHookPayload: Decodable {
     /// `PreToolUse`/`PostToolUse`'s `tool_use_id`, used only to count each
     /// edit once when `refresh()` re-reads an unchanged file.
     let toolUseId: String?
+    /// `PostToolUseFailure`'s `is_interrupt`: the failure was a user abort.
+    let isInterrupt: Bool?
+    /// `Notification`'s `message` text (identifies a notification-origin prompt).
+    let message: String?
+    /// The user turn this event belongs to: every event of one turn shares
+    /// it, so it tells two turns apart, never two prompts within one turn.
+    let promptId: String?
 
     enum CodingKeys: String, CodingKey {
+        case isInterrupt = "is_interrupt"
+        case message
+        case promptId = "prompt_id"
         case hookEventName = "hook_event_name"
         case toolName = "tool_name"
         case toolInput = "tool_input"
@@ -77,6 +88,9 @@ struct ClaudeHookPayload: Decodable {
         toolInput = try? c.decodeIfPresent(ToolInputSummary.self, forKey: .toolInput)
         prompt = try? c.decodeIfPresent(String.self, forKey: .prompt)
         toolUseId = try? c.decodeIfPresent(String.self, forKey: .toolUseId)
+        isInterrupt = try? c.decodeIfPresent(Bool.self, forKey: .isInterrupt)
+        message = try? c.decodeIfPresent(String.self, forKey: .message)
+        promptId = try? c.decodeIfPresent(String.self, forKey: .promptId)
     }
 }
 
@@ -93,15 +107,27 @@ struct ToolInputSummary: Decodable, Equatable {
     /// `file_path` (Glob/Grep `pattern`, Notebook `notebook_path`, `path`,
     /// WebFetch `url`), for the "first arg" of a non-Bash tool line.
     let firstArgument: String?
+    /// `AskUserQuestion`'s `questions[].question` strings, in order. Empty for
+    /// every other tool.
+    let questions: [String]
+    /// Stable SHA-256 of the whole `tool_input` (sorted keys), so two prompts
+    /// that differ only in fields the summary drops (an Edit's new_string)
+    /// still fingerprint differently. Empty when there was no object.
+    let digest: String
+
+    private struct Question: Decodable { let question: String? }
 
     private enum Keys: String, CodingKey {
-        case command, description
+        case command, description, questions
         case filePath = "file_path"
         case path, pattern, url
         case notebookPath = "notebook_path"
     }
 
-    init(command: String? = nil, description: String? = nil, filePath: String? = nil, firstArgument: String? = nil) {
+    init(command: String? = nil, description: String? = nil, filePath: String? = nil, firstArgument: String? = nil,
+         questions: [String] = [], digest: String = "") {
+        self.questions = questions
+        self.digest = digest
         self.command = command
         self.description = description
         self.filePath = filePath
@@ -113,6 +139,8 @@ struct ToolInputSummary: Decodable, Equatable {
             self.init()
             return
         }
+        let digest = (try? decoder.singleValueContainer().decode(CanonicalJSON.self))
+            .map { SHA256.hash(data: Data($0.canonical.utf8)).map { String(format: "%02x", $0) }.joined() } ?? ""
         func string(_ key: Keys) -> String? {
             guard let value = try? c.decodeIfPresent(String.self, forKey: key), !value.isEmpty else { return nil }
             return value
@@ -121,8 +149,39 @@ struct ToolInputSummary: Decodable, Equatable {
             command: string(.command),
             description: string(.description),
             filePath: string(.filePath),
-            firstArgument: string(.notebookPath) ?? string(.path) ?? string(.pattern) ?? string(.url)
+            firstArgument: string(.notebookPath) ?? string(.path) ?? string(.pattern) ?? string(.url),
+            questions: (try? c.decodeIfPresent([Question].self, forKey: .questions))?
+                .compactMap { $0.question }.filter { !$0.isEmpty } ?? [],
+            digest: digest
         )
+    }
+}
+
+/// Minimal JSON value with a canonical (sorted-key) serialization, used only
+/// to digest a hook's `tool_input`.
+private enum CanonicalJSON: Decodable {
+    case null, bool(Bool), number(Double), string(String), array([CanonicalJSON]), object([String: CanonicalJSON])
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
+        else if let v = try? c.decode(Double.self) { self = .number(v) }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
+        else if let v = try? c.decode([CanonicalJSON].self) { self = .array(v) }
+        else { self = .object(try c.decode([String: CanonicalJSON].self)) }
+    }
+
+    var canonical: String {
+        switch self {
+        case .null: return "null"
+        case .bool(let v): return v ? "true" : "false"
+        case .number(let v): return String(v)
+        case .string(let v): return "\(v.count):\(v)"
+        case .array(let v): return "[" + v.map(\.canonical).joined(separator: ",") + "]"
+        case .object(let v):
+            return "{" + v.keys.sorted().map { "\($0.count):\($0)=" + v[$0]!.canonical }.joined(separator: ",") + "}"
+        }
     }
 }
 
@@ -234,6 +293,10 @@ struct StructuredPrompt: Equatable {
     /// What the tool is about to do — carried here and nowhere else, so it
     /// exists only while the state is `.needsPermission`.
     var toolInput: ToolInputSummary? = nil
+    /// A `Notification`-origin prompt's message text (no tool fields exist).
+    var message: String? = nil
+    /// The hook's `prompt_id`; see `ClaudeStateStore.resolve`.
+    var promptId: String? = nil
 }
 
 /// Decoded, derived state for one Ghostties session, keyed by
@@ -288,11 +351,18 @@ final class ClaudeStateStore {
     /// apart from `states` on purpose -- nothing that feeds the indicator
     /// caches reads it, so ingesting summaries cannot change what they publish.
     private var summaries: [UUID: SessionSummary] = [:]
+    /// What `promptsDidChange` compares against: each pending prompt's identity.
+    private var pendingPrompts: [UUID: String] = [:]
     private var watcher: TaskFileWatcher?
 
     /// Fires after every `refresh()` rebuilds `states`, so a live consumer
     /// (the session popover) can re-derive instead of trusting a snapshot.
     let didRefresh = PassthroughSubject<Void, Never>()
+
+    /// Fires when a pending prompt changes, even though the session's
+    /// indicator stays `.needsAttention`: the only thing that tells the
+    /// sidebar rows to redraw what they ask.
+    let promptsDidChange = PassthroughSubject<Void, Never>()
 
     nonisolated static var defaultDirectoryURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -350,7 +420,7 @@ final class ClaudeStateStore {
 
     // MARK: - Writes
 
-    /// Delete both state files for a session. Called from `SessionCoordinator
+    /// Delete the state files for a session. Called from `SessionCoordinator
     /// .setStatus(_:for:)`'s terminal branch, the same seam that already
     /// clears both indicator caches, so a closed session's Claude state
     /// cannot outlive the session that owned it.
@@ -360,6 +430,7 @@ final class ClaudeStateStore {
         let fm = FileManager.default
         try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).json"))
         try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).todos.json"))
+        try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).permission.json"))
     }
 
     /// Delete `*.json` state files, and orphaned `*.tmp` files, older than
@@ -395,7 +466,8 @@ final class ClaudeStateStore {
 
     /// Rebuild `states` from scratch by listing `directoryURL` and decoding
     /// every `<uuid>.json` file (never `*.todos.json`, which is out of
-    /// scope this phase). One bad file is skipped, not fatal to the whole
+    /// scope this phase, and never `*.permission.json`, which is read only
+    /// as a companion of its session's main file). One bad file is skipped, not fatal to the whole
     /// refresh. Full rebuild (not an incremental merge) is deliberate: the
     /// hook overwrites its one file per session on every event, and a
     /// rebuild is also how a deleted file's session naturally drops out.
@@ -430,7 +502,8 @@ final class ClaudeStateStore {
         var seen: Set<UUID> = []
         for url in entries {
             let name = url.lastPathComponent
-            guard name.hasSuffix(".json"), !name.hasSuffix(".todos.json") else { continue }
+            guard name.hasSuffix(".json"), !name.hasSuffix(".todos.json"),
+                  !name.hasSuffix(".permission.json") else { continue }
             let stem = String(name.dropLast(".json".count))
             guard let ghosttiesSessionId = UUID(uuidString: stem) else { continue }
             guard let data = try? Data(contentsOf: url) else { continue }
@@ -453,12 +526,22 @@ final class ClaudeStateStore {
                 summaries[ghosttiesSessionId] = summary
             }
 
-            guard let state = Self.derive(from: wrapper) else { continue }
+            guard let derived = Self.derive(from: wrapper) else { continue }
+            let sidecar = (try? Data(contentsOf: directoryURL.appendingPathComponent("\(stem).permission.json")))
+                .flatMap { try? JSONDecoder().decode(ClaudeHookWrapper.self, from: $0) }
+            let state = Self.resolve(derived, previous: states[derived.ghosttiesSessionId], wrapper: wrapper, pendingPermission: sidecar)
             newStates[state.ghosttiesSessionId] = state
         }
         states = newStates
         // A session whose file is gone has gone away.
         summaries = summaries.filter { seen.contains($0.key) }
+        let prompts = newStates.compactMapValues { state in
+            state.structuredPrompt.map { _ in "\(state.updatedAt.timeIntervalSince1970)|\(ApprovalFingerprint.make(state))" }
+        }
+        if prompts != pendingPrompts {
+            pendingPrompts = prompts
+            promptsDidChange.send()
+        }
         didRefresh.send()
     }
 
@@ -533,20 +616,45 @@ final class ClaudeStateStore {
         var structuredPrompt: StructuredPrompt?
 
         switch hook.hookEventName {
-        case "UserPromptSubmit", "PreToolUse", "PostToolUse":
+        case "PreToolUse" where hook.toolName == "AskUserQuestion":
+            // A pending AskUserQuestion blocks on the user's answer: the
+            // session needs them, it is not "working". The question text rides
+            // in `structuredPrompt.toolInput` (hooks docs: tool_input.questions).
+            kind = .needsInput
+            structuredPrompt = StructuredPrompt(toolName: "AskUserQuestion", toolUseId: hook.toolUseId, toolInput: hook.toolInput, promptId: hook.promptId)
+        case "PostToolUseFailure" where hook.isInterrupt == true:
+            // `Stop` is skipped on user interrupt (hooks docs), so nothing
+            // else would end "working": an aborted tool call lands on idle.
+            kind = .idle
+        case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied":
+            // PostToolUseFailure / PermissionDenied: the blocked tool call
+            // resolved and Claude carries on (hooks docs, "PostToolUseFailure"
+            // and "PermissionDenied"), so a pending needs-you clears to busy.
+            // Docs caveat: a user Esc fires neither, and `Stop` is skipped on
+            // user interrupt -- the next event (e.g. UserPromptSubmit) clears it.
             kind = .busy
         case "Stop":
             kind = .idle
         case "PermissionRequest":
             kind = .needsPermission
             // toolUseId is nil — see StructuredPrompt's doc comment above.
-            structuredPrompt = StructuredPrompt(toolName: hook.toolName ?? "", toolUseId: nil, toolInput: hook.toolInput)
+            structuredPrompt = StructuredPrompt(toolName: hook.toolName ?? "", toolUseId: nil, toolInput: hook.toolInput, promptId: hook.promptId)
         case "Notification":
             switch hook.notificationType {
             case "permission_prompt":
                 kind = .needsPermission
-            case "idle_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
+                structuredPrompt = StructuredPrompt(toolName: "", toolUseId: nil, message: hook.message, promptId: hook.promptId)
+            case "idle_prompt":
+                // "Claude finished responding ~60s ago": a finished session,
+                // not one waiting on the user. Never attention.
+                kind = .idle
+            case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
                 kind = .needsInput
+            case "elicitation_complete", "elicitation_response":
+                // The MCP elicitation resolved; Claude resumes. (The docs give
+                // no clearing event for agent_needs_input: the next hook
+                // event overwrites it.)
+                kind = .busy
             default:
                 return nil
             }
@@ -564,6 +672,63 @@ final class ClaudeStateStore {
             structuredPrompt: structuredPrompt,
             updatedAt: Date(timeIntervalSince1970: wrapper.updatedAt)
         )
+    }
+
+    /// The state file is last-event-wins, so a less specific notification can
+    /// overwrite the record of a still-pending prompt. It must not erase one.
+    /// - `idle_prompt` (Claude "finished ~60s ago") never speaks for a prompt:
+    ///   keep the previous genuine attention state.
+    /// - `permission_prompt` carries no tool field, only a message ("Claude
+    ///   needs your permission"), and lands seconds after the
+    ///   `PermissionRequest` it belongs to. The hook therefore keeps that
+    ///   request in a sidecar (`<id>.permission.json`), written on
+    ///   `PermissionRequest`, left alone by `Notification`, deleted by every
+    ///   other event. A sidecar that exists beside a `permission_prompt` main
+    ///   file is thus the request still pending, whatever the watcher
+    ///   coalesced, and supplies the tool and its input. No sidecar means the
+    ///   tool is unknown: the tool-less `derived`, which makes Approve stale.
+    ///   (A `prompt_id` check would add nothing here: the sidecar's lifetime
+    ///   already encodes "still pending".)
+    /// - A pending question (`needsInput`) offers no Approve and has no
+    ///   sidecar; a `permission_prompt` in the same turn leaves it alone.
+    /// `PermissionRequest` names its tool, so it always replaces; so does a
+    /// real `Stop` or any other event.
+    static func resolve(
+        _ derived: ClaudeState,
+        previous: ClaudeState?,
+        wrapper: ClaudeHookWrapper,
+        pendingPermission: ClaudeHookWrapper? = nil
+    ) -> ClaudeState {
+        guard wrapper.hook.hookEventName == "Notification" else { return derived }
+        switch wrapper.hook.notificationType {
+        case "idle_prompt":
+            guard let previous, previous.state == .needsPermission || previous.state == .needsInput else { return derived }
+            return previous
+        case "permission_prompt":
+            if let previous, previous.state == .needsInput,
+               let turn = previous.structuredPrompt?.promptId, turn == wrapper.hook.promptId {
+                return previous
+            }
+            guard let pending = pendingPermission,
+                  pending.hook.hookEventName == "PermissionRequest",
+                  let tool = pending.hook.toolName, !tool.isEmpty else { return derived }
+            // The pending request, verbatim: same prompt (message and all, which
+            // is part of the approval fingerprint) and same time, so the Approve
+            // already on screen for it stays answerable.
+            return ClaudeState(
+                ghosttiesSessionId: derived.ghosttiesSessionId,
+                claudeSessionId: derived.claudeSessionId,
+                cwd: derived.cwd,
+                state: .needsPermission,
+                structuredPrompt: StructuredPrompt(
+                    toolName: tool, toolUseId: nil, toolInput: pending.hook.toolInput,
+                    promptId: pending.hook.promptId
+                ),
+                updatedAt: Date(timeIntervalSince1970: pending.updatedAt)
+            )
+        default:
+            return derived
+        }
     }
 
     /// Test-only override for where `refresh()` persists a resume record,

@@ -17,10 +17,7 @@ struct CaptureFixtureDefaultsTests {
 
     @Test func storeResolvesToCaptureSuiteInFixtureMode() {
         let store = SessionComposerStore(captureFixtureActive: true)
-        defer {
-            CaptureFixture.cleanUpDefaults(fixtureActive: true)
-            UserDefaults.standard.removeObject(forKey: probeKey) // a regression must not leak into Dev's domain
-        }
+        defer { CaptureFixture.cleanUpDefaults(fixtureActive: true) }
         store.defaultsForTesting.set("x", forKey: probeKey)
         let suite = UserDefaults(suiteName: suiteName)!
         #expect(suite.string(forKey: probeKey) == "x")
@@ -29,23 +26,17 @@ struct CaptureFixtureDefaultsTests {
 
     @Test func storeUsesStandardOutsideFixtureMode() {
         let store = SessionComposerStore(captureFixtureActive: false)
-        #expect(store.defaultsForTesting === UserDefaults.standard)
+        #expect(store.defaultsForTesting === AppDefaults.sharedStore)
     }
 
     @Test func prefResolvesToCaptureSuiteInFixtureMode() {
         let defaults = WorkspaceViewContainer.composerPreferenceDefaults(fixtureActive: true)
         let key = "ghostties.newSessionOpensComposer"
-        let standardBefore = UserDefaults.standard.object(forKey: key)
-        defer {
-            CaptureFixture.cleanUpDefaults(fixtureActive: true)
-            // A regression would have written Dev's domain; put it back.
-            if let standardBefore { UserDefaults.standard.set(standardBefore, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
-        }
+        defer { CaptureFixture.cleanUpDefaults(fixtureActive: true) }
         defaults.set(false, forKey: key)
         #expect(WorkspaceViewContainer.newSessionOpensComposer(in: defaults) == false)
         #expect(UserDefaults(suiteName: suiteName)!.object(forKey: "ghostties.newSessionOpensComposer") != nil)
-        #expect(WorkspaceViewContainer.composerPreferenceDefaults(fixtureActive: false) === UserDefaults.standard)
+        #expect(WorkspaceViewContainer.composerPreferenceDefaults(fixtureActive: false) === AppDefaults.sharedStore)
     }
 
     @Test func cleanupRemovesTheSuite() {

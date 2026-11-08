@@ -96,7 +96,7 @@ struct TaskRowView: View {
     /// the built-in default (whatever `startOrFocusSession` falls back to).
     /// No Settings UI in v0 — set via
     /// `defaults write com.mitchellh.ghostty ghostties.defaultTaskTemplate "Codex"`.
-    @AppStorage("ghostties.defaultTaskTemplate") private var defaultTaskTemplate: String = ""
+    @AppStorage("ghostties.defaultTaskTemplate", store: AppDefaults.store) private var defaultTaskTemplate: String = ""
     @State private var isHovered = false
 
     // MARK: - U11 — Row focus model

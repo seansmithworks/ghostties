@@ -8,15 +8,42 @@ import SwiftUI
 /// - `closed`: Sidebar hidden, terminal fills window flush.
 /// - `overlay`: Sidebar floats on top of full-width terminal (hover-to-reveal).
 /// - `collapsed`: Sidebar shown as a narrow icon-only rail (Flow 01, sidebar-presence).
+/// - `hoverRevealed`: the closed strip's hover reveal of the real pinned
+///   layout (the "Hover shows full sidebar" dial). A peek, not a pin.
 ///
 /// `Codable` by `Int` raw value and persisted in `WorkspaceStore` — new cases
 /// must always be APPENDED, never renumbered, or an old `workspace.json`
-/// decodes into the wrong mode.
+/// decodes into the wrong mode. The two peeks out of `.closed` save as
+/// `.closed` (`persisted`).
 enum SidebarMode: Int, Codable {
     case pinned
     case closed
     case overlay
     case collapsed
+    case hoverRevealed
+}
+
+extension SidebarMode {
+    /// The mode saved for this one: a peek out of `.closed` (the overlay,
+    /// the hover reveal) is never a mode the user chose.
+    var persisted: SidebarMode {
+        switch self {
+        case .overlay, .hoverRevealed: return .closed
+        case .pinned, .closed, .collapsed: return self
+        }
+    }
+
+    /// The mode the sidebar's geometry is laid out as: the hover reveal is
+    /// the pinned layout.
+    var layoutMode: SidebarMode {
+        self == .hoverRevealed ? .pinned : self
+    }
+
+    /// A peek out of `.closed` that the pointer leaving (or the window
+    /// losing key) ends.
+    var isClosedPeek: Bool {
+        self == .overlay || self == .hoverRevealed
+    }
 }
 
 /// Shared layout constants for the workspace sidebar.
@@ -256,6 +283,28 @@ enum WorkspaceLayout {
     /// Minimum width for the terminal panel when browser is visible.
     static let terminalMinWidth: CGFloat = 300
 
+    /// The widest the sidebar can be with the terminal card beside it
+    /// (pinned, a push reveal): what leaves the card `terminalMinWidth`
+    /// between the sidebar's gutter and the trailing margin.
+    static func sidebarRoomBesideTerminal(containerWidth: CGFloat, margin: CGFloat) -> CGFloat {
+        containerWidth - terminalMinWidth - margin * 2
+    }
+
+    /// The sidebar's width range with the terminal card beside it: never
+    /// below `sidebarMinWidth`, so in a window too narrow for both minimums
+    /// the terminal gives way (`sidebarFitsBesideTerminal` says when).
+    static func sidebarWidthRangeBesideTerminal(containerWidth: CGFloat, margin: CGFloat) -> ClosedRange<CGFloat> {
+        let room = sidebarRoomBesideTerminal(containerWidth: containerWidth, margin: margin)
+        return sidebarMinWidth...min(sidebarMaxWidth, max(room, sidebarMinWidth))
+    }
+
+    /// Whether the sidebar at its minimum fits beside the terminal at its
+    /// minimum. A reveal that can't push without crossing one floats over
+    /// the card instead.
+    static func sidebarFitsBesideTerminal(containerWidth: CGFloat, margin: CGFloat) -> Bool {
+        sidebarRoomBesideTerminal(containerWidth: containerWidth, margin: margin) >= sidebarMinWidth
+    }
+
     // MARK: - Session Status-Dot Colors
 
     /// Session status dot: "your turn" / waiting for input. Calm muted blue #5B8DEF.
@@ -362,6 +411,13 @@ enum WorkspaceLayout {
     /// (`RecentsListView.sectionsContent`).
     static let recentsRowGap: CGFloat = 4
 
+    /// The one-view list's only separator between pinned projects and the
+    /// alphabetical rest (mild2wild 2026-10-21 card 01): clear space added
+    /// to the usual break between project groups. The card's rows touch
+    /// (40pt pitch) and the break opens a 16pt gap (56pt pitch); here the
+    /// usual break stays and the pinned break is 16pt more, the same step.
+    static let projectPinnedBreak: CGFloat = 16
+
     /// Session name / inline-rename field text size in `RecentsRowView`.
     static let recentsRowTitleSize: CGFloat = 14
 
@@ -419,7 +475,7 @@ enum WorkspaceLayout {
 
     /// `sidebarTrailingGutter(for:)` at an explicit window margin.
     static func sidebarTrailingGutter(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
-        mode == .pinned || mode == .overlay ? margin : 0
+        mode.layoutMode == .pinned || mode == .overlay ? margin : 0
     }
 
     /// Hit width of the sidebar drag handle on the rail: a strip over the
@@ -436,7 +492,7 @@ enum WorkspaceLayout {
     /// Closed: 0 (the handle is hidden there).
     static func sidebarDragHandleWidth(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
         switch mode {
-        case .pinned, .overlay: return sidebarTrailingGutter(for: mode, margin: margin)
+        case .pinned, .overlay, .hoverRevealed: return sidebarTrailingGutter(for: mode, margin: margin)
         case .collapsed: return railDragHandleHitWidth
         case .closed: return 0
         }

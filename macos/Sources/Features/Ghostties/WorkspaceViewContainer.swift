@@ -219,14 +219,21 @@ private struct SidebarHostRoot: View {
             .environment(\.sidebarMode, store.sidebarMode)
     }
 
-    /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
-    /// "Expand Sidebar" on the rail, "Open Sidebar" while overlaid — the
-    /// overlay's toggle promotes it to pinned.
     private var toggleLabel: String {
-        switch store.sidebarMode {
+        WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode)
+    }
+}
+
+extension WorkspaceViewContainer {
+    /// The tray toggle's label: "Collapse Sidebar" while pinned (the toggle
+    /// flips full width ↔ rail), "Expand Sidebar" on the rail, "Open
+    /// Sidebar" while overlaid or hover-revealed — there the toggle promotes
+    /// the peek to pinned.
+    static func sidebarToggleLabel(for mode: SidebarMode) -> String {
+        switch mode {
         case .collapsed: return "Expand Sidebar"
-        case .overlay: return "Open Sidebar"
-        default: return "Collapse Sidebar"
+        case .overlay, .hoverRevealed: return "Open Sidebar"
+        case .pinned, .closed: return "Collapse Sidebar"
         }
     }
 }
@@ -315,7 +322,7 @@ class WorkspaceViewContainer: NSView {
     /// Read the current sidebar view mode from UserDefaults. Defaults to
     /// project-first if the key is missing or holds an unknown value.
     private var currentSidebarViewMode: String {
-        let raw = UserDefaults.standard.string(forKey: Self.sidebarViewModeDefaultsKey) ?? "projectFirst"
+        let raw = AppDefaults.store.string(forKey: Self.sidebarViewModeDefaultsKey) ?? "projectFirst"
         return raw == "taskFirst" ? "taskFirst" : "projectFirst"
     }
 
@@ -339,11 +346,29 @@ class WorkspaceViewContainer: NSView {
     /// token when unset. Persisted values are re-clamped to the current
     /// min/max tokens in case those tokens changed since the value was saved.
     private static func persistedSidebarWidth(forMode mode: String) -> CGFloat {
-        let stored = UserDefaults.standard.double(forKey: sidebarWidthDefaultsKey(forMode: mode))
+        let stored = AppDefaults.store.double(forKey: sidebarWidthDefaultsKey(forMode: mode))
         guard stored > 0 else {
             return mode == "taskFirst" ? WorkspaceLayout.taskSidebarWidth : WorkspaceLayout.sidebarWidth
         }
         return min(max(CGFloat(stored), WorkspaceLayout.sidebarMinWidth), WorkspaceLayout.sidebarMaxWidth)
+    }
+
+    /// The sidebar's width with the terminal card beside it — pinned, the
+    /// closed strip's hover reveal, a push reveal from the rail: the desired
+    /// `currentSidebarWidth`, held to what leaves the card
+    /// `terminalMinWidth` (`WorkspaceLayout.sidebarWidthRangeBesideTerminal`).
+    /// One rule for all three, so a reveal is exactly pinned's geometry.
+    private var sidebarWidthBesideTerminal: CGFloat {
+        let range = WorkspaceLayout.sidebarWidthRangeBesideTerminal(
+            containerWidth: bounds.width, margin: SidebarDialTuning.windowMargin()
+        )
+        return min(max(currentSidebarWidth, range.lowerBound), range.upperBound)
+    }
+
+    /// Whether a reveal can push the card at all: the sidebar's minimum
+    /// beside the terminal's. When not, it overlays the card instead.
+    private var revealCanPushTerminal: Bool {
+        WorkspaceLayout.sidebarFitsBesideTerminal(containerWidth: bounds.width, margin: SidebarDialTuning.windowMargin())
     }
 
     /// Resolved sidebar width for the current view mode.
@@ -435,7 +460,7 @@ class WorkspaceViewContainer: NSView {
     /// UserDefaults key for the Cmd+T preference — composer (default) vs.
     /// instant create. Mirrors `Ghostty.Config.autoUpdateChannel`'s
     /// resolution pattern (`ghostties.autoUpdateChannel`): a plain
-    /// `UserDefaults.standard` read, since this container is an AppKit
+    /// `AppDefaults.store` read, since this container is an AppKit
     /// `NSView` and can't use the `@AppStorage` property wrapper directly.
     /// Documented in `SettingsView.swift` beside the update-channel line.
     private static let newSessionOpensComposerDefaultsKey = "ghostties.newSessionOpensComposer"
@@ -460,7 +485,7 @@ class WorkspaceViewContainer: NSView {
         #if DEBUG
         Self.newSessionOpensComposer(in: Self.composerPreferenceDefaults(fixtureActive: CaptureFixture.isActive))
         #else
-        Self.newSessionOpensComposer(in: .standard)
+        Self.newSessionOpensComposer(in: AppDefaults.store)
         #endif
     }
 
@@ -511,7 +536,20 @@ class WorkspaceViewContainer: NSView {
     private weak var observedSurface: Ghostty.SurfaceView?
 
     /// Current sidebar state — always kept in sync with `store.sidebarMode`.
-    private var sidebarMode: SidebarMode = .pinned
+    /// A drag belongs to the mode it runs in: any change of mode by any
+    /// path (Cmd+S, a close, a peek ending) ends it, except the drag's own
+    /// snap between pinned and the rail (`isDragSnapping`).
+    private var sidebarMode: SidebarMode = .pinned {
+        didSet {
+            if sidebarMode != oldValue && !isDragSnapping {
+                sidebarDragPointerWidth = nil
+            }
+        }
+    }
+
+    /// True while the drag itself moves the mode across the rail's snap
+    /// point, the one mode change a drag survives.
+    private var isDragSnapping = false
 
     /// Last published value of `store.toolbarRowTopAnchorConstant`.
     /// Updated in layout() from the live close-button frame so the SwiftUI
@@ -602,13 +640,6 @@ class WorkspaceViewContainer: NSView {
     /// never splits a reveal from its collapse.
     private var railRevealStyle: RailRevealStyle = .push
 
-    /// Spike ("Hover shows full sidebar" dial): true while the closed-mode
-    /// hover strip has revealed the real pinned layout. The container is in
-    /// `.pinned`, but it is not a pin: the store keeps `.closed` (nothing
-    /// persists), the hover exit closes it, and Cmd+S promotes it to a real
-    /// pin in place (`toggleSidebar`). Any other transition ends it.
-    private var isClosedHoverRevealed = false
-
     /// True while an overlay-style reveal is presented: the card holds its x
     /// and the sidebar is drawn over it on `railRevealBacking`.
     private var railRevealOverlays: Bool { isRailRevealPresented && railRevealStyle == .overlay }
@@ -616,7 +647,7 @@ class WorkspaceViewContainer: NSView {
     /// The mode the sidebar's geometry is laid out as: pinned while a push
     /// reveal is out, else the real mode.
     private var geometryMode: SidebarMode {
-        railRevealTarget && railRevealStyle == .push ? .pinned : sidebarMode
+        railRevealTarget && railRevealStyle == .push ? .pinned : sidebarMode.layoutMode
     }
 
     /// The sidebar's surface while revealed: the chrome fill, out to the
@@ -1287,7 +1318,7 @@ class WorkspaceViewContainer: NSView {
                     guard let self, self.sidebarMode == .closed else { return }
                     self.revealFromClosedStrip()
                     DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
-                        guard let self, self.sidebarMode == .overlay || self.isClosedHoverRevealed else { return }
+                        guard let self, self.sidebarMode.isClosedPeek else { return }
                         self.closeRevealFromClosedStrip()
                         cycle(remaining - 1, after: hold)
                     }
@@ -1305,8 +1336,8 @@ class WorkspaceViewContainer: NSView {
                 guard remaining > 0 else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
                     guard let self else { return }
-                    let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
-                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab))
+                    let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab), pairedBrowsers: self.coordinator.pairedBrowserByTerminal)
                     self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
                     tick(remaining - 1)
                 }
@@ -1393,7 +1424,7 @@ class WorkspaceViewContainer: NSView {
         let termSize = terminalContainer.intrinsicContentSize
         guard termSize.width != NSView.noIntrinsicMetric else { return termSize }
         switch sidebarMode {
-        case .pinned:
+        case .pinned, .hoverRevealed:
             let inset = SidebarDialTuning.windowMargin()
             return NSSize(
                 width: termSize.width + currentSidebarWidth + inset * 2,
@@ -1434,7 +1465,7 @@ class WorkspaceViewContainer: NSView {
         // cards still share the window with the rail only.
         let sidebarWidth: CGFloat = railRevealOverlays
             ? railRevealRestingWidth
-            : (sidebarMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
+            : (sidebarMode.layoutMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
         let inset = SidebarDialTuning.windowMargin()
         // Three inset slots: leading of terminal, gap between panels, trailing of browser.
         return bounds.width - sidebarWidth - inset * 3
@@ -1449,7 +1480,8 @@ class WorkspaceViewContainer: NSView {
         // Re-clamp the sidebar width when the window shrinks. The sidebar
         // previously never re-clamped on resize, so a sidebar sitting near
         // its max could exceed the available space once the window got
-        // small enough. Pinned mode only — closed mode is always width 0,
+        // small enough. Pinned geometry only (pinned, the closed strip's
+        // hover reveal, a push reveal from the rail) — closed mode is always width 0,
         // and overlay floats over the terminal rather than sharing its
         // space. Runs BEFORE the browser split clamp below: the browser
         // math reads `resizableWidth`, which reads the sidebar's live
@@ -1482,11 +1514,8 @@ class WorkspaceViewContainer: NSView {
         // also bail outright while a mode-transition animation is in
         // flight — the animation itself is already driving the constraint
         // to the right place.
-        if sidebarMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating && !isMorphStepHeld {
-            let inset = SidebarDialTuning.windowMargin()
-            let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
-            let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
-            let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
+        if geometryMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating && !isMorphStepHeld {
+            let reclamped = sidebarWidthBesideTerminal
             if reclamped != widthModel.width {
                 sidebarWidthConstraint.constant = reclamped
                 widthModel.width = reclamped
@@ -1628,7 +1657,7 @@ class WorkspaceViewContainer: NSView {
     /// `.sessionsList`), rather than crossfading.
     private var sidebarBodyMorphs: Bool {
         guard currentSidebarViewMode != "taskFirst" else { return false }
-        let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+        let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
         return SidebarBodyKind.resolve(tab: tab, dial: SidebarDialTuning.projectsLayout()) != .projectsList
     }
 
@@ -1741,7 +1770,7 @@ class WorkspaceViewContainer: NSView {
     ///
     /// Re-entrant: a second toggle mid-flight writes new targets and lands
     /// the old clock.
-    private func beginSidebarMorph(to newMode: SidebarMode, reduceMotion: Bool) {
+    private func beginSidebarMorph(to newMode: SidebarMode, expandedWidth: CGFloat, reduceMotion: Bool) {
         guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
         coordinator.sessionPopover.dismiss()
         NotificationCenter.default.post(name: .workspaceSidebarWillMorph, object: window)
@@ -1753,10 +1782,10 @@ class WorkspaceViewContainer: NSView {
         let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
         widthModel.railWidth = railWidth
         if newMode == .pinned {
-            widthModel.expandedWidth = currentSidebarWidth
+            widthModel.expandedWidth = expandedWidth
         }
         let targetMorph: CGFloat = newMode == .collapsed ? 1 : 0
-        let targetWidth = newMode == .collapsed ? railWidth : currentSidebarWidth
+        let targetWidth = newMode == .collapsed ? railWidth : expandedWidth
         widthModel.isMorphing = true
         if reduceMotion {
             morphClock?.land()
@@ -1922,7 +1951,7 @@ class WorkspaceViewContainer: NSView {
             context.duration = reduceMotion ? 0 : 0.2
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             switch sidebarMode {
-            case .pinned, .overlay:
+            case .pinned, .overlay, .hoverRevealed:
                 sidebarWidthConstraint.animator().constant = currentSidebarWidth
                 widthModel.width = currentSidebarWidth
                 widthModel.expandedWidth = currentSidebarWidth
@@ -1980,15 +2009,19 @@ class WorkspaceViewContainer: NSView {
         case .collapsed: return .pinned
         case .closed:    return .pinned
         case .overlay:   return .pinned
+        case .hoverRevealed: return .pinned
         }
     }
 
     @objc func toggleSidebar() {
         // Cmd+S during a closed hover reveal pins it for real, in place:
-        // the layout is already pinned, so nothing moves.
-        if isClosedHoverRevealed {
-            isClosedHoverRevealed = false
+        // the layout is already pinned, so nothing moves. The sidebar's
+        // root is rebuilt so its tray reads the new mode.
+        if sidebarMode == .hoverRevealed {
+            sidebarMode = .pinned
             store.updateSidebarMode(.pinned)
+            applySidebarView()
+            sidebarDragHandle.isHidden = !Self.sidebarEdgeDrags(in: .pinned)
             updateTrackingAreas()
             return
         }
@@ -2137,7 +2170,21 @@ class WorkspaceViewContainer: NSView {
         return (.pinned, min(max(pointerWidth, WorkspaceLayout.sidebarMinWidth), upperBound))
     }
 
+    /// Whether the sidebar's edge drags in `mode`: pinned and the rail snap
+    /// between each other; the closed peeks (overlay, hover reveal) only
+    /// resize — the pinned width, saved as pinned saves it — and never
+    /// change the mode. Closed has no edge.
+    static func sidebarEdgeDrags(in mode: SidebarMode) -> Bool {
+        switch mode {
+        case .pinned, .collapsed, .overlay, .hoverRevealed: return true
+        case .closed: return false
+        }
+    }
+
+    /// Starts a drag only where the edge drags: with no drag started,
+    /// `handleSidebarDrag` and `endSidebarDrag` do nothing.
     private func beginSidebarDrag() {
+        guard Self.sidebarEdgeDrags(in: sidebarMode) else { return }
         // A drag takes the width from wherever a toggle's spring has it.
         if motion.isRunning {
             cancelMorphMotion()
@@ -2159,12 +2206,12 @@ class WorkspaceViewContainer: NSView {
         // Upper bound: the design-token max, but never wider than leaves room
         // for the terminal's minimum usable width (mirrors the browser drag
         // handle's clamp against `WorkspaceLayout.terminalMinWidth`).
-        let inset = SidebarDialTuning.windowMargin()
-        let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
-        let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
-        // Overlay only resizes: no snapping to the rail, no pinning. It
-        // writes the same width pinned uses.
-        if sidebarMode == .overlay {
+        let upperBound = WorkspaceLayout.sidebarWidthRangeBesideTerminal(
+            containerWidth: bounds.width, margin: SidebarDialTuning.windowMargin()
+        ).upperBound
+        // A closed peek only resizes: no snapping to the rail, no pinning.
+        // It writes the same width pinned uses.
+        if sidebarMode.isClosedPeek {
             guard !isSidebarTransitionAnimating else { return }
             applyDraggedSidebarWidth(min(max(pointer, WorkspaceLayout.sidebarMinWidth), upperBound))
             return
@@ -2183,6 +2230,8 @@ class WorkspaceViewContainer: NSView {
         // re-cross; the next drag tick re-evaluates and catches up.
         if target.mode != sidebarMode {
             currentSidebarWidth = target.mode == .pinned ? target.width : sidebarWidthBeforeDrag
+            isDragSnapping = true
+            defer { isDragSnapping = false }
             transitionTo(target.mode)
             return
         }
@@ -2214,18 +2263,17 @@ class WorkspaceViewContainer: NSView {
     }
 
     private func endSidebarDrag() {
+        guard sidebarDragPointerWidth != nil else { return }
         sidebarDragPointerWidth = nil
         persistSidebarWidth()
-        // The overlay held open through the drag (`mouseExited`). Its hover
-        // zone follows the new width, and a drag that ended outside it
-        // closes the overlay as any exit does: the exit AppKit may still
+        // A closed peek held open through the drag (`mouseExited`). Its
+        // hover zone follows the new width, and a drag that ended outside it
+        // closes the peek as any exit does: the exit AppKit may still
         // deliver belongs to the replaced tracking area, so it's ignored.
-        guard sidebarMode == .overlay || isClosedHoverRevealed else { return }
+        guard sidebarMode.isClosedPeek else { return }
         updateTrackingAreas()
         if !pointerIsInOverlayZone {
-            // Not debounced: a drag can end within the guard's 0.25s of the
-            // overlay opening, and this close must not be dropped.
-            transitionTo(.closed, debounced: false)
+            transitionTo(.closed)
         }
     }
 
@@ -2240,8 +2288,8 @@ class WorkspaceViewContainer: NSView {
     /// reveal the pinned sidebar out to the card's leading edge.
     private var openRevealZone: CGRect {
         let margin = SidebarDialTuning.windowMargin()
-        if isClosedHoverRevealed {
-            let width = currentSidebarWidth + WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: margin)
+        if sidebarMode == .hoverRevealed {
+            let width = sidebarWidthBesideTerminal + WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: margin)
             return CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height)
         }
         return WorkspaceLayout.overlayRevealZone(in: bounds, sidebarWidth: currentSidebarWidth, margin: margin)
@@ -2252,7 +2300,7 @@ class WorkspaceViewContainer: NSView {
     /// drag tick — to avoid excessive UserDefaults writes.
     private func persistSidebarWidth() {
         let key = Self.sidebarWidthDefaultsKey(forMode: currentSidebarViewMode)
-        UserDefaults.standard.set(Double(currentSidebarWidth), forKey: key)
+        AppDefaults.store.set(Double(currentSidebarWidth), forKey: key)
     }
 
     /// Embed a browser manager's active tab view into `browserPanelView.contentArea`.
@@ -2362,6 +2410,9 @@ class WorkspaceViewContainer: NSView {
     /// Called by SessionCoordinator when switching to or creating a browser session.
     func showBrowserContent(_ manager: BrowserTabManager, bridge: BrowserSessionBridge?) {
         embedBrowserInPanel(manager)
+        #if DEBUG
+        refreshBrowserDrivenBy()
+        #endif
 
         // Wire the bridge if provided (overrides the one found in embedBrowserInPanel).
         if let bridge = bridge {
@@ -2374,6 +2425,10 @@ class WorkspaceViewContainer: NSView {
         }
     }
 
+    /// Width of the browser side panel as laid out right now; 0 while it is
+    /// collapsed. `gt browser open` waits for this before replying.
+    var browserPanelWidth: CGFloat { browserPanelView.frame.width }
+
     /// Restore terminal-only display (collapse browser side panel).
     /// Called by SessionCoordinator when switching from a browser session to a terminal session.
     func showTerminalContent() {
@@ -2383,6 +2438,9 @@ class WorkspaceViewContainer: NSView {
             animateBrowserPanel(visible: false)
         }
         _activeBrowserManager = nil
+        #if DEBUG
+        refreshBrowserDrivenBy()
+        #endif
     }
 
     /// Weak reference to the active browser manager for navigation actions.
@@ -2432,25 +2490,20 @@ class WorkspaceViewContainer: NSView {
     private var lastTransitionTime: CFTimeInterval = 0
 
     /// Centralized state transition. All sidebar mode changes go through here.
-    /// `debounced: false` skips the oscillation guard, for a transition that
-    /// is a deliberate one-off rather than a hover flicker (the close at the
-    /// end of an overlay drag).
-    private func transitionTo(_ newMode: SidebarMode, debounced: Bool = true, closedHoverReveal: Bool = false) {
+    /// The oscillation guard never drops leaving a peek out of closed (the
+    /// overlay, the hover reveal): the peek stamped the guard as it opened,
+    /// and the exit that closes it arrives on the peek's own tracking area,
+    /// so a dropped close is never retried and the peek sticks open. Only
+    /// what follows a transition too closely otherwise is dropped.
+    private func transitionTo(_ newMode: SidebarMode) {
         guard newMode != sidebarMode else { return }
         let now = CACurrentMediaTime()
-        guard !debounced || now - lastTransitionTime > 0.25 else { return }
+        guard sidebarMode.isClosedPeek || now - lastTransitionTime > 0.25 else { return }
         lastTransitionTime = now
-        let endsClosedHoverReveal = isClosedHoverRevealed && newMode == .closed
-        isClosedHoverRevealed = closedHoverReveal
+        let endsClosedHoverReveal = sidebarMode == .hoverRevealed && newMode == .closed
         isMorphStepHeld = false
         let previousMode = sidebarMode
         sidebarMode = newMode
-        // An overlay drag ends with the overlay: a later overlay must never
-        // inherit a drag whose mouse-up was lost (`mouseExited` holds an
-        // overlay open while one is in progress).
-        if previousMode == .overlay {
-            sidebarDragPointerWidth = nil
-        }
 
         // Leaving the rail ends any hover reveal. Cmd+S while revealed pins
         // it: the sidebar is already out at the pinned width, so it stays
@@ -2499,13 +2552,14 @@ class WorkspaceViewContainer: NSView {
         if morphs {
             beginSidebarMorph(
                 to: newMode,
+                expandedWidth: sidebarWidthBesideTerminal,
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             )
         } else if isCollapsePair {
             applyCollapseCrossfadeSidebarView(
                 previousMode: previousMode,
                 newMode: newMode,
-                targetWidth: newMode == .collapsed ? WorkspaceLayout.collapsedRailWidth(in: self) : currentSidebarWidth,
+                targetWidth: newMode == .collapsed ? WorkspaceLayout.collapsedRailWidth(in: self) : sidebarWidthBesideTerminal,
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             )
         } else {
@@ -2525,7 +2579,7 @@ class WorkspaceViewContainer: NSView {
 
         // 1. Swap leading constraints before animation.
         switch newMode {
-        case .pinned, .collapsed:
+        case .pinned, .collapsed, .hoverRevealed:
             shadowHostLeadingToSuperview.isActive = false
             shadowHostLeadingToSidebar.isActive = true
         case .closed, .overlay:
@@ -2556,7 +2610,7 @@ class WorkspaceViewContainer: NSView {
         //    The background material is only visible in overlay mode (floating hover state).
         //    In pinned mode the sidebar is transparent — the window background shows through.
         switch newMode {
-        case .pinned, .closed, .collapsed:
+        case .pinned, .closed, .collapsed, .hoverRevealed:
             backgroundEffectView.isHidden = true
             sidebarOverlayBackground.isHidden = true
         case .overlay:
@@ -2564,10 +2618,9 @@ class WorkspaceViewContainer: NSView {
             sidebarOverlayBackground.isHidden = false
         }
 
-        // Sidebar drag handle: active while pinned or collapsed — dragging
-        // snaps between the two — and in overlay, where it only resizes.
-        // Hidden in closed mode (sidebar isn't there).
-        sidebarDragHandle.isHidden = newMode == .closed
+        // Sidebar drag handle: shown wherever the edge drags
+        // (`sidebarEdgeDrags(in:)`).
+        sidebarDragHandle.isHidden = !Self.sidebarEdgeDrags(in: newMode)
 
         // 4. Animate constraints, widths, alphas — duration/curve come from
         // the Flow 05 named-transition table (`WorkspaceLayout.
@@ -2586,7 +2639,7 @@ class WorkspaceViewContainer: NSView {
         // open"/"Reveal close"), ease-in-out; every other transition keeps
         // its row in the Flow 05 table.
         let timing: WorkspaceLayout.SidebarTransitionTiming
-        if closedHoverReveal {
+        if newMode == .hoverRevealed {
             timing = .init(duration: SidebarDialTuning.hoverRevealOpenDuration(), curve: .legacyEaseInOut)
         } else if endsClosedHoverReveal {
             timing = .init(duration: SidebarDialTuning.hoverRevealCloseDuration(), curve: .legacyEaseInOut)
@@ -2682,7 +2735,7 @@ class WorkspaceViewContainer: NSView {
         }
         // 5. Non-animatable properties.
         switch newMode {
-        case .pinned, .collapsed:
+        case .pinned, .collapsed, .hoverRevealed:
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
             terminalShadowHost.castsShadow = true
@@ -2753,11 +2806,9 @@ class WorkspaceViewContainer: NSView {
             updateTrackingAreas()
         }
 
-        // 8. Persist (overlay is transient — store persists it as .closed).
-        // A closed hover reveal never reaches the store: it stays `.closed`.
-        if !isClosedHoverRevealed {
-            store.updateSidebarMode(newMode)
-        }
+        // 8. Publish. The store saves a peek out of closed (overlay, hover
+        // reveal) as `.closed` (`SidebarMode.persisted`).
+        store.updateSidebarMode(newMode)
 
         invalidateIntrinsicContentSize()
     }
@@ -2795,10 +2846,11 @@ class WorkspaceViewContainer: NSView {
         }
 
         switch newMode {
-        case .pinned:
-            set(sidebarWidthConstraint, currentSidebarWidth)
-            widthModel.expandedWidth = currentSidebarWidth
-            if updatesWidthModel { widthModel.width = currentSidebarWidth }
+        case .pinned, .hoverRevealed:
+            let width = sidebarWidthBesideTerminal
+            set(sidebarWidthConstraint, width)
+            widthModel.expandedWidth = width
+            if updatesWidthModel { widthModel.width = width }
             set(sidebarHostLeadingConstraint, 0)
             set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
@@ -2925,7 +2977,9 @@ class WorkspaceViewContainer: NSView {
     private func setRailRevealed(_ reveal: Bool) {
         guard sidebarMode == .collapsed, reveal != railRevealTarget else { return }
         if reveal {
-            railRevealStyle = SidebarDialTuning.hoverRevealStyle()
+            // A push that can't leave both minimums overlays instead.
+            let style = SidebarDialTuning.hoverRevealStyle()
+            railRevealStyle = style == .push && !revealCanPushTerminal ? .overlay : style
             beginRailRevealPresentation()
         }
         railRevealTarget = reveal
@@ -2935,18 +2989,20 @@ class WorkspaceViewContainer: NSView {
         let from: SidebarMode = reveal ? .collapsed : .pinned
         let to: SidebarMode = reveal ? .pinned : .collapsed
         let inset = SidebarDialTuning.windowMargin()
-        let targetWidth = reveal ? currentSidebarWidth : railRevealRestingWidth
-        let targetGutter = reveal ? WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset) : 0
         let pushes = railRevealStyle == .push
+        // Push: pinned's width. Overlay floats, so it keeps the desired one.
+        let revealedWidth = pushes ? sidebarWidthBesideTerminal : currentSidebarWidth
+        let targetWidth = reveal ? revealedWidth : railRevealRestingWidth
+        let targetGutter = reveal ? WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset) : 0
         // Push: the card's gap to the sidebar, rail -> pinned and back.
         let cardGap = WorkspaceLayout.sidebarTrailingGutter(for: to, margin: inset)
 
         let morphs = sidebarBodyMorphs
         if morphs {
-            beginSidebarMorph(to: to, reduceMotion: reduceMotion)
+            beginSidebarMorph(to: to, expandedWidth: revealedWidth, reduceMotion: reduceMotion)
         } else {
             applyCollapseCrossfadeSidebarView(previousMode: from, newMode: to, targetWidth: targetWidth, reduceMotion: reduceMotion)
-            if reveal { widthModel.expandedWidth = currentSidebarWidth }
+            if reveal { widthModel.expandedWidth = revealedWidth }
         }
 
         if reveal { installRailRevealClickMonitor() } else { removeRailRevealClickMonitor() }
@@ -3202,7 +3258,7 @@ class WorkspaceViewContainer: NSView {
             addTrackingArea(area)
             activeTrackingArea = area
 
-        case .pinned where isClosedHoverRevealed:
+        case .hoverRevealed:
             let area = NSTrackingArea(
                 rect: openRevealZone,
                 options: [.mouseEnteredAndExited, .activeInKeyWindow],
@@ -3235,9 +3291,10 @@ class WorkspaceViewContainer: NSView {
     /// The closed strip's reveal: what `mouseEntered` runs once the pointer
     /// is in the strip's own tracking area.
     private func revealFromClosedStrip() {
-        // "Hover shows full sidebar": the real pinned layout, not a pin.
-        if SidebarDialTuning.hoverBarPushesCanvas() {
-            transitionTo(.pinned, closedHoverReveal: true)
+        // "Hover shows full sidebar": the real pinned layout, not a pin —
+        // unless the window can't fit both minimums, then the hover bar.
+        if SidebarDialTuning.hoverBarPushesCanvas() && revealCanPushTerminal {
+            transitionTo(.hoverRevealed)
         } else {
             transitionTo(.overlay)
         }
@@ -3247,7 +3304,7 @@ class WorkspaceViewContainer: NSView {
         // Same rule: only the overlay's own tracking area closes it, never
         // an exit forwarded up from a subview. A sidebar drag holds it
         // open; `endSidebarDrag` closes it if the drag ends outside.
-        guard sidebarMode == .overlay || isClosedHoverRevealed,
+        guard sidebarMode.isClosedPeek,
               let area = activeTrackingArea, event.trackingArea === area,
               sidebarDragPointerWidth == nil
         else { return }
@@ -3269,7 +3326,7 @@ class WorkspaceViewContainer: NSView {
             sidebarDragPointerWidth = nil
             persistSidebarWidth()
         }
-        if sidebarMode == .overlay || isClosedHoverRevealed {
+        if sidebarMode.isClosedPeek {
             transitionTo(.closed)
         }
         // Rail hover reveal: leaving the window collapses a reveal and
@@ -3430,7 +3487,7 @@ class WorkspaceViewContainer: NSView {
     /// `store.lastSelectedProjectId` (the list restores from it on mount);
     /// the list mirrors it via `.workspaceDidSelectProjectFromShortcut`.
     private func selectAdjacentProject(offset: Int) {
-        let order = store.flatProjectsInVisualOrder
+        let order = store.projectsInDisplayOrder()
         guard !order.isEmpty else { return }
         let activeProject = coordinator.activeSessionId.flatMap { id in
             store.sessions.first(where: { $0.id == id })?.projectId
@@ -3459,7 +3516,7 @@ class WorkspaceViewContainer: NSView {
     /// The sessions the switching shortcuts act on, for this container's
     /// current state.
     private func shortcutSessions() -> [AgentSession] {
-        let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+        let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
         return Self.shortcutSessions(
             sidebarMode: sidebarMode,
             sidebarViewMode: currentSidebarViewMode,
@@ -3486,20 +3543,21 @@ class WorkspaceViewContainer: NSView {
         coordinator: SessionCoordinator
     ) -> [AgentSession] {
         if sidebarMode == .collapsed {
-            return store.railSessions(layout: projectsLayout).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: projectsLayout, pairedBrowsers: coordinator.pairedBrowserByTerminal).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         // One view lists exactly the rail's sessions: Pinned, then Active
         // project by project.
         if sidebarViewMode != "taskFirst" && projectsLayout == .oneView {
-            return store.railSessions(layout: .oneView).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: .oneView, pairedBrowsers: coordinator.pairedBrowserByTerminal).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
-            return store.sessionsInVisualOrder(coordinator: coordinator)
+            return store.sessionsInVisualOrder(coordinator: coordinator, layout: projectsLayout)
         }
         return WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: store.sessions,
             statuses: store.globalStatuses,
-            coordinator: coordinator
+            coordinator: coordinator,
+            pairedBrowsers: coordinator.pairedBrowserByTerminal
         )
     }
 
@@ -3749,8 +3807,8 @@ class WorkspaceViewContainer: NSView {
     /// Instant session creation — Cmd+Shift+T (always) and Cmd+T when the
     /// `ghostties.newSessionOpensComposer` preference is off. Resolves the
     /// same smart-default cascade the composer uses, then creates directly
-    /// with the project's default template (falling back to `.shell`), with
-    /// no UI. Mirrors the deleted
+    /// with the project's new-session default from Settings
+    /// (`SessionTemplateResolver.newSessionTemplate`), with no UI. Mirrors the deleted
     /// `WorkspaceSidebarView.createNewSessionForSelectedProject()`, but uses
     /// the cascade pick instead of the sidebar's `selectedProjectId`.
     private func instantCreateSession() {
@@ -3758,13 +3816,7 @@ class WorkspaceViewContainer: NSView {
         guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
               let project = store.projects.first(where: { $0.id == projectId }) else { return }
 
-        let template: AgentTemplate
-        if let defaultId = project.defaultTemplateId,
-           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
-            template = defaultTemplate
-        } else {
-            template = AgentTemplate.shell
-        }
+        let template = SessionTemplateResolver.newSessionTemplate(for: project, store: store)
 
         // F1 (Phase 3 review): without this, a session created via the
         // cascade pick into a collapsed project spawns with no visible
@@ -3855,12 +3907,23 @@ class WorkspaceViewContainer: NSView {
         terminalShadowHost.addSubview(terminalContainer)
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
 
+        // Intrinsic width here is the terminal's IDEAL size (the requested
+        // window size, the Debug banner's one-line width), read for default
+        // sizing. It must not act as a floor: at the default compression
+        // resistance it outranks the window's stay-put priority, so a narrow
+        // window grows to fit it, past the minimum
+        // `sidebarWidthRangeBesideTerminal` works from.
+        terminalContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         // Browser panel lives inside browser shadow host.
         browserPanelView.translatesAutoresizingMaskIntoConstraints = false
         browserShadowHost.addSubview(browserPanelView)
 
-        // Read persisted sidebar mode.
-        let initialMode = store.sidebarMode
+        // Read persisted sidebar mode. Another window's hover reveal is not
+        // this window's mode: it opens closed, as it did when the store
+        // still said `.closed` during a reveal.
+        let initialMode = store.sidebarMode == .hoverRevealed ? .closed : store.sidebarMode
         self.sidebarMode = initialMode
         let isPinned = initialMode == .pinned
         // Pinned and collapsed both push the terminal right and share space
@@ -4167,7 +4230,36 @@ class WorkspaceViewContainer: NSView {
                 self.railHover.dismiss(pointerInside: self.pointerIsOverRail)
             }
             .store(in: &cancellables)
+
+        #if DEBUG
+        // "Driven by": who drives the shown browser, and in what colour, can
+        // change with an attach, a pairing, a rename or the project's activity.
+        Publishers.MergeMany(
+            coordinator.$agentAttachedTargets.map { _ in () }.eraseToAnyPublisher(),
+            coordinator.$pairedBrowserByTerminal.map { _ in () }.eraseToAnyPublisher(),
+            store.$sessions.map { _ in () }.eraseToAnyPublisher(),
+            store.$projects.map { _ in () }.eraseToAnyPublisher(),
+            store.$globalIndicatorStates.map { _ in () }.eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.refreshBrowserDrivenBy() }
+        .store(in: &cancellables)
+        #endif
     }
+
+    #if DEBUG
+    /// Shows or hides "Driven by" on the browser panel for the browser it is
+    /// showing. The colour is the driving terminal's project ghost colour,
+    /// the one its sidebar ghost wears.
+    private func refreshBrowserDrivenBy() {
+        let driver = coordinator.shownBrowserSessionId.flatMap { coordinator.agentDriver(ofBrowser: $0) }
+        let project = driver.flatMap { driver in store.projects.first { $0.id == driver.projectId } }
+        browserPanelView.setDrivenBy(
+            name: project == nil ? nil : driver?.name,
+            color: project.map { NSColor(store.projectGhostColor(for: $0)) }
+        )
+    }
+    #endif
 
     /// Mounts the history browser over the terminal, inside the canvas card,
     /// while History is selected; unmounts it otherwise. Focus goes to the
@@ -4286,7 +4378,7 @@ class WorkspaceViewContainer: NSView {
     private func applyChromeColor() {
         sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
         sidebarHostingView.appearance = sidebarAppearanceOverride
-        guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
+        guard sidebarMode != .overlay else { return }
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
         layer?.backgroundColor = canvasBackgroundCGColor

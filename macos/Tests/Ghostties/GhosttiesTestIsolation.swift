@@ -6,10 +6,13 @@ import XCTest
 
 /// The test bundle's principal class (`NSPrincipalClass` in the GhosttyTests
 /// build settings). XCTest instantiates it once, when the bundle loads and
-/// before any test runs, so every test in `GhosttyTests` reads the sidebar
-/// dials from a throwaway suite instead of the Dev app's real defaults domain
-/// (`com.seansmithdesign.ghostties.dev`), where live-tuned values would
-/// otherwise leak into layout and pixel tests. A new test cannot forget it.
+/// before any test runs, so every test in `GhosttyTests` reads and writes the
+/// sidebar dials and the app's settings in a throwaway suite instead of the
+/// test host's real defaults domain. That domain belongs to whichever live app
+/// shares the bundle ID: live-tuned values would leak into layout and pixel
+/// tests, and a test's write would reach that app's windows at their next
+/// redraw. A new test cannot forget it; `scripts/check-test-defaults.sh` fails
+/// any test that goes around it.
 ///
 /// The suite is private to this process (its name carries the pid), so a
 /// parallel test process starting up can't clear it mid-render. A test that
@@ -21,18 +24,21 @@ final class GhosttiesTestIsolation: NSObject, XCTestObservation {
 
     override init() {
         super.init()
-        UserDefaults().removePersistentDomain(forName: Self.suiteName)
-        SidebarDialTuning.sharedStore = UserDefaults(suiteName: Self.suiteName)!
+        let suite = UserDefaults(suiteName: Self.suiteName)!
+        suite.removePersistentDomain(forName: Self.suiteName)
+        SidebarDialTuning.sharedStore = suite
+        AppDefaults.sharedStore = suite
         XCTestObservationCenter.shared.addTestObserver(self)
     }
 
     func testBundleDidFinish(_ testBundle: Bundle) {
-        UserDefaults().removePersistentDomain(forName: Self.suiteName)
+        UserDefaults(suiteName: Self.suiteName)?.removePersistentDomain(forName: Self.suiteName)
     }
 }
 
-/// Runs `body` with every dial reader (and every dial `@AppStorage` built
-/// inside it) reading a fresh private suite, seeded by `configure`. Nothing
+/// Runs `body` with every dial and `AppDefaults` reader (and every such
+/// `@AppStorage` built inside it) reading a fresh private suite, seeded by
+/// `configure`. Nothing
 /// is written to the suite other tests read, so concurrent tests can't see
 /// these values or clear them. Render inside `body`: views constructed and
 /// laid out there read this suite.
@@ -45,14 +51,24 @@ func withDials<R>(_ configure: (UserDefaults) -> Void = { _ in }, _ body: () thr
     return try SidebarDialTuning.$scopedStore.withValue(suite) { try body() }
 }
 
+/// `withDials` for XCTest: each test method, `setUp` and `tearDown` included,
+/// runs inside its own private suite, written through `defaults`. Nothing
+/// needs resetting afterwards, and a nested `withDials` replaces this suite.
+class PrivateDefaultsTestCase: XCTestCase {
+    private(set) var defaults: UserDefaults!
+
+    override func invokeTest() {
+        withDials({ defaults = $0 }) { super.invokeTest() }
+    }
+}
+
 @Suite("Test isolation: sidebar dial defaults")
 struct SidebarDialIsolationTests {
     @Test("Dial readers see the test suite, not UserDefaults.standard")
     func dialReadersUseTheInjectedStore() throws {
         let key = SidebarDialTuning.trayInnerPaddingKey
         let sentinel = 12345.0
-        let standard = UserDefaults.standard
-        let standardBefore = standard.object(forKey: key) as? Double
+        let standardBefore = UserDefaults.standard.object(forKey: key) as? Double
 
         #expect(SidebarDialTuning.store !== UserDefaults.standard)
         // Whatever Dev's domain holds must not reach the production reader.
@@ -63,7 +79,17 @@ struct SidebarDialIsolationTests {
         }
         // The value never reached the shared suite or standard.
         #expect(SidebarDialTuning.sharedStore.object(forKey: key) == nil)
-        #expect(standard.object(forKey: key) as? Double == standardBefore)
+        #expect(UserDefaults.standard.object(forKey: key) as? Double == standardBefore)
+    }
+
+    @Test("App settings read the test suite, not UserDefaults.standard")
+    func appDefaultsUseTheInjectedStore() {
+        #expect(AppDefaults.sharedStore !== UserDefaults.standard)
+        #expect(AppDefaults.sharedStore === SidebarDialTuning.sharedStore)
+        withDials({ $0.set(false, forKey: ApprovalFlag.defaultsKey) }) {
+            #expect(!ApprovalFlag.isEnabled)
+        }
+        #expect(ApprovalFlag.isEnabled)
     }
 
     @Test("The shared suite is private to this test process")

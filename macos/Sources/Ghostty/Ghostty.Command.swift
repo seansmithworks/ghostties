@@ -36,5 +36,42 @@ extension Ghostty {
             self.action = String(cString: cValue.action)
             self.actionKey = String(cString: cValue.action_key)
         }
+
+        // MARK: - Ghostties fork fence (open_config palette entry)
+        // `open_config` opens the Settings window on macOS (`Ghostty.App`),
+        // whatever its argument, so upstream's two "Open Config…" entries
+        // would both open Settings under titles that say otherwise. They
+        // become one entry, "Open Settings", where the first one was.
+
+        init(title: String, description: String, action: String, actionKey: String) {
+            self.title = title
+            self.description = description
+            self.action = action
+            self.actionKey = actionKey
+        }
+
+        static let openSettings = Command(
+            title: "Open Settings",
+            description: "Open the Settings window. App Settings there opens the config file.",
+            action: "open_config",
+            actionKey: "open_config"
+        )
+
+        static func collapsingOpenConfig(_ commands: [Command]) -> [Command] {
+            var result: [Command] = []
+            var placed = false
+            for command in commands {
+                guard command.actionKey == "open_config" else {
+                    result.append(command)
+                    continue
+                }
+                if !placed {
+                    result.append(openSettings)
+                    placed = true
+                }
+            }
+            return result
+        }
+        // MARK: - End Ghostties fork fence (open_config palette entry)
     }
 }

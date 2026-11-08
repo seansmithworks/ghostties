@@ -134,6 +134,18 @@ NS_ASSUME_NONNULL_BEGIN
                                  runningMajor:(NSInteger)runningMajor;
 
 #if DEBUG
+/// The loopback port CEF's DevTools server listens on, or 0 before CEF is
+/// initialized (or if no port could be reserved). Debug builds only: the
+/// agent gateway proxies to it, and nothing outside this process is ever told
+/// about it. Release builds keep remote debugging off entirely.
+@property (class, nonatomic, readonly) int remoteDebuggingPort;
+
+/// Asks the OS for a free 127.0.0.1 TCP port by binding port 0, reading the
+/// assigned number and closing the socket. Returns 0 on failure. Another
+/// process could in theory claim it before CEF binds it; CEF then simply has
+/// no DevTools server and the gateway reports unavailable.
++ (int)pickFreeLoopbackPort;
+
 /// TEST-ONLY. Overrides the base directory all sentinel/profile paths above
 /// are derived from (normally `~/Library/Application Support/<bundleId>`).
 /// Tests MUST set this to an isolated scratch directory before touching any
