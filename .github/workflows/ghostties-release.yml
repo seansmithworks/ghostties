@@ -186,6 +186,9 @@ jobs:
         if: steps.cache-cef.outputs.cache-hit != 'true'
         run: bash scripts/build-cef-wrapper.sh
 
+      - name: Clear stale SwiftPM artifact cache (runner image ships a conflicting Sparkle artifact)
+        run: rm -rf ~/Library/Caches/org.swift.swiftpm/artifacts
+
       # Build the Ghostties Xcode scheme in Release config.
       # -scheme Ghostties builds DockTilePlugin as a dependency automatically.
       # ONLY_ACTIVE_ARCH=YES ARCHS=arm64 is required because GhosttyKit.xcframework
