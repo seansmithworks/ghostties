@@ -1737,6 +1737,7 @@ class WorkspaceViewContainer: NSView {
                 .environmentObject(coordinator)
                 .environmentObject(store)
                 .environmentObject(sessionDraftStore)
+                .onboardingSheet()
             return AnyView(view)
         } else {
             let content = WorkspaceSidebarView()
@@ -1754,6 +1755,7 @@ class WorkspaceViewContainer: NSView {
             // `widthModel` so the user-resizable drag handle continues to
             // work without rebuilding this tree on every tick.
             let view = SidebarMorphFrame(model: widthModel, content: content)
+                .onboardingSheet()
             return AnyView(view)
         }
     }
