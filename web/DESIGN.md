@@ -29,7 +29,7 @@ day-long stale window, which would serve a stale stylesheet after a deploy.
 
 | Page | Page-specific CSS |
 | --- | --- |
-| `index.html` | Hero scene, ghost pyramid, typewriter terminal, product windows, ambient backdrop, mono footer variant |
+| `index.html` | **None in `style.css`.** The homepage links `/v3.css` only; see §8 and §9 |
 | `download.html` | `.download-block`, `.download-btn`, `.download-meta`, `.all-releases` |
 | `changelog.html` | `.release*` group |
 | `support.html` | `.known-issue` |
@@ -380,16 +380,16 @@ concludes from this document that the system is finished.
 
 ---
 
-## 8. v2 redesign token set (`web/v2.css`) — in-progress system, not the live site
+## 8. Arcade token set (`web/v3.css`) — the live homepage
 
-`v2.html`/`v2.css` (Arcade shell, `feat/web-redesign-round4`) is a sandbox for
-the redesign in flight, served at `/v2.html` alongside the live `index.html`
-(`vercel.json` has no `/v2` rewrite, so the extension is required). It
-declares its own `:root` block, deliberately **not** merged into `style.css`'s
-tokens above — the two pages don't share a design system yet, and nothing in
-§3–§5 of this document applies to `/v2`. Document it here so it isn't an
-undocumented parallel system; promote it into the shared tokens (and delete
-this section) if and when `/v2` replaces `index.html`.
+The homepage (`index.html`) runs on the Arcade shell in `web/v3.css`. It began
+as the `/v2` sandbox (`v2.html`/`v2.css`, `feat/web-redesign-round4`), which
+has since been removed; v3 kept its tokens and vocabulary. It declares its
+own `:root` block, deliberately **not** merged into `style.css`'s tokens
+above: the homepage and the document pages don't share a design system yet,
+and nothing in §3–§5 applies to the homepage. Promote these into shared
+tokens (and fold this section into §3–§5) if the document pages move to the
+Arcade look.
 
 ### Colour
 
@@ -417,7 +417,7 @@ this section) if and when `/v2` replaces `index.html`.
 
 Self-hosted from `web/assets/fonts/` (`font-src 'self'` blocks any CDN) — same
 three families as the "Round-4 board fonts" set in §4 above, which only
-covered `index.html`'s two lifted sections; `/v2` uses them page-wide.
+covered `index.html`'s two lifted sections; the homepage now uses them page-wide.
 
 ### House vocabulary (locked)
 
@@ -426,3 +426,20 @@ sharing hairlines. **No rounded corners or drop shadows on chrome** — the one
 named exception is the amber `box-shadow` glow on `.cab-btn.primary`, which
 reads as arcade CRT bloom, not a drop shadow. Uppercase micro-labels at
 0.2em tracking (`.micro`, `.mono-tag`).
+
+---
+
+## 9. v3 components
+
+Two components added to `v3.css` on 2026-10-22:
+
+- **`.feature-grid` / `.feature-cell`** — the "What it adds" section. Same
+  bordered grid as `.install-grid` (hairlines shared, no radius, no shadow),
+  with an `h3` in `--font-display` and a sentence in `--font-prose` at
+  `--ink-dim`. Unlike `.install-grid` it is **opaque** (`background: var(--bg)`):
+  its cells hold running sentences, and the ghost field drifting behind
+  `main` would otherwise cross them. Every claim in it must already be in
+  `README.md` "What it adds" or a shipped `CHANGELOG.md` entry.
+- **`.text-link`** — an underline for links inside running text, so they
+  don't rely on amber alone (WCAG 1.4.1, Lighthouse `link-in-text-block`).
+  Buttons and footer links don't take it.
