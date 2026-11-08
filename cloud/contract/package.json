@@ -1,0 +1,14 @@
+{
+  "name": "@ghostties/contract",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Types, RPC signatures and realtime channels shared by the Ghostties web, mobile and desk clients.",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./fixtures": "./fixtures.ts"
+  },
+  "sideEffects": false
+}
