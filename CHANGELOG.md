@@ -8,29 +8,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Ghostties gets a Settings window and a theme picker, and the whole window now follows your terminal theme. Ghostties ships its own light and dark theme by default. The selected session is a quiet outline that crossfades between rows, a closed sidebar slides out and moves the terminal over when you rest on the window's edge, and closing the browser no longer closes the window.
+---
+
+## [0.5.0-beta.27] — 2026-11-09
+
+Sessions that need you now say what they need right in the sidebar, and you can approve or deny Claude Code's permission prompts from the row. Projects show their own icons, and Cmd+, opens a Settings window for projects, appearance and themes. The whole window follows your terminal theme, Ghostties ships its own light and dark theme by default, Claude Code status works without setup, and closing the browser no longer closes the window.
 
 ### Added
 
-- **A Settings window.** Cmd+, opens Settings, with General and Appearance panes, in place of the old "Coming Soon" stub. An Open Config File button is always there, and the config file itself is never written.
+- **Approve or Deny from the sidebar.** When Claude Code asks permission to run something, its row shows Approve and Deny. Approve answers that one prompt with "Yes", never "always allow"; Deny cancels it. Both go only to that session's terminal, and only if the same prompt is still showing. A session split into several panes shows "Answer in terminal →" instead.
+- **Sessions that need you ask their question in the row.** The question shows inline with "Answer in terminal →", and the hover card leads with it too.
+- **Projects show their own icon.** Ghostties finds a project's favicon or app icon and draws it in the project tile, in the full list and the rail, in place of the monogram.
+- **A Settings window.** Cmd+, opens Settings at your projects, where you can change a project's name, its icon (Auto, Monogram or an image you choose), its new-session default and its templates. General and Appearance panes hold app-wide settings, in place of the old "Coming Soon" stub. An Open Config File button is always there, and the config file itself is never written.
 - **Pick a theme in Settings.** Settings → Appearance shows themes as a 3×3 grid with a search field, with separate Light and Dark picks. A theme set in your config shows up as Custom. A pick beats `theme =` in your config until you choose Use Theme from Config or Reset to Ghostties; explicit `background`, `foreground` and `palette` lines in your config still win.
 - **Pick a theme from the composer.** Type `theme` in Cmd+T, or `/theme` and a name, to browse the same grid. Moving through it previews the whole window live; Return keeps the theme, and Esc, clicking away or closing the window puts the old one back.
 - **Appearance Mode.** Settings → Appearance has a System, Light or Dark switch.
+- **Claude Code status works without setup.** On launch, Ghostties adds its status hook to `~/.claude/settings.json` once, keeping your existing settings and hooks. It never creates the file if Claude Code isn't installed, and leaves a file it can't read untouched. Before, "needs you" and the status glyphs stayed blank until you pasted the hook in by hand.
 
 ### Changed
 
 - **The whole window follows your terminal theme.** With a theme other than the Ghostties theme, the sidebar, canvas and toolbar pills take their colors from it, and sidebar text is kept readable against them. A few themes can't reach that contrast and fall back to plain white or black text.
 - **Ghostties Light and Ghostties Dark are the default theme.** The terminal background matches its card: a warm off-white in light, near-black in dark. A `theme =` in your config still wins.
 - **Dark mode is darker.** The canvas behind the terminal is near-black, and the card shadow is retuned for both appearances: a faint dark shadow in light, a faint light glow in dark. The tray shadow in light sits a little tighter. History and the triage card follow the darker canvas.
-- **The selected session is a thin outline over a tint.** It crossfades from the old row to the new one whether you click or use the keyboard, and the project holding the active session sits on a glass card. With Reduce Motion on, it only fades.
+- **The selected session is a thin outline over a tint.** It crossfades from the old row to the new one whether you click or use the keyboard. With Reduce Motion on, it only fades.
+- **Pinned projects come first, then the rest alphabetically.** Pinned projects keep the order you give them; the two groups are separated by space, not a divider.
+- **"N need you" counts only sessions that are waiting on you.** An idle session no longer counts.
 - **Project tile monograms use the main text color**, a little more contrast in every theme.
-- **Resting on the edge of a closed sidebar slides the full sidebar out and moves the terminal over**, instead of floating a separate bar over it. It closes when the pointer leaves, Cmd+S keeps it open, and it never changes whether the sidebar stays closed next time.
-- **Cmd+T then Return opens a Shell** in the project you picked, even when Browser is that project's default or last-used template.
+- **Resting on the edge of a closed sidebar slides the full sidebar out and moves the terminal over**, instead of floating a separate bar over it. Drag its edge to resize it. It closes when the pointer leaves, Cmd+S keeps it open, and it never changes whether the sidebar stays closed next time.
+- **Cmd+T then Return opens a Shell** in the project you picked, including after you type the project's name, even when Browser is that project's default or last-used template.
 - **Closing the browser asks first.** Stop in the sidebar, or Cmd+W on the active browser, asks "Close browser?", says how many tabs will close, and closes only the browser. Focus moves to a running terminal in the same project.
+- **The Install gt row is gone from the welcome sheet.** It only worked from a copy of the source code. The welcome sheet now shows whichever sidebar view you use.
 
 ### Fixed
 
 - **Closing or stopping the in-app browser no longer closes the window.**
+- **A web page that closes itself closes only its tab**, or the browser if it was the last tab. Before, nothing happened.
+- **Opening the browser's DevTools no longer breaks the page.**
+- **Revealing the sidebar in a narrow window keeps the terminal at its minimum width.** The sidebar narrows to fit, and if even its narrowest width can't fit, it slides over the terminal instead of pushing it.
 - **The terminal card keeps its shadow after a light or dark switch.** It used to vanish until the sidebar mode changed.
 
 ---
