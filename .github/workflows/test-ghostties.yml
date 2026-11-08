@@ -132,6 +132,9 @@ jobs:
         if: steps.cache-cef.outputs.cache-hit != 'true'
         run: bash scripts/build-cef-wrapper.sh
 
+      - name: Clear stale SwiftPM artifact cache (runner image ships a conflicting Sparkle artifact)
+        run: rm -rf ~/Library/Caches/org.swift.swiftpm/artifacts
+
       # Pin arm64 — GhosttyKit.xcframework is arm64-only. Without this the
       # Xcode CLI will try to build universal and fail on linker misses.
       # (Xcode GUI masks this by defaulting ONLY_ACTIVE_ARCH=YES for Debug.)
