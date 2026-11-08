@@ -13,6 +13,13 @@ import OSLog
 /// snippet people pasted by hand, so it never doubles up). A file that is
 /// not a valid JSON object is left untouched.
 ///
+/// Add once: the first time the file ends up holding the hook (merged in
+/// now, or already there), `registeredKey` is recorded in Ghostties' own
+/// defaults and `register` never touches the file again, so a user who
+/// removes the hook keeps it removed. A launch that could not register
+/// (Claude Code not installed, unreadable or wrong-shaped file) records
+/// nothing, so a later launch tries again.
+///
 /// Known limit: a read-modify-write with no file lock — a concurrent write
 /// by Claude Code between the read and the atomic replace is lost.
 struct ClaudeHookRegistrar {
@@ -20,6 +27,9 @@ struct ClaudeHookRegistrar {
         subsystem: Bundle.main.bundleIdentifier ?? "com.ghostties",
         category: "ClaudeHookRegistrar"
     )
+
+    /// Set in Ghostties' defaults once the hook has been registered.
+    static let registeredKey = "ghostties.claudeHookRegistered"
 
     static var defaultSettingsPath: String {
         ("~/.claude/settings.json" as NSString).expandingTildeInPath
@@ -32,13 +42,26 @@ struct ClaudeHookRegistrar {
         ("Stop", ""), ("Notification", ""), ("PermissionRequest", ""), ("SessionEnd", ""),
     ]
 
-    /// Merge Ghostties' hook into `settingsPath`. Returns `true` if the file
-    /// is now in the desired state (including "already was"); `false` if it
+    /// Merge Ghostties' hook into `settingsPath`, unless `defaults` records it
+    /// was registered before. Returns `true` if the hook is registered (now,
+    /// already present, or on an earlier launch); `false` if the file
     /// could not be read, parsed or written, or if there is nothing to
     /// register into (neither the file nor its directory exists — Claude
     /// Code isn't installed, so one isn't created for it).
     @discardableResult
-    static func register(settingsPath: String = defaultSettingsPath, scriptPath: String) -> Bool {
+    static func register(
+        settingsPath: String = defaultSettingsPath,
+        scriptPath: String,
+        defaults: UserDefaults = AppDefaults.store
+    ) -> Bool {
+        if defaults.bool(forKey: registeredKey) { return true }
+        guard merge(settingsPath: settingsPath, scriptPath: scriptPath) else { return false }
+        defaults.set(true, forKey: registeredKey)
+        return true
+    }
+
+    /// The merge behind `register`: `true` if the file now holds the hook.
+    private static func merge(settingsPath: String, scriptPath: String) -> Bool {
         let fm = FileManager.default
         // Write through a symlinked settings.json (dotfiles repos) rather
         // than replacing the link with a plain file.

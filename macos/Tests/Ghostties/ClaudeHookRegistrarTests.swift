@@ -2,10 +2,25 @@ import Foundation
 import Testing
 @testable import Ghostty
 
-/// `ClaudeHookRegistrar.register(settingsPath:scriptPath:)` against temp
-/// files only — never the real `~/.claude/settings.json`.
-struct ClaudeHookRegistrarTests {
+/// `ClaudeHookRegistrar.register(settingsPath:scriptPath:defaults:)` against
+/// temp files and a private defaults suite only — never the real
+/// `~/.claude/settings.json` or a real Ghostties defaults domain.
+final class ClaudeHookRegistrarTests {
     private let script = "/home/u/.ghostties/hooks/ghostties-status.sh"
+    private let suiteName = "ghostties.tests.claude-hook.\(UUID().uuidString)"
+    private let defaults: UserDefaults
+
+    init() { defaults = UserDefaults(suiteName: suiteName)! }
+    deinit { defaults.removePersistentDomain(forName: suiteName) }
+
+    private func register(_ path: String) -> Bool {
+        ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script, defaults: defaults)
+    }
+
+    /// Forget an earlier registration, so the next `register` merges again.
+    private func forgetRegistration() {
+        defaults.removeObject(forKey: ClaudeHookRegistrar.registeredKey)
+    }
 
     private func tempPath() -> String {
         FileManager.default.temporaryDirectory
@@ -49,7 +64,7 @@ struct ClaudeHookRegistrarTests {
                   "Custom":[{"matcher":"","hooks":[{"type":"command","command":"keep"}]}]}}
         """, to: path)
 
-        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        #expect(register(path))
 
         let root = try #require(readJSON(path))
         #expect(root["model"] as? String == "opus")
@@ -67,20 +82,47 @@ struct ClaudeHookRegistrarTests {
         }
     }
 
-    @Test func secondRunIsANoOp() throws {
+    @Test func secondMergeIsANoOp() throws {
         let path = tempPath(); defer { cleanup(path) }
         try write(#"{"model":"opus"}"#, to: path)
-        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        #expect(register(path))
         let first = try #require(FileManager.default.contents(atPath: path))
-        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        // Bypass the add-once record: the merge itself must be idempotent.
+        forgetRegistration()
+        #expect(register(path))
         let second = try #require(FileManager.default.contents(atPath: path))
         #expect(first == second)
+    }
+
+    @Test func removedHookStaysRemoved() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"model":"opus"}"#, to: path)
+        #expect(register(path))
+        #expect(defaults.bool(forKey: ClaudeHookRegistrar.registeredKey))
+
+        // The user deletes our hook by hand.
+        let removed = #"{"model":"opus"}"#
+        try write(removed, to: path)
+
+        #expect(register(path))
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == removed)
+    }
+
+    @Test func aFailedRegistrationIsRetriedOnTheNextLaunch() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"hooks": {oops"#, to: path)
+        #expect(!register(path))
+        #expect(!defaults.bool(forKey: ClaudeHookRegistrar.registeredKey))
+
+        try write(#"{"model":"opus"}"#, to: path)
+        #expect(register(path))
+        #expect(readJSON(path)?["hooks"] != nil)
     }
 
     @Test func recognisesAHandPastedEntryAndDoesNotDuplicateIt() throws {
         let path = tempPath(); defer { cleanup(path) }
         try write(#"{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"$HOME\"/.ghostties/hooks/ghostties-status.sh","async":true}]}]}}"#, to: path)
-        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        #expect(register(path))
         let hooks = try #require(readJSON(path)?["hooks"] as? [String: Any])
         #expect(ghosttiesCount(try #require(hooks["Stop"] as? [[String: Any]])) == 1)
     }
@@ -89,13 +131,13 @@ struct ClaudeHookRegistrarTests {
         let path = tempPath(); defer { cleanup(path) }
         let bad = #"{"hooks": {oops"#
         try write(bad, to: path)
-        #expect(!ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        #expect(!register(path))
         #expect(try String(contentsOfFile: path, encoding: .utf8) == bad)
     }
 
     @Test func missingDirectoryMeansNothingIsCreated() {
         let path = tempPath()
-        #expect(!ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        #expect(!register(path))
         #expect(!FileManager.default.fileExists(atPath: path))
     }
 
@@ -103,7 +145,7 @@ struct ClaudeHookRegistrarTests {
         let path = tempPath(); defer { cleanup(path) }
         try write(#"{"statusLine":{"type":"command","command":"/usr/local/bin/line"}}"#, to: path)
 
-        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        #expect(register(path))
 
         let text = try String(contentsOfFile: path, encoding: .utf8)
         #expect(!text.contains(#"\/"#))
@@ -117,9 +159,10 @@ struct ClaudeHookRegistrarTests {
             #"{"hooks":{"Stop":[1,2]}}"#,
         ] {
             let path = tempPath(); defer { cleanup(path) }
+            forgetRegistration()
             try write(original, to: path)
 
-            #expect(!ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+            #expect(!register(path))
             #expect(try String(contentsOfFile: path, encoding: .utf8) == original)
         }
     }
@@ -130,7 +173,7 @@ struct ClaudeHookRegistrarTests {
         try write(#"{"model":"opus"}"#, to: target)
         try FileManager.default.createSymbolicLink(atPath: path, withDestinationPath: target)
 
-        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+        #expect(register(path))
 
         let attrs = try FileManager.default.attributesOfItem(atPath: path)
         #expect(attrs[.type] as? FileAttributeType == .typeSymbolicLink)
@@ -142,9 +185,10 @@ struct ClaudeHookRegistrarTests {
     @Test func emptyHooksObjectAndEmptyEventArrayStillMerge() throws {
         for original in [#"{"hooks":{}}"#, #"{"hooks":{"Stop":[]}}"#] {
             let path = tempPath(); defer { cleanup(path) }
+            forgetRegistration()
             try write(original, to: path)
 
-            #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: script))
+            #expect(register(path))
 
             let hooks = try #require(readJSON(path)?["hooks"] as? [String: Any])
             let stop = try #require(hooks["Stop"] as? [[String: Any]])

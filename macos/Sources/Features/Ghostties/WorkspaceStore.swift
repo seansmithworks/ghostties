@@ -223,7 +223,8 @@ final class WorkspaceStore: ObservableObject {
         // Seed bundled presets to ~/.ghostties/presets/ on first launch.
         PresetLoader.seedIfNeeded()
         HookInstaller.seedIfNeeded()
-        // Merge our hook into ~/.claude/settings.json (idempotent). Not from
+        // Merge our hook into ~/.claude/settings.json, once ever (see
+        // ClaudeHookRegistrar: a hook the user removes stays removed). Not from
         // a unit-test host or a capture run (both would write the developer's
         // real settings), and only once the script it points at exists.
         if !isRunningUnderXCTest, !CaptureFixture.isActive,
