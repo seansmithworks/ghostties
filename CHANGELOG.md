@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [0.5.0-beta.27] — 2026-11-09
+## [0.5.0-beta.27] — 2026-11-08
 
 Sessions that need you now say what they need right in the sidebar, and you can approve or deny Claude Code's permission prompts from the row. Projects show their own icons, and Cmd+, opens a Settings window for projects, appearance and themes. The whole window follows your terminal theme, Ghostties ships its own light and dark theme by default, Claude Code status works without setup, and closing the browser no longer closes the window.
 
