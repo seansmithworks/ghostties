@@ -36,7 +36,7 @@ struct WorkspaceSidebarView: View {
     /// Tracks which projects are expanded (per-window, not persisted).
     @State private var expandedProjectIds: Set<UUID> = []
 
-    @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    @AppStorage("ghostties.sidebarTab", store: AppDefaults.store) private var sidebarTab: SidebarTab = .projects
     #if DEBUG
     /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE` in One view: the fold the accordion reads.
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var captureCollapsedRaw = ""
@@ -338,9 +338,11 @@ struct WorkspaceSidebarView: View {
         sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
         coordinator: SessionCoordinator,
-        pinningAvailable: Bool = SessionPinning.isAvailable
+        pinningAvailable: Bool = SessionPinning.isAvailable,
+        pairedBrowsers: [UUID: UUID] = [:]
     ) -> [AgentSession] {
-        (RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable)
+        let sessions = PairedBrowserRows.visible(sessions, pairedBrowsers: pairedBrowsers)
+        return (RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable)
             + RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: pinningAvailable))
             .filter { coordinator.hasLiveSurface(id: $0.id) }
     }

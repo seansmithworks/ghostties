@@ -446,15 +446,21 @@ struct ClosedSidebarEdgeStripTests {
         }
     }
 
-    private func makeWindow(mode: SidebarMode) -> (WorkspaceViewContainer, NSWindow) {
-        let store = WorkspaceStore(
+    /// A persistence-disabled store: nothing it holds reaches a
+    /// `workspace.json`.
+    private func makeStore() -> WorkspaceStore {
+        WorkspaceStore(
             testingProjects: [], testingSessions: [],
             hasShownPinMigrationNotice: true, hasDismissedPinMigrationNotice: true
         )
+    }
+
+    private func makeWindow(mode: SidebarMode, store: WorkspaceStore? = nil, width: CGFloat = 900) -> (WorkspaceViewContainer, NSWindow) {
+        let store = store ?? makeStore()
         store.updateSidebarMode(mode)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         let window = NSWindow(
-            contentRect: .init(x: 0, y: 0, width: 900, height: 620),
+            contentRect: .init(x: 0, y: 0, width: width, height: 620),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false
         )
@@ -536,6 +542,49 @@ struct ClosedSidebarEdgeStripTests {
         }
     }
 
+    /// The closed strip's hover reveal in a narrow window: the pushed
+    /// card never goes below `terminalMinWidth` through the open, held
+    /// to it as pinned is.
+    @Test func hoverRevealInANarrowWindowKeepsTheTerminalAtItsMinimum() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed, width: 560)
+            defer { close(window) }
+            spin(0.5)
+            container.updateTrackingAreas()
+            let strip = try #require(container.trackingAreas.first)
+            let windowWidth = window.frame.width
+            container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
+            for _ in 0..<40 {
+                spin(0.02)
+                #expect(container.cardFrameForTesting.width >= WorkspaceLayout.terminalMinWidth - 0.5)
+            }
+            #expect(container.cardFrameForTesting.minX >= container.sidebarFrameForTesting.maxX)
+            // The hover zone ends at the card, not over it.
+            let zone = try #require(container.trackingAreas.first)
+            #expect(zone.rect.maxX <= container.cardFrameForTesting.minX + 0.5)
+            #expect(window.frame.width == windowWidth)
+        }
+    }
+
+    /// Too narrow for the sidebar's minimum beside the terminal's: the
+    /// strip reveals the overlay instead of pushing the card.
+    @Test func hoverRevealTooNarrowToFitOverlaysInstead() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed, width: 450)
+            defer { close(window) }
+            spin(0.5)
+            container.updateTrackingAreas()
+            let strip = try #require(container.trackingAreas.first)
+            let card = container.cardFrameForTesting
+            container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+            #expect(container.sidebarModeForTesting == .overlay)
+            spin(0.6)
+            #expect(container.cardFrameForTesting.width >= WorkspaceLayout.terminalMinWidth - 0.5)
+            #expect(container.cardFrameForTesting == card)
+        }
+    }
+
     /// Spike: the closed hover reveal's close animates. Halfway through a
     /// 300ms close, the sidebar's width and the card's leading edge are
     /// both strictly between their pinned and closed values — the card
@@ -552,7 +601,7 @@ struct ClosedSidebarEdgeStripTests {
             container.updateTrackingAreas()
             let strip = try #require(container.trackingAreas.first)
             container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
-            #expect(container.sidebarModeForTesting == .pinned)
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
             // Past the open and the 0.25s transition debounce.
             spin(0.6)
             let openWidth = container.sidebarFrameForTesting.width
@@ -579,6 +628,316 @@ struct ClosedSidebarEdgeStripTests {
             #expect(midCardX > closedCardX && midCardX < openCardX)
             #expect(endWidth == 0)
             #expect(endCardX == closedCardX)
+        }
+    }
+
+    /// Opens the closed strip's reveal with the "Hover shows full sidebar"
+    /// dial as set by the caller, and returns the reveal's own tracking area.
+    private func revealFromStrip(_ container: WorkspaceViewContainer, in window: NSWindow) throws -> NSTrackingArea {
+        spin(0.5)
+        container.updateTrackingAreas()
+        let strip = try #require(container.trackingAreas.first)
+        container.mouseEntered(with: enterEvent(.mouseEntered, area: strip, in: window))
+        #expect(container.sidebarModeForTesting != .closed)
+        return try #require(container.trackingAreas.first)
+    }
+
+    // MARK: Defect 1 — a deliberate close is never debounced
+
+    /// Leaving the reveal straight after it opens closes it. The reveal
+    /// stamps the 0.25s oscillation guard, and the exit arrives inside it;
+    /// the exit's tracking area is already the reveal's, so no second exit
+    /// ever comes to retry the close.
+    @Test func hoverRevealClosesWhenThePointerLeavesRightAway() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            let area = try revealFromStrip(container, in: window)
+            container.mouseExited(with: enterEvent(.mouseExited, area: area, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    /// The window losing key straight after the reveal opens closes it.
+    @Test func hoverRevealClosesWhenTheWindowResignsKeyRightAway() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    /// The dial's OFF path, the overlay, closes the same way.
+    @Test func overlayClosesWhenThePointerLeavesRightAway() throws {
+        try withDials({ $0.set(false, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            let area = try revealFromStrip(container, in: window)
+            #expect(container.sidebarModeForTesting == .overlay)
+            container.mouseExited(with: enterEvent(.mouseExited, area: area, in: window))
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    // MARK: Defect 2 — a reveal never saves a mode or width
+
+    private static let widthKeys = ["ghostties.sidebarWidth.projectFirst", "ghostties.sidebarWidth.taskFirst"]
+
+    /// A drag on the sidebar's own drag handle, driven by sending mouse
+    /// events to the handle directly (whether or not it is shown), so a
+    /// test can act between mouse-down and mouse-up.
+    private struct EdgeDrag {
+        let handle: NSView
+        let window: NSWindow
+        let startX: CGFloat
+        let y: CGFloat
+
+        private func mouse(_ type: NSEvent.EventType, x: CGFloat) -> NSEvent {
+            NSEvent.mouseEvent(
+                with: type, location: NSPoint(x: x, y: y), modifierFlags: [],
+                timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1
+            )!
+        }
+
+        func down() { handle.mouseDown(with: mouse(.leftMouseDown, x: startX)) }
+        func move(by dx: CGFloat) { handle.mouseDragged(with: mouse(.leftMouseDragged, x: startX + dx)) }
+        func up(at dx: CGFloat) { handle.mouseUp(with: mouse(.leftMouseUp, x: startX + dx)) }
+    }
+
+    private func edgeDrag(_ container: WorkspaceViewContainer, in window: NSWindow) throws -> EdgeDrag {
+        let handle = try #require(container.subviews.first {
+            String(describing: type(of: $0)) == "PanelDragHandleView"
+                && $0.frame == container.sidebarDragHandleFrameForTesting
+        })
+        let start = handle.convert(NSPoint(x: handle.bounds.midX, y: handle.bounds.midY), to: nil)
+        return EdgeDrag(handle: handle, window: window, startX: start.x, y: start.y)
+    }
+
+    /// Drags the sidebar's own drag handle by `dx` points, mouse-down to
+    /// mouse-up.
+    private func dragSidebarEdge(_ container: WorkspaceViewContainer, in window: NSWindow, by dx: CGFloat) throws {
+        let drag = try edgeDrag(container, in: window)
+        drag.down()
+        drag.move(by: dx)
+        drag.up(at: dx)
+    }
+
+    /// Clears the saved sidebar widths; the returned closure puts the test
+    /// host's own back.
+    private func clearSavedWidths() -> () -> Void {
+        let defaults = AppDefaults.store
+        let saved = Self.widthKeys.map { defaults.object(forKey: $0) }
+        Self.widthKeys.forEach { defaults.removeObject(forKey: $0) }
+        return {
+            for (key, value) in zip(Self.widthKeys, saved) {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+            }
+        }
+    }
+
+    private var savedWidths: [Double] {
+        Self.widthKeys.compactMap { AppDefaults.store.object(forKey: $0) as? Double }
+    }
+
+    // MARK: The hover reveal's edge drags (Sean, 2026-10-21)
+
+    /// `withDials` for an async test, with "Hover shows full sidebar" on.
+    private func withHoverRevealPushing(_ body: () async throws -> Void) async throws {
+        let name = "com.seansmithdesign.ghostties.tests.dials.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+        suite.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey)
+        try await SidebarDialTuning.$scopedStore.withValue(suite) { try await body() }
+    }
+
+    /// Opens the hover reveal and waits out its open. Async: the open's
+    /// completion arrives on the main queue, which a nested run-loop spin
+    /// inside this main-queue test can't drain — and until it does, the
+    /// drag holds off, as it does for any transition still animating.
+    private func openHoverReveal(_ container: WorkspaceViewContainer, in window: NSWindow) async throws {
+        _ = try revealFromStrip(container, in: window)
+        #expect(container.sidebarModeForTesting == .hoverRevealed)
+        try await _Concurrency.Task.sleep(nanoseconds: 600_000_000)
+    }
+
+    /// The edge drags during a hover reveal: its handle is shown, and a
+    /// drag resizes the sidebar exactly as pinned does.
+    @Test func dragDuringHoverRevealResizesTheSidebar() async throws {
+        let restoreWidths = clearSavedWidths()
+        defer { restoreWidths() }
+        try await withHoverRevealPushing {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            try await openHoverReveal(container, in: window)
+            #expect(WorkspaceViewContainer.sidebarEdgeDrags(in: .hoverRevealed))
+            #expect(!container.sidebarDragHandleIsHiddenForTesting)
+            let before = container.sidebarFrameForTesting.width
+            let drag = try edgeDrag(container, in: window)
+            drag.down()
+            drag.move(by: 24)
+            container.layoutSubtreeIfNeeded()
+            #expect(container.sidebarFrameForTesting.width == before + 24)
+            drag.up(at: 24)
+        }
+    }
+
+    /// The dragged width is saved to the same setting pinned saves to, and
+    /// the drag leaves the mode alone: still the hover reveal, which still
+    /// saves as `.closed`.
+    @Test func dragDuringHoverRevealSavesTheWidthAndKeepsTheMode() async throws {
+        let restoreWidths = clearSavedWidths()
+        defer { restoreWidths() }
+        try await withHoverRevealPushing {
+            let store = makeStore()
+            let (container, window) = makeWindow(mode: .closed, store: store)
+            defer { close(window) }
+            try await openHoverReveal(container, in: window)
+            let before = container.sidebarFrameForTesting.width
+            let drag = try edgeDrag(container, in: window)
+            drag.down()
+            drag.move(by: 24)
+            // Mid-drag: still a reveal, not a pin.
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
+            #expect(store.sidebarMode == .hoverRevealed)
+            drag.up(at: 24)
+
+            #expect(savedWidths == [Double(before + 24)])
+            #expect(container.sidebarModeForTesting != .pinned)
+            #expect(store.sidebarMode != .pinned && store.sidebarMode != .collapsed)
+            let data = try JSONEncoder().encode(WorkspacePersistence.State(sidebarMode: store.sidebarMode))
+            #expect(try JSONDecoder().decode(WorkspacePersistence.State.self, from: data).sidebarMode == .closed)
+        }
+    }
+
+    /// The pointer leaving the reveal while the mouse button is still held
+    /// mid-drag does not close it, and the drag keeps resizing.
+    @Test func exitDuringHoverRevealDragDoesNotClose() async throws {
+        let restoreWidths = clearSavedWidths()
+        defer { restoreWidths() }
+        try await withHoverRevealPushing {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            try await openHoverReveal(container, in: window)
+            let before = container.sidebarFrameForTesting.width
+            let drag = try edgeDrag(container, in: window)
+            drag.down()
+            drag.move(by: 24)
+            let area = try #require(container.trackingAreas.first)
+            container.mouseExited(with: enterEvent(.mouseExited, area: area, in: window))
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
+            drag.move(by: 32)
+            container.layoutSubtreeIfNeeded()
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
+            #expect(container.sidebarFrameForTesting.width == before + 32)
+            drag.up(at: 32)
+        }
+    }
+
+    /// Moves the window so the real pointer sits over the card, outside
+    /// the reveal — where the drag's mouse-up reads it.
+    private func putPointerOverTheCard(_ window: NSWindow) {
+        let mouse = NSEvent.mouseLocation
+        window.setFrameOrigin(NSPoint(x: mouse.x - window.frame.width + 60, y: mouse.y - window.frame.height / 2))
+    }
+
+    /// A drag that ends with the pointer outside the reveal closes it on
+    /// mouse-up, as any exit would have.
+    @Test func hoverRevealDragEndingOutsideCloses() async throws {
+        let restoreWidths = clearSavedWidths()
+        defer { restoreWidths() }
+        try await withHoverRevealPushing {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            try await openHoverReveal(container, in: window)
+            let before = container.sidebarFrameForTesting.width
+            let drag = try edgeDrag(container, in: window)
+            drag.down()
+            drag.move(by: 24)
+            putPointerOverTheCard(window)
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
+            drag.up(at: 24)
+            #expect(savedWidths == [Double(before + 24)], "the drag resized")
+            #expect(container.sidebarModeForTesting == .closed)
+        }
+    }
+
+    /// Dragging the edge past the rail's snap point during a reveal only
+    /// resizes: the width stops at the minimum, and the mode stays the
+    /// reveal — never the rail, which would save `.collapsed`.
+    @Test func dragPastTheSnapPointDuringHoverRevealOnlyResizes() async throws {
+        let restoreWidths = clearSavedWidths()
+        defer { restoreWidths() }
+        try await withHoverRevealPushing {
+            let store = makeStore()
+            let (container, window) = makeWindow(mode: .closed, store: store)
+            defer { close(window) }
+            try await openHoverReveal(container, in: window)
+            let drag = try edgeDrag(container, in: window)
+            drag.down()
+            drag.move(by: -400)
+            container.layoutSubtreeIfNeeded()
+            #expect(container.sidebarModeForTesting == .hoverRevealed)
+            #expect(store.sidebarMode == .hoverRevealed)
+            #expect(container.sidebarFrameForTesting.width == WorkspaceLayout.sidebarMinWidth)
+            drag.up(at: -400)
+            #expect(store.sidebarMode != .collapsed && store.sidebarMode != .pinned)
+        }
+    }
+
+    /// Cmd+S mid-drag pins the reveal and ends the drag: the rest of the
+    /// gesture does nothing, so it can't carry on under pinned's rules and
+    /// snap the sidebar to the rail.
+    @Test func pinningDuringHoverRevealDragEndsTheDrag() async throws {
+        let restoreWidths = clearSavedWidths()
+        defer { restoreWidths() }
+        try await withHoverRevealPushing {
+            let (container, window) = makeWindow(mode: .closed)
+            defer { close(window) }
+            try await openHoverReveal(container, in: window)
+            let drag = try edgeDrag(container, in: window)
+            drag.down()
+            drag.move(by: 24)
+            container.toggleSidebar()
+            #expect(container.sidebarModeForTesting == .pinned)
+            container.layoutSubtreeIfNeeded()
+            let pinnedWidth = container.sidebarFrameForTesting.width
+            drag.move(by: -400)
+            container.layoutSubtreeIfNeeded()
+            #expect(container.sidebarModeForTesting == .pinned)
+            #expect(container.sidebarFrameForTesting.width == pinnedWidth)
+            drag.up(at: -400)
+            #expect(container.sidebarModeForTesting == .pinned)
+        }
+    }
+
+    // MARK: Defect 3 — the reveal is a state the sidebar can read
+
+    /// While revealed, the store (and so the SwiftUI sidebar's
+    /// `\.sidebarMode`) reports the same state the container lays out —
+    /// not `.closed` under a pinned layout — so the tray toggle reads
+    /// "Open Sidebar", as it does on the overlay. It still saves as
+    /// `.closed`. Cmd+S pins it for real: then both report `.pinned` and the
+    /// toggle reads "Collapse Sidebar".
+    @Test func hoverRevealIsTheStoresSidebarModeAndSavesAsClosed() throws {
+        try withDials({ $0.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey) }) {
+            let store = makeStore()
+            let (container, window) = makeWindow(mode: .closed, store: store)
+            defer { close(window) }
+            _ = try revealFromStrip(container, in: window)
+            #expect(store.sidebarMode == container.sidebarModeForTesting)
+            #expect(WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode) == "Open Sidebar")
+
+            let data = try JSONEncoder().encode(WorkspacePersistence.State(sidebarMode: store.sidebarMode))
+            let saved = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+            #expect(saved.sidebarMode == .closed)
+
+            container.toggleSidebar()
+            #expect(container.sidebarModeForTesting == .pinned)
+            #expect(store.sidebarMode == .pinned)
+            #expect(WorkspaceViewContainer.sidebarToggleLabel(for: store.sidebarMode) == "Collapse Sidebar")
         }
     }
 

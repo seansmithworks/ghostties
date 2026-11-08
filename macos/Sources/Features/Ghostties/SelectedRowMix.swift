@@ -4,7 +4,7 @@ import Foundation
 /// `docs/plans/selected-row-mix-contract.md`): row motion 04 Hand-off,
 /// project switch P1 Cross-fade, new tab N4 Outline first, Switch 300ms,
 /// New tab 600ms. At rest the selected row is a 1pt `inkSecondary` outline
-/// at 0.4 over the selected-row tint, and one glass card sits behind the
+/// at 0.4 over the selected-row tint, and one group card sits behind the
 /// project holding it.
 ///
 /// A pure timeline: every input is explicit, there is no clock inside. The

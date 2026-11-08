@@ -39,13 +39,11 @@ struct SidebarMorphGateTests {
         let window: NSWindow
         let groupId: String
         let selected: UUID
-        let restoreTab: () -> Void
 
         func close() {
             window.contentView = nil
             window.orderOut(nil)
             window.close()
-            restoreTab()
         }
     }
 
@@ -60,11 +58,6 @@ struct SidebarMorphGateTests {
     /// view, the second atlas-api session selected (its group carries the
     /// card), pinned.
     private func makeRig() -> Rig {
-        // The tab is store-less `@AppStorage` (`.standard`, the test host's
-        // own domain); pin it to Projects for this rig and put it back.
-        let tabKey = "ghostties.sidebarTab"
-        let previousTab = UserDefaults.standard.object(forKey: tabKey)
-        UserDefaults.standard.set(SidebarTab.projects.rawValue, forKey: tabKey)
 
         let sessions = [
             AgentSession(name: "auth refactor", templateId: AgentTemplate.claudeCode.id, projectId: atlas.id),
@@ -100,10 +93,7 @@ struct SidebarMorphGateTests {
             spin(0.05)
         }
         return Rig(
-            container: container, store: store, window: window, groupId: atlas.id.uuidString, selected: sessions[1].id,
-            restoreTab: {
-                if let previousTab { UserDefaults.standard.set(previousTab, forKey: tabKey) } else { UserDefaults.standard.removeObject(forKey: tabKey) }
-            }
+            container: container, store: store, window: window, groupId: atlas.id.uuidString, selected: sessions[1].id
         )
     }
 

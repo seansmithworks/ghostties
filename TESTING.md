@@ -54,6 +54,15 @@ instance quits Sean's running Dev. Agents use `scripts/build-capture.sh` (build)
 `.build-capture` with `GHOSTTIES_DEV_BUNDLE_SUFFIX=.capture`, so it runs beside
 Sean's Dev. Its state folder is separate too (`WorkspacePersistence` maps unknown IDs to `Ghostties (<bundleId>)`); never use a suffix ending in `.dev`, which shares Sean's Dev workspace.
 
+### Tests never write the real defaults domain
+
+A hosted test runs inside the app, so `UserDefaults.standard` is the live domain of
+any running build with that bundle ID, and every capture build shares one. Read and
+write settings through `AppDefaults.store` or `SidebarDialTuning.store`, which the
+test bundle points at a throwaway suite when it loads. For per-test values use
+`withDials`, or `PrivateDefaultsTestCase` in XCTest. `scripts/check-test-defaults.sh`
+enforces this in CI.
+
 ### Why CI doesn't run these
 
 CI builds this suite with `build-for-testing` but does not execute it. App-hosted

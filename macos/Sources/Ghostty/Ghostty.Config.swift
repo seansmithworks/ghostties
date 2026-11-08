@@ -768,7 +768,11 @@ extension Ghostty {
             guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return [] }
             guard v.len > 0 else { return [] }
             let buffer = UnsafeBufferPointer(start: v.commands, count: v.len)
-            return buffer.map { Ghostty.Command(cValue: $0) }
+            // MARK: - Ghostties fork fence (open_config palette entry)
+            // One honest "Open Settings" entry for open_config
+            // (`Ghostty.Command.collapsingOpenConfig`).
+            return Ghostty.Command.collapsingOpenConfig(buffer.map { Ghostty.Command(cValue: $0) })
+            // MARK: - End Ghostties fork fence (open_config palette entry)
         }
 
         var progressStyle: Bool {

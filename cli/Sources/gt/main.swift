@@ -13,6 +13,7 @@ struct GT: ParsableCommand {
             FocusCommand.self,
             DoneCommand.self,
             NotesCommand.self,
+            BrowserCommand.self,
             MCPCommand.self,
             SmokeCommand.self
         ]

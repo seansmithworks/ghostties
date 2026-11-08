@@ -42,15 +42,27 @@ enum SidebarBodyKind: Equatable {
     }
 }
 
-/// The one-view list's project order, which the rail shares: pinned
-/// projects first, then the rest, each in `WorkspaceStore.projects` order
-/// (the manual drag order). A stable partition, so unpinning a project puts
-/// it back at its own place in that order. Everything that orders one-view
-/// projects (`SidebarProjectGroup.make`, project drag and keyboard moves)
-/// reads this; `WorkspaceStore.moveProject` keeps a move inside its group.
+/// The one-view list's project order, which the rail shares (mild2wild
+/// 2026-10-21 card 01, "Spacing only"): pinned projects first, in
+/// `WorkspaceStore.projects` order (the manual drag order), then every other
+/// project by name — case-insensitive, numbers in numeric order, ties in
+/// array order. The sort is display-only: `workspace.json` keeps its order.
+/// Everything that orders one-view projects (`SidebarProjectGroup.make`,
+/// project drag and keyboard moves) reads this. Only pinned projects
+/// reorder (`SidebarProjectGroup.isReorderable`), and
+/// `WorkspaceStore.moveProject` keeps a move inside its group.
 enum ProjectListOrder {
     static func pinnedFirst(_ projects: [Project]) -> [Project] {
-        projects.filter(\.isPinned) + projects.filter { !$0.isPinned }
+        let rest = projects.enumerated().filter { !$0.element.isPinned }.sorted { a, b in
+            // `localizedStandardCompare` without its forced ordering, which
+            // would break a case-only tie ("app"/"App") by case, not array order.
+            switch a.element.name.compare(b.element.name, options: [.caseInsensitive, .numeric, .widthInsensitive], locale: .current) {
+            case .orderedAscending: return true
+            case .orderedDescending: return false
+            case .orderedSame: return a.offset < b.offset
+            }
+        }
+        return projects.filter(\.isPinned) + rest.map(\.element)
     }
 }
 
@@ -60,6 +72,12 @@ struct SidebarProjectGroup: Equatable, Identifiable {
     let projectId: UUID?
     let name: String
     let sessions: [AgentSession]
+    /// The project is pinned: its group sits in the pinned block.
+    var isPinned = false
+
+    /// Whether a drag or Move Up/Down can move this group: the alphabetical
+    /// block has no manual order, so only a pinned project reorders.
+    var isReorderable: Bool { projectId != nil && isPinned }
 
     var id: String { projectId?.uuidString ?? "unknown-project" }
 
@@ -79,7 +97,7 @@ struct SidebarProjectGroup: Equatable, Identifiable {
             byProject[session.projectId, default: []].append(session)
         }
         var groups: [SidebarProjectGroup] = ProjectListOrder.pinnedFirst(projects).map { project in
-            SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [])
+            SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [], isPinned: project.isPinned)
         }
         let orphans = active.filter { byProject[$0.projectId] != nil }
         if !orphans.isEmpty {
@@ -95,8 +113,11 @@ struct SidebarProjectGroup: Equatable, Identifiable {
 /// them inside the section `VStack` with its row gap, slot for slot: every
 /// rail tile sits at its header's y, every rail glyph at its row's y.
 enum SidebarProjectGroupItem: Identifiable {
-    /// Clear space before every group but the first (`spacerHeight`).
-    case spacer(groupId: String)
+    /// Clear space before every group but the first (`spacerHeight`). The
+    /// one before the first unpinned project is also the pinned block's
+    /// break (`pinnedBreakHeight` taller); while the only pinned project is
+    /// dragged that group leads the list, and its spacer is the break alone.
+    case spacer(groupId: String, height: CGFloat)
     case header(SidebarProjectGroup, isCollapsed: Bool)
     case row(AgentSession, group: SidebarProjectGroup)
 
@@ -104,18 +125,43 @@ enum SidebarProjectGroupItem: Identifiable {
     /// line (`.hair`). The rule itself now sits in the header.
     static let spacerHeight: CGFloat = 13
 
+    /// Card 01's only separator between the pinned block and the
+    /// alphabetical one (`WorkspaceLayout.projectPinnedBreak`), added to the
+    /// usual break. The rail renders the same items, so the gap is the same
+    /// height in both widths and no tile moves between them.
+    static let pinnedBreakHeight: CGFloat = WorkspaceLayout.projectPinnedBreak
+
+    /// The group the pinned break sits before: the first unpinned project,
+    /// when a pinned project leads it. Read from the whole list, never the
+    /// rendered one, so a pinned drag (which drops its group from the
+    /// render) leaves the break where it was.
+    static func pinnedBreakGroupId(_ groups: [SidebarProjectGroup]) -> String? {
+        guard groups.contains(where: \.isPinned) else { return nil }
+        return groups.first { $0.projectId != nil && !$0.isPinned }?.id
+    }
+
     var id: String {
         switch self {
-        case .spacer(let groupId): return "spacer-\(groupId)"
+        case .spacer(let groupId, _): return "spacer-\(groupId)"
         case .header(let group, _): return "header-\(group.id)"
         case .row(let session, _): return session.id.uuidString
         }
     }
 
     static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>) -> [SidebarProjectGroupItem] {
+        items(groups, collapsed: collapsed, pinnedBreakBefore: pinnedBreakGroupId(groups))
+    }
+
+    /// `pinnedBreakBefore` is `pinnedBreakGroupId` of the whole list when
+    /// `groups` is the rendered one with a dragged group removed.
+    static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>, pinnedBreakBefore: String?) -> [SidebarProjectGroupItem] {
         var items: [SidebarProjectGroupItem] = []
         for (index, group) in groups.enumerated() {
-            if index > 0 { items.append(.spacer(groupId: group.id)) }
+            let breakHeight = group.id == pinnedBreakBefore ? pinnedBreakHeight : 0
+            let height = (index > 0 ? spacerHeight : 0) + breakHeight
+            if height > 0 {
+                items.append(.spacer(groupId: group.id, height: height))
+            }
             let isCollapsed = !group.isEmpty && (group.projectId.map(collapsed.contains) ?? false)
             items.append(.header(group, isCollapsed: isCollapsed))
             if !isCollapsed {
@@ -235,6 +281,39 @@ enum ProjectSelection {
     }
 }
 
+// MARK: - Paired browser rows
+
+/// A browser an agent opened with `gt browser open` is paired with that
+/// terminal at runtime only (`SessionCoordinator.pairedBrowserByTerminal`,
+/// terminal id to browser id). Clicking either puts the same screen up, so
+/// the pair is ONE sidebar row, the terminal's: the browser has no row of
+/// its own, and the terminal's row carries a browser icon. Ending the
+/// pairing needs no cleanup here: the browser is an ordinary row again the
+/// next time a list is built.
+enum PairedBrowserRows {
+    /// The glyph for a browser everywhere in the sidebar (the composer's
+    /// browser template).
+    static let symbolName = "globe"
+
+    /// `sessions` without the browsers paired to a terminal.
+    static func visible(_ sessions: [AgentSession], pairedBrowsers: [UUID: UUID]) -> [AgentSession] {
+        guard !pairedBrowsers.isEmpty else { return sessions }
+        let hidden = Set(pairedBrowsers.values)
+        return sessions.filter { !hidden.contains($0.id) }
+    }
+
+    /// True when `terminalId` has a paired browser: its row shows the icon.
+    static func hasBrowser(_ terminalId: UUID, pairedBrowsers: [UUID: UUID]) -> Bool {
+        pairedBrowsers[terminalId] != nil
+    }
+
+    /// The row that stands for `sessionId`: its terminal when it is a paired
+    /// browser, itself otherwise.
+    static func rowId(for sessionId: UUID, pairedBrowsers: [UUID: UUID]) -> UUID {
+        pairedBrowsers.first { $0.value == sessionId }?.key ?? sessionId
+    }
+}
+
 // MARK: - Row subtitle
 
 extension SessionStatusGlyphKind {
@@ -247,6 +326,74 @@ extension SessionStatusGlyphKind {
         case .done:       return "done"
         case .error:      return "error"
         case .stopped:    return "stopped"
+        }
+    }
+}
+
+/// Whether a row genuinely needs the user: the one rule behind its "needs
+/// you" subtitle and its project's "N need you" count. A needs-attention
+/// indicator counts unless the session's Claude hook state says otherwise,
+/// so a cached indicator that outlived its prompt (the hook has since gone
+/// idle, e.g. `idle_prompt`) does not. With a hook state, genuine means
+/// `SessionAttention` finds a question; with none, the indicator is the
+/// only evidence and stands.
+enum SessionNeedsYou {
+    static func isGenuine(indicator: SessionIndicatorState, state: ClaudeState?) -> Bool {
+        guard indicator == .needsAttention else { return false }
+        guard let state else { return true }
+        return SessionAttention.make(indicator: indicator, state: state) != nil
+    }
+
+    /// The one-view row subtitle. A needs-attention row its hook state
+    /// contradicts reads what the hook state says instead.
+    static func subtitle(indicator: SessionIndicatorState, state: ClaudeState?) -> String {
+        guard indicator == .needsAttention, !isGenuine(indicator: indicator, state: state), let state else {
+            return indicator.statusGlyphKind.groupedRowSubtitle
+        }
+        let hookIndicator = SessionCoordinator.claudeIndicator(kind: state.state, isLongRunning: false) ?? .idle
+        return hookIndicator.statusGlyphKind.groupedRowSubtitle
+    }
+
+    /// The trailing label of a project header: "N need you" while any of
+    /// its rows genuinely needs the user, else its session count.
+    static func headerCountLabel(sessionCount: Int, needYou: Int) -> String {
+        needYou > 0 ? "\(needYou) need you" : "\(sessionCount)"
+    }
+}
+
+/// What a row that genuinely needs the user (`SessionNeedsYou`) shows
+/// inline (hover-approvals card 01): its question as the subtitle ("Run npm
+/// test?", "Which env name?", or "needs you" when the hook carried none),
+/// then an action line. Approve/Deny answer only a fresh bounded prompt
+/// (`approvalPrompt`) and draw only while `ApprovalFlag` is on; every other
+/// needs-you row hands off with "Answer in terminal →". Nil for a row that
+/// doesn't need the user, which gets no action line.
+struct SessionRowPrompt: Equatable {
+    let question: String?
+    /// The prompt Approve/Deny would answer, for the responder's stale guard.
+    let approvalPrompt: SessionPopoverContent.ApprovalPrompt?
+
+    var subtitle: String { question ?? SessionStatusGlyphKind.needsInput.groupedRowSubtitle }
+
+    /// `canAnswerInline` is false when no single surface can be targeted (a split session); the row then hands off.
+    static func make(indicator: SessionIndicatorState, state: ClaudeState?, now: Date = Date(), canAnswerInline: Bool = true) -> SessionRowPrompt? {
+        guard SessionNeedsYou.isGenuine(indicator: indicator, state: state) else { return nil }
+        guard let state, let attention = SessionAttention.make(indicator: indicator, state: state) else {
+            return SessionRowPrompt(question: nil, approvalPrompt: nil)
+        }
+        switch attention {
+        case let .freeform(question):
+            let text = question?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return SessionRowPrompt(question: text?.isEmpty == false ? text : nil, approvalPrompt: nil)
+        case let .bounded(prompt, command):
+            let toolName = state.structuredPrompt?.toolName ?? ""
+            let answerable = canAnswerInline && SessionPopoverContent.isFreshApproval(state, now: now) && state.structuredPrompt != nil
+            return SessionRowPrompt(
+                question: SessionPopoverContent.boundedQuestion(prompt: prompt, toolName: toolName, command: command),
+                approvalPrompt: answerable
+                    ? SessionPopoverContent.ApprovalPrompt(updatedAt: state.updatedAt, fingerprint: ApprovalFingerprint.make(state))
+                    : nil
+            )
         }
     }
 }
@@ -343,10 +490,17 @@ struct ProjectAccordionHeader: View {
     /// `ProjectMonogram.monograms`' entry for this project.
     var monogram: String = "?"
     let count: Int
+    /// How many of the project's sessions genuinely need the user
+    /// (`SessionNeedsYou`): the trailing label reads "N need you" in place
+    /// of `count` while this is above 0.
+    var needYouCount: Int = 0
     let isCollapsed: Bool
     var isEmpty: Bool = false
     /// The project holds the selected session: its tile fills with ink.
     var isSelectedProject: Bool = false
+    /// The project's resolved icon (`ProjectIconStore`'s cache), drawn in
+    /// the tile in place of the monogram; nil draws the monogram.
+    var icon: NSImage? = nil
     /// DEBUG Redlines tag (`RedlineID.header`).
     var redlineID: String? = nil
     /// The header's place in the expand cascade (`SidebarLabelCascade`).
@@ -398,7 +552,8 @@ struct ProjectAccordionHeader: View {
                         isEmpty: isEmpty,
                         isSelectedProject: isSelectedProject,
                         redlineID: redlineID.map { $0 + ".tile" },
-                        badgeCount: isCollapsed ? count : nil
+                        badgeCount: isCollapsed ? count : nil,
+                        icon: icon
                     )
                 }
                 .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
@@ -424,7 +579,7 @@ struct ProjectAccordionHeader: View {
                     .background(ClusterEdgeReporter(part: .chevron))
                 Spacer(minLength: 8)
                 // Never squeezed by a long name: it keeps its own width.
-                Text("\(count)")
+                Text(SessionNeedsYou.headerCountLabel(sessionCount: count, needYou: needYouCount))
                     .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
                     .fixedSize()
@@ -435,6 +590,10 @@ struct ProjectAccordionHeader: View {
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.count), progress: progress))
                     .background(ClusterEdgeReporter(part: .count))
+                    // Sized before the name: the frame's 18pt minimum would
+                    // otherwise let a long name take the room "2 need you"
+                    // draws in, and the two would overlap.
+                    .layoutPriority(2)
             }
         }
         .coordinateSpace(name: ClusterEdgeReporter.space)
@@ -466,7 +625,7 @@ struct ProjectAccordionHeader: View {
         .modifier(ToggleKeyActivation(action: onToggle))
         .accessibilityElement(children: .ignore)
         .accessibilityAction(.default, onToggle)
-        .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
+        .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")" + (needYouCount > 0 ? ", \(needYouCount) need you" : ""))
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
         .accessibilityHint(Self.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
@@ -524,6 +683,9 @@ enum SidebarTileContext {
 /// scaled by `shapeScale` (`MorphTileScale`) while the monogram stays at
 /// `textSize`, unscaled.
 struct ProjectMonogramTileFace: View {
+    /// A selected project's ring on an icon tile, in points as drawn.
+    static let selectedRingWidth: CGFloat = 2
+
     let monogram: String
     let size: CGFloat
     let textSize: CGFloat
@@ -532,6 +694,9 @@ struct ProjectMonogramTileFace: View {
     var isSelectedProject: Bool = false
     /// DEBUG Redlines tag for the drawn (scaled) shape.
     var redlineID: String? = nil
+    /// The project's icon, filling the tile's shape in place of the
+    /// monogram. Same frame, same shape: only the face changes.
+    var icon: NSImage? = nil
 
     /// Re-renders on every dial write; the fill reads "Selected tile fill".
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
@@ -555,15 +720,34 @@ struct ProjectMonogramTileFace: View {
         let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius / max(shapeScale, 0.01), style: .continuous)
         // Tint fades out as ink fades in, so each end draws exactly one
         // fill: the plain tile at 0, solid ink at 1.
-        return shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(RailProjectTile.ink(colorScheme).opacity(inkFill)))
+        let ink = RailProjectTile.ink(colorScheme)
+        return shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(ink.opacity(inkFill)))
+            .overlay {
+                if let icon {
+                    // The icon covers the ink fill, so selection reads as an
+                    // ink ring on the tile's edge instead, on the same mix
+                    // (`inkFill`) the fill follows. Width is divided by the
+                    // shape's scale so it draws 2pt at every morph step.
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size, height: size)
+                        .clipShape(shape)
+                        .opacity(isEmpty ? 0.5 : 1)
+                        .overlay(shape.strokeBorder(ink.opacity(inkFill), lineWidth: Self.selectedRingWidth / max(shapeScale, 0.01)))
+                }
+            }
             .frame(width: size, height: size)
             // Inside the scale, so Redlines reports the drawn tile.
             .redlineFrame(redlineID)
             .scaleEffect(shapeScale)
             .overlay {
-                Text(monogram)
-                    .font(.system(size: textSize, weight: .bold))
-                    .foregroundStyle(isEmpty ? SidebarColors.dimmedProject(colorScheme) : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
+                if icon == nil {
+                    Text(monogram)
+                        .font(.system(size: textSize, weight: .bold))
+                        .foregroundStyle(isEmpty ? SidebarColors.dimmedProject(colorScheme) : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
+                }
             }
             .frame(width: size, height: size)
     }
@@ -583,6 +767,8 @@ struct MorphTileFace: View, Animatable {
     let redlineID: String?
     /// The folded project's session count; nil while it is unfolded.
     let badgeCount: Int?
+    /// The project's icon; nil draws the monogram.
+    var icon: NSImage? = nil
 
     @ChromeScheme private var colorScheme
 
@@ -603,7 +789,8 @@ struct MorphTileFace: View, Animatable {
             shapeScale: scale,
             isEmpty: isEmpty,
             isSelectedProject: isSelectedProject,
-            redlineID: redlineID
+            redlineID: redlineID,
+            icon: icon
         )
         .morphIdentityProbe(redlineID)
         .overlay(alignment: .topTrailing) {

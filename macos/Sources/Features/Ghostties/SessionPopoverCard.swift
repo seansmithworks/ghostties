@@ -27,12 +27,18 @@ enum SessionPopoverLayout {
 
     static let maxCommandLines = 3
     static let maxPromptLines = 2
+
+    /// The gap above a needs-you card's "Answer in terminal →".
+    static let actionsTopGap: CGFloat = 8
 }
 
 /// The popover card: the card shell around one content block (a Bash command,
 /// a tool approval, or what a running session is doing), set directly on the
-/// white card — no inner block (Sean, 2026-10-04: one card). Read-only: clicking
-/// the row opens the session, moving off it dismisses the card.
+/// white card — no inner block (Sean, 2026-10-04: one card). Clicking the row
+/// opens the session, moving off it dismisses the card. A session that needs
+/// the user leads with its question and ends with "Answer in terminal →".
+/// Approve/Deny live on the sidebar row only (`SessionRowActionLine`), never
+/// here.
 struct SessionPopoverCard: View {
     @ObservedObject var model: SessionPopoverModel
     let onHover: (Bool) -> Void
@@ -56,7 +62,7 @@ struct SessionPopoverCard: View {
 
     private func card(_ content: SessionPopoverContent) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            blockView(content.block)
+            blockView(content)
         }
         .frame(width: SessionPopoverLayout.width)
         .background(surface)
@@ -71,9 +77,16 @@ struct SessionPopoverCard: View {
     }
 
     @ViewBuilder
-    private func blockView(_ content: SessionPopoverContent.Block) -> some View {
+    private func blockView(_ content: SessionPopoverContent) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            switch content {
+            // A needs-you card leads with what is being asked.
+            if let question = content.question {
+                Text(question)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(primaryText)
+                    .lineLimit(SessionPopoverLayout.maxPromptLines)
+            }
+            switch content.block {
             case let .command(command, description):
                 Text("$ \(command)")
                     .font(.system(size: 16, weight: .medium, design: .monospaced))
@@ -99,12 +112,32 @@ struct SessionPopoverCard: View {
                     .foregroundStyle(primaryText)
                     .lineLimit(SessionPopoverLayout.maxPromptLines)
                 secondary(step)
+            case .freeform:
+                EmptyView()
+            }
+            if content.needsYou {
+                answerInTerminal
+                    .padding(.top, SessionPopoverLayout.actionsTopGap)
             }
         }
         .truncationMode(.tail)
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WorkspaceLayout.sessionPopoverContentPadding)
+    }
+
+    /// The hand-off every needs-you card carries.
+    private var answerInTerminal: some View {
+        Button {
+            model.onAnswerInTerminal?()
+        } label: {
+            Text("Answer in terminal →")
+                .font(.system(size: 11, weight: .medium))
+                .underline()
+                .foregroundStyle(primaryText)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows this session's terminal")
     }
 
     @ViewBuilder

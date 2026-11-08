@@ -1431,9 +1431,9 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     /// so every open WorkspaceViewContainer swaps its hosted sidebar.
     @IBAction func toggleTaskView(_ sender: Any?) {
         let key = "ghostties.sidebarViewMode"
-        let current = UserDefaults.standard.string(forKey: key) ?? "projectFirst"
+        let current = AppDefaults.store.string(forKey: key) ?? "projectFirst"
         let next = current == "taskFirst" ? "projectFirst" : "taskFirst"
-        UserDefaults.standard.set(next, forKey: key)
+        AppDefaults.store.set(next, forKey: key)
         NotificationCenter.default.post(name: .workspaceSidebarViewModeChanged, object: nil)
 
         // Reflect the new state in the menu item's checkmark.
@@ -1443,15 +1443,15 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     @IBAction func showProjectsView(_ sender: Any?) {
-        UserDefaults.standard.set("projects", forKey: "ghostties.sidebarTab")
-        UserDefaults.standard.set("projectFirst", forKey: "ghostties.sidebarViewMode")
+        AppDefaults.store.set("projects", forKey: "ghostties.sidebarTab")
+        AppDefaults.store.set("projectFirst", forKey: "ghostties.sidebarViewMode")
         NotificationCenter.default.post(name: .workspaceSidebarTabChanged, object: nil)
         NotificationCenter.default.post(name: .workspaceSidebarViewModeChanged, object: nil)
     }
 
     @IBAction func showSessionsView(_ sender: Any?) {
-        UserDefaults.standard.set("sessions", forKey: "ghostties.sidebarTab")
-        UserDefaults.standard.set("projectFirst", forKey: "ghostties.sidebarViewMode")
+        AppDefaults.store.set("sessions", forKey: "ghostties.sidebarTab")
+        AppDefaults.store.set("projectFirst", forKey: "ghostties.sidebarViewMode")
         NotificationCenter.default.post(name: .workspaceSidebarTabChanged, object: nil)
         NotificationCenter.default.post(name: .workspaceSidebarViewModeChanged, object: nil)
     }
@@ -1887,7 +1887,7 @@ extension TerminalController {
         // `RowFocusStore` pattern used elsewhere for AppKit-reads-SwiftUI-state).
         case #selector(TerminalController.selectNextProject(_:)),
             #selector(TerminalController.selectPreviousProject(_:)):
-            let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+            let mode = AppDefaults.store.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
             guard mode == "projectFirst" else { return false }
             return !WorkspaceStore.shared.flatProjectsInVisualOrder.isEmpty
 
@@ -1904,19 +1904,19 @@ extension TerminalController {
             return window?.contentView is WorkspaceViewContainer
 
         case #selector(showProjectsView(_:)):
-            let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
-            let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab") ?? "projects"
+            let mode = AppDefaults.store.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+            let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab") ?? "projects"
             item.state = (mode == "projectFirst" && tab == "projects") ? .on : .off
             return true
 
         case #selector(showSessionsView(_:)):
-            let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
-            let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab") ?? "projects"
+            let mode = AppDefaults.store.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+            let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab") ?? "projects"
             item.state = (mode == "projectFirst" && tab == "sessions") ? .on : .off
             return true
 
         case #selector(toggleTaskView(_:)):
-            let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+            let mode = AppDefaults.store.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
             item.state = mode == "taskFirst" ? .on : .off
             return true
 

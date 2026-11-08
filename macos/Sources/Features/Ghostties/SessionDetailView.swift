@@ -11,6 +11,8 @@ struct SessionRow: View {
     let session: AgentSession
     let indicatorState: SessionIndicatorState
     var isActive: Bool = false
+    /// An agent's browser is attached to this terminal (`PairedBrowserRows`).
+    var hasPairedBrowser: Bool = false
     var isEditing: Bool = false
     /// Template name shown as a subtle badge when the session was launched with agent config.
     var agentTemplateName: String?
@@ -62,6 +64,13 @@ struct SessionRow: View {
 
             Spacer()
 
+            if hasPairedBrowser {
+                Image(systemName: PairedBrowserRows.symbolName)
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(.secondaryLabelColor))
+                    .accessibilityHidden(true)
+            }
+
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
@@ -78,7 +87,7 @@ struct SessionRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(session.name)\(agentTemplateName.map { ", \($0) agent" } ?? ""), \(statusLabel)\(isActive ? ", active" : "")")
+        .accessibilityLabel("\(session.name)\(agentTemplateName.map { ", \($0) agent" } ?? ""), \(statusLabel)\(hasPairedBrowser ? ", browser open" : "")\(isActive ? ", active" : "")")
     }
 
     // MARK: - Colors

@@ -121,7 +121,7 @@ extension View {
 }
 
 private struct OnboardingSheetModifier: ViewModifier {
-    @AppStorage("ghostties.hasSeenOnboarding") private var hasSeenOnboarding = false
+    @AppStorage("ghostties.hasSeenOnboarding", store: AppDefaults.store) private var hasSeenOnboarding = false
 
     func body(content: Content) -> some View {
         content.sheet(isPresented: Binding(

@@ -103,7 +103,8 @@ struct WorkspacePersistence {
         var templates: [AgentTemplate]
 
         /// Sidebar mode when the app last saved state.
-        /// `.overlay` is transient — always persisted as `.closed`.
+        /// `.overlay` and `.hoverRevealed` are transient — always persisted
+        /// as `.closed`.
         var sidebarMode: SidebarMode
 
         /// The last selected project ID, for restoring selection on launch.
@@ -177,9 +178,8 @@ struct WorkspacePersistence {
             try container.encode(projects, forKey: .projects)
             try container.encode(sessions, forKey: .sessions)
             try container.encode(templates, forKey: .templates)
-            // Overlay is transient — always persist as closed.
-            let persistedMode = sidebarMode == .overlay ? SidebarMode.closed : sidebarMode
-            try container.encode(persistedMode, forKey: .sidebarMode)
+            // The overlay and the hover reveal are transient — always persist as closed.
+            try container.encode(sidebarMode.persisted, forKey: .sidebarMode)
             try container.encodeIfPresent(lastSelectedProjectId, forKey: .lastSelectedProjectId)
             // Always encode migration flags so once flipped they survive future writes.
             try container.encode(hasShownPinMigrationNotice, forKey: .hasShownPinMigrationNotice)

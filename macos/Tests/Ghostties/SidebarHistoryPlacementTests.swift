@@ -101,14 +101,6 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             })
         }
         let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
-        // The list and rail read the sidebar tab from store-less
-        // `@AppStorage` (`.standard`, the Dev app's domain); pin it to the
-        // Projects tab in a private suite so the saved tab can't swap in the
-        // flat Sessions list.
-        let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
-        let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
-        defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
-        tabSuite.set(SidebarTab.projects.rawValue, forKey: "ghostties.sidebarTab")
         let root = column
             .frame(width: width, height: height)
             .overlay(alignment: .bottom) {
@@ -118,7 +110,6 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             .environmentObject(store)
             .environmentObject(coordinator)
             .environmentObject(SidebarWidthModel(width: width))
-            .defaultAppStorage(tabSuite)
             .background(Color(nsColor: chrome))
         let hosting = NSHostingView(rootView: root)
         hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
@@ -276,10 +267,9 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     private func selectedChip(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let chrome = try XCTUnwrap(ChromeTheme.ghostties(.light).chrome.usingColorSpace(.sRGB))
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
-        // The glass card at its top stop (`ProjectGroupCardGlass.representative`).
-        let card = try XCTUnwrap(ProjectGroupCardGlass.representative(.light).usingColorSpace(.sRGB))
+        let cardAlpha = RailProjectColumn.columnFillOpacity(.light)
         let chipAlpha = RailProjectColumn.selectedChipTintOpacity
-        let cardSum = card.redComponent + card.greenComponent + card.blueComponent
+        let cardSum = base * (1 - cardAlpha) + 3 * cardAlpha
         let cardDrop = base - cardSum
         let chipOverCardDrop = base - cardSum * (1 - chipAlpha)
         let lowerBound = (cardDrop + chipOverCardDrop) / 2

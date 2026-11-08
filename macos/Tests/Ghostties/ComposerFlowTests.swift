@@ -708,21 +708,21 @@ struct ComposerFlowTests {
     /// `SessionComposerOverlay` is hard-wired to `SessionComposerStore.shared`,
     /// which in a hosted run reads the Dev defaults domain. This test only
     /// opens and cancels it (neither writes), keeps pruning from writing by
-    /// giving the throwaway workspace every template id the Dev domain has
-    /// pinned, and asserts the composer's keys in `.standard` are untouched.
+    /// giving the throwaway workspace every template id the store has
+    /// pinned, and asserts the composer's keys in that store are untouched.
     @Test func x2_clickOutsideClosesButTheTitlebarBandDoesNot() async {
         await withSharedComposerStore {
             let shared = SessionComposerStore.shared
-            let standard = UserDefaults.standard
+            let store = AppDefaults.sharedStore
             func composerKeys() -> [String: String] {
-                Dictionary(uniqueKeysWithValues: standard.dictionaryRepresentation()
+                Dictionary(uniqueKeysWithValues: store.dictionaryRepresentation()
                     .filter { $0.key.lowercased().contains("composer") }
                     .map { ($0.key, String(describing: $0.value)) })
             }
             let defaultsBefore = composerKeys()
             defer {
                 shared.cancel()
-                #expect(composerKeys() == defaultsBefore, "x2 changed the Dev domain's composer keys")
+                #expect(composerKeys() == defaultsBefore, "x2 changed the composer keys")
             }
             #expect(!shared.isOpen, "shared composer was already open")
 

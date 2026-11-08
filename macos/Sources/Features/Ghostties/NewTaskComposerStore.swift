@@ -64,7 +64,7 @@ final class NewTaskComposerStore: ObservableObject {
 
     /// The ID of the last project the user confirmed a task for.
     /// Backed by AppStorage so it survives app relaunches.
-    @AppStorage("ghostties.newTaskComposerMRUProjectId")
+    @AppStorage("ghostties.newTaskComposerMRUProjectId", store: AppDefaults.store)
     var mruProjectIdString: String = ""
 
     var mruProjectId: UUID? {
