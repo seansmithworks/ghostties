@@ -857,13 +857,25 @@ enum CaptureFixture {
         }
     }
 
-    /// `GHOSTTIES_CAPTURE_PROJECT_ICON=<project>=<png path>`: the projects
-    /// pane's Choose Image… for that fixture project, with that file, as if
-    /// picked in the open panel.
-    static var projectIconHook: (projectName: String, path: String)? {
-        guard let raw = env("GHOSTTIES_CAPTURE_PROJECT_ICON"),
-              let split = raw.firstIndex(of: "=") else { return nil }
-        return (String(raw[..<split]), String(raw[raw.index(after: split)...]))
+    /// `GHOSTTIES_CAPTURE_PROJECT_ICON=<project>=<png path>[,<project>=<png path>…]`:
+    /// the projects pane's Choose Image… for each listed fixture project,
+    /// with that file, as if picked in the open panel.
+    struct ProjectIcon: Equatable {
+        let projectName: String
+        let path: String
+    }
+
+    static var projectIconHooks: [ProjectIcon] { parseProjectIcons(env("GHOSTTIES_CAPTURE_PROJECT_ICON")) }
+
+    /// Entries without a `=`, or with an empty name or path, are skipped.
+    static func parseProjectIcons(_ raw: String?) -> [ProjectIcon] {
+        (raw ?? "").split(separator: ",").compactMap { entry in
+            guard let split = entry.firstIndex(of: "=") else { return nil }
+            let name = entry[..<split].trimmingCharacters(in: .whitespaces)
+            let path = entry[entry.index(after: split)...].trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, !path.isEmpty else { return nil }
+            return ProjectIcon(projectName: name, path: path)
+        }
     }
 
     /// `GHOSTTIES_CAPTURE_THEME_PICKS=<light>|<dark>`: the Appearance pick
