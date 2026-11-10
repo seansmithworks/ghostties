@@ -1,4 +1,5 @@
 import Foundation
+import GhosttiesCore
 import Testing
 @testable import Ghostty
 
@@ -145,6 +146,30 @@ struct CaptureLaunchHooksTests {
         #expect(CaptureFixture.parseProjectIcons(
             CaptureFixture.gatedEnv("GHOSTTIES_CAPTURE_PROJECT_ICON", active: false, in: ["GHOSTTIES_CAPTURE_PROJECT_ICON": "wren=/a.png"])
         ).isEmpty)
+    }
+
+    @Test func projectNamesParseOneOrManyPairs() {
+        #expect(CaptureFixture.parseProjectNames("atlas-api=ghostties") == ["atlas-api": "ghostties"])
+        #expect(CaptureFixture.parseProjectNames("atlas-api=ghostties, fieldwork=brukas")
+            == ["atlas-api": "ghostties", "fieldwork": "brukas"])
+        #expect(CaptureFixture.parseProjectNames("silo=a=b") == ["silo": "a=b"])
+        for raw in [nil, "", "silo", "=x", "wren=", ","] {
+            #expect(CaptureFixture.parseProjectNames(raw).isEmpty, "\(raw ?? "nil")")
+        }
+        #expect(CaptureFixture.parseProjectNames(
+            CaptureFixture.gatedEnv("GHOSTTIES_CAPTURE_PROJECT_NAME", active: false, in: ["GHOSTTIES_CAPTURE_PROJECT_NAME": "wren=x"])
+        ).isEmpty)
+    }
+
+    @Test func projectNamesRenameSeededProjectsAndKeepSessionsLinked() {
+        var knobs = CaptureFixture.SeedKnobs()
+        knobs.projectNames = ["atlas-api": "ghostties", "nope": "ignored"]
+        let projects = CaptureFixture.seededProjects(knobs)
+        #expect(projects.map(\.name).contains("ghostties"))
+        #expect(!projects.map(\.name).contains("atlas-api"))
+        #expect(!projects.map(\.name).contains("ignored"))
+        let sessions = CaptureFixture.seededSessions(knobs, projects: projects)
+        #expect(sessions.allSatisfy { s in projects.contains { $0.id == s.projectId } })
     }
 
     @Test func revealStyleSeedsOnlyTheGivenSuite() {

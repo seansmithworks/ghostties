@@ -204,12 +204,36 @@ enum CaptureFixture {
     struct SeedKnobs: Equatable {
         var zeroProjects = false
         var templateInUse = false
+        var projectNames: [String: String] = [:]
+    }
+
+    /// `GHOSTTIES_CAPTURE_PROJECT_NAME=<fixture name>=<shown name>[,…]`: shows
+    /// a seeded project under another name, so a capture can carry real
+    /// project names. Left side is the ORIGINAL fixture name; names that match
+    /// no fixture project are ignored. Fixture mode only (see `seedKnobs`).
+    /// Every other knob that targets a project by name
+    /// (`GHOSTTIES_CAPTURE_PROJECT_ICON`, `GHOSTTIES_CAPTURE_COMPOSER=…:<project>`,
+    /// `GHOSTTIES_CAPTURE_SETTINGS=projects:<name>`) matches the store at
+    /// runtime, so with a rename they take the SHOWN (right-hand) name.
+    /// Entries without a `=`, or with an empty side, are skipped; a repeated
+    /// left side keeps the last.
+    static func parseProjectNames(_ raw: String?) -> [String: String] {
+        var names: [String: String] = [:]
+        for entry in (raw ?? "").split(separator: ",") {
+            guard let split = entry.firstIndex(of: "=") else { continue }
+            let from = entry[..<split].trimmingCharacters(in: .whitespaces)
+            let to = entry[entry.index(after: split)...].trimmingCharacters(in: .whitespaces)
+            guard !from.isEmpty, !to.isEmpty else { continue }
+            names[from] = to
+        }
+        return names
     }
 
     static func parseSeedKnobs(_ env: [String: String]) -> SeedKnobs {
         SeedKnobs(
             zeroProjects: env["GHOSTTIES_CAPTURE_FIXTURE_PROJECTS"] == "none",
-            templateInUse: env["GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE"] == "1"
+            templateInUse: env["GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE"] == "1",
+            projectNames: parseProjectNames(env["GHOSTTIES_CAPTURE_PROJECT_NAME"])
         )
     }
 
@@ -226,7 +250,7 @@ enum CaptureFixture {
         return fixtureProjects.map { fp in
             Project(
                 id: fixedId(String(format: "%04d", fixtureProjects.firstIndex { $0.name == fp.name }! + 1)),
-                name: fp.name,
+                name: knobs.projectNames[fp.name] ?? fp.name,
                 rootPath: fixtureWorkingDirectory(for: fp.name),
                 isPinned: fp.isPinned,
                 ghostCharacter: fp.ghost,
@@ -306,7 +330,7 @@ enum CaptureFixture {
                 id: fixedId(String(format: "%04d", 100 + index)),
                 name: fs.name,
                 templateId: usesInUseTemplate ? inUseTemplate.id : AgentTemplate.claudeCode.id,
-                projectId: projects.first { $0.name == fs.project }!.id,
+                projectId: projects[fixtureProjects.firstIndex { $0.name == fs.project }!].id,
                 sortOrder: index,
                 lastActiveAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
                 lastOutputAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
