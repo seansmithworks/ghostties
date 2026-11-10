@@ -14,16 +14,16 @@ Running one coding agent is fine. Running five is a mess of terminal windows whe
 
 Ghostties puts them in one window, grouped by project, and shows you what each one is doing.
 
-![A recording of Ghostties: the sidebar collapses to a narrow rail while Claude Code fixes a flaky test in the terminal.](.github/assets/demo.gif)
+![A recording of Ghostties: a list of sessions in the sidebar, which then collapses to a narrow rail while Claude Code works through a flaky test in the terminal.](.github/assets/demo.gif)
 
 ## What it adds
 
 Ghostty's terminal, with a workspace layer on top.
 
-- **A project sidebar.** Sessions and tasks grouped by project. Projects show their real icons, and the sidebar collapses to a narrow rail.
+- **A project sidebar.** Sessions and tasks grouped by project. Projects show their real icons. The sidebar can collapse to a narrow rail.
 - **Status at a glance.** Each session shows whether its agent is working, needs you, is done, or hit an error.
 - **Approve or deny from the sidebar.** When Claude Code asks permission to run something, answer from the session's row.
-- **A window that follows your theme.** With a terminal theme set, the sidebar, canvas and toolbar take their colors from it. Ghostties Light and Dark are the default.
+- **A window that follows your theme.** Pick any theme other than the default and the sidebar, canvas and toolbar take their colors from it. Ghostties Light and Dark are the default.
 - **`gt`, a CLI.** Create and move tasks from inside any agent session, so an agent can file its own work.
 - **An MCP server.** Agents read and update the task list directly.
 - **An embedded browser.** The thing you're building, next to the thing building it.

@@ -16,7 +16,7 @@ Attach: README demo GIF.
 
 Every session row in Ghostties says what its agent is doing: a spinner while it works, a ? when it needs you, a check when it's done, a cross on an error.
 
-Hover a Claude Code row to see what it wants to run. Claude Code status takes a one time hook setup.
+Hover a Claude Code row to see what it wants to run. Claude Code status works without setup.
 
 ghostties.org
 
@@ -24,7 +24,7 @@ Attach: sidebar capture, dark.
 
 ## 3. Themes (beta 27)
 
-New in Ghostties beta 27: pick a theme from Settings, or type "theme" in Cmd+T and arrow through a live preview of the whole window.
+New in Ghostties beta 27: approve or deny Claude Code's permission prompts from the sidebar row, or type "theme" in Cmd+T and arrow through a live preview of the whole window.
 
 The sidebar and canvas now follow your terminal theme, not just the terminal.
 

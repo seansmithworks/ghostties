@@ -4,11 +4,13 @@ Built from the `## [Unreleased]` draft in `CHANGELOG.md`. Update both together.
 
 ## Copy
 
-**Ghostties beta 27 is out.** Themes, a Settings window, and a quieter sidebar.
+**Ghostties beta 27 is out.** Themes, approve from the sidebar, and project icons.
 
-**Settings, finally.** Cmd+, opens a real Settings window with General and Appearance panes. Open Config File is always one click away, and Ghostties never writes your config file.
+**Approve or deny from the sidebar.** When Claude Code asks permission to run something, the session's row shows Approve and Deny. Approve answers that one prompt only, never "always allow".
 
-**Pick a theme, watch it live.** Browse themes as a grid in Settings, with separate Light and Dark picks, or type "theme" in Cmd+T and move through the grid to preview the whole window. Return keeps it; Esc puts the old one back. A System, Light or Dark switch sits alongside.
+**Pick a theme, watch it live.** Type "theme" in Cmd+T and move through the grid of themes to preview the whole window. Return keeps it; Esc puts the old one back.
+
+**Projects show their own icon.** Ghostties finds a project's favicon or app icon and draws it in the project tile, in the full list and the rail.
 
 **The whole window follows your theme.** Pick something other than the Ghostties theme and the sidebar, canvas and toolbar pills take their colors from it, with sidebar text kept readable.
 

@@ -4,7 +4,7 @@ Drafts only. Nothing here has been posted, scheduled or sent.
 
 > **Reader:** Sean, when posting. **Decay:** a dated snapshot tied to the beta 27 changelog; delete or archive after launch.
 
-`gt` and the MCP server are left out on purpose: an app install doesn't get them today today. Claude Code status works without setup (shipped in beta 27), and Codex asks once to trust Ghostties' hook, so the copy says so where it leans on status.
+`gt` and the MCP server are left out on purpose: an app install doesn't get them today. Claude Code status works without setup (shipped in beta 27), and Codex asks once to trust Ghostties' hook, so the copy says so where it leans on status.
 
 Every claim comes from a `CHANGELOG.md` entry: beta 26 (shipped 2026-10-12) or the beta 27 `## [Unreleased]` draft. Beta 27 claims stand or fall with that draft, so reread these after Sean edits the changelog and after the Mac checks.
 
