@@ -18,6 +18,14 @@ import OSLog
 /// marker and never uses `--dangerously-bypass-hook-trust` — Sean approves
 /// the new entry once in Codex's own review UI.
 ///
+/// Add once, self-guarding: `registeredKey` records the first successful
+/// registration so a user who removes the hook keeps it removed (Codex
+/// launches call `register` every time). The written command is a silent
+/// no-op when the script is gone (`guardedCommand`), and a one-time
+/// migration (`guardedKey`) rewrites older unguarded entries in place, at
+/// the same array position. Because Codex trust is keyed to the entry, a
+/// rewritten entry may need approving once more in Codex's review UI.
+///
 /// The read-modify-write in `register(hooksJSONPath:scriptPath:)` takes no
 /// file lock. A Codex process writing to `hooks.json` concurrently (e.g.
 /// approving a hook in its own review UI) between this type's read and its
@@ -29,6 +37,13 @@ struct CodexHookRegistrar {
         subsystem: Bundle.main.bundleIdentifier ?? "com.ghostties",
         category: "CodexHookRegistrar"
     )
+
+    /// Set in Ghostties' defaults once the hook has been registered.
+    static let registeredKey = "ghostties.codexHookRegistered"
+
+    /// Set once existing Ghostties entries have been rewritten to the
+    /// guarded command. Versioned: bump to re-run the migration.
+    static let guardedKey = "ghostties.codexHookGuarded.v1"
 
     /// Default location of Codex's hook config file.
     static var defaultHooksJSONPath: String {
@@ -51,7 +66,33 @@ struct CodexHookRegistrar {
     /// "just wrote"); `false` on any failure, including a malformed
     /// existing file, which is left untouched rather than overwritten.
     @discardableResult
-    static func register(hooksJSONPath: String = defaultHooksJSONPath, scriptPath: String) -> Bool {
+    static func register(
+        hooksJSONPath: String = defaultHooksJSONPath,
+        scriptPath: String,
+        defaults: UserDefaults = AppDefaults.store
+    ) -> Bool {
+        let needsAdd = !defaults.bool(forKey: registeredKey)
+        let needsGuard = !defaults.bool(forKey: guardedKey)
+        if !needsAdd && !needsGuard { return true }
+        guard sync(hooksJSONPath: hooksJSONPath, scriptPath: scriptPath, addMissing: needsAdd) else { return false }
+        defaults.set(true, forKey: registeredKey)
+        defaults.set(true, forKey: guardedKey)
+        return true
+    }
+
+    /// The exec-form argv for the hook: `sh -c '[ -x "$1" ] && "$1" codex ||
+    /// true' sh <script>`. The script path travels as its own argument, so
+    /// no quoting of the path is needed. A silent no-op (exit 0) when the
+    /// script is missing; the path element keeps the literal script name, so
+    /// `isGhosttiesCommand` still recognises it.
+    static func guardedCommand(scriptPath: String) -> [String] {
+        ["/bin/sh", "-c", "[ -x \"$1\" ] && \"$1\" codex || true", "sh", scriptPath]
+    }
+
+    /// The edit behind `register`, in one read-modify-write: rewrites every
+    /// existing Ghostties command to the guarded form and, if `addMissing`,
+    /// appends our entry to events that have none.
+    private static func sync(hooksJSONPath: String, scriptPath: String, addMissing: Bool) -> Bool {
         let fm = FileManager.default
 
         var root: [String: Any]
@@ -80,7 +121,12 @@ struct CodexHookRegistrar {
 
         for event in events {
             var entries = hooks[event] as? [[String: Any]] ?? []
-            if !containsGhosttiesEntry(entries, scriptPath: scriptPath) {
+            if containsGhosttiesEntry(entries) {
+                if guardExistingCommands(&entries, scriptPath: scriptPath) {
+                    hooks[event] = entries
+                    changed = true
+                }
+            } else if addMissing {
                 entries.append(ghosttiesEntry(scriptPath: scriptPath))
                 hooks[event] = entries
                 changed = true
@@ -125,8 +171,8 @@ struct CodexHookRegistrar {
     }
 
     /// One `{"matcher": "", "hooks": [{"type": "command", "command": [...],
-    /// "async": true}]}` entry, invoking the script with a trailing "codex"
-    /// argument so `ghostties-status.sh` tags every state file it writes
+    /// "async": true}]}` entry, invoking the script (guarded) with a trailing
+    /// "codex" argument so `ghostties-status.sh` tags every state file it writes
     /// `"agent":"codex"`.
     private static func ghosttiesEntry(scriptPath: String) -> [String: Any] {
         [
@@ -134,29 +180,51 @@ struct CodexHookRegistrar {
             "hooks": [
                 [
                     "type": "command",
-                    "command": [scriptPath, "codex"],
+                    "command": guardedCommand(scriptPath: scriptPath),
                     "async": true,
                 ],
             ],
         ]
     }
 
-    /// True if any existing entry for this event already invokes
-    /// `scriptPath` — matched by the command's first element (or substring,
-    /// for a legacy string-form command), not full-array equality, so a
-    /// future change to trailing args never creates a duplicate entry.
-    private static func containsGhosttiesEntry(_ entries: [[String: Any]], scriptPath: String) -> Bool {
+    /// True if `command` (exec-form array, or legacy string) runs
+    /// `ghostties-status.sh` — matched by script name, so a moved home or an
+    /// older form never creates a duplicate entry.
+    private static func isGhosttiesCommand(_ command: Any?) -> Bool {
+        if let argv = command as? [String] {
+            return argv.contains { $0.contains(HookInstaller.scriptName) }
+        }
+        if let line = command as? String {
+            return line.contains(HookInstaller.scriptName)
+        }
+        return false
+    }
+
+    private static func containsGhosttiesEntry(_ entries: [[String: Any]]) -> Bool {
         entries.contains { entry in
-            guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
-            return innerHooks.contains { inner in
-                if let command = inner["command"] as? [String] {
-                    return command.first == scriptPath
-                }
-                if let command = inner["command"] as? String {
-                    return command.contains(scriptPath)
-                }
-                return false
+            ((entry["hooks"] as? [[String: Any]]) ?? []).contains { isGhosttiesCommand($0["command"]) }
+        }
+    }
+
+    /// Rewrite the `command` of every Ghostties hook in `entries` to the
+    /// guarded form in place (same array positions), leaving every other key
+    /// as parsed. `true` if any changed.
+    private static func guardExistingCommands(_ entries: inout [[String: Any]], scriptPath: String) -> Bool {
+        let guarded = guardedCommand(scriptPath: scriptPath)
+        var changed = false
+        for i in entries.indices {
+            guard var inner = entries[i]["hooks"] as? [[String: Any]] else { continue }
+            var entryChanged = false
+            for j in inner.indices where isGhosttiesCommand(inner[j]["command"]) {
+                if let argv = inner[j]["command"] as? [String], argv == guarded { continue }
+                inner[j]["command"] = guarded
+                entryChanged = true
+            }
+            if entryChanged {
+                entries[i]["hooks"] = inner
+                changed = true
             }
         }
+        return changed
     }
 }

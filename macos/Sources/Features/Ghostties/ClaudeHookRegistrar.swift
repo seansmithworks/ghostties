@@ -20,6 +20,13 @@ import OSLog
 /// (Claude Code not installed, unreadable or wrong-shaped file) records
 /// nothing, so a later launch tries again.
 ///
+/// Self-guarding: the written command is a silent no-op when the script is
+/// gone (`guardedCommand`), so deleting `~/.ghostties` after an uninstall
+/// leaves harmless entries instead of exit-127 errors on every agent event.
+/// A one-time migration (`guardedKey`) rewrites entries written by earlier
+/// versions (and hand-pasted ones) to that form; it never adds or removes
+/// an entry.
+///
 /// Known limit: a read-modify-write with no file lock — a concurrent write
 /// by Claude Code between the read and the atomic replace is lost.
 struct ClaudeHookRegistrar {
@@ -30,6 +37,10 @@ struct ClaudeHookRegistrar {
 
     /// Set in Ghostties' defaults once the hook has been registered.
     static let registeredKey = "ghostties.claudeHookRegistered"
+
+    /// Set once existing Ghostties entries have been rewritten to the
+    /// guarded command. Versioned: bump to re-run the migration.
+    static let guardedKey = "ghostties.claudeHookGuarded.v1"
 
     static var defaultSettingsPath: String {
         ("~/.claude/settings.json" as NSString).expandingTildeInPath
@@ -54,14 +65,27 @@ struct ClaudeHookRegistrar {
         scriptPath: String,
         defaults: UserDefaults = AppDefaults.store
     ) -> Bool {
-        if defaults.bool(forKey: registeredKey) { return true }
-        guard merge(settingsPath: settingsPath, scriptPath: scriptPath) else { return false }
+        let needsAdd = !defaults.bool(forKey: registeredKey)
+        let needsGuard = !defaults.bool(forKey: guardedKey)
+        if !needsAdd && !needsGuard { return true }
+        guard sync(settingsPath: settingsPath, scriptPath: scriptPath, addMissing: needsAdd) else { return false }
         defaults.set(true, forKey: registeredKey)
+        defaults.set(true, forKey: guardedKey)
         return true
     }
 
-    /// The merge behind `register`: `true` if the file now holds the hook.
-    private static func merge(settingsPath: String, scriptPath: String) -> Bool {
+    /// `[ -x "<script>" ] && "<script>" || true`: runs the script when it
+    /// exists and does nothing (exit 0) when it does not. Keeps the literal
+    /// script name, so `containsGhosttiesEntry` still recognises it.
+    static func guardedCommand(scriptPath: String) -> String {
+        "[ -x \"\(scriptPath)\" ] && \"\(scriptPath)\" || true"
+    }
+
+    /// The edit behind `register`, in one read-modify-write: rewrites every
+    /// existing Ghostties command to the guarded form and, if `addMissing`,
+    /// appends our entry to events that have none. `true` if the file is in
+    /// that state afterwards.
+    private static func sync(settingsPath: String, scriptPath: String, addMissing: Bool) -> Bool {
         let fm = FileManager.default
         // Write through a symlinked settings.json (dotfiles repos) rather
         // than replacing the link with a plain file.
@@ -100,7 +124,12 @@ struct ClaudeHookRegistrar {
             // `?? []` only ever covers a missing key: the shape check above
             // has already refused any present-but-wrong value.
             var entries = hooks[event] as? [[String: Any]] ?? []
-            if !containsGhosttiesEntry(entries) {
+            if containsGhosttiesEntry(entries) {
+                if guardExistingCommands(&entries, scriptPath: scriptPath) {
+                    hooks[event] = entries
+                    changed = true
+                }
+            } else if addMissing {
                 entries.append(ghosttiesEntry(matcher: matcher, scriptPath: scriptPath))
                 hooks[event] = entries
                 changed = true
@@ -126,9 +155,31 @@ struct ClaudeHookRegistrar {
         [
             "matcher": matcher,
             "hooks": [
-                ["type": "command", "command": "\"\(scriptPath)\"", "async": true] as [String: Any],
+                ["type": "command", "command": guardedCommand(scriptPath: scriptPath), "async": true] as [String: Any],
             ],
         ]
+    }
+
+    /// Rewrite the `command` of every Ghostties hook in `entries` to the
+    /// guarded form, leaving every other key as parsed. `true` if any changed.
+    private static func guardExistingCommands(_ entries: inout [[String: Any]], scriptPath: String) -> Bool {
+        let guarded = guardedCommand(scriptPath: scriptPath)
+        var changed = false
+        for i in entries.indices {
+            guard var inner = entries[i]["hooks"] as? [[String: Any]] else { continue }
+            var entryChanged = false
+            for j in inner.indices {
+                guard let command = inner[j]["command"] as? String,
+                      command.contains(HookInstaller.scriptName), command != guarded else { continue }
+                inner[j]["command"] = guarded
+                entryChanged = true
+            }
+            if entryChanged {
+                entries[i]["hooks"] = inner
+                changed = true
+            }
+        }
+        return changed
     }
 
     /// True if any entry already runs `ghostties-status.sh` — matched by

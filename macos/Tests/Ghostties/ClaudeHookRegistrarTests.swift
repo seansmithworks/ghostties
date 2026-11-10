@@ -195,4 +195,48 @@ final class ClaudeHookRegistrarTests {
             #expect(ghosttiesCount(stop) == 1)
         }
     }
+
+    @Test func writtenCommandIsGuardedAndStillMatchesByName() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"model":"opus"}"#, to: path)
+        #expect(register(path))
+        let hooks = try #require(readJSON(path)?["hooks"] as? [String: Any])
+        let entry = try #require((hooks["Stop"] as? [[String: Any]])?.first)
+        #expect(firstCommand(entry) == "[ -x \"\(script)\" ] && \"\(script)\" || true")
+        #expect(((entry["hooks"] as? [[String: Any]])?.first?["async"] as? Bool) == true)
+        #expect(ghosttiesCount(try #require(hooks["Stop"] as? [[String: Any]])) == 1)
+    }
+
+    @Test func migratesAnOldUnguardedEntryAndLeavesOtherHooksIntact() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write("""
+        {"model":"opus","hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"/usr/bin/other-a"}]},
+                                         {"matcher":"","hooks":[{"type":"command","command":"\\"\(script)\\"","async":true}]}]}}
+        """, to: path)
+        // Registered by an earlier version: only the migration is outstanding.
+        defaults.set(true, forKey: ClaudeHookRegistrar.registeredKey)
+
+        #expect(register(path))
+
+        let root = try #require(readJSON(path))
+        #expect(root["model"] as? String == "opus")
+        let hooks = try #require(root["hooks"] as? [String: Any])
+        let stop = try #require(hooks["Stop"] as? [[String: Any]])
+        #expect(stop.count == 2)
+        #expect(firstCommand(stop[0]) == "/usr/bin/other-a")
+        #expect(firstCommand(stop[1]) == "[ -x \"\(script)\" ] && \"\(script)\" || true")
+        #expect(hooks["PreToolUse"] == nil, "migration must not add entries to other events")
+        #expect(defaults.bool(forKey: ClaudeHookRegistrar.guardedKey))
+    }
+
+    @Test func migrationIsIdempotent() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"/old/ghostties-status.sh\"","async":true}]}]}}"#, to: path)
+        defaults.set(true, forKey: ClaudeHookRegistrar.registeredKey)
+        #expect(register(path))
+        let first = try #require(FileManager.default.contents(atPath: path))
+        defaults.removeObject(forKey: ClaudeHookRegistrar.guardedKey)
+        #expect(register(path))
+        #expect(try #require(FileManager.default.contents(atPath: path)) == first)
+    }
 }
