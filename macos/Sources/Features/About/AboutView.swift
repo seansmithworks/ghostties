@@ -93,7 +93,7 @@ struct AboutView: View {
 
                 VStack(spacing: 2) {
                     switch versionConfig {
-                    case .stable:
+                    case .stable(let version):
                         PropertyRow(label: "Version", text: version, url: versionConfig.url)
                     case .tip:
                         PropertyRow(label: "Version", text: "Tip Release")
