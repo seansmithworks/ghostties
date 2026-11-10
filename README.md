@@ -26,7 +26,7 @@ Ghostty's terminal, with a workspace layer on top.
 - **A window that follows your theme.** Set any theme other than the default and the sidebar, the area around the terminal, and the toolbar take their colors from it. Ghostties Light and Ghostties Dark are the default.
 - **An embedded browser.** The thing you're building, next to the thing building it.
 
-Everything else is Ghostty: the terminal, the renderer, fonts, keybindings, shell integration. Ghostties reads your existing Ghostty config (`~/.config/ghostty/config`) as is and doesn't edit it. The only change is the default theme. To keep your own, set `theme =` in your config and it wins.
+Everything else is Ghostty: the terminal, the renderer, fonts, keybindings, shell integration. Ghostties reads your existing Ghostty config (`~/.config/ghostty/config`) and doesn't edit it. Two defaults differ from Ghostty's: the Ghostties theme and 20pt of window padding. Anything you set in your config overrides both. A theme you pick inside the app overrides the `theme =` line in your config until you clear that pick in the app.
 
 ### Build from source: `gt` and an MCP server
 
@@ -66,7 +66,7 @@ Neither removes the status hooks Ghostties added for your agents. Delete these b
 
 - In `~/.claude/settings.json`, the entries under `hooks` whose command runs `ghostties-status.sh`.
 - In `~/.codex/hooks.json`, the same entries (only present if you launched a Codex session).
-- The folder `~/.ghostties`, which holds that script, your presets and caches.
+- The folder `~/.ghostties`, which holds that script, your presets, session state and caches.
 
 The hook entries are harmless if left, but they'll point at a script that's gone once you delete `~/.ghostties`.
 
