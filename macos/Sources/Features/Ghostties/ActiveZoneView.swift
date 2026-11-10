@@ -7,9 +7,6 @@ import SwiftUI
 /// (unpromoted terminal sessions), sorted so the most recent activity floats
 /// to the top. Placeholder slots count against both so the zone never resizes
 /// as tasks + drafts come and go (brief §4: spatial stability).
-///
-/// The "machine ok" hint in the header is hardcoded for v0; a later revision
-/// will read thermal state / pressure and drive the color.
 struct ActiveZoneView: View {
     @ObservedObject var taskStore: TaskStore
     @ObservedObject var sessionDraftStore: SessionDraftStore
@@ -139,8 +136,6 @@ struct ActiveZoneView: View {
             Text("· \(rowCount) of ~\(taskStore.machineCap)")
                 .font(.system(size: 10.5, design: .monospaced))
                 .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
-
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)
         .padding(.vertical, 6)

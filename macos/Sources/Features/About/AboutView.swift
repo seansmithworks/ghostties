@@ -19,7 +19,7 @@ struct AboutView: View {
 
         init(version: String?) {
             guard let version else { self = .none; return }
-            if version.range(of: #"^\d+\.\d+\.\d+$"#, options: .regularExpression) != nil {
+            if version.range(of: #"^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$"#, options: .regularExpression) != nil {
                 self = .stable(version: version)
                 return
             }
@@ -32,7 +32,7 @@ struct AboutView: View {
 
         var url: URL? {
             switch self {
-            case .stable(let version):
+            case .stable:
                 return URL(string: "https://ghostties.org/changelog")
             default:
                 return nil
@@ -93,7 +93,7 @@ struct AboutView: View {
 
                 VStack(spacing: 2) {
                     switch versionConfig {
-                    case .stable(let version):
+                    case .stable:
                         PropertyRow(label: "Version", text: version, url: versionConfig.url)
                     case .tip:
                         PropertyRow(label: "Version", text: "Tip Release")

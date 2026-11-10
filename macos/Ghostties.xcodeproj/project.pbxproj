@@ -720,7 +720,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "A program running within Ghostties would like to access your Photo Library.";
 				INFOPLIST_KEY_NSRemindersUsageDescription = "A program running within Ghostties would like to access your reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "A program running within Ghostties would like to use speech recognition.";
-				INFOPLIST_KEY_NSSystemAdministrationUsageDescription = "A program running within Ghostty requires elevated privileges.";
+				INFOPLIST_KEY_NSSystemAdministrationUsageDescription = "A program running within Ghostties requires elevated privileges.";
 				INFOPLIST_PREPROCESS = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1133,7 +1133,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "A program running within Ghostties would like to access your Photo Library.";
 				INFOPLIST_KEY_NSRemindersUsageDescription = "A program running within Ghostties would like to access your reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "A program running within Ghostties would like to use speech recognition.";
-				INFOPLIST_KEY_NSSystemAdministrationUsageDescription = "A program running within Ghostty requires elevated privileges.";
+				INFOPLIST_KEY_NSSystemAdministrationUsageDescription = "A program running within Ghostties requires elevated privileges.";
 				INFOPLIST_PREPROCESS = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1195,7 +1195,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "A program running within Ghostties would like to access your Photo Library.";
 				INFOPLIST_KEY_NSRemindersUsageDescription = "A program running within Ghostties would like to access your reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "A program running within Ghostties would like to use speech recognition.";
-				INFOPLIST_KEY_NSSystemAdministrationUsageDescription = "A program running within Ghostty requires elevated privileges.";
+				INFOPLIST_KEY_NSSystemAdministrationUsageDescription = "A program running within Ghostties requires elevated privileges.";
 				INFOPLIST_PREPROCESS = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
