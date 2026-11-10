@@ -274,11 +274,14 @@ class AppDelegate: NSObject,
 
         #if DEBUG
         CaptureFixture.applySidebarTabOverride()
-        if let hook = CaptureFixture.projectIconHook {
+        let iconHooks = CaptureFixture.projectIconHooks
+        if !iconHooks.isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 let settings = GhosttiesSettingsWindowController.shared.projects
-                guard let project = settings.store.projects.first(where: { $0.name == hook.projectName }) else { return }
-                _Concurrency.Task { try? await settings.chooseImage(from: URL(fileURLWithPath: hook.path), for: project.id) }
+                for hook in iconHooks {
+                    guard let project = settings.store.projects.first(where: { $0.name == hook.projectName }) else { continue }
+                    _Concurrency.Task { try? await settings.chooseImage(from: URL(fileURLWithPath: hook.path), for: project.id) }
+                }
             }
         }
         if let hook = CaptureFixture.settingsHook {

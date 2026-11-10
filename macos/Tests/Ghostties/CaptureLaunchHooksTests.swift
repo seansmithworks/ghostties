@@ -132,6 +132,21 @@ struct CaptureLaunchHooksTests {
         }
     }
 
+    @Test func projectIconsParseOneOrManyPairs() {
+        typealias Icon = CaptureFixture.ProjectIcon
+        #expect(CaptureFixture.parseProjectIcons("switchboard=/tmp/a.png")
+            == [Icon(projectName: "switchboard", path: "/tmp/a.png")])
+        #expect(CaptureFixture.parseProjectIcons("atlas-api=/tmp/a.png, trove=/tmp/b c.png")
+            == [Icon(projectName: "atlas-api", path: "/tmp/a.png"), Icon(projectName: "trove", path: "/tmp/b c.png")])
+        #expect(CaptureFixture.parseProjectIcons("silo=/tmp/x=y.png") == [Icon(projectName: "silo", path: "/tmp/x=y.png")])
+        for raw in [nil, "", "switchboard", "=/tmp/a.png", "wren=", ","] {
+            #expect(CaptureFixture.parseProjectIcons(raw).isEmpty, "\(raw ?? "nil")")
+        }
+        #expect(CaptureFixture.parseProjectIcons(
+            CaptureFixture.gatedEnv("GHOSTTIES_CAPTURE_PROJECT_ICON", active: false, in: ["GHOSTTIES_CAPTURE_PROJECT_ICON": "wren=/a.png"])
+        ).isEmpty)
+    }
+
     @Test func revealStyleSeedsOnlyTheGivenSuite() {
         let name = "ghostties.test.revealSeed.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: name)!
