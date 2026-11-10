@@ -3,8 +3,8 @@ import SwiftUI
 struct AboutView: View {
     @Environment(\.openURL) var openURL
 
-    private let githubURL = URL(string: "https://github.com/ghostty-org/ghostty")
-    private let docsURL = URL(string: "https://ghostty.org/docs")
+    private let githubURL = URL(string: "https://github.com/SeanSmithWorks/ghostties")
+    private let docsURL = URL(string: "https://ghostties.org")
 
     /// Read the commit from the bundle.
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
@@ -33,8 +33,7 @@ struct AboutView: View {
         var url: URL? {
             switch self {
             case .stable(let version):
-                let slug = version.replacingOccurrences(of: ".", with: "-")
-                return URL(string: "https://ghostty.org/docs/install/release-notes/\(slug)")
+                return URL(string: "https://ghostties.org/changelog")
             default:
                 return nil
             }
@@ -83,7 +82,7 @@ struct AboutView: View {
                     Text("Ghostties")
                         .bold()
                         .font(.title)
-                    Text("Fast, native, feature-rich terminal \nemulator pushing modern features.")
+                    Text("Run all your coding agents in one window.")
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .font(.caption)

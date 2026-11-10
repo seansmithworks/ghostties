@@ -2188,7 +2188,7 @@ extension AppDelegate {
         if controllersNeedConfirmation.count == 1 {
             _Concurrency.Task {
                 let response = await controllersNeedConfirmation[0].confirmCloseAsync(
-                    messageText: "Quit Ghostty?",
+                    messageText: "Quit Ghostties?",
                     informativeText: "The terminal still has a running process. If you quit, the process will be killed.",
                     confirmButtonTitle: "Terminate",
                 )
@@ -2222,7 +2222,7 @@ extension AppDelegate {
         _Concurrency.Task {
             for controller in controllers {
                 let response = await controller.confirmCloseAsync(
-                    messageText: "Quit Ghostty?",
+                    messageText: "Quit Ghostties?",
                     informativeText: "The terminal still has a running process. If you quit, the process will be killed.",
                     confirmButtonTitle: "Terminate",
                 )

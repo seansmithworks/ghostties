@@ -39,7 +39,7 @@ struct OnboardingSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Use the sidebar to manage multiple repos, agent threads, and terminals — all in one window.")
+                    Text("Use the sidebar to manage multiple repos, agent threads, and terminals, all in one window.")
                         .font(.system(size: 13))
                         .foregroundStyle(.primary)
 
@@ -56,7 +56,7 @@ struct OnboardingSheet: View {
                             Text("Feedback:")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
-                            Link("sean@seansmithdesign.com", destination: URL(string: "mailto:sean@seansmithdesign.com?subject=Ghostties%20Feedback")!)
+                            Link("Report an issue", destination: URL(string: "https://github.com/SeanSmithWorks/ghostties/issues")!)
                                 .font(.system(size: 12))
                         }
 

@@ -141,10 +141,6 @@ struct ActiveZoneView: View {
                 .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
 
             Spacer(minLength: 0)
-
-            Text("machine ok")
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(ChromeTheme.active(colorScheme).inkSecondaryColor)
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)
         .padding(.vertical, 6)
