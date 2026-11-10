@@ -67,7 +67,7 @@ If you cannot say which of the three a new document is, it is not ready to add.
 
 ### Ship documents are dated snapshots, and say so
 
-`docs/ship/` holds working documents for the maintainer and the agents working with them, not for any reader in the table above: launch drafts and release working notes. Their decay model is a fourth one, **dated snapshot**: the date is in the filename or the first lines, the document is true as of that date and no later, and it is deleted or superseded once the release it was for has shipped. Each one states its reader, its date and what supersedes it at the top, and is linked from the document that uses it. Nothing on the public reader path links to them.
+Launch drafts and release working notes are working documents for the maintainer and the agents working with them, not for any reader in the table above. Their decay model is a fourth one, **dated snapshot**: the date is in the filename or the first lines, the document is true as of that date and no later, and it is deleted or superseded once the release it was for has shipped. Each one states its reader, its date and what supersedes it at the top, and is linked from the document that uses it. Nothing on the public reader path links to them.
 
 `docs/plans/` and `docs/audits/` are working documents too, but not snapshots: code comments cite them, so they stay until the code that cites them changes.
 
