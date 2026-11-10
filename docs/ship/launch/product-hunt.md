@@ -22,7 +22,7 @@ Developer Tools, Artificial Intelligence, Mac, Open Source
 2. Sidebar collapsed to the rail
 3. Hover card on a session that needs approval
 4. Cmd+T composer with Resume and Templates
-5. Theme grid in Settings, beta 27
+5. Theme grid from the Cmd+T composer, beta 27
 
 ## First comment
 

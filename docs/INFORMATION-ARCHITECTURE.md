@@ -59,7 +59,7 @@ Documentation goes wrong when nobody knows which parts are supposed to be true. 
 
 **Generated.** `THIRD-PARTY-NOTICES.md` is assembled from the licence files on disk and diffed against them, never retyped. When a dependency version changes, the file is regenerated, not edited. Legal text is the clearest case where hand-copying is a defect.
 
-**Measured.** `TESTING.md` states test counts and timings from actual runs. Those numbers go stale by design, which is why the file says to read the count from the run rather than trusting the number printed in it.
+**Measured.** Numbers go stale by design, so `TESTING.md` carries none. It says to read test totals from the run with `xcrun xcresulttool get test-results summary`.
 
 **Inherited and frozen.** `HACKING.md` is upstream's build documentation and stays that way, because Ghostties does not modify the build system, the Zig core, or the renderer. Rewriting it would mean maintaining a worse copy of a correct document. Only its header is ours, and that header's job is to mark which sections describe platforms this fork does not ship.
 

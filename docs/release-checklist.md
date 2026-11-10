@@ -4,8 +4,6 @@ Follow these steps before tagging any release. The tag triggers CI (`.github/wor
 
 Until v1.0, a `-beta` tag publishes to **both** the beta and the stable appcast, because every install defaults to the stable channel. Tagging a beta therefore offers it as an update to every installed copy. Treat the tag as a one-way door.
 
-What is still open for the next beta, and who can do it, is in the newest ship map under [`docs/ship/`](ship/).
-
 ## Before tagging
 
 - [ ] All PRs for this release merged to `main`

@@ -13,7 +13,7 @@ cd cli
 swift test --parallel
 ```
 
-Currently 110 tests. This is what CI runs on every PR.
+This is what CI runs on every PR.
 
 ## macOS app — Xcode
 
@@ -36,7 +36,7 @@ xcodebuild test \
   -skipPackagePluginValidation
 ```
 
-Currently 673 tests across 52 suites, about 15 seconds.
+Read the totals from the run: `xcrun xcresulttool get test-results summary --path <the .xcresult>`.
 
 Two things that will bite you:
 

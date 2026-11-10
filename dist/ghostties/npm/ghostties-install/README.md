@@ -4,15 +4,10 @@ A zero-dependency installer shim for [Ghostties](https://ghostties.org). Downloa
 newest published build of `Ghostties.app`, verifies it, and places it on your Mac.
 
 **Published to npm.** `npx ghostties-install` resolves the newest release,
-downloads it, verifies it, and installs it — no separate `npm install` step
+downloads it, verifies it, and installs it. No separate `npm install` step
 needed.
 
-**Recommended install path:** `brew install --cask seansmithworks/tap/ghostties`
-(see [`../../homebrew/README.md`](../../homebrew/README.md)). This npm shim exists
-for people who already live in `npx` and want a one-liner; the cask does more for
-you (checksum-verified download, `/Applications` placement, `uninstall`/`zap`
-cleanup) while Sparkle handles updates in-app either way. If you have Homebrew, use
-the cask instead.
+If you have Homebrew, use the cask instead. See the install section of the [root README](../../../../README.md#install).
 
 ## Requirements
 
@@ -32,8 +27,8 @@ Installs `Ghostties.app` into `/Applications`.
 | Flag              | Env var                 | Default         | Description                                      |
 | ----------------- | ------------------------ | --------------- | ------------------------------------------------- |
 | `--target <dir>`  | `GHOSTTIES_INSTALL_DIR`  | `/Applications` | Directory to install into.                        |
-| `--force`         | —                        | off             | Overwrite an existing `Ghostties.app` at target.  |
-| `-h`, `--help`    | —                        | —               | Show usage.                                       |
+| `--force`         | none                     | off             | Overwrite an existing `Ghostties.app` at target.  |
+| `-h`, `--help`    | none                     | none            | Show usage.                                       |
 
 Example, installing somewhere other than `/Applications`:
 
@@ -43,7 +38,7 @@ npx ghostties-install --target ~/Applications
 
 ## What it does
 
-1. Checks that you're on macOS/arm64. Hard-fails with a clear message otherwise —
+1. Checks that you're on macOS/arm64. Hard-fails with a clear message otherwise.
    Ghostties has no Linux, Windows, or Intel build.
 2. Resolves the newest published release from the GitHub API at run time. Every
    Ghostties release so far is a GitHub prerelease, so this reads the release list
@@ -55,7 +50,7 @@ npx ghostties-install --target ~/Applications
    (it's ~154 MB).
 5. Verifies the download's SHA-256 against the digest GitHub published for that
    asset before touching the archive contents. On mismatch it deletes the download
-   and exits non-zero — it will never extract or install an unverified binary.
+   and exits non-zero. It will never extract or install an unverified binary.
 6. Extracts with `ditto -x -k` (not `unzip`), which preserves extended attributes,
    symlinks, and code-signature integrity on `.app` bundles.
 7. Verifies the extracted app bundle's code signature with `codesign` and confirms
@@ -76,7 +71,7 @@ re-run this installer for future versions.
 ## Always installs the newest release
 
 This package resolves the newest published release from the GitHub API at
-install time rather than pinning a version — a pinned version goes stale the
+install time rather than pinning a version. A pinned version goes stale the
 moment the next release ships, and this installer has no CI automation to bump
 a pin on every release. Nothing in `bin/ghostties-install.js` needs to be
 edited when a new version ships.
@@ -84,7 +79,7 @@ edited when a new version ships.
 Integrity is verified two ways instead: the download's SHA-256 is checked
 against the digest GitHub publishes for that exact asset, and the extracted
 app bundle's code signature is checked against Ghostties' Developer ID team
-identifier. The signature check is the stronger guarantee — it holds for every
+identifier. The signature check is the stronger guarantee. It holds for every
 future release, not just the one a checksum happened to be pinned to.
 
 ## Zero dependencies
