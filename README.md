@@ -68,7 +68,7 @@ Neither removes the status hooks Ghostties added for your agents. Delete these b
 - In `~/.codex/hooks.json`, the same entries (only present if you launched a Codex session).
 - The folder `~/.ghostties`, which holds that script, your presets, session state and caches.
 
-The hook entries are harmless if left, but they'll point at a script that's gone once you delete `~/.ghostties`.
+The hook entries are harmless if left. They skip silently when the script is gone, so deleting `~/.ghostties` won't cause errors.
 
 ## Its relationship to Ghostty
 

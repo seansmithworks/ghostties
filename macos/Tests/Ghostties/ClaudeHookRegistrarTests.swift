@@ -195,4 +195,95 @@ final class ClaudeHookRegistrarTests {
             #expect(ghosttiesCount(stop) == 1)
         }
     }
+
+    @Test func writtenCommandIsGuardedAndStillMatchesByName() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"model":"opus"}"#, to: path)
+        #expect(register(path))
+        let hooks = try #require(readJSON(path)?["hooks"] as? [String: Any])
+        let entry = try #require((hooks["Stop"] as? [[String: Any]])?.first)
+        #expect(firstCommand(entry) == "[ -x '\(script)' ] && '\(script)' || true")
+        #expect(((entry["hooks"] as? [[String: Any]])?.first?["async"] as? Bool) == true)
+        #expect(ghosttiesCount(try #require(hooks["Stop"] as? [[String: Any]])) == 1)
+    }
+
+    @Test func migratesAnOldUnguardedEntryAndLeavesOtherHooksIntact() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write("""
+        {"model":"opus","hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"/usr/bin/other-a"}]},
+                                         {"matcher":"","hooks":[{"type":"command","command":"\\"\(script)\\"","async":true}]}]}}
+        """, to: path)
+        // Registered by an earlier version: only the migration is outstanding.
+        defaults.set(true, forKey: ClaudeHookRegistrar.registeredKey)
+
+        #expect(register(path))
+
+        let root = try #require(readJSON(path))
+        #expect(root["model"] as? String == "opus")
+        let hooks = try #require(root["hooks"] as? [String: Any])
+        let stop = try #require(hooks["Stop"] as? [[String: Any]])
+        #expect(stop.count == 2)
+        #expect(firstCommand(stop[0]) == "/usr/bin/other-a")
+        #expect(firstCommand(stop[1]) == "[ -x '\(script)' ] && '\(script)' || true")
+        #expect(hooks["PreToolUse"] == nil, "migration must not add entries to other events")
+        #expect(defaults.bool(forKey: ClaudeHookRegistrar.guardedKey))
+    }
+
+    @Test func migrationIsIdempotent() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"/old/ghostties-status.sh\"","async":true}]}]}}"#, to: path)
+        defaults.set(true, forKey: ClaudeHookRegistrar.registeredKey)
+        #expect(register(path))
+        let first = try #require(FileManager.default.contents(atPath: path))
+        defaults.removeObject(forKey: ClaudeHookRegistrar.guardedKey)
+        #expect(register(path))
+        #expect(try #require(FileManager.default.contents(atPath: path)) == first)
+    }
+
+    @Test func pathWithSpaceAndSingleQuoteIsQuotedAndStillRecognised() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        let odd = "/Users/o'brien $HOME/`x`/.ghostties/hooks/ghostties-status.sh"
+        try write(#"{"model":"opus"}"#, to: path)
+        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: odd, defaults: defaults))
+        let hooks = try #require(readJSON(path)?["hooks"] as? [String: Any])
+        let entry = try #require((hooks["Stop"] as? [[String: Any]])?.first)
+        let q = #"'/Users/o'\''brien $HOME/`x`/.ghostties/hooks/ghostties-status.sh'"#
+        #expect(firstCommand(entry) == "[ -x \(q) ] && \(q) || true")
+        // Recognised as ours again: a forced second pass changes nothing.
+        let first = try #require(FileManager.default.contents(atPath: path))
+        defaults.removeObject(forKey: ClaudeHookRegistrar.guardedKey)
+        defaults.removeObject(forKey: ClaudeHookRegistrar.registeredKey)
+        #expect(ClaudeHookRegistrar.register(settingsPath: path, scriptPath: odd, defaults: defaults))
+        #expect(try #require(FileManager.default.contents(atPath: path)) == first)
+    }
+
+    @Test func unrelatedHookMentioningTheScriptNameIsLeftUntouched() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        let text = #"{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"tail -f /tmp/ghostties-status.sh.log"}]}]}}"#
+        try write(text, to: path)
+        defaults.set(true, forKey: ClaudeHookRegistrar.registeredKey)
+        #expect(register(path))
+        let stop = try #require((readJSON(path)?["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]])
+        #expect(stop.count == 1)
+        #expect(firstCommand(stop[0]) == "tail -f /tmp/ghostties-status.sh.log")
+    }
+
+    @Test func handPastedEntryWithExtraArgsKeepsThemWhenGuarded() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        try write(#"{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"/old/dir/ghostties-status.sh\" --flag x","async":true}]}]}}"#, to: path)
+        defaults.set(true, forKey: ClaudeHookRegistrar.registeredKey)
+        #expect(register(path))
+        let stop = try #require((readJSON(path)?["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]])
+        #expect(firstCommand(stop[0]) == "[ -x '\(script)' ] && '\(script)' --flag x || true")
+    }
+
+    @Test func malformedFileIsLeftByteIdenticalAndFlagsStayUnsetOnTheMigrationPath() throws {
+        let path = tempPath(); defer { cleanup(path) }
+        let bad = #"{"hooks": {oops"#
+        try write(bad, to: path)
+        defaults.set(true, forKey: ClaudeHookRegistrar.registeredKey)
+        #expect(!register(path))
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == bad)
+        #expect(!defaults.bool(forKey: ClaudeHookRegistrar.guardedKey))
+    }
 }
