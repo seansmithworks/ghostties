@@ -59,7 +59,7 @@ Documentation goes wrong when nobody knows which parts are supposed to be true. 
 
 **Generated.** `THIRD-PARTY-NOTICES.md` is assembled from the licence files on disk and diffed against them, never retyped. When a dependency version changes, the file is regenerated, not edited. Legal text is the clearest case where hand-copying is a defect.
 
-**Measured.** `TESTING.md` states test counts and timings from actual runs. Those numbers go stale by design, which is why the file says to read the count from the run rather than trusting the number printed in it.
+**Measured.** Numbers go stale by design, so `TESTING.md` carries none. It says to read test totals from the run with `xcrun xcresulttool get test-results summary`.
 
 **Inherited and frozen.** `HACKING.md` is upstream's build documentation and stays that way, because Ghostties does not modify the build system, the Zig core, or the renderer. Rewriting it would mean maintaining a worse copy of a correct document. Only its header is ours, and that header's job is to mark which sections describe platforms this fork does not ship.
 
@@ -67,7 +67,7 @@ If you cannot say which of the three a new document is, it is not ready to add.
 
 ### Ship documents are dated snapshots, and say so
 
-`docs/ship/` holds working documents for the maintainer and the agents working with them, not for any reader in the table above: per-release ship maps and launch drafts. Their decay model is a fourth one, **dated snapshot**: the date is in the filename or the first lines, the document is true as of that date and no later, and it is deleted or superseded once the release it was for has shipped. Each one states its reader, its date and what supersedes it at the top, and is linked from the document that uses it (the release checklist links `docs/ship/`). Nothing on the public reader path links to them.
+`docs/ship/` holds working documents for the maintainer and the agents working with them, not for any reader in the table above: launch drafts and release working notes. Their decay model is a fourth one, **dated snapshot**: the date is in the filename or the first lines, the document is true as of that date and no later, and it is deleted or superseded once the release it was for has shipped. Each one states its reader, its date and what supersedes it at the top, and is linked from the document that uses it. Nothing on the public reader path links to them.
 
 `docs/plans/` and `docs/audits/` are working documents too, but not snapshots: code comments cite them, so they stay until the code that cites them changes.
 

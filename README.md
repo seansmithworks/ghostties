@@ -1,8 +1,10 @@
 # Ghostties
 
-**A terminal for running several AI agents at once. A fork of [Ghostty](https://github.com/ghostty-org/ghostty).**
+**Run all your coding agents in one window.**
 
-![Ghostties](.github/assets/product-hero.png)
+Ghostties is a macOS fork of [Ghostty](https://github.com/ghostty-org/ghostty) with a sidebar for your agent sessions.
+
+![The Ghostties window: a project sidebar on the left with sessions marked needs you, working and done, and a Claude Code session running in the terminal on the right.](.github/assets/product-hero.png)
 
 > **Pre-1.0.** Active development, ships as a beta. Things move, and occasionally break.
 
@@ -12,14 +14,16 @@ Running one coding agent is fine. Running five is a mess of terminal windows whe
 
 Ghostties puts them in one window, grouped by project, and shows you what each one is doing.
 
-![Ghostties sidebar](.github/assets/demo.gif)
+![A recording of Ghostties: a list of sessions in the sidebar, which then collapses to a narrow rail while Claude Code works through a flaky test in the terminal.](.github/assets/demo.gif)
 
 ## What it adds
 
 Ghostty's terminal, with a workspace layer on top.
 
-- **A project sidebar.** Sessions and tasks grouped by project, so a window full of agents stays readable.
-- **Status at a glance.** Every session shows whether its agent is working, waiting on you, done, or stopped on an error.
+- **A project sidebar.** Sessions and tasks grouped by project. Projects show their real icons. The sidebar can collapse to a narrow rail.
+- **Status at a glance.** Each session shows whether its agent is working, needs you, is done, or hit an error.
+- **Approve or deny from the sidebar.** When Claude Code asks permission to run something, answer from the session's row.
+- **A window that follows your theme.** Pick any theme other than the default and the sidebar, canvas and toolbar take their colors from it. Ghostties Light and Dark are the default.
 - **`gt`, a CLI.** Create and move tasks from inside any agent session, so an agent can file its own work.
 - **An MCP server.** Agents read and update the task list directly.
 - **An embedded browser.** The thing you're building, next to the thing building it.
@@ -42,8 +46,6 @@ Requires **macOS 13 or later on Apple Silicon**. There's no Intel build and no L
 
 macOS will ask for access to Desktop, Documents, and iCloud Drive. That's standard for any new terminal. The prompts come from commands running inside the terminal, not from Ghostties. Deny anything you don't need. To stop them entirely, grant Full Disk Access in System Settings, under Privacy & Security.
 
-The dialogs say "Ghostty" rather than "Ghostties" because they use the bundle identifier inherited from upstream.
-
 ## Its relationship to Ghostty
 
 Ghostties is a fork of [Ghostty](https://github.com/ghostty-org/ghostty), the terminal emulator built by [Mitchell Hashimoto](https://github.com/mitchellh) and the Ghostty contributors. Ghostty is the original, and the reason this exists. The terminal, its performance, and nearly all of this repository's source are its work. Ghostties adds a sidebar.
@@ -60,7 +62,7 @@ And if you want the terminal without the agent workspace, you want [Ghostty](htt
 
 - [CONTRIBUTING.md](CONTRIBUTING.md). How to report things, and what happens with pull requests.
 - [TESTING.md](TESTING.md). Running the test suites.
-- [HACKING.md](HACKING.md). Building from source.
+- [Building from source](AGENTS.md#commands). The build and launch commands.
 - [SECURITY.md](SECURITY.md). Reporting a vulnerability privately.
 
 Terminal configuration is documented at [ghostty.org/docs](https://ghostty.org/docs). Ghostties uses the same config.

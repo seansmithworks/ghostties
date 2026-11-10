@@ -7,7 +7,8 @@ test targets — read it, and put changes there rather than restating them here.
 What it overrides in the upstream section below:
 
 - Build with Xcode, **not** `macos/build.nu` and **not** `zig build` — see the
-  note in the root AGENTS.md § Commands for why the Zig path is broken.
+  root AGENTS.md § Commands. Default `zig` 0.15.2 fails on this machine; it covers
+  building the xcframework with zig 0.16.
 - The scheme and the built bundle are `Ghostties`, not `Ghostty`, so every
   `Ghostty.app` path below is `Ghostties.app` here.
 

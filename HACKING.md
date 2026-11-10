@@ -13,8 +13,11 @@ Two things to know before you start:
   change. Code pull requests aren't being accepted on this fork right now, and it
   explains what to do instead.
 
-For the workspace sidebar, the `gt` CLI, and the MCP server — the parts this fork
-adds — see [AGENTS.md](AGENTS.md) and [TESTING.md](TESTING.md).
+## Building Ghostties
+
+Follow [AGENTS.md § Commands](AGENTS.md#commands) to build and launch the app.
+The `zig build` sections below are upstream reference, not the Ghostties path.
+For tests, see [TESTING.md](TESTING.md).
 
 To start development, clone the repository and build from a Git checkout. The
 process is very similar to [building Ghostty from a source tarball](http://ghostty.org/docs/install/build),

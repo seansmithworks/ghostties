@@ -14,10 +14,19 @@ shipped, or tested here.
 
 ## Commands
 
-> **`zig build` does not currently work on this machine.** Zig 0.15.2's linker
-> fails on macOS 26+ (can't find `_abort`, `_free`, `_malloc`). Still 0.15.2 and
-> now macOS 27.0 as of 2026-09-20, so nothing has changed that would fix it.
-> Build through Xcode until Zig 0.16 ships, then re-check.
+> **Default `zig` (0.15.2) fails to link on macOS 26+.** Zig 0.16 works:
+> `/opt/homebrew/opt/zig@0.16` (not on `PATH` by default). Xcode needs
+> `macos/GhosttyKit.xcframework` (gitignored). A fresh worktree lacks it; build it
+> with 0.16 first (about 2 minutes), then run `xcodebuild`:
+>
+> ```sh
+> PATH=/opt/homebrew/opt/zig@0.16/bin:$PATH zig build -Doptimize=Debug -Demit-macos-app=false -Demit-xcframework=true -Dxcframework-target=native
+> ```
+>
+> Keep `-Dxcframework-target=native`. The default `universal` writes
+> `macos-arm64_x86_64/`, which the verify scripts don't find. Don't copy a
+> framework from another worktree; it may be stale. The Debug app also needs
+> `zig-out/share` (vim, zsh, terminfo) copied or symlinked into a fresh worktree.
 
 - **Build + launch Dev (terminal)**:
   `xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration Debug -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`,
@@ -36,7 +45,7 @@ shipped, or tested here.
   the embedded browser
 - **Formatting**: `zig fmt .` · `swiftlint lint --strict --fix` · `prettier -w .`
 
-Blocked on the Zig toolchain, kept for when it works again:
+Zig-only commands, not verified here; they need zig 0.16 on `PATH`:
 `zig build run -Doptimize=ReleaseFast` (build + launch),
 `zig build -Demit-macos-app=false` (Zig only, skips the app bundle),
 `zig build test` (slow; prefer `-Dtest-filter=<name>`).

@@ -22,7 +22,7 @@ Developer Tools, Artificial Intelligence, Mac, Open Source
 2. Sidebar collapsed to the rail
 3. Hover card on a session that needs approval
 4. Cmd+T composer with Resume and Templates
-5. Theme grid in Settings, beta 27
+5. Theme grid from the Cmd+T composer, beta 27
 
 ## First comment
 
@@ -30,6 +30,6 @@ Hey Product Hunt, I'm Sean.
 
 I built Ghostties because running five agents meant five terminal windows and no idea which one needed me.
 
-It's Ghostty's terminal with a workspace layer on top: a project sidebar, a status glyph on every session, hover cards that show what a Claude Code agent wants to run (after a one time hook setup), and one composer (Cmd+T) to start or resume Shell, Claude Code, Codex and Browser sessions. There's an embedded browser too, so the thing you're building sits next to the thing building it.
+It's Ghostty's terminal with a workspace layer on top: a project sidebar, a status glyph on every session, hover cards that show what a Claude Code agent wants to run, and one composer (Cmd+T) to start or resume Shell, Claude Code, Codex and Browser sessions. There's an embedded browser too, so the thing you're building sits next to the thing building it.
 
 It's free, open source and in beta, for macOS 13 or later on Apple Silicon. I'd love to hear what you'd want it to show you next.

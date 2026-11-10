@@ -25,7 +25,7 @@ cp .build/release/gt /usr/local/bin/gt
 
 ## Requirements
 
-- macOS 13+ (or Linux with Foundation)
+- macOS 13+
 - Swift 5.9+ (to build)
 
 ## Tasks directory discovery
@@ -85,7 +85,7 @@ Individual test targets:
 
 ```sh
 swift test --filter GhosttiesCoreTests   # parser, store, directory discovery, cross-surface schema
-swift test --filter GhosttiesMCPTests    # JSON-RPC protocol + all 9 MCP tool handlers
+swift test --filter GhosttiesMCPTests    # JSON-RPC protocol + the MCP tool handlers
 ```
 
 `GhosttiesCoreTests/CrossSurfaceCoherenceTests.swift` asserts that task files written by this CLI (and the MCP server) match the exact frontmatter schema the macOS sidebar's `TaskFixtureParser` reads. If that test fails, do not commit — the three-surface architecture has drifted.
