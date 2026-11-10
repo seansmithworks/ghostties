@@ -12,8 +12,22 @@ struct ReleaseNotesTests {
 
         #expect(notes != nil)
         if case .tagged(let url) = notes {
-            #expect(url.absoluteString == "https://ghostty.org/docs/install/release-notes/1-2-3")
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/releases/tag/v1.2.3")
             #expect(notes?.label == "View Release Notes")
+        } else {
+            Issue.record("Expected tagged case")
+        }
+    }
+
+    /// Test tagged beta release (prerelease suffix)
+    @Test func testTaggedBetaRelease() async throws {
+        let notes = UpdateState.ReleaseNotes(
+            displayVersionString: "0.5.0-beta.27",
+            currentCommit: nil
+        )
+
+        if case .tagged(let url) = notes {
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.5.0-beta.27")
         } else {
             Issue.record("Expected tagged case")
         }
@@ -28,7 +42,7 @@ struct ReleaseNotesTests {
 
         #expect(notes != nil)
         if case .compareTip(let url) = notes {
-            #expect(url.absoluteString == "https://github.com/ghostty-org/ghostty/compare/def5678...abc1234")
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/compare/def5678...abc1234")
             #expect(notes?.label == "Changes Since This Tip Release")
         } else {
             Issue.record("Expected compareTip case")
@@ -44,7 +58,7 @@ struct ReleaseNotesTests {
 
         #expect(notes != nil)
         if case .commit(let url) = notes {
-            #expect(url.absoluteString == "https://github.com/ghostty-org/ghostty/commit/abc1234")
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/commit/abc1234")
             #expect(notes?.label == "View GitHub Commit")
         } else {
             Issue.record("Expected commit case")
@@ -60,7 +74,7 @@ struct ReleaseNotesTests {
 
         #expect(notes != nil)
         if case .commit(let url) = notes {
-            #expect(url.absoluteString == "https://github.com/ghostty-org/ghostty/commit/abc1234")
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/commit/abc1234")
         } else {
             Issue.record("Expected commit case")
         }
@@ -75,7 +89,7 @@ struct ReleaseNotesTests {
 
         #expect(notes != nil)
         if case .commit(let url) = notes {
-            #expect(url.absoluteString == "https://github.com/ghostty-org/ghostty/commit/1234567890abcdef1234567890abcdef12345678")
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/commit/1234567890abcdef1234567890abcdef12345678")
         } else {
             Issue.record("Expected commit case")
         }
@@ -91,15 +105,18 @@ struct ReleaseNotesTests {
         #expect(notes == nil)
     }
 
-    /// Test semantic version with prerelease suffix should not match
+    /// Test semantic version with prerelease suffix is tagged
     @Test func testSemanticVersionWithSuffix() async throws {
         let notes = UpdateState.ReleaseNotes(
             displayVersionString: "1.2.3-beta",
             currentCommit: nil
         )
 
-        // Should not match semantic version pattern, falls back to hash detection
-        #expect(notes == nil)
+        if case .tagged(let url) = notes {
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/releases/tag/v1.2.3-beta")
+        } else {
+            Issue.record("Expected tagged case")
+        }
     }
 
     /// Test semantic version with 4 components should not match
@@ -122,7 +139,7 @@ struct ReleaseNotesTests {
 
         #expect(notes != nil)
         if case .compareTip(let url) = notes {
-            #expect(url.absoluteString == "https://github.com/ghostty-org/ghostty/compare/def5678...abc1234")
+            #expect(url.absoluteString == "https://github.com/SeanSmithWorks/ghostties/compare/def5678...abc1234")
         } else {
             Issue.record("Expected compareTip case")
         }

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ghostties — one window, every agent</title>
+  <title>Ghostties: one window, every agent</title>
   <meta name="description" content="Ghostties is a free macOS terminal for running several AI coding agents at once: every Claude Code and Codex session in one window, grouped by project, with status you can read at a glance. A fork of Ghostty, in beta.">
   <link rel="canonical" href="https://ghostties.org/">
   <meta name="theme-color" content="#06060e">
   <meta property="og:site_name" content="Ghostties">
-  <meta property="og:title" content="Ghostties — one window, every agent">
+  <meta property="og:title" content="Ghostties: one window, every agent">
   <meta property="og:description" content="A macOS terminal for running several coding agents at once. Every session in one window, grouped by project, with live status. A fork of Ghostty, in beta.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ghostties.org/">
@@ -17,7 +17,7 @@
   <meta property="og:image:height" content="1280">
   <meta property="og:image:alt" content="Eight pixel ghosts under a terminal showing npx ghostties-install and Ghostties installed">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Ghostties — one window, every agent">
+  <meta name="twitter:title" content="Ghostties: one window, every agent">
   <meta name="twitter:description" content="A macOS terminal for running several coding agents at once. Every session in one window, grouped by project, with live status.">
   <meta name="twitter:image" content="https://ghostties.org/assets/social-card.png">
   <meta name="twitter:image:alt" content="Eight pixel ghosts under a terminal showing npx ghostties-install and Ghostties installed">
@@ -128,6 +128,10 @@
             <p>Hover a session to see what it wants to run and why, or your last prompt and its current step.</p>
           </li>
           <li class="feature-cell">
+            <h3>Approve from the sidebar</h3>
+            <p>When Claude Code asks permission to run something, approve or deny it from its row without switching terminals.</p>
+          </li>
+          <li class="feature-cell">
             <h3>One composer</h3>
             <p>Cmd+T starts a Shell, Claude Code, Codex or Browser session in any project.</p>
           </li>
@@ -157,7 +161,7 @@
         <p class="lead" style="max-width: 64ch;">
           Ghostties is a fork of
           <a class="text-link" href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>,
-          not a rewrite — your config, themes and keybinds load unchanged, the terminal
+          not a rewrite. Your config, themes and keybinds load unchanged, the terminal
           engine underneath is still upstream Ghostty, and the sidebar is an additional
           surface, not a replacement.
         </p>

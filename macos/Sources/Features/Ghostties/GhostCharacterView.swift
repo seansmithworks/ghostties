@@ -41,6 +41,6 @@ struct GhostCharacterView: View {
                 GhostShape(character: character).stroke(color, lineWidth: 1)
             }
         }
-        .accessibilityLabel("\(character.rawValue) ghost")
+        .accessibilityLabel("Ghost")
     }
 }
