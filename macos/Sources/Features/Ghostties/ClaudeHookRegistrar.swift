@@ -74,11 +74,68 @@ struct ClaudeHookRegistrar {
         return true
     }
 
-    /// `[ -x "<script>" ] && "<script>" || true`: runs the script when it
-    /// exists and does nothing (exit 0) when it does not. Keeps the literal
-    /// script name, so `containsGhosttiesEntry` still recognises it.
-    static func guardedCommand(scriptPath: String) -> String {
-        "[ -x \"\(scriptPath)\" ] && \"\(scriptPath)\" || true"
+    /// `[ -x '<script>' ] && '<script>'<args> || true`: runs the script when
+    /// it exists and does nothing (exit 0) when it does not. The path is
+    /// POSIX single-quoted (`'` becomes `'\''`), so no character in it can
+    /// break out. Keeps the literal script name, so `classify` recognises it.
+    static func guardedCommand(scriptPath: String, args: String = "") -> String {
+        let q = "'" + scriptPath.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return "[ -x \(q) ] && \(q)\(args) || true"
+    }
+
+    /// True if `word` is the status script: exactly its name, or a path
+    /// ending in `/ghostties-status.sh`. Not a mere substring match, so
+    /// `ghostties-status.sh.log` is not ours.
+    static func isScriptWord(_ word: String) -> Bool {
+        word == HookInstaller.scriptName || word.hasSuffix("/" + HookInstaller.scriptName)
+    }
+
+    /// The first shell word of `s` from `start`: quotes removed, a backslash
+    /// escapes the next character, whitespace outside quotes ends it.
+    /// `end` is the index just past the word.
+    private static func shellWord(_ s: String, from start: String.Index) -> (word: String, end: String.Index) {
+        var word = ""
+        var quote: Character?
+        var i = start
+        while i < s.endIndex {
+            let c = s[i]
+            if let q = quote {
+                if c == q {
+                    quote = nil
+                } else if c == "\\", q == "\"", s.index(after: i) < s.endIndex {
+                    i = s.index(after: i)
+                    word.append(s[i])
+                } else {
+                    word.append(c)
+                }
+            } else if c == "'" || c == "\"" {
+                quote = c
+            } else if c == "\\", s.index(after: i) < s.endIndex {
+                i = s.index(after: i)
+                word.append(s[i])
+            } else if c.isWhitespace {
+                break
+            } else {
+                word.append(c)
+            }
+            i = s.index(after: i)
+        }
+        return (word, i)
+    }
+
+    /// Recognise a Ghostties command string: either the old unguarded form
+    /// (the script as the first word, `rest` = any trailing arguments) or the
+    /// guarded form. `nil` for anything else.
+    static func classify(_ command: String) -> (guarded: Bool, rest: String)? {
+        let s = String(command.drop(while: { $0.isWhitespace }))
+        if s.hasPrefix("[ -x ") {
+            let first = shellWord(s, from: s.index(s.startIndex, offsetBy: 5))
+            guard isScriptWord(first.word), s[first.end...].hasPrefix(" ] && ") else { return nil }
+            return (true, "")
+        }
+        let first = shellWord(s, from: s.startIndex)
+        guard isScriptWord(first.word) else { return nil }
+        return (false, String(s[first.end...]))
     }
 
     /// The edit behind `register`, in one read-modify-write: rewrites every
@@ -160,18 +217,18 @@ struct ClaudeHookRegistrar {
         ]
     }
 
-    /// Rewrite the `command` of every Ghostties hook in `entries` to the
-    /// guarded form, leaving every other key as parsed. `true` if any changed.
+    /// Rewrite the `command` of every unguarded Ghostties hook in `entries`
+    /// to the guarded form (keeping any trailing arguments), leaving every
+    /// other key as parsed. `true` if any changed.
     private static func guardExistingCommands(_ entries: inout [[String: Any]], scriptPath: String) -> Bool {
-        let guarded = guardedCommand(scriptPath: scriptPath)
         var changed = false
         for i in entries.indices {
             guard var inner = entries[i]["hooks"] as? [[String: Any]] else { continue }
             var entryChanged = false
             for j in inner.indices {
                 guard let command = inner[j]["command"] as? String,
-                      command.contains(HookInstaller.scriptName), command != guarded else { continue }
-                inner[j]["command"] = guarded
+                      let found = classify(command), !found.guarded else { continue }
+                inner[j]["command"] = guardedCommand(scriptPath: scriptPath, args: found.rest)
                 entryChanged = true
             }
             if entryChanged {
@@ -182,13 +239,13 @@ struct ClaudeHookRegistrar {
         return changed
     }
 
-    /// True if any entry already runs `ghostties-status.sh` — matched by
-    /// script name so a hand-pasted `"$HOME"/.ghostties/...` command counts.
+    /// True if any entry already runs `ghostties-status.sh` (see `classify`),
+    /// so a hand-pasted `"$HOME"/.ghostties/...` command counts.
     private static func containsGhosttiesEntry(_ entries: [[String: Any]]) -> Bool {
         entries.contains { entry in
             guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
             return inner.contains { hook in
-                (hook["command"] as? String)?.contains(HookInstaller.scriptName) == true
+                (hook["command"] as? String).flatMap(classify) != nil
             }
         }
     }

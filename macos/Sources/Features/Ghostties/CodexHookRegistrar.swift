@@ -187,17 +187,24 @@ struct CodexHookRegistrar {
         ]
     }
 
-    /// True if `command` (exec-form array, or legacy string) runs
-    /// `ghostties-status.sh` — matched by script name, so a moved home or an
-    /// older form never creates a duplicate entry.
+    /// True if `command` is a Ghostties hook: an exec-form array whose first
+    /// element is the script (old form) or that is our guarded `sh -c` form,
+    /// or a legacy string command (see `ClaudeHookRegistrar.classify`).
+    /// Anchored on the script's basename, not a substring.
     private static func isGhosttiesCommand(_ command: Any?) -> Bool {
         if let argv = command as? [String] {
-            return argv.contains { $0.contains(HookInstaller.scriptName) }
+            if let first = argv.first, ClaudeHookRegistrar.isScriptWord(first) { return true }
+            return isGuarded(argv)
         }
         if let line = command as? String {
-            return line.contains(HookInstaller.scriptName)
+            return ClaudeHookRegistrar.classify(line) != nil
         }
         return false
+    }
+
+    private static func isGuarded(_ argv: [String]) -> Bool {
+        argv.count >= 5 && argv[0] == "/bin/sh" && argv[1] == "-c"
+            && ClaudeHookRegistrar.isScriptWord(argv[argv.count - 1])
     }
 
     private static func containsGhosttiesEntry(_ entries: [[String: Any]]) -> Bool {
@@ -206,9 +213,11 @@ struct CodexHookRegistrar {
         }
     }
 
-    /// Rewrite the `command` of every Ghostties hook in `entries` to the
-    /// guarded form in place (same array positions), leaving every other key
-    /// as parsed. `true` if any changed.
+    /// Rewrite the `command` of every unguarded Ghostties hook in `entries`
+    /// to the guarded form in place (same array positions), leaving every
+    /// other key as parsed. An array with arguments other than the single
+    /// `codex` this type writes is not ours to reshape and is left alone.
+    /// `true` if any changed.
     private static func guardExistingCommands(_ entries: inout [[String: Any]], scriptPath: String) -> Bool {
         let guarded = guardedCommand(scriptPath: scriptPath)
         var changed = false
@@ -216,7 +225,9 @@ struct CodexHookRegistrar {
             guard var inner = entries[i]["hooks"] as? [[String: Any]] else { continue }
             var entryChanged = false
             for j in inner.indices where isGhosttiesCommand(inner[j]["command"]) {
-                if let argv = inner[j]["command"] as? [String], argv == guarded { continue }
+                if let argv = inner[j]["command"] as? [String] {
+                    if isGuarded(argv) || !(argv.count == 1 || Array(argv.dropFirst()) == ["codex"]) { continue }
+                }
                 inner[j]["command"] = guarded
                 entryChanged = true
             }

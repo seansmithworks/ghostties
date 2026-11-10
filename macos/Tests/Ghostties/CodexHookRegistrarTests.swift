@@ -173,4 +173,56 @@ final class CodexHookRegistrarTests {
         #expect(CodexHookRegistrar.register(hooksJSONPath: path, scriptPath: script, defaults: defaults))
         #expect(try String(contentsOfFile: path, encoding: .utf8) == removed)
     }
+
+    @Test func firstLaunchAfterUpgradeRewritesInPlaceTopsUpAndIsThenANoOp() throws {
+        let path = tempPath()
+        defer { try? FileManager.default.removeItem(atPath: (path as NSString).deletingLastPathComponent) }
+        try write("""
+        {"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":["/usr/bin/other"],"async":true}]},
+                          {"matcher":"","hooks":[{"type":"command","command":["/scripts/ghostties-status.sh","codex"],"async":true}]}],
+                  "SessionStart":[{"matcher":"","hooks":[{"type":"command","command":["/scripts/ghostties-status.sh","codex"],"async":true}]}]}}
+        """, to: path)
+        // No flags set: an install that predates both.
+        #expect(CodexHookRegistrar.register(hooksJSONPath: path, scriptPath: script, defaults: defaults))
+
+        let hooks = try #require(readJSON(path)?["hooks"] as? [String: Any])
+        let guarded = CodexHookRegistrar.guardedCommand(scriptPath: script)
+        func cmd(_ e: [String: Any]) -> [String]? { (e["hooks"] as? [[String: Any]])?.first?["command"] as? [String] }
+        let stop = try #require(hooks["Stop"] as? [[String: Any]])
+        #expect(stop.count == 2)
+        #expect(cmd(stop[0]) == ["/usr/bin/other"])
+        #expect(cmd(stop[1]) == guarded, "rewritten in place")
+        for event in CodexHookRegistrar.events {
+            let entries = try #require(hooks[event] as? [[String: Any]], "\(event) topped up")
+            #expect(entries.contains { cmd($0) == guarded })
+        }
+        #expect((try #require(hooks["SessionStart"] as? [[String: Any]])).count == 1)
+        #expect(defaults.bool(forKey: CodexHookRegistrar.registeredKey))
+        #expect(defaults.bool(forKey: CodexHookRegistrar.guardedKey))
+
+        let first = try #require(FileManager.default.contents(atPath: path))
+        #expect(CodexHookRegistrar.register(hooksJSONPath: path, scriptPath: script, defaults: defaults))
+        #expect(try #require(FileManager.default.contents(atPath: path)) == first)
+    }
+
+    @Test func unrelatedHookMentioningTheScriptNameIsLeftUntouched() throws {
+        let path = tempPath()
+        defer { try? FileManager.default.removeItem(atPath: (path as NSString).deletingLastPathComponent) }
+        try write(#"{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":["tail","/tmp/ghostties-status.sh.log"]}]}]}}"#, to: path)
+        defaults.set(true, forKey: CodexHookRegistrar.registeredKey)
+        #expect(CodexHookRegistrar.register(hooksJSONPath: path, scriptPath: script, defaults: defaults))
+        let stop = try #require((readJSON(path)?["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]])
+        #expect((stop[0]["hooks"] as? [[String: Any]])?.first?["command"] as? [String] == ["tail", "/tmp/ghostties-status.sh.log"])
+    }
+
+    @Test func malformedFileIsLeftByteIdenticalAndFlagsStayUnsetOnTheMigrationPath() throws {
+        let path = tempPath()
+        defer { try? FileManager.default.removeItem(atPath: (path as NSString).deletingLastPathComponent) }
+        let bad = "{ not json"
+        try write(bad, to: path)
+        defaults.set(true, forKey: CodexHookRegistrar.registeredKey)
+        #expect(!CodexHookRegistrar.register(hooksJSONPath: path, scriptPath: script, defaults: defaults))
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == bad)
+        #expect(!defaults.bool(forKey: CodexHookRegistrar.guardedKey))
+    }
 }
