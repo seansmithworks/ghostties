@@ -1,6 +1,6 @@
-# gt — Ghostties task CLI
+# gt: Ghostties task CLI
 
-Terminal-native read/write for `.ghostties/tasks/*.md` — the same task files the Ghostties sidebar app reads. Zero coupling: `gt` talks to the filesystem, not the running app.
+Terminal-native read/write for `.ghostties/tasks/*.md`, the same task files the Ghostties sidebar app reads. `gt` edits those files directly. The app doesn't need to be running. `gt` and the MCP server are built from source here and don't ship in the Homebrew cask or the DMG.
 
 ## Build
 
@@ -57,8 +57,8 @@ gt done <id>
 Every subcommand that takes an id accepts the full id (the filename stem) or an unambiguous prefix:
 
 ```sh
-gt focus sea-14          # unambiguous prefix — ok
-gt focus sea-1           # ambiguous — errors with list of candidates
+gt focus sea-14          # unambiguous prefix, ok
+gt focus sea-1           # ambiguous, errors with list of candidates
 ```
 
 ## Lane names
@@ -67,10 +67,10 @@ Six lanes match the sidebar IA: `inbox`, `backlog`, `running`, `needs-you`, `rev
 
 ## Exit codes
 
-- `0` — success
-- `1` — usage error
-- `2` — task or directory not found
-- `3` — ambiguous id
+- `0`: success
+- `1`: usage error
+- `2`: task or directory not found
+- `3`: ambiguous id
 
 ## Testing
 
@@ -88,7 +88,7 @@ swift test --filter GhosttiesCoreTests   # parser, store, directory discovery, c
 swift test --filter GhosttiesMCPTests    # JSON-RPC protocol + the MCP tool handlers
 ```
 
-`GhosttiesCoreTests/CrossSurfaceCoherenceTests.swift` asserts that task files written by this CLI (and the MCP server) match the exact frontmatter schema the macOS sidebar's `TaskFixtureParser` reads. If that test fails, do not commit — the three-surface architecture has drifted.
+`GhosttiesCoreTests/CrossSurfaceCoherenceTests.swift` asserts that task files written by this CLI (and the MCP server) match the exact frontmatter schema the macOS sidebar's `TaskFixtureParser` reads. If that test fails, do not commit. The three-surface architecture has drifted.
 
 CI runs both test targets plus a scoped macOS app test pass on every push. See `.github/workflows/test-ghostties.yml`.
 
@@ -117,5 +117,5 @@ status: running
 
 ## Activity
 
-- 2026-04-22T22:35:00Z — Agent started from gh-287
+- 2026-04-22T22:35:00Z, Agent started from gh-287
 ```

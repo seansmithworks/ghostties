@@ -14,21 +14,23 @@ Running one coding agent is fine. Running five is a mess of terminal windows whe
 
 Ghostties puts them in one window, grouped by project, and shows you what each one is doing.
 
-![A recording of Ghostties: a list of sessions in the sidebar, which then collapses to a narrow rail while Claude Code works through a flaky test in the terminal.](.github/assets/demo.gif)
+![A recording of Ghostties: a list of sessions in the sidebar, which then collapses to a narrow strip of icons while Claude Code works through a flaky test in the terminal.](.github/assets/demo.gif)
 
 ## What it adds
 
 Ghostty's terminal, with a workspace layer on top.
 
-- **A project sidebar.** Sessions and tasks grouped by project. Projects show their real icons. The sidebar can collapse to a narrow rail.
-- **Status at a glance.** Each session shows whether its agent is working, needs you, is done, or hit an error.
-- **Approve or deny from the sidebar.** When Claude Code asks permission to run something, answer from the session's row.
-- **A window that follows your theme.** Pick any theme other than the default and the sidebar, canvas and toolbar take their colors from it. Ghostties Light and Dark are the default.
-- **`gt`, a CLI.** Create and move tasks from inside any agent session, so an agent can file its own work.
-- **An MCP server.** Agents read and update the task list directly.
+- **A project sidebar.** Sessions grouped by project. Projects show their real icons. The sidebar can collapse to a narrow strip of icons.
+- **Status at a glance.** Each session shows whether its agent is working, needs you, is done, or hit an error. This works for Claude Code and Codex.
+- **Approve or deny from the sidebar.** When Claude Code asks permission to run something, answer from the session's row. Codex sessions get status only.
+- **A window that follows your theme.** Set any theme other than the default and the sidebar, the area around the terminal, and the toolbar take their colors from it. Ghostties Light and Ghostties Dark are the default.
 - **An embedded browser.** The thing you're building, next to the thing building it.
 
-Everything else is Ghostty, unmodified: the terminal, the renderer, fonts, config, keybindings, shell integration.
+Everything else is Ghostty: the terminal, the renderer, fonts, keybindings, shell integration. Ghostties reads your existing Ghostty config (`~/.config/ghostty/config`) and doesn't edit it. Two defaults differ from Ghostty's: the Ghostties theme and 20pt of window padding. Anything you set in your config overrides both. A theme you pick inside the app overrides the `theme =` line in your config until you clear that pick in the app.
+
+### Build from source: `gt` and an MCP server
+
+The repo also has `gt`, a CLI for creating and moving task files from inside an agent session, and an MCP server so agents can read and update the same list. Neither ships in the Homebrew cask or the DMG. You build them from source. See [cli/README.md](cli/README.md).
 
 ## Install
 
@@ -38,13 +40,35 @@ With Homebrew:
 brew install --cask seansmithworks/tap/ghostties
 ```
 
-Or run `npx ghostties-install`, or download the latest `.dmg` from [Releases](https://github.com/SeanSmithWorks/ghostties/releases) and drag it to Applications. It updates itself after that.
+Or run `npx ghostties-install`, or download the latest `.dmg` from [Releases](https://github.com/SeanSmithWorks/ghostties/releases) and drag it to Applications.
+
+The app checks for updates on its own, whichever way you installed it. Homebrew knows this, so `brew upgrade` skips it.
 
 Requires **macOS 13 or later on Apple Silicon**. There's no Intel build and no Linux build.
 
 ### First launch
 
-macOS will ask for access to Desktop, Documents, and iCloud Drive. That's standard for any new terminal. The prompts come from commands running inside the terminal, not from Ghostties. Deny anything you don't need. To stop them entirely, grant Full Disk Access in System Settings, under Privacy & Security.
+macOS may ask for access to Desktop, Documents, iCloud Drive or other folders. Those prompts come from commands running inside the terminal (an agent, `ls`, `git`), not from Ghostties itself. Allow only the folders you actually work in. You can change any of them later in System Settings, under Privacy & Security, then Files and Folders. Full Disk Access also silences the prompts, but it's broad, and this is a beta. I'd leave it off unless the prompts get in your way.
+
+## Uninstall
+
+Homebrew:
+
+```sh
+brew uninstall --cask ghostties
+```
+
+Add `--zap` to also delete Ghostties' preferences, caches, saved state and Application Support folder. It doesn't touch `~/.config/ghostty/config` or the separate Ghostty app.
+
+DMG or `npx` install: quit Ghostties and drag it from Applications to the Trash.
+
+Neither removes the status hooks Ghostties added for your agents. Delete these by hand if you want them gone:
+
+- In `~/.claude/settings.json`, the entries under `hooks` whose command runs `ghostties-status.sh`.
+- In `~/.codex/hooks.json`, the same entries (only present if you launched a Codex session).
+- The folder `~/.ghostties`, which holds that script, your presets, session state and caches.
+
+The hook entries are harmless if left, but they'll point at a script that's gone once you delete `~/.ghostties`.
 
 ## Its relationship to Ghostty
 
