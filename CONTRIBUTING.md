@@ -5,7 +5,7 @@ multi-agent workspace sidebar. It's a personal project, built and maintained by 
 person in his spare time.
 
 The most useful thing you can do is **tell me when something is broken or confusing**.
-Bug reports and feedback are genuinely wanted.
+I read every bug report.
 
 ## Is it a Ghostties issue or a Ghostty issue?
 

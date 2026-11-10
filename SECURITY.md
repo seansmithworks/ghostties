@@ -8,7 +8,7 @@ Report it through GitHub's private vulnerability reporting (Security tab, then R
 [Report a vulnerability](https://github.com/SeanSmithWorks/ghostties/security/advisories/new)
 
 I'll acknowledge within a few days. This is a personal project, not a company with
-an on-call rotation, so don't expect an SLA. I take this seriously and I will respond.
+an on-call rotation, so don't expect an SLA.
 
 ## What's in scope
 
