@@ -1252,6 +1252,7 @@ class WorkspaceViewContainer: NSView {
     private func triggerCaptureLaunchHooksIfNeeded() {
         if let hook = CaptureFixture.composerHook, CaptureFixture.claimHook("composer") {
             CaptureFixture.applyThemePresentation()
+            CaptureFixture.applyComposerDials()
             DispatchQueue.main.asyncAfter(deadline: .now() + hook.delay) { [weak self] in
                 guard let self else { return }
                 defer { Self.applyCaptureComposerText() }

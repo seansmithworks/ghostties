@@ -123,21 +123,6 @@ struct ComposerWitnessFramesTests {
         #expect(frames.last?.grid == ComposerWitnessFrames.emptyGridLike(Self.grid))
     }
 
-    @Test func resolveFramesHaveSixFortyMsStepsAndEndOnGridB() {
-        let gridB = ComposerWitnessFrames.emptyGridLike(Self.grid)
-        let frames = ComposerWitnessFrames.buildResolveFrames(gridA: Self.grid, gridB: gridB, seed: 11)
-        #expect(frames.count == 6)
-        #expect(frames.map(\.ms) == [40, 40, 40, 40, 40, 40])
-        #expect(frames.last?.grid == gridB)
-    }
-
-    @Test func openFramesHaveSixFortyMsStepsAndEndOnTheBaseGrid() {
-        let frames = ComposerWitnessFrames.buildOpenFrames(grid: Self.grid, seed: 11)
-        #expect(frames.count == 6)
-        #expect(frames.map(\.ms) == [40, 40, 40, 40, 40, 40])
-        #expect(frames.last?.grid == Self.grid)
-    }
-
     // MARK: - Frame-at-elapsed boundaries
 
     @Test func tabFrameIndexBoundaries() {
@@ -179,7 +164,6 @@ struct ComposerWitnessFramesTests {
             )
             #expect(result.grid == Self.grid, "combo \(combo) did not hold the base grid under Reduce Motion")
             #expect(result.cellOffsetY == 0)
-            #expect(result.sourceIsB == nil)
         }
     }
 
@@ -221,5 +205,117 @@ struct ComposerWitnessFramesTests {
 
     @Test func floatOffsetXIsZeroAtZeroAmplitude() {
         #expect(ComposerWitnessFrames.floatOffsetX(clockMs: 1500, amplitude: 0, periodMs: 3000, reduceMotion: false) == 0)
+    }
+
+    // MARK: - Entrance (the open drop)
+
+    private static func openSamples() -> [ComposerWitnessFrames.WitnessTransform] {
+        (0...ComposerWitnessFrames.openDurationMs + 20).map {
+            ComposerWitnessFrames.openTransform(elapsedMs: $0, reduceMotion: false)
+        }
+    }
+
+    @Test func entranceStartsTwelvePointsAboveAndInvisible() {
+        let start = ComposerWitnessFrames.openTransform(elapsedMs: 0, reduceMotion: false)
+        #expect(start.offsetY == -12)
+        #expect(start.opacity == 0)
+        #expect(start.scaleX == 1)
+        #expect(start.scaleY == 1)
+    }
+
+    @Test func entranceEndsExactlyAtTheIdentityTransformWithin250Ms() {
+        #expect(ComposerWitnessFrames.openDurationMs <= 250)
+        let end = ComposerWitnessFrames.openTransform(elapsedMs: ComposerWitnessFrames.openDurationMs, reduceMotion: false)
+        #expect(end == .identity)
+        #expect(ComposerWitnessFrames.openTransform(elapsedMs: 10_000, reduceMotion: false) == .identity)
+    }
+
+    @Test func entranceDropOnlyEverMovesDownAndIsEasedOut() {
+        let samples = Self.openSamples()
+        for (a, b) in zip(samples, samples.dropFirst()) {
+            #expect(b.offsetY >= a.offsetY, "the drop must never move back up")
+        }
+        // A strong ease-out covers most of the distance in the first third.
+        let third = ComposerWitnessFrames.openTransform(elapsedMs: ComposerWitnessFrames.openDropMs / 3, reduceMotion: false)
+        #expect(third.offsetY > -12 * 0.3)
+    }
+
+    /// Exactly one squash: scale y dips below 1 in one unbroken run, never
+    /// rises above 1, and the squash's scale x never shrinks below 1.
+    @Test func entranceSquashesExactlyOnce() {
+        let samples = Self.openSamples()
+        let dipping = samples.map { $0.scaleY < 1 }
+        let runs = zip([false] + dipping, dipping).filter { !$0 && $1 }.count
+        #expect(runs == 1, "expected one squash, saw \(runs)")
+        #expect(samples.allSatisfy { $0.scaleY <= 1 }, "scale y must never stretch past 1")
+        #expect(samples.allSatisfy { $0.scaleX >= 1 })
+        #expect(samples.map(\.scaleY).min()! < 0.95, "the squash should be visible")
+    }
+
+    @Test func dropIsOffUnderReduceMotion() {
+        for ms in [0, 40, 120, 200, 239] {
+            #expect(ComposerWitnessFrames.openTransform(elapsedMs: ms, reduceMotion: true) == .identity)
+        }
+    }
+
+    // MARK: - Flip (identity change)
+
+    @Test func flipLastsAbout240Ms() {
+        #expect(ComposerWitnessFrames.flipDurationMs == 240)
+    }
+
+    @Test func flipHitsZeroWidthAndSwapsTheSpriteAtTheMidpoint() {
+        let half = ComposerWitnessFrames.flipDurationMs / 2
+        let before = ComposerWitnessFrames.flipTransform(elapsedMs: half - 1, reduceMotion: false)
+        let mid = ComposerWitnessFrames.flipTransform(elapsedMs: half, reduceMotion: false)
+        #expect(mid.scaleX < 1e-6)
+        #expect(!before.showsNewIdentity)
+        #expect(mid.showsNewIdentity)
+        #expect(ComposerWitnessFrames.flipTransform(elapsedMs: 0, reduceMotion: false) == (1, false))
+    }
+
+    @Test func flipEndsAtFullWidthOnTheNewIdentity() {
+        let end = ComposerWitnessFrames.flipTransform(elapsedMs: ComposerWitnessFrames.flipDurationMs, reduceMotion: false)
+        #expect(end.scaleX == 1)
+        #expect(end.showsNewIdentity)
+    }
+
+    @Test func flipIsSymmetric() {
+        let total = ComposerWitnessFrames.flipDurationMs
+        for ms in stride(from: 0, through: total, by: 10) {
+            let a = ComposerWitnessFrames.flipTransform(elapsedMs: ms, reduceMotion: false).scaleX
+            let b = ComposerWitnessFrames.flipTransform(elapsedMs: total - ms, reduceMotion: false).scaleX
+            #expect(abs(a - b) < 1e-6, "\(ms)ms: \(a) vs \(b)")
+        }
+    }
+
+    @Test func flipIsOffUnderReduceMotion() {
+        for ms in [0, 60, 120, 180] {
+            let flip = ComposerWitnessFrames.flipTransform(elapsedMs: ms, reduceMotion: true)
+            #expect(flip.scaleX == 1)
+            #expect(flip.showsNewIdentity)
+        }
+    }
+
+    @Test func floatIsOffUnderReduceMotion() {
+        let amplitude = ComposerWitnessFloatAmplitude.defaultAmplitude
+        for ms in [750, 1500, 2250] {
+            #expect(ComposerWitnessFrames.floatOffset(clockMs: ms, amplitude: amplitude, periodMs: 3000, reduceMotion: true) == 0)
+            #expect(ComposerWitnessFrames.floatOffsetX(clockMs: ms, amplitude: amplitude, periodMs: 3000, reduceMotion: true) == 0)
+        }
+    }
+
+    // MARK: - Pixel snapping
+
+    @Test func pixelSnappedOffsetsLandOnWholePixels() {
+        #expect(ComposerWitnessFrames.pixelSnapped(1.3, scale: 1) == 1)
+        #expect(ComposerWitnessFrames.pixelSnapped(1.3, scale: 2) == 1.5)
+        #expect(ComposerWitnessFrames.pixelSnapped(-3.8, scale: 2) == -4)
+    }
+
+    @Test func cubicBezierHitsItsEndpoints() {
+        #expect(ComposerWitnessFrames.cubicBezier(0, 0.23, 1, 0.32, 1) == 0)
+        #expect(ComposerWitnessFrames.cubicBezier(1, 0.23, 1, 0.32, 1) == 1)
+        #expect(abs(ComposerWitnessFrames.cubicBezier(0.5, 0.65, 0, 0.35, 1) - 0.5) < 1e-9)
     }
 }

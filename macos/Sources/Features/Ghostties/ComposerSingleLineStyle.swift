@@ -131,10 +131,9 @@ enum ComposerWitnessGap {
 /// keeps every one of the 12 grid cells a whole Retina pixel at every step.
 enum ComposerWitnessSize {
     static let storageKey = "ghostties.composerWitnessSize"
-    /// Round 15 (Sean's DialKit Copy output): Sean's Dev-tuned size, up
-    /// from 24 — cell size 2.5pt (5px), a whole Retina pixel.
-    static let defaultSize: CGFloat = 30
-    static let range: ClosedRange<Double> = 12...48
+    /// 48pt: 4pt cells, whole pixels at 1x and 2x. Up from round 15's 30.
+    static let defaultSize: CGFloat = 48
+    static let range: ClosedRange<Double> = 12...72
 
     static func size(defaults: UserDefaults = .standard) -> CGFloat {
         let stored = defaults.object(forKey: storageKey) as? Double
@@ -147,10 +146,11 @@ enum ComposerWitnessSize {
 /// (`ComposerWitnessFrames.floatOffset`), driven by the same idle clock the
 /// blink/glance/ripple loop already uses. Round 15 (Sean's DialKit Copy
 /// output): default up from 0 (off) to 2 — the bob is now on by default.
+/// Now 4, to go with the 48pt ghost.
 enum ComposerWitnessFloatAmplitude {
     static let storageKey = "ghostties.composerWitnessFloatAmplitude"
-    static let defaultAmplitude: Double = 2
-    static let range: ClosedRange<Double> = 0...4
+    static let defaultAmplitude: Double = 4
+    static let range: ClosedRange<Double> = 0...8
 
     static func amplitude(defaults: UserDefaults = .standard) -> Double {
         defaults.object(forKey: storageKey) as? Double ?? defaultAmplitude
@@ -207,11 +207,48 @@ enum ComposerWitnessBeatSpeed {
     }
 }
 
+/// The Witness's glow radius, in points: a soft halo in the ghost's own
+/// colour, drawn behind the sprite (`ComposerWitnessView`).
+enum ComposerWitnessGlowRadius {
+    static let storageKey = "ghostties.composerWitnessGlowRadius"
+    static let defaultRadius: CGFloat = 8
+    static let range: ClosedRange<Double> = 0...24
+
+    static func radius(defaults: UserDefaults = .standard) -> CGFloat {
+        let stored = defaults.object(forKey: storageKey) as? Double
+        return CGFloat(stored ?? Double(defaultRadius))
+    }
+}
+
+/// The Witness glow's opacity. 0 draws no glow at all.
+enum ComposerWitnessGlowStrength {
+    static let storageKey = "ghostties.composerWitnessGlowStrength"
+    static let defaultStrength: Double = 0.5
+    static let range: ClosedRange<Double> = 0...1
+
+    static func strength(defaults: UserDefaults = .standard) -> Double {
+        defaults.object(forKey: storageKey) as? Double ?? defaultStrength
+    }
+}
+
+/// Where the composer's field card sits: its top edge at this fraction of
+/// the window's height, in every layout (`ComposerVerticalAnchor`).
+enum ComposerFieldTopFraction {
+    static let storageKey = "ghostties.composerFieldTopFraction"
+    static let defaultFraction: Double = 1.0 / 3
+    static let range: ClosedRange<Double> = 0.15...0.5
+
+    static func fraction(defaults: UserDefaults = .standard) -> Double {
+        defaults.object(forKey: storageKey) as? Double ?? defaultFraction
+    }
+}
+
 /// Session-7 brief §11: "Reset single-line" clears every single-line-only
 /// key back to its code default — field size, row size, width, corner
 /// radius, shadow preset + its three derived dials, treatment, glass tint,
 /// Witness, ghost gap, ghost size, float amplitude, float horizontal
-/// amplitude, float period, ghost opacity, and beat speed. Deliberately
+/// amplitude, float period, ghost opacity, beat speed, glow radius, glow
+/// strength, and the field's vertical position. Deliberately
 /// excludes the legacy `ghostties.composerStyle` key. A single list,
 /// `resetKeys`, is the one
 /// place both `ComposerDialKitCoordinator`'s reset action and the legacy
@@ -237,7 +274,10 @@ enum ComposerSingleLineReset {
             ComposerWitnessFloatHorizontal.storageKey,
             ComposerWitnessFloatPeriod.storageKey,
             ComposerWitnessOpacity.storageKey,
-            ComposerWitnessBeatSpeed.storageKey
+            ComposerWitnessBeatSpeed.storageKey,
+            ComposerWitnessGlowRadius.storageKey,
+            ComposerWitnessGlowStrength.storageKey,
+            ComposerFieldTopFraction.storageKey
         ]
     }
 
@@ -555,6 +595,9 @@ struct ComposerDebugTuningControl: View {
     @AppStorage private var witnessFloatPeriod: Double
     @AppStorage private var witnessOpacity: Double
     @AppStorage private var witnessBeatSpeed: Double
+    @AppStorage private var witnessGlowRadius: Double
+    @AppStorage private var witnessGlowStrength: Double
+    @AppStorage private var fieldTopFraction: Double
 
     /// Round 12: kept so `ComposerSingleLineShadowDials.apply` writes to the
     /// SAME `UserDefaults` instance this control's own `@AppStorage`
@@ -590,6 +633,9 @@ struct ComposerDebugTuningControl: View {
         _witnessFloatPeriod = AppStorage(wrappedValue: ComposerWitnessFloatPeriod.defaultPeriod, ComposerWitnessFloatPeriod.storageKey, store: defaults)
         _witnessOpacity = AppStorage(wrappedValue: ComposerWitnessOpacity.defaultOpacity, ComposerWitnessOpacity.storageKey, store: defaults)
         _witnessBeatSpeed = AppStorage(wrappedValue: ComposerWitnessBeatSpeed.defaultSpeed, ComposerWitnessBeatSpeed.storageKey, store: defaults)
+        _witnessGlowRadius = AppStorage(wrappedValue: Double(ComposerWitnessGlowRadius.defaultRadius), ComposerWitnessGlowRadius.storageKey, store: defaults)
+        _witnessGlowStrength = AppStorage(wrappedValue: ComposerWitnessGlowStrength.defaultStrength, ComposerWitnessGlowStrength.storageKey, store: defaults)
+        _fieldTopFraction = AppStorage(wrappedValue: ComposerFieldTopFraction.defaultFraction, ComposerFieldTopFraction.storageKey, store: defaults)
         self.defaults = defaults
         self.onChange = onChange
     }
@@ -692,6 +738,18 @@ struct ComposerDebugTuningControl: View {
         Binding(get: { witnessBeatSpeed }, set: { witnessBeatSpeed = $0; onChange() })
     }
 
+    var witnessGlowRadiusBinding: Binding<Double> {
+        Binding(get: { witnessGlowRadius }, set: { witnessGlowRadius = $0; onChange() })
+    }
+
+    var witnessGlowStrengthBinding: Binding<Double> {
+        Binding(get: { witnessGlowStrength }, set: { witnessGlowStrength = $0; onChange() })
+    }
+
+    var fieldTopFractionBinding: Binding<Double> {
+        Binding(get: { fieldTopFraction }, set: { fieldTopFraction = $0; onChange() })
+    }
+
     /// Session-7 brief §11: clears every single-line key
     /// (`ComposerSingleLineReset.resetKeys`) back to its code default, then
     /// re-reads each `@AppStorage` property from the now-empty keys so the
@@ -720,6 +778,9 @@ struct ComposerDebugTuningControl: View {
         witnessFloatPeriod = ComposerWitnessFloatPeriod.period(defaults: defaults)
         witnessOpacity = ComposerWitnessOpacity.opacity(defaults: defaults)
         witnessBeatSpeed = ComposerWitnessBeatSpeed.speed(defaults: defaults)
+        witnessGlowRadius = Double(ComposerWitnessGlowRadius.radius(defaults: defaults))
+        witnessGlowStrength = ComposerWitnessGlowStrength.strength(defaults: defaults)
+        fieldTopFraction = ComposerFieldTopFraction.fraction(defaults: defaults)
         onChange()
     }
 
@@ -796,6 +857,9 @@ struct ComposerDebugTuningControl: View {
             dialRow("Float period", value: witnessFloatPeriodBinding, range: ComposerWitnessFloatPeriod.range, format: "%.1fs")
             dialRow("Ghost opacity", value: witnessOpacityBinding, range: ComposerWitnessOpacity.range, format: "%.2f")
             dialRow("Beat speed", value: witnessBeatSpeedBinding, range: ComposerWitnessBeatSpeed.range, format: "%.2f×")
+            dialRow("Glow radius", value: witnessGlowRadiusBinding, range: ComposerWitnessGlowRadius.range, format: "%.0fpt")
+            dialRow("Glow strength", value: witnessGlowStrengthBinding, range: ComposerWitnessGlowStrength.range, format: "%.2f")
+            dialRow("Field top", value: fieldTopFractionBinding, range: ComposerFieldTopFraction.range, format: "%.2f")
             Button("Reset single-line") { resetSingleLine() }
         }
         .pickerStyle(.menu)
@@ -840,6 +904,9 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
     var witnessFloatPeriod: Double
     var witnessOpacity: Double
     var witnessBeatSpeed: Double
+    var witnessGlowRadius: Double
+    var witnessGlowStrength: Double
+    var fieldTopFraction: Double
     var resumeLayoutRaw: String
 
     /// The `shadowPreset` `.select` control (in `ComposerDialKitCoordinator
@@ -892,6 +959,9 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         witnessFloatPeriod: Double,
         witnessOpacity: Double,
         witnessBeatSpeed: Double,
+        witnessGlowRadius: Double,
+        witnessGlowStrength: Double,
+        fieldTopFraction: Double,
         resumeLayoutRaw: String
     ) {
         self.singleLineFieldSize = singleLineFieldSize
@@ -918,6 +988,9 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         self.witnessFloatPeriod = witnessFloatPeriod
         self.witnessOpacity = witnessOpacity
         self.witnessBeatSpeed = witnessBeatSpeed
+        self.witnessGlowRadius = witnessGlowRadius
+        self.witnessGlowStrength = witnessGlowStrength
+        self.fieldTopFraction = fieldTopFraction
         self.resumeLayoutRaw = resumeLayoutRaw
     }
 
@@ -927,6 +1000,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw, glassTintRaw
         case witnessEnabled, witnessGap
         case witnessSize, witnessFloatAmplitude, witnessFloatHorizontalAmplitude, witnessFloatPeriod, witnessOpacity, witnessBeatSpeed
+        case witnessGlowRadius, witnessGlowStrength, fieldTopFraction
         case resumeLayoutRaw
     }
 }
@@ -1081,6 +1155,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
             witnessFloatPeriod: ComposerWitnessFloatPeriod.period(defaults: defaults),
             witnessOpacity: ComposerWitnessOpacity.opacity(defaults: defaults),
             witnessBeatSpeed: ComposerWitnessBeatSpeed.speed(defaults: defaults),
+            witnessGlowRadius: Double(ComposerWitnessGlowRadius.radius(defaults: defaults)),
+            witnessGlowStrength: ComposerWitnessGlowStrength.strength(defaults: defaults),
+            fieldTopFraction: ComposerFieldTopFraction.fraction(defaults: defaults),
             resumeLayoutRaw: ComposerResumeLayout.current(defaults: defaults).rawValue
         )
     }
@@ -1143,6 +1220,15 @@ final class ComposerDialKitCoordinator: ObservableObject {
         if model.witnessBeatSpeed != previous.witnessBeatSpeed {
             defaults.set(model.witnessBeatSpeed, forKey: ComposerWitnessBeatSpeed.storageKey)
         }
+        if model.witnessGlowRadius != previous.witnessGlowRadius {
+            defaults.set(model.witnessGlowRadius, forKey: ComposerWitnessGlowRadius.storageKey)
+        }
+        if model.witnessGlowStrength != previous.witnessGlowStrength {
+            defaults.set(model.witnessGlowStrength, forKey: ComposerWitnessGlowStrength.storageKey)
+        }
+        if model.fieldTopFraction != previous.fieldTopFraction {
+            defaults.set(model.fieldTopFraction, forKey: ComposerFieldTopFraction.storageKey)
+        }
         if model.resumeLayoutRaw != previous.resumeLayoutRaw {
             defaults.set(model.resumeLayoutRaw, forKey: ComposerResumeLayout.storageKey)
         }
@@ -1158,7 +1244,7 @@ final class ComposerDialKitCoordinator: ObservableObject {
     /// Treatment, Glass tint, Width, Corner radius, Field size, Row size,
     /// Shadow (preset + 3 dials), Witness, Ghost size, Ghost gap, Float
     /// vertical, Float horizontal, Float period, Ghost opacity, Beat speed,
-    /// Reset.
+    /// Glow radius, Glow strength, Field top, Reset.
     static let controls: [DialControl<ComposerDialKitTuningModel>] = [
         // Sidebar vnext: how past sessions show — A5 (↓ reveals a list
         // under the one-line field, the default) or A4 (two columns).
@@ -1249,6 +1335,18 @@ final class ComposerDialKitCoordinator: ObservableObject {
         .slider(
             "witnessBeatSpeed", keyPath: \.witnessBeatSpeed, label: "Beat speed",
             range: ComposerWitnessBeatSpeed.range, step: 0.25, unit: "×"
+        ),
+        .slider(
+            "witnessGlowRadius", keyPath: \.witnessGlowRadius, label: "Glow radius",
+            range: ComposerWitnessGlowRadius.range, step: 1, unit: "pt"
+        ),
+        .slider(
+            "witnessGlowStrength", keyPath: \.witnessGlowStrength, label: "Glow strength",
+            range: ComposerWitnessGlowStrength.range, step: 0.05
+        ),
+        .slider(
+            "fieldTopFraction", keyPath: \.fieldTopFraction, label: "Field top",
+            range: ComposerFieldTopFraction.range, step: 0.01
         ),
         .action(resetActionPath, label: "Reset single-line")
     ]

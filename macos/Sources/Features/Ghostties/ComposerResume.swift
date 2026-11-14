@@ -451,9 +451,14 @@ struct ComposerDownListView: View {
     /// The tallest the list grows before it scrolls: the old two-section
     /// list's full height (two headers, three rows each).
     static func maxHeight(titleSize: CGFloat) -> CGFloat {
+        height(rows: 6, headers: 2, titleSize: titleSize)
+    }
+
+    /// The height of `rows` rows under `headers` section headers.
+    static func height(rows: Int, headers: Int, titleSize: CGFloat) -> CGFloat {
         let row = titleSize + 24
         let header = (titleSize * 0.62 * 1.25).rounded(.up) + 12
-        return 6 * row + 2 * header
+        return CGFloat(rows) * row + CGFloat(headers) * header
     }
 
     var body: some View {

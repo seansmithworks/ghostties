@@ -75,7 +75,8 @@ Ghostties is a workspace tool, not a content surface. The sidebar UI is dense, i
 - Shadows on the terminal card, the overlay sidebar, the browser card, and
   surfaces that float free of the sidebar (the session composer's
   `.centered` presentation). A floating surface is lifted by shadow alone;
-  it never dims the content behind it.
+  it never dims the content behind it. The composer's Witness ghost also
+  carries a glow: a shadow in the ghost's own colour, with no offset.
 - No gradients, no decorative borders, no visual noise
 
 **Design References:** Ghostty terminal UI, Dia Browser sidebar restraint
@@ -328,7 +329,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 - Hardcode hex or pt values in view files — use `ChromeTheme` and `WorkspaceLayout` tokens
 - Use terracotta for hover, selection, or states other than `waiting`
 - Mix corner radii — 12pt continuous everywhere on the terminal card
-- Add shadows outside the card, overlay, browser, and floating-modal contexts listed in §1
+- Add shadows outside the card, overlay, browser, floating-modal, and Witness-glow contexts listed in §1
 - Use `update_styles` in Paper MCP to change SVG attributes — use `write_html(mode: "replace")` instead
 
 ## 9. Device Targets

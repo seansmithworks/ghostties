@@ -51,6 +51,23 @@ cmd_up() {
   if [ -n "${VERIFY_COMPOSER:-}" ]; then
     [[ "$VERIFY_COMPOSER" =~ ^(open|prefilled:$name)$delay$ ]] || die "VERIFY_COMPOSER must be open|prefilled:<project>, optionally :delay=<seconds>"
   fi
+  if [ -n "${VERIFY_WINDOW_SIZE:-}" ]; then
+    [[ "$VERIFY_WINDOW_SIZE" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]] || die "VERIFY_WINDOW_SIZE must be <width>x<height> in points"
+  fi
+  if [ -n "${VERIFY_COMPOSER_RESUME:-}${VERIFY_COMPOSER_PROJECT_SEQUENCE:-}${VERIFY_COMPOSER_DIALS:-}" ]; then
+    [ -n "${VERIFY_COMPOSER:-}" ] || die "VERIFY_COMPOSER_RESUME/_PROJECT_SEQUENCE/_DIALS need VERIFY_COMPOSER"
+  fi
+  if [ -n "${VERIFY_COMPOSER_RESUME:-}" ]; then
+    [ "$VERIFY_COMPOSER_RESUME" = open ] || die "VERIFY_COMPOSER_RESUME must be open"
+  fi
+  if [ -n "${VERIFY_COMPOSER_PROJECT_SEQUENCE:-}" ]; then
+    [[ "$VERIFY_COMPOSER_PROJECT_SEQUENCE" =~ ^[0-9]+(\.[0-9]+)?:$name(,$name)*$ ]] && [[ "${VERIFY_COMPOSER_PROJECT_SEQUENCE%%:*}" =~ [1-9] ]] \
+      || die "VERIFY_COMPOSER_PROJECT_SEQUENCE must be <seconds>:<project>,<project>,..."
+  fi
+  if [ -n "${VERIFY_COMPOSER_DIALS:-}" ]; then
+    local dial='ghostties\.composer[A-Za-z]+=-?[0-9]+(\.[0-9]+)?'
+    [[ "$VERIFY_COMPOSER_DIALS" =~ ^$dial(,$dial)*$ ]] || die "VERIFY_COMPOSER_DIALS must be ghostties.composer<Key>=<number>,..."
+  fi
   if [ -n "${VERIFY_PROJECT_SETTINGS:-}" ]; then
     [[ "$VERIFY_PROJECT_SETTINGS" =~ ^$name(:templates-edit|:templates-delete)?$ ]] || die "VERIFY_PROJECT_SETTINGS must be <project>[:templates-edit|:templates-delete]"
   fi
@@ -113,6 +130,10 @@ cmd_up() {
   if [ -n "${VERIFY_POPOVER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_POPOVER=$VERIFY_POPOVER"); fi
   if [ -n "${VERIFY_EXPAND_PROJECT:-}" ]; then extra+=("GHOSTTIES_CAPTURE_EXPAND_PROJECT=$VERIFY_EXPAND_PROJECT"); fi
   if [ -n "${VERIFY_COMPOSER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER=$VERIFY_COMPOSER"); fi
+  if [ -n "${VERIFY_WINDOW_SIZE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_WINDOW_SIZE=$VERIFY_WINDOW_SIZE"); fi
+  if [ -n "${VERIFY_COMPOSER_RESUME:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER_RESUME=$VERIFY_COMPOSER_RESUME"); fi
+  if [ -n "${VERIFY_COMPOSER_PROJECT_SEQUENCE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER_PROJECT_SEQUENCE=$VERIFY_COMPOSER_PROJECT_SEQUENCE"); fi
+  if [ -n "${VERIFY_COMPOSER_DIALS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER_DIALS=$VERIFY_COMPOSER_DIALS"); fi
   if [ -n "${VERIFY_PROJECT_SETTINGS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_PROJECT_SETTINGS=$VERIFY_PROJECT_SETTINGS"); fi
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER=$VERIFY_SIDEBAR_TOGGLE_AFTER"); fi
   if [ -n "${VERIFY_REVEAL_STYLE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_REVEAL_STYLE=$VERIFY_REVEAL_STYLE"); fi
@@ -301,5 +322,5 @@ case "${1:-}" in
   script) shift; cmd_script "$@" ;;
   report) shift; cmd_report "$@" ;;
   down) cmd_down ;;
-  *) echo "usage: run.sh up|doctor|shot <name>|video <name> <seconds> [--focus x,y,w,h]|script <file.json>|report <contract.md>|down  (env: VERIFY_SCRIPT_TIMEOUT, VERIFY_SIDEBAR_MODE, VERIFY_POPOVER, VERIFY_SIDEBAR_TAB, VERIFY_EXPAND_PROJECT, VERIFY_COMPOSER, VERIFY_PROJECT_SETTINGS, VERIFY_SIDEBAR_TOGGLE_AFTER, VERIFY_REVEAL_STYLE, VERIFY_RAIL_REVEAL_AFTER, VERIFY_RAIL_REVEAL_COLLAPSE_AFTER, VERIFY_SELECT_SEQUENCE, VERIFY_FOLD_TOGGLE, VERIFY_BUILD=0)"; exit 2 ;;
+  *) echo "usage: run.sh up|doctor|shot <name>|video <name> <seconds> [--focus x,y,w,h]|script <file.json>|report <contract.md>|down  (env: VERIFY_SCRIPT_TIMEOUT, VERIFY_SIDEBAR_MODE, VERIFY_POPOVER, VERIFY_SIDEBAR_TAB, VERIFY_EXPAND_PROJECT, VERIFY_COMPOSER, VERIFY_COMPOSER_RESUME, VERIFY_COMPOSER_PROJECT_SEQUENCE, VERIFY_COMPOSER_DIALS, VERIFY_WINDOW_SIZE, VERIFY_PROJECT_SETTINGS, VERIFY_SIDEBAR_TOGGLE_AFTER, VERIFY_REVEAL_STYLE, VERIFY_RAIL_REVEAL_AFTER, VERIFY_RAIL_REVEAL_COLLAPSE_AFTER, VERIFY_SELECT_SEQUENCE, VERIFY_FOLD_TOGGLE, VERIFY_BUILD=0)"; exit 2 ;;
 esac
