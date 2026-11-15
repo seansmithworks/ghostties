@@ -1337,7 +1337,7 @@ class WorkspaceViewContainer: NSView {
                 DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
                     guard let self else { return }
                     let tab = AppDefaults.store.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
-                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab), pairedBrowsers: self.coordinator.pairedBrowserByTerminal, recency: self.coordinator.sessionRecency)
+                    let sessions = self.store.railSessions(layout: SidebarProjectsLayout.effective(tab: tab), pairedBrowsers: self.coordinator.pairedBrowserByTerminal, recency: { [coordinator = self.coordinator] in coordinator.recencyOrdered($0) })
                     self.focusShortcutTarget(self.coordinator.selectAdjacentForCapture(offset: sequence.steps, in: sessions))
                     tick(remaining - 1)
                 }
@@ -3545,12 +3545,12 @@ class WorkspaceViewContainer: NSView {
         coordinator: SessionCoordinator
     ) -> [AgentSession] {
         if sidebarMode == .collapsed {
-            return store.railSessions(layout: projectsLayout, pairedBrowsers: coordinator.pairedBrowserByTerminal, recency: coordinator.sessionRecency).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: projectsLayout, pairedBrowsers: coordinator.pairedBrowserByTerminal, recency: { coordinator.recencyOrdered($0) }).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         // One view lists exactly the rail's sessions: Pinned, then Active
         // project by project.
         if sidebarViewMode != "taskFirst" && projectsLayout == .oneView {
-            return store.railSessions(layout: .oneView, pairedBrowsers: coordinator.pairedBrowserByTerminal, recency: coordinator.sessionRecency).filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: .oneView, pairedBrowsers: coordinator.pairedBrowserByTerminal, recency: { coordinator.recencyOrdered($0) }).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
             return store.sessionsInVisualOrder(coordinator: coordinator, layout: projectsLayout)

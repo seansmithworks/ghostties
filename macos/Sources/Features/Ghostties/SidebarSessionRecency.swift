@@ -13,14 +13,13 @@ import GhosttiesCore
 /// waits (`isPending`) until the pointer leaves. Rows therefore never move
 /// under the pointer.
 ///
-/// One per window (`SessionCoordinator.sessionRecency`), so the list, the
+/// One per window (`SessionCoordinator.recencyOrdered`), so the list, the
 /// rail and the session shortcuts all read the same order.
 struct SessionRecencyOrder: Equatable {
     /// What asks for a reorder.
     enum Event: Equatable {
-        /// The list came on screen, or its set of rows changed: orders it
-        /// if it has no order yet (the first rows can arrive after the
-        /// list does).
+        /// The first read of the order (`SessionCoordinator.recencyOrdered`):
+        /// orders the rows if they have no order yet.
         case listAppeared
         case selectionChanged
         /// A session stopped working (`finished(from:to:)`).
@@ -78,8 +77,10 @@ struct SessionRecencyOrder: Equatable {
 
     /// `sessions` in the held order. A session the order has not seen (one
     /// created since) leads, newest first, so it is at the top of its
-    /// project before the next reorder too.
+    /// project before the next reorder too. With no order held yet,
+    /// `sessions` as given.
     func ordered(_ sessions: [AgentSession]) -> [AgentSession] {
+        guard !held.isEmpty else { return sessions }
         let rank = Dictionary(held.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         return sessions.enumerated().sorted { a, b in
             switch (rank[a.element.id], rank[b.element.id]) {

@@ -559,17 +559,17 @@ final class WorkspaceStore: ObservableObject {
     /// In one view (`SidebarProjectsLayout.oneView`) Active is listed
     /// project by project, as the list and rail group it, each project's
     /// rows in `recency`'s order when the window passes its own
-    /// (`SessionCoordinator.sessionRecency`).
+    /// (`SessionCoordinator.recencyOrdered`).
     func railSessions(
         layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout(),
         pinningAvailable: Bool = SessionPinning.isAvailable,
         pairedBrowsers: [UUID: UUID] = [:],
-        recency: SessionRecencyOrder? = nil
+        recency: (([AgentSession]) -> [AgentSession])? = nil
     ) -> [AgentSession] {
         let sessions = PairedBrowserRows.visible(sessions, pairedBrowsers: pairedBrowsers)
         let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses, pinningAvailable: pinningAvailable)
         let ordered = layout == .oneView
-            ? SidebarProjectGroup.make(active: recency?.ordered(active) ?? active, projects: projects).flatMap(\.sessions)
+            ? SidebarProjectGroup.make(active: recency?(active) ?? active, projects: projects).flatMap(\.sessions)
             : active
         return RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable) + ordered
     }

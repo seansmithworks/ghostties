@@ -156,6 +156,14 @@ final class SidebarSwitchCreateTests: XCTestCase {
         XCTAssertEqual(order.ordered([a, b, new1, new2]).map(\.name), ["new2", "new1", "a", "b"])
     }
 
+    /// With no order held, rows stay as given.
+    func testWithNoOrderHeldRowsStayAsGiven() {
+        let a = session("a", atlas, minutesAgo: 9)
+        let b = session("b", atlas, minutesAgo: 1)
+
+        XCTAssertEqual(SessionRecencyOrder().ordered([a, b]).map(\.name), ["a", "b"])
+    }
+
     // MARK: - Groups, rail and shortcuts
 
     func testEachProjectOrdersByRecencyAndProjectOrderIsUnchanged() {
@@ -186,7 +194,7 @@ final class SidebarSwitchCreateTests: XCTestCase {
         order.handle(.listAppeared, sessions: [a1, a2, f1], selected: nil, pointerOverList: false)
 
         XCTAssertEqual(
-            store.railSessions(layout: .oneView, pinningAvailable: true, recency: order).map(\.name),
+            store.railSessions(layout: .oneView, pinningAvailable: true, recency: order.ordered).map(\.name),
             ["orchestrator", "a2", "a1", "f1"]
         )
         // Without a window's order, creation order as before.
@@ -206,7 +214,7 @@ final class SidebarSwitchCreateTests: XCTestCase {
         var order = SessionRecencyOrder()
         order.handle(.listAppeared, sessions: all, selected: nil, pointerOverList: false)
 
-        XCTAssertEqual(store.railSessions(layout: .tabs, recency: order).map(\.name), ["a1", "f1", "a2"])
+        XCTAssertEqual(store.railSessions(layout: .tabs, recency: order.ordered).map(\.name), ["a1", "f1", "a2"])
     }
 
     // MARK: - Following the selection

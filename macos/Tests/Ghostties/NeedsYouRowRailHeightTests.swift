@@ -63,10 +63,14 @@ final class NeedsYouRowRailHeightTests: PrivateDefaultsTestCase {
         // the same in every world this file builds.
         let first = Project(id: UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000F1")!, name: "atlas-api", rootPath: "/Users/example/work/atlas-api")
         let second = Project(id: UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000F2")!, name: "field-notes", rootPath: "/Users/example/work/field-notes")
+        // One timestamp for every session, so the one-view row order
+        // (`SessionRecencyOrder`, newest first) is the same in every world:
+        // the selected row, then creation order.
+        let now = Date()
         func session(_ id: UUID, _ name: String, _ project: Project) -> AgentSession {
             AgentSession(
                 id: id, name: name, templateId: UUID(), projectId: project.id,
-                lastActiveAt: Date(), lastOutputAt: Date(), isNamePinned: true
+                lastActiveAt: now, lastOutputAt: now, isNamePinned: true
             )
         }
         let sessions = [

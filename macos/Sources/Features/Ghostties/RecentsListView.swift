@@ -339,7 +339,7 @@ struct RecentsListView: View {
     /// recency order (`SessionRecencyOrder`): newest first, held still
     /// between reorders. Drag and drop still act on Active's own order.
     private func projectGroups(_ active: [AgentSession]) -> [SidebarProjectGroup] {
-        SidebarProjectGroup.make(active: coordinator.sessionRecency.ordered(active), projects: store.projects)
+        SidebarProjectGroup.make(active: coordinator.recencyOrdered(active), projects: store.projects)
     }
 
     /// Production's real `ScrollView` — `sectionsContent` plus reflow

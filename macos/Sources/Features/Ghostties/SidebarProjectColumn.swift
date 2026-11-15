@@ -374,17 +374,11 @@ struct SidebarSelectionFollower: ViewModifier {
             }
             .onAppear {
                 guard inputs.layout == .oneView else { return }
-                reorder(.listAppeared, inputs, animated: false)
                 scroll(to: inputs.selectedRowId, in: inputs, animated: false)
             }
     }
 
     private func changed(from old: Inputs, to new: Inputs) {
-        // The first rows, or one view itself, can arrive after the list
-        // appears.
-        if new.layout != old.layout || new.active.map(\.id) != old.active.map(\.id) {
-            reorder(.listAppeared, new, animated: false)
-        }
         if SessionRecencyOrder.finished(from: old.working, to: new.working) {
             reorder(.sessionFinished, new)
         }
@@ -423,15 +417,11 @@ struct SidebarSelectionFollower: ViewModifier {
     @discardableResult
     private func reorder(_ event: SessionRecencyOrder.Event, _ inputs: Inputs, animated: Bool = true) -> Bool {
         guard inputs.layout == .oneView else { return false }
-        var order = coordinator.sessionRecency
-        let changed = order.handle(
-            event, sessions: inputs.active, selected: inputs.selected, pointerOverList: inputs.isPointerOverList
-        )
-        guard order != coordinator.sessionRecency else { return false }
-        withAnimation(animated ? SidebarUISpring.reflow.animation() : nil) {
-            coordinator.sessionRecency = order
+        return withAnimation(animated ? SidebarUISpring.reflow.animation() : nil) {
+            coordinator.reorderSessions(
+                event, sessions: inputs.active, selected: inputs.selected, pointerOverList: inputs.isPointerOverList
+            )
         }
-        return changed
     }
 
     private func scroll(to rowId: String?, in inputs: Inputs, animated: Bool) {
