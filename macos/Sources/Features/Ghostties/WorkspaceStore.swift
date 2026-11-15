@@ -557,19 +557,16 @@ final class WorkspaceStore: ObservableObject {
     /// opened) still has a row in the full sidebar and must still have one
     /// in the rail.
     /// In one view (`SidebarProjectsLayout.oneView`) Active is listed
-    /// project by project, as the list and rail group it, each project's
-    /// rows in `recency`'s order when the window passes its own
-    /// (`SessionCoordinator.recencyOrdered`).
+    /// project by project, as the list and rail group it.
     func railSessions(
         layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout(),
         pinningAvailable: Bool = SessionPinning.isAvailable,
-        pairedBrowsers: [UUID: UUID] = [:],
-        recency: (([AgentSession]) -> [AgentSession])? = nil
+        pairedBrowsers: [UUID: UUID] = [:]
     ) -> [AgentSession] {
         let sessions = PairedBrowserRows.visible(sessions, pairedBrowsers: pairedBrowsers)
         let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses, pinningAvailable: pinningAvailable)
         let ordered = layout == .oneView
-            ? SidebarProjectGroup.make(active: recency?(active) ?? active, projects: projects).flatMap(\.sessions)
+            ? SidebarProjectGroup.make(active: active, projects: projects).flatMap(\.sessions)
             : active
         return RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable) + ordered
     }

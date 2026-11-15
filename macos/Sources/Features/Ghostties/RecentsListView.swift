@@ -40,9 +40,6 @@ struct RecentsListView: View {
     @State private var mouseUpMonitor: Any?
     @State private var autoScrollTimer: Timer?
     @State private var autoScrollAnchorId: String?
-    /// The pointer is over the scrolling list: a one-view reorder waits
-    /// until it leaves (`SessionRecencyOrder`).
-    @State private var isPointerOverList = false
 
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
@@ -330,16 +327,9 @@ struct RecentsListView: View {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else {
             return sections.pinned.count + sections.active.count
         }
-        let groups = projectGroups(sections.active)
+        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects)
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
         return SidebarProjectGroupItem.cascade(items, start: sections.pinned.count).end
-    }
-
-    /// One view's project groups, each project's rows in this window's
-    /// recency order (`SessionRecencyOrder`): newest first, held still
-    /// between reorders. Drag and drop still act on Active's own order.
-    private func projectGroups(_ active: [AgentSession]) -> [SidebarProjectGroup] {
-        SidebarProjectGroup.make(active: coordinator.recencyOrdered(active), projects: store.projects)
     }
 
     /// Production's real `ScrollView` — `sectionsContent` plus reflow
@@ -370,15 +360,11 @@ struct RecentsListView: View {
             .modifier(MorphTrayReserve(scrolls: true, isActive: underTray))
             .accessibilityLabel("Sessions")
             .redlineFrame(RedlineID.listViewport)
-            // One view reorders only while the pointer is off the list, so
-            // no row moves under it (`SessionRecencyOrder`).
-            .onHover { isPointerOverList = $0 }
             .modifier(SidebarSelectionFollower(
                 selectedSessionId: coordinator.sidebarSelectedSessionId,
                 pinned: sections.pinned,
                 active: sections.active,
                 layout: SidebarProjectsLayout.effective(tab: sidebarTab),
-                isPointerOverList: isPointerOverList,
                 window: { [coordinator] in coordinator.containerView?.window },
                 scrollProxy: scrollProxy
             ))
@@ -440,7 +426,7 @@ struct RecentsListView: View {
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
-        let allGroups = projectGroups(active)
+        let allGroups = SidebarProjectGroup.make(active: active, projects: store.projects)
         let groups = allGroups
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         // The pinned break comes from the whole list, so a pinned drag
@@ -547,7 +533,7 @@ struct RecentsListView: View {
     private func selectedGroupId(_ active: [AgentSession]) -> SidebarProjectGroup.ID? {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else { return nil }
         return RailProjectColumn.selectedGroupId(
-            projectGroups(active),
+            SidebarProjectGroup.make(active: active, projects: store.projects),
             selectedSessionId: coordinator.sidebarSelectedSessionId
         )
     }
@@ -577,6 +563,7 @@ struct RecentsListView: View {
         _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
         monogram: String, isSelectedProject: Bool, staggerIndex: Int
     ) -> some View {
+        let captureHover = Self.captureHeaderHover(group.name)
         let header = withProjectContextMenu(projectId: group.projectId) { ProjectAccordionHeader(
             name: group.name, monogram: monogram, count: group.sessions.count,
             needYouCount: group.sessions.filter {
@@ -588,7 +575,7 @@ struct RecentsListView: View {
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
             icon: group.projectId.flatMap { projectIcons[$0] },
             redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex,
-            forceHover: Self.captureHeaderHover(group.name),
+            forceHover: captureHover.header, forceChipPointed: captureHover.chip,
             onNewThread: newThreadAction(group.projectId)
         ) {
             ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
@@ -640,13 +627,16 @@ struct RecentsListView: View {
         }
     }
 
-    /// DEBUG capture hook: draws a header's hover state without a pointer
+    /// DEBUG capture hook: draws a header's hover state without a pointer,
+    /// and for `<project>!` its chip as it is under the pointer
     /// (`CaptureFixture.headerHoverProjects`).
-    private static func captureHeaderHover(_ projectName: String) -> Bool {
+    private static func captureHeaderHover(_ projectName: String) -> (header: Bool, chip: Bool) {
         #if DEBUG
-        return CaptureFixture.headerHoverProjects.contains(projectName)
+        let names = CaptureFixture.headerHoverProjects
+        let chip = names.contains(projectName + "!")
+        return (chip || names.contains(projectName), chip)
         #else
-        return false
+        return (false, false)
         #endif
     }
 
@@ -1011,6 +1001,9 @@ struct RecentsListView: View {
             guard supportsReorder else { return }
             moveWithinSection(session: session, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
         }
+        // What the list scrolls to when this row is selected
+        // (`SidebarSelectionFollower`).
+        .background(alignment: .top) { SidebarSelectionFollow.ScrollTarget(rowId: session.id.uuidString) }
     }
 
     /// Runs one `SessionRowMenu` action on `session`.

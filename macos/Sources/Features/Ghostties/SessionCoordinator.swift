@@ -70,39 +70,6 @@ final class SessionCoordinator: ObservableObject {
         selectionCause = SelectionCause(id: id, kind: kind)
     }
 
-    /// This window's one-view row order (`SessionRecencyOrder`). The list,
-    /// the rail, the hover reveal and the session shortcuts all read it
-    /// through `recencyOrdered`, so they never disagree; the list asks for
-    /// reorders through `reorderSessions`.
-    private(set) var sessionRecency = SessionRecencyOrder()
-
-    /// `active` in this window's one-view order. The first read with a
-    /// selection takes the first snapshot, so the order does not depend on
-    /// which surface appeared first or on whether it drew before the
-    /// window's selection was restored; until then rows stay as given.
-    /// That write is not published (it happens while a view reads, and
-    /// changes nothing already drawn).
-    func recencyOrdered(_ active: [AgentSession]) -> [AgentSession] {
-        if sessionRecency.held.isEmpty, !active.isEmpty, sidebarSelectedSessionId != nil {
-            sessionRecency.handle(.listAppeared, sessions: active, selected: sidebarSelectedSessionId, pointerOverList: false)
-        }
-        return sessionRecency.ordered(active)
-    }
-
-    /// Hands `event` to the row order. True when the rows took a new order,
-    /// which is published.
-    @discardableResult
-    func reorderSessions(
-        _ event: SessionRecencyOrder.Event, sessions: [AgentSession], selected: UUID?, pointerOverList: Bool
-    ) -> Bool {
-        var order = sessionRecency
-        let changed = order.handle(event, sessions: sessions, selected: selected, pointerOverList: pointerOverList)
-        guard order != sessionRecency else { return false }
-        if changed { objectWillChange.send() }
-        sessionRecency = order
-        return changed
-    }
-
     /// True while the sidebar's History row is selected and the canvas shows
     /// the history browser (mock I3). `activeSessionId` is left untouched
     /// underneath, so closing the browser returns to the session that was

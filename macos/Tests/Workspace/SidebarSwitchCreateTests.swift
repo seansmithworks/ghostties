@@ -3,10 +3,10 @@ import SwiftUI
 import GhosttiesCore
 @testable import Ghostty
 
-/// One view: rows order by last activity and hold still under the pointer
-/// (`SessionRecencyOrder`), the list follows the selection
-/// (`SidebarSelectionFollow`), and a project header's "+" sits where its
-/// count was (`ProjectAccordionHeader`).
+/// One view: a project's threads keep the user's order (creation order
+/// until dragged), the list follows the selection
+/// (`SidebarSelectionFollow`), and a project header's "+" chip sits where
+/// its count was (`ProjectAccordionHeader`).
 ///
 /// Every store here is persistence-disabled (`WorkspaceStore(testingProjects:)`).
 @MainActor
@@ -23,198 +23,116 @@ final class SidebarSwitchCreateTests: XCTestCase {
         )
     }
 
-    private func names(_ ids: [UUID], in sessions: [AgentSession]) -> [String] {
-        ids.compactMap { id in sessions.first { $0.id == id }?.name }
+    /// A store whose sessions all have a live terminal, so all are Active.
+    private func runningStore(_ sessions: [AgentSession], projects: [Project]? = nil) -> WorkspaceStore {
+        let store = WorkspaceStore(testingProjects: projects ?? [atlas, fieldwork], testingSessions: sessions)
+        for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
+        return store
     }
 
-    // MARK: - Ranking
-
-    func testRankingIsNewestFirstWithUndatedLastAndTiesInListOrder() {
-        let old = session("old", atlas, minutesAgo: 60)
-        let never = session("never", atlas, minutesAgo: nil)
-        let fresh = session("fresh", atlas, minutesAgo: 1)
-        let tieA = session("tieA", atlas, minutesAgo: 10)
-        let tieB = session("tieB", atlas, minutesAgo: 10)
-        let all = [old, never, fresh, tieA, tieB]
-
-        XCTAssertEqual(
-            names(SessionRecencyOrder.ranking(all, selected: nil), in: all),
-            ["fresh", "tieA", "tieB", "old", "never"]
-        )
+    /// Each project's rows as one view draws them, by project name.
+    private func oneViewRows(_ store: WorkspaceStore) -> [String: [String]] {
+        let active = RecentsListView.activeSessions(from: store.sessions, statuses: store.globalStatuses, pinningAvailable: true)
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        return Dictionary(uniqueKeysWithValues: groups.map { ($0.name, $0.sessions.map(\.name)) })
     }
 
-    /// Focus advances `lastActiveAt` in 5s steps, so the session just
-    /// switched to can carry an older timestamp than the one switched from.
-    func testSelectedSessionLeadsEvenWhenItsTimestampIsOlder() {
-        let fresh = session("fresh", atlas, minutesAgo: 1)
-        let older = session("older", atlas, minutesAgo: 30)
-        let all = [fresh, older]
-
-        XCTAssertEqual(names(SessionRecencyOrder.ranking(all, selected: older.id), in: all), ["older", "fresh"])
+    /// The rows the rail and the session shortcuts walk.
+    private func railRows(_ store: WorkspaceStore) -> [String] {
+        store.railSessions(layout: .oneView, pinningAvailable: true).map(\.name)
     }
 
-    // MARK: - Holding still
+    // MARK: - Fixed order
 
-    func testOrderIsHeldWhileTimestampsMove() {
-        var a = session("a", atlas, minutesAgo: 1)
-        let b = session("b", atlas, minutesAgo: 5)
-        var order = SessionRecencyOrder()
-        XCTAssertTrue(order.handle(.listAppeared, sessions: [a, b], selected: nil, pointerOverList: false))
-        XCTAssertEqual(order.ordered([b, a]).map(\.name), ["a", "b"])
-
-        // `a` goes quiet and `b` prints: no event, so no row moves.
-        a.lastActiveAt = base.addingTimeInterval(-3600)
-        XCTAssertEqual(order.ordered([b, a]).map(\.name), ["a", "b"])
-        // A second appearance (the rail mounting) keeps the held order.
-        XCTAssertFalse(order.handle(.listAppeared, sessions: [a, b], selected: nil, pointerOverList: false))
-        XCTAssertEqual(order.ordered([b, a]).map(\.name), ["a", "b"])
-    }
-
-    func testSelectionChangeReordersWhenThePointerIsOffTheList() {
-        let a = session("a", atlas, minutesAgo: 1)
-        let b = session("b", atlas, minutesAgo: 5)
-        let c = session("c", atlas, minutesAgo: 9)
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: [a, b, c], selected: a.id, pointerOverList: false)
-
-        XCTAssertTrue(order.handle(.selectionChanged, sessions: [a, b, c], selected: c.id, pointerOverList: false))
-        XCTAssertEqual(order.ordered([a, b, c]).map(\.name), ["c", "a", "b"])
-        XCTAssertFalse(order.isPending)
-    }
-
-    func testReorderWaitsWhileThePointerIsOverTheListThenAppliesOnExit() {
-        let a = session("a", atlas, minutesAgo: 1)
-        let b = session("b", atlas, minutesAgo: 5)
-        let c = session("c", atlas, minutesAgo: 9)
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: [a, b, c], selected: a.id, pointerOverList: false)
-
-        // A click on `c`: the pointer is on the list, so nothing moves.
-        XCTAssertFalse(order.handle(.selectionChanged, sessions: [a, b, c], selected: c.id, pointerOverList: true))
-        XCTAssertEqual(order.ordered([a, b, c]).map(\.name), ["a", "b", "c"])
-        XCTAssertTrue(order.isPending)
-        // A session finishing meanwhile waits too.
-        XCTAssertFalse(order.handle(.sessionFinished, sessions: [a, b, c], selected: c.id, pointerOverList: true))
-        XCTAssertEqual(order.ordered([a, b, c]).map(\.name), ["a", "b", "c"])
-
-        XCTAssertTrue(order.handle(.pointerExited, sessions: [a, b, c], selected: c.id, pointerOverList: false))
-        XCTAssertEqual(order.ordered([a, b, c]).map(\.name), ["c", "a", "b"])
-        XCTAssertFalse(order.isPending)
-    }
-
-    func testPointerExitWithNothingWaitingChangesNothing() {
-        var a = session("a", atlas, minutesAgo: 1)
-        let b = session("b", atlas, minutesAgo: 5)
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: [a, b], selected: nil, pointerOverList: false)
-        a.lastActiveAt = base.addingTimeInterval(-3600)
-
-        XCTAssertFalse(order.handle(.pointerExited, sessions: [a, b], selected: nil, pointerOverList: false))
-        XCTAssertEqual(order.ordered([a, b]).map(\.name), ["a", "b"])
-    }
-
-    func testASessionFinishingReorders() {
-        let a = session("a", atlas, minutesAgo: 20)
-        var b = session("b", atlas, minutesAgo: 30)
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: [a, b], selected: nil, pointerOverList: false)
-        XCTAssertEqual(order.ordered([a, b]).map(\.name), ["a", "b"])
-
-        // `b` worked until now, then stopped.
-        b.lastActiveAt = base
-        let before = SessionRecencyOrder.working([a, b], indicators: [b.id: .processing])
-        let after = SessionRecencyOrder.working([a, b], indicators: [b.id: .idle])
-        XCTAssertEqual(before, [b.id])
-        XCTAssertTrue(SessionRecencyOrder.finished(from: before, to: after))
-        XCTAssertTrue(order.handle(.sessionFinished, sessions: [a, b], selected: nil, pointerOverList: false))
-        XCTAssertEqual(order.ordered([a, b]).map(\.name), ["b", "a"])
-    }
-
-    func testOnlyASessionLeavingTheWorkingSetCountsAsFinished() {
-        let a = UUID(), b = UUID()
-        XCTAssertFalse(SessionRecencyOrder.finished(from: [a], to: [a, b]), "a session starting work is not a finish")
-        XCTAssertFalse(SessionRecencyOrder.finished(from: [a], to: [a]))
-        XCTAssertTrue(SessionRecencyOrder.finished(from: [a, b], to: [a]))
-        // A long run is still working; a question, a failure and a stop are not.
-        let s = session("s", atlas, minutesAgo: 1)
-        XCTAssertEqual(SessionRecencyOrder.working([s], indicators: [s.id: .longRunning]), [s.id])
-        for state in [SessionIndicatorState.needsAttention, .error, .inactive, .idle] {
-            XCTAssertTrue(SessionRecencyOrder.working([s], indicators: [s.id: state]).isEmpty, "\(state)")
-        }
-    }
-
-    /// A session created since the last reorder has no held rank: it leads
-    /// its project, the newest of several first.
-    func testANewSessionLeadsBeforeTheNextReorder() {
-        let a = session("a", atlas, minutesAgo: 1)
-        let b = session("b", atlas, minutesAgo: 5)
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: [a, b], selected: nil, pointerOverList: false)
-        let new1 = session("new1", atlas, minutesAgo: 0)
-        let new2 = session("new2", atlas, minutesAgo: 0)
-
-        XCTAssertEqual(order.ordered([a, b, new1, new2]).map(\.name), ["new2", "new1", "a", "b"])
-    }
-
-    /// With no order held, rows stay as given.
-    func testWithNoOrderHeldRowsStayAsGiven() {
-        let a = session("a", atlas, minutesAgo: 9)
-        let b = session("b", atlas, minutesAgo: 1)
-
-        XCTAssertEqual(SessionRecencyOrder().ordered([a, b]).map(\.name), ["a", "b"])
-    }
-
-    // MARK: - Groups, rail and shortcuts
-
-    func testEachProjectOrdersByRecencyAndProjectOrderIsUnchanged() {
+    /// The newest activity is on the last row and the oldest on the first:
+    /// rows stay in creation order, whatever their timestamps.
+    func testThreadsKeepCreationOrderWhateverTheirLastActivity() {
         let a1 = session("a1", atlas, minutesAgo: 50)
         let f1 = session("f1", fieldwork, minutesAgo: 2)
-        let a2 = session("a2", atlas, minutesAgo: 3)
-        let f2 = session("f2", fieldwork, minutesAgo: 40)
-        let a3 = session("a3", atlas, minutesAgo: 10)
-        let active = [a1, f1, a2, f2, a3]
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: active, selected: nil, pointerOverList: false)
+        let a2 = session("a2", atlas, minutesAgo: nil)
+        let a3 = session("a3", atlas, minutesAgo: 1)
+        let store = runningStore([a1, f1, a2, a3])
 
-        let groups = SidebarProjectGroup.make(active: order.ordered(active), projects: [fieldwork, atlas])
-        // Projects stay alphabetical, though fieldwork holds the newest session.
-        XCTAssertEqual(groups.map(\.name), ["atlas-api", "fieldwork"])
-        XCTAssertEqual(groups.map { $0.sessions.map(\.name) }, [["a2", "a3", "a1"], ["f1", "f2"]])
+        XCTAssertEqual(oneViewRows(store), ["atlas-api": ["a1", "a2", "a3"], "fieldwork": ["f1"]])
+        XCTAssertEqual(railRows(store), ["a1", "a2", "a3", "f1"])
     }
 
-    func testRailAndShortcutOrderFollowTheHeldOrderAndPinnedStaysOnTop() {
+    /// A thread that starts working, prints and takes the selection's
+    /// activity stamp stays on its row.
+    func testAThreadBecomingActiveDoesNotMoveItsRow() {
+        let a1 = session("a1", atlas, minutesAgo: 1)
+        let a2 = session("a2", atlas, minutesAgo: 30)
+        let a3 = session("a3", atlas, minutesAgo: 600)
+        let f1 = session("f1", fieldwork, minutesAgo: 5)
+        let store = runningStore([a1, a2, a3, f1])
+        let before = oneViewRows(store)
+        let railBefore = railRows(store)
+
+        // `a3`, the stalest, starts working and prints now.
+        store.updateIndicatorState(id: a3.id, state: .processing)
+        store.recordActivity(sessionId: a3.id, projectId: atlas.id, isOutput: true)
+        XCTAssertEqual(
+            store.sessions.max { ($0.lastActiveAt ?? .distantPast) < ($1.lastActiveAt ?? .distantPast) }?.name, "a3",
+            "a3 is now the most recently active thread"
+        )
+        XCTAssertEqual(oneViewRows(store), before)
+        XCTAssertEqual(railRows(store), railBefore)
+
+        // And when it finishes.
+        store.updateIndicatorState(id: a3.id, state: .idle)
+        XCTAssertEqual(oneViewRows(store), before)
+        XCTAssertEqual(railRows(store), railBefore)
+    }
+
+    // MARK: - Dragging within a project
+
+    /// One view's drop: a row's reorder acts on the whole Active list
+    /// (`RecentsListView.groupedActiveRows` hands every row `sectionList:
+    /// active`) through `moveSessionInSessionsView`.
+    private func drop(_ dragged: AgentSession, before target: AgentSession?, in store: WorkspaceStore) {
+        let active = RecentsListView.activeSessions(from: store.sessions, statuses: store.globalStatuses, pinningAvailable: true)
+        store.moveSessionInSessionsView(id: dragged.id, before: target?.id, within: active)
+    }
+
+    func testDraggingAThreadWithinItsProjectReordersItAndTheOrderSticks() {
+        let a1 = session("a1", atlas, minutesAgo: 1)
+        let f1 = session("f1", fieldwork, minutesAgo: 2)
+        let a2 = session("a2", atlas, minutesAgo: 3)
+        let a3 = session("a3", atlas, minutesAgo: 4)
+        let store = runningStore([a1, f1, a2, a3])
+
+        // The last atlas row, dropped on the first.
+        drop(a3, before: a1, in: store)
+        XCTAssertEqual(oneViewRows(store), ["atlas-api": ["a3", "a1", "a2"], "fieldwork": ["f1"]])
+        XCTAssertEqual(railRows(store), ["a3", "a1", "a2", "f1"], "the rail and the shortcuts follow the dragged order")
+
+        // The first, dropped after the last row of its project (before
+        // nothing: the end of Active).
+        drop(a3, before: nil, in: store)
+        XCTAssertEqual(oneViewRows(store)["atlas-api"], ["a1", "a2", "a3"])
+        drop(a2, before: a1, in: store)
+        XCTAssertEqual(oneViewRows(store)["atlas-api"], ["a2", "a1", "a3"])
+
+        // It sticks: activity on another row moves nothing.
+        store.updateIndicatorState(id: a3.id, state: .processing)
+        store.recordActivity(sessionId: a3.id, projectId: atlas.id, isOutput: true)
+        XCTAssertEqual(oneViewRows(store)["atlas-api"], ["a2", "a1", "a3"])
+
+        // And it is the sessions' own saved order (`sessionViewOrder`), so a
+        // store loaded from them draws the same rows.
+        let reloaded = runningStore(store.sessions)
+        XCTAssertEqual(oneViewRows(reloaded), ["atlas-api": ["a2", "a1", "a3"], "fieldwork": ["f1"]])
+    }
+
+    func testPinnedStaysOnTopOfTheRailAndProjectsStayAlphabetical() {
         let pinned = session("orchestrator", fieldwork, minutesAgo: 500, pinned: true)
-        let a1 = session("a1", atlas, minutesAgo: 50)
-        let a2 = session("a2", atlas, minutesAgo: 3)
         let f1 = session("f1", fieldwork, minutesAgo: 2)
-        let all = [pinned, a1, a2, f1]
-        let store = WorkspaceStore(testingProjects: [atlas, fieldwork], testingSessions: all)
-        for s in all { store.updateSessionStatus(id: s.id, status: .running) }
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: [a1, a2, f1], selected: nil, pointerOverList: false)
-
-        XCTAssertEqual(
-            store.railSessions(layout: .oneView, pinningAvailable: true, recency: order.ordered).map(\.name),
-            ["orchestrator", "a2", "a1", "f1"]
-        )
-        // Without a window's order, creation order as before.
-        XCTAssertEqual(
-            store.railSessions(layout: .oneView, pinningAvailable: true).map(\.name),
-            ["orchestrator", "a1", "a2", "f1"]
-        )
-    }
-
-    func testTheTabsLayoutIgnoresRecency() {
         let a1 = session("a1", atlas, minutesAgo: 50)
-        let f1 = session("f1", fieldwork, minutesAgo: 2)
-        let a2 = session("a2", atlas, minutesAgo: 3)
-        let all = [a1, f1, a2]
-        let store = WorkspaceStore(testingProjects: [atlas, fieldwork], testingSessions: all)
-        for s in all { store.updateSessionStatus(id: s.id, status: .running) }
-        var order = SessionRecencyOrder()
-        order.handle(.listAppeared, sessions: all, selected: nil, pointerOverList: false)
+        let store = runningStore([pinned, f1, a1], projects: [fieldwork, atlas])
 
-        XCTAssertEqual(store.railSessions(layout: .tabs, recency: order.ordered).map(\.name), ["a1", "f1", "a2"])
+        // fieldwork holds the newest thread and was added first; atlas-api
+        // still leads.
+        XCTAssertEqual(railRows(store), ["orchestrator", "a1", "f1"])
     }
 
     // MARK: - Following the selection
@@ -236,23 +154,21 @@ final class SidebarSwitchCreateTests: XCTestCase {
 
         XCTAssertEqual(
             plan(selected: f1.id, active: [a1, f1], collapsed: [fieldwork.id]),
-            SidebarSelectionFollow.Plan(reorders: true, unfold: fieldwork.id, scrollTo: f1.id.uuidString, animates: true)
+            SidebarSelectionFollow.Plan(unfold: fieldwork.id, scrollTo: f1.id.uuidString, animates: true)
         )
         // Another project's fold is left alone.
         XCTAssertEqual(
             plan(selected: a1.id, active: [a1, f1], collapsed: [fieldwork.id]),
-            SidebarSelectionFollow.Plan(reorders: true, unfold: nil, scrollTo: a1.id.uuidString, animates: true)
+            SidebarSelectionFollow.Plan(unfold: nil, scrollTo: a1.id.uuidString, animates: true)
         )
     }
 
-    /// The session shortcuts walk the list by position: reordering on each
-    /// press would send Next Session back and forth between two rows.
-    func testAKeyboardMoveScrollsAndUnfoldsButNeitherReordersNorAnimates() {
+    func testAKeyboardMoveScrollsAndUnfoldsWithoutAnimating() {
         let f1 = session("f1", fieldwork, minutesAgo: 2)
 
         XCTAssertEqual(
             plan(route: .keyboard, selected: f1.id, active: [f1], collapsed: [fieldwork.id]),
-            SidebarSelectionFollow.Plan(reorders: false, unfold: fieldwork.id, scrollTo: f1.id.uuidString, animates: false)
+            SidebarSelectionFollow.Plan(unfold: fieldwork.id, scrollTo: f1.id.uuidString, animates: false)
         )
     }
 
@@ -261,7 +177,7 @@ final class SidebarSwitchCreateTests: XCTestCase {
 
         XCTAssertEqual(
             plan(selected: pinned.id, pinned: [pinned], active: [], collapsed: [fieldwork.id]),
-            SidebarSelectionFollow.Plan(reorders: true, unfold: nil, scrollTo: pinned.id.uuidString, animates: true)
+            SidebarSelectionFollow.Plan(unfold: nil, scrollTo: pinned.id.uuidString, animates: true)
         )
     }
 
@@ -270,9 +186,7 @@ final class SidebarSwitchCreateTests: XCTestCase {
 
         XCTAssertEqual(plan(selected: nil, active: [a1]), SidebarSelectionFollow.Plan())
         // History's session, or one whose terminal has not opened yet.
-        let rowless = plan(selected: UUID(), active: [a1], collapsed: [atlas.id])
-        XCTAssertNil(rowless.scrollTo)
-        XCTAssertNil(rowless.unfold)
+        XCTAssertEqual(plan(selected: UUID(), active: [a1], collapsed: [atlas.id]), SidebarSelectionFollow.Plan())
     }
 
     func testTheTabsLayoutKeepsItsRailOnlyKeyboardScroll() {
@@ -287,29 +201,58 @@ final class SidebarSwitchCreateTests: XCTestCase {
         XCTAssertEqual(tabs(.direct, isRail: false), SidebarSelectionFollow.Plan())
     }
 
-    // MARK: - Header "+"
-
-    func testThePlusTakesAPlainCountsPlaceAndSitsBesideANeedYouLabel() {
-        let glyph = ProjectAccordionHeader.newThreadGlyphWidth
-        // A plain count: the glyph's trailing edge on the count's.
-        let overCount = ProjectAccordionHeader.newThreadCenterX(labelMinX: 182, labelMaxX: 200, needYouCount: 0)
-        XCTAssertEqual(overCount + glyph / 2, 200)
-        // "2 need you": the glyph ends one gap before the label, which stays.
-        let beside = ProjectAccordionHeader.newThreadCenterX(labelMinX: 140, labelMaxX: 200, needYouCount: 2)
-        XCTAssertEqual(beside + glyph / 2, 140 - ProjectAccordionHeader.newThreadLabelGap)
+    /// The list scrolls to a row's target, which is the row plus the clear
+    /// space kept above the tray (`SidebarSelectionFollowGateTests` measures
+    /// it in a window).
+    func testAFollowedRowKeepsEightPointsClearOfTheTray() {
+        XCTAssertEqual(SidebarSelectionFollow.trayClearance, 8)
+        let id = UUID().uuidString
+        XCTAssertNotEqual(SidebarSelectionFollow.scrollTargetId(row: id), id, "the target is not the row's own frame")
     }
 
-    func testANeedYouHeaderAlwaysKeepsRoomForThePlus() {
+    // MARK: - Header "+" chip
+
+    /// One chip frame for every project with a plain count: its trailing
+    /// edge on the count's, whatever the count's width.
+    func testTheChipsFrameDoesNotMoveWithTheCountsWidth() {
+        let size = ProjectAccordionHeader.newThreadChipSize
+        // "0", "7" and "128" end at the same x and start at different ones.
+        let frames = [(182.0, 200.0), (190.0, 200.0), (170.0, 200.0)].map { minX, maxX in
+            ProjectAccordionHeader.newThreadChipMinX(labelMinX: minX, labelMaxX: maxX, needYouCount: 0)
+        }
+        XCTAssertEqual(frames, [200 - size, 200 - size, 200 - size])
+        // The chip drawn is the click target: one size, a square on the 8pt grid.
+        XCTAssertEqual(size, 24)
+    }
+
+    func testTheChipSitsBesideANeedYouLabelAndNeverOverIt() {
+        let size = ProjectAccordionHeader.newThreadChipSize
+        let minX = ProjectAccordionHeader.newThreadChipMinX(labelMinX: 140, labelMaxX: 200, needYouCount: 2)
+        XCTAssertEqual(minX + size, 140 - ProjectAccordionHeader.newThreadLabelGap, "the chip ends one gap before the label")
+        // The label keeps drawing under hover; a plain count gives way.
+        XCTAssertFalse(ProjectAccordionHeader.hidesCountLabel(showsNewThread: true, needYouCount: 2))
+        XCTAssertTrue(ProjectAccordionHeader.hidesCountLabel(showsNewThread: true, needYouCount: 0))
+        XCTAssertFalse(ProjectAccordionHeader.hidesCountLabel(showsNewThread: false, needYouCount: 0))
+    }
+
+    func testANeedYouHeaderAlwaysKeepsRoomForTheChip() {
         XCTAssertEqual(ProjectAccordionHeader.newThreadReserve(needYouCount: 0, canCreate: true), 0)
         XCTAssertEqual(
             ProjectAccordionHeader.newThreadReserve(needYouCount: 1, canCreate: true),
-            ProjectAccordionHeader.newThreadGlyphWidth + ProjectAccordionHeader.newThreadLabelGap
+            ProjectAccordionHeader.newThreadChipSize + ProjectAccordionHeader.newThreadLabelGap
         )
         // The "Unknown" group has no project to create in.
         XCTAssertEqual(ProjectAccordionHeader.newThreadReserve(needYouCount: 1, canCreate: false), 0)
+        // The name gives way to the reserve, never the chip to the name.
+        XCTAssertEqual(ProjectAccordionHeader.trailingLabelSpacing(needYouCount: 0, canCreate: true), 8)
+        XCTAssertEqual(ProjectAccordionHeader.trailingLabelSpacing(needYouCount: 1, canCreate: false), 8)
+        XCTAssertGreaterThan(
+            ProjectAccordionHeader.trailingLabelSpacing(needYouCount: 1, canCreate: true),
+            ProjectAccordionHeader.newThreadReserve(needYouCount: 1, canCreate: true)
+        )
     }
 
-    func testThePlusShowsOnHoverOrFocusOnTheExpandedSidebarOnly() {
+    func testTheChipShowsOnHoverOrFocusOnTheExpandedSidebarOnly() {
         func shows(canCreate: Bool = true, hovered: Bool = false, focused: Bool = false, morph: CGFloat = 0) -> Bool {
             ProjectAccordionHeader.showsNewThread(canCreate: canCreate, isHovered: hovered, isFocused: focused, morph: morph)
         }
@@ -321,8 +264,26 @@ final class SidebarSwitchCreateTests: XCTestCase {
         XCTAssertFalse(shows(hovered: true, morph: 0.4), "nor mid-morph")
     }
 
-    func testThePlusIsLabelledWithItsProject() {
-        XCTAssertEqual(ProjectAccordionHeader.newThreadAccessibilityLabel(project: "atlas-api"), "New thread in atlas-api")
+    /// The fill is the row's hover tint, and the chip ink at the selected
+    /// chip's opacity under the pointer: existing tokens only.
+    func testTheChipFillsWithTheRowHoverTintAndBrightensUnderThePointer() {
+        XCTAssertGreaterThan(RailProjectColumn.selectedChipTintOpacity, RailProjectColumn.hoverChipTintOpacity)
+        for scheme in [ColorScheme.light, .dark] {
+            XCTAssertEqual(
+                ProjectAccordionHeader.newThreadChipFill(isPointed: false, scheme),
+                Color.primary.opacity(RailProjectColumn.hoverChipTintOpacity)
+            )
+            XCTAssertEqual(
+                ProjectAccordionHeader.newThreadChipFill(isPointed: true, scheme),
+                RailProjectColumn.tintInk(scheme).opacity(RailProjectColumn.selectedChipTintOpacity)
+            )
+        }
+    }
+
+    /// The tooltip and the VoiceOver label are one string.
+    func testTheChipsTooltipNamesItsProject() {
+        XCTAssertEqual(ProjectAccordionHeader.newThreadLabel(project: "atlas-api"), "New thread in atlas-api")
+        XCTAssertEqual(ProjectAccordionHeader.newThreadLabel(project: "wren"), "New thread in wren")
     }
 
     /// The header "+" and the Projects tab row's "+" are one route: a plain

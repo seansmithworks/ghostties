@@ -103,16 +103,14 @@ struct SelectedRowCardFitGateTests {
         try withDials({ $0.set(true, forKey: SidebarDialTuning.redlinesKey) }) {
             let rig = makeRig()
             defer { rig.close() }
-            // atlas-api's second session is selected, so it leads the group
-            // (`SessionRecencyOrder`) and the first session is its last row.
+            // atlas-api's second (last) session is selected.
             settle(rig)
             let card = try frame(rig, RedlineID.groupCard)
             let plate = try frame(rig, RedlineID.row(rig.sessions[1].id))
-            let lastRow = try frame(rig, RedlineID.row(rig.sessions[0].id))
 
             let left = plate.minX - card.minX
             let right = card.maxX - plate.maxX
-            let bottom = card.maxY - lastRow.maxY
+            let bottom = card.maxY - plate.maxY
             #expect(abs(left - gap) <= tolerance, "left gap \(left), want \(gap)")
             #expect(abs(right - gap) <= tolerance, "right gap \(right), want \(gap)")
             #expect(abs(bottom - gap) <= tolerance, "bottom gap \(bottom), want \(gap)")

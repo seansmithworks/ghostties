@@ -505,10 +505,12 @@ struct ProjectAccordionHeader: View {
     var redlineID: String? = nil
     /// The header's place in the expand cascade (`SidebarLabelCascade`).
     var staggerIndex: Int = 0
-    /// DEBUG capture hook: draws the hover state without a pointer.
+    /// DEBUG capture hooks: draw the hover state, and the chip as it is
+    /// under the pointer, without a pointer.
     var forceHover: Bool = false
-    /// The quick-create "+" (`ProjectHeaderNewThreadButton`); nil for a
-    /// group with no project to create in.
+    var forceChipPointed: Bool = false
+    /// The quick-create "+" chip (`ProjectHeaderNewThreadButton`); nil for
+    /// a group with no project to create in.
     var onNewThread: (() -> Void)?
     let onToggle: () -> Void
 
@@ -517,38 +519,64 @@ struct ProjectAccordionHeader: View {
     static let chevronWidth: CGFloat = 18
     static let countMinWidth: CGFloat = 18
 
-    /// The "+"'s click target, a square centred on its glyph.
-    static let newThreadHitSize: CGFloat = 24
-    /// The "+" glyph's point size (the header's 11pt type) and drawn width.
+    /// The "+" chip's side: the rounded square drawn on hover is also the
+    /// click target, one size for every project.
+    static let newThreadChipSize: CGFloat = 24
+    /// The "+" glyph's point size (the header's 11pt type).
     static let newThreadGlyphSize: CGFloat = 11
-    static let newThreadGlyphWidth: CGFloat = 10
-    /// Clear space between the "+" and a "N need you" label beside it.
+    /// Clear space between the chip and a "N need you" label beside it.
     static let newThreadLabelGap: CGFloat = 8
 
-    /// Where the "+" glyph is centred, from the trailing label's laid-out
-    /// edges: over a plain count, its trailing edge on the count's, so it
-    /// takes the count's place; beside a "N need you" label, one gap before
-    /// the label, which stays.
-    static func newThreadCenterX(labelMinX: CGFloat, labelMaxX: CGFloat, needYouCount: Int) -> CGFloat {
+    /// The chip's leading edge, from the trailing label's laid-out edges.
+    /// Over a plain count its trailing edge is the count's, so it takes the
+    /// count's place and sits at the same x whatever the count's width;
+    /// beside a "N need you" label it ends one gap before the label, which
+    /// stays.
+    static func newThreadChipMinX(labelMinX: CGFloat, labelMaxX: CGFloat, needYouCount: Int) -> CGFloat {
         needYouCount > 0
-            ? labelMinX - newThreadLabelGap - newThreadGlyphWidth / 2
-            : labelMaxX - newThreadGlyphWidth / 2
+            ? labelMinX - newThreadLabelGap - newThreadChipSize
+            : labelMaxX - newThreadChipSize
     }
 
     /// The room a "N need you" header keeps free before its label for the
-    /// "+", always, so a long name never truncates further on hover.
+    /// chip, always, so a long name never truncates further on hover.
     static func newThreadReserve(needYouCount: Int, canCreate: Bool) -> CGFloat {
-        needYouCount > 0 && canCreate ? newThreadGlyphWidth + newThreadLabelGap : 0
+        needYouCount > 0 && canCreate ? newThreadChipSize + newThreadLabelGap : 0
     }
 
-    /// The "+" shows while the pointer is over the header or the "+" has
+    /// The least room between the chevron and the trailing label: 8pt, or
+    /// the chip's reserve with 4pt before it (the chevron's own frame
+    /// already stands clear of its glyph).
+    static func trailingLabelSpacing(needYouCount: Int, canCreate: Bool) -> CGFloat {
+        let reserve = newThreadReserve(needYouCount: needYouCount, canCreate: canCreate)
+        return reserve > 0 ? reserve + 4 : 8
+    }
+
+    /// The chip shows while the pointer is over the header or the chip has
     /// keyboard focus, on the expanded sidebar only (the rail's header is
     /// its tile alone).
     static func showsNewThread(canCreate: Bool, isHovered: Bool, isFocused: Bool, morph: CGFloat) -> Bool {
         canCreate && morph <= 0 && (isHovered || isFocused)
     }
 
-    static func newThreadAccessibilityLabel(project name: String) -> String {
+    /// The chip takes a plain count's place; a "N need you" label stays.
+    static func hidesCountLabel(showsNewThread: Bool, needYouCount: Int) -> Bool {
+        showsNewThread && needYouCount == 0
+    }
+
+    /// The chip's fill: the row's hover tint (`SidebarRowChipBackground`),
+    /// and while the pointer is on the chip itself the chip ink at the
+    /// selected chip's opacity, so it brightens in dark and deepens in
+    /// light. (The selected row's own dark tint is black, which would dim
+    /// it.)
+    static func newThreadChipFill(isPointed: Bool, _ colorScheme: ColorScheme) -> Color {
+        isPointed
+            ? RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.selectedChipTintOpacity)
+            : Color.primary.opacity(RailProjectColumn.hoverChipTintOpacity)
+    }
+
+    /// The chip's tooltip and VoiceOver label.
+    static func newThreadLabel(project name: String) -> String {
         "New thread in \(name)"
     }
 
@@ -562,7 +590,7 @@ struct ProjectAccordionHeader: View {
     @State private var isHovered = false
     /// The chevron's and count's resting trailing edges in the header's own
     /// space, measured outside their ride (`MorphTrailingClusterRide`), and
-    /// the count's leading edge, which places the "+".
+    /// the count's leading edge, which places the "+" chip.
     @State private var clusterEdges: [ClusterPart: CGFloat] = [:]
 
     var body: some View {
@@ -623,7 +651,7 @@ struct ProjectAccordionHeader: View {
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.chevron), progress: progress))
                     .background(ClusterEdgeReporter(part: .chevron))
-                Spacer(minLength: 8 + Self.newThreadReserve(needYouCount: needYouCount, canCreate: onNewThread != nil))
+                Spacer(minLength: Self.trailingLabelSpacing(needYouCount: needYouCount, canCreate: onNewThread != nil))
                 // Never squeezed by a long name: it keeps its own width.
                 Text(SessionNeedsYou.headerCountLabel(sessionCount: count, needYou: needYouCount))
                     .font(.system(size: 11, weight: .medium))
@@ -633,9 +661,9 @@ struct ProjectAccordionHeader: View {
                         minWidth: SidebarMorphMetrics.trailingClusterWidth(resting: Self.countMinWidth, progress: progress),
                         alignment: .trailing
                     )
-                    // The "+" takes a plain count's place on hover; a
-                    // "N need you" label stays, with the "+" beside it.
-                    .opacity(showsNewThread && needYouCount == 0 ? 0 : 1)
+                    // The chip takes a plain count's place on hover; a
+                    // "N need you" label stays, with the chip beside it.
+                    .opacity(Self.hidesCountLabel(showsNewThread: showsNewThread, needYouCount: needYouCount) ? 0 : 1)
                     .animation(SidebarUISpring.hover.settle(), value: showsNewThread)
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.count), progress: progress))
@@ -679,21 +707,21 @@ struct ProjectAccordionHeader: View {
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
         .accessibilityHint(Self.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
-        // After the header's own accessibility element, so the "+" is a
+        // After the header's own accessibility element, so the chip is a
         // separate button to VoiceOver and a separate keyboard stop, hover
         // or not.
         .overlay(alignment: .leading) {
             if let onNewThread, let minX = clusterEdges[.countLeading], let maxX = clusterEdges[.count] {
                 ProjectHeaderNewThreadButton(
-                    label: Self.newThreadAccessibilityLabel(project: name),
+                    label: Self.newThreadLabel(project: name),
                     isVisible: showsNewThread,
+                    forcePointed: forceChipPointed,
                     isFocused: $isNewThreadFocused,
                     action: onNewThread
                 )
                 // `clusterEdges` are measured inside the leading padding.
                 .offset(x: SidebarDialTuning.rowLeadingPadding()
-                    + Self.newThreadCenterX(labelMinX: minX, labelMaxX: maxX, needYouCount: needYouCount)
-                    - Self.newThreadHitSize / 2)
+                    + Self.newThreadChipMinX(labelMinX: minX, labelMaxX: maxX, needYouCount: needYouCount))
                 // The rail's header is its tile alone.
                 .allowsHitTesting(progress <= 0 && !widthModel.isMorphing)
                 .accessibilityHidden(progress > 0)
@@ -746,18 +774,22 @@ struct ProjectAccordionHeader: View {
 
 // MARK: - Quick create
 
-/// A project header's "+" (one view): a click opens the composer with the
-/// project filled in, Option-click creates a thread at once
-/// (`ProjectRowNewSession.perform`). Drawn only while `isVisible`, but
-/// always a keyboard stop and a VoiceOver button, so neither needs the
-/// pointer; focus draws it too. It fades on the hover spring; Reduce
-/// Motion: it snaps.
+/// A project header's "+" chip (one view): a click opens the composer with
+/// the project filled in, Option-click creates a thread at once
+/// (`ProjectRowNewSession.perform`). A rounded square on the row's hover
+/// tint, stronger under the pointer
+/// (`ProjectAccordionHeader.newThreadChipFill`); the square is the click
+/// target. Drawn only while `isVisible`, but always a keyboard stop and a
+/// VoiceOver button, so neither needs the pointer; focus draws it too. It
+/// fades on the hover spring; Reduce Motion: it snaps.
 ///
 /// A tap gesture and a focus stop, like the header under it, not a
 /// `Button`: the same keyboard behaviour as the header (Space / Return).
 private struct ProjectHeaderNewThreadButton: View {
     let label: String
     let isVisible: Bool
+    /// DEBUG capture hook: draws the fill it has under the pointer.
+    var forcePointed = false
     var isFocused: FocusState<Bool>.Binding
     let action: () -> Void
 
@@ -769,16 +801,15 @@ private struct ProjectHeaderNewThreadButton: View {
         Image(systemName: "plus")
             .font(.system(size: ProjectAccordionHeader.newThreadGlyphSize, weight: .semibold))
             .foregroundStyle(SidebarColors.secondaryText(colorScheme))
-            .frame(width: ProjectAccordionHeader.newThreadHitSize, height: ProjectAccordionHeader.newThreadHitSize)
-            // The row's hover tint (`SidebarRowChipBackground`).
-            .background(shape.fill(Color.primary.opacity(isHovered ? RailProjectColumn.hoverChipTintOpacity : 0)))
+            .frame(width: ProjectAccordionHeader.newThreadChipSize, height: ProjectAccordionHeader.newThreadChipSize)
+            .background(shape.fill(ProjectAccordionHeader.newThreadChipFill(isPointed: isHovered || forcePointed, colorScheme)))
             .overlay {
                 if isFocused.wrappedValue {
                     // The header's focus mark ink, as a ring.
                     shape.strokeBorder(SidebarColors.secondaryText(colorScheme), lineWidth: 2)
                 }
             }
-            .contentShape(Rectangle())
+            .contentShape(shape)
             .onTapGesture(perform: action)
             .onHover { isHovered = $0 }
             .opacity(isVisible ? 1 : 0)
