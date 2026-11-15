@@ -184,8 +184,8 @@ final class SidebarIdleFoldTests: XCTestCase {
 
     func testTheFoldIsClosedByDefaultAndPersistsAcrossADefaultsReload() throws {
         let suite = "ghostties.tests.idle-fold.\(UUID().uuidString)"
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
         let first = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { first.removePersistentDomain(forName: suite) }
         XCTAssertFalse(SidebarIdleFold.isExpanded(defaults: first), "folded by default")
 
         SidebarIdleFold.setExpanded(true, defaults: first)
