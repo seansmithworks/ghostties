@@ -308,36 +308,146 @@ struct SidebarRowChipBackground: View {
     }
 }
 
-// MARK: - Rail keyboard scroll
+// MARK: - Following the selection
 
-/// On the rail, scrolls the list to the selected session when the
-/// selection moved by keyboard (Next/Previous Session, Cmd+1-9), so a
-/// selection cycled past the clip edge comes into view; instantly, since
-/// keyboard actions don't animate (motion spec, "stays still"). A click
-/// selects a row that is already visible, so it doesn't scroll. Scrolls the
-/// least distance (`anchor: nil`). The expanded list leaves scrolling to
-/// the user, as before.
-struct RailScrollToKeyboardSelection: ViewModifier {
+/// Keeps the list on the selected session (`SidebarSelectionFollow`).
+///
+/// One view: any selection (a click, a shortcut, the composer, the CLI)
+/// unfolds the selected session's project if it is folded and scrolls its
+/// row into view, the least distance (`anchor: nil`); the rows take their
+/// recency order (`SessionRecencyOrder`) on a selection that didn't come
+/// from the session shortcuts, when a session finishes, and never while the
+/// pointer is over the list. Keyboard moves don't animate (motion spec,
+/// "stays still"); Reduce Motion animates nothing.
+///
+/// The tabs layout keeps what it had: on the rail, a selection moved by
+/// keyboard (Next/Previous Session, Cmd+1-9) scrolls into view, instantly.
+struct SidebarSelectionFollower: ViewModifier {
     let selectedSessionId: UUID?
+    /// The rows the list draws: Pinned, then Active.
+    let pinned: [AgentSession]
+    let active: [AgentSession]
+    let layout: SidebarProjectsLayout
+    let isPointerOverList: Bool
     let window: () -> NSWindow?
     let scrollProxy: ScrollViewProxy
 
     @State private var keyboardMovedSelection = false
     @EnvironmentObject private var widthModel: SidebarWidthModel
+    @EnvironmentObject private var store: WorkspaceStore
+    @EnvironmentObject private var coordinator: SessionCoordinator
+    @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedRaw = ""
+
+    /// Everything a change is read from. `onChange` runs the closure of
+    /// the body before the change, whose own properties are one render
+    /// old, so every handler below takes the new value explicitly and
+    /// never reads `self`'s.
+    private struct Inputs: Equatable {
+        var selected: UUID?
+        var pinned: [AgentSession]
+        var active: [AgentSession]
+        /// The sessions that are working (`SessionRecencyOrder.working`).
+        var working: Set<UUID>
+        var layout: SidebarProjectsLayout
+        var isPointerOverList: Bool
+
+        /// The selection's row, if it has one yet: a new session is
+        /// selected before its terminal is up, so its row can arrive after.
+        var selectedRowId: String? {
+            (pinned + active).contains { $0.id == selected } ? selected?.uuidString : nil
+        }
+    }
 
     func body(content: Content) -> some View {
+        let inputs = Inputs(
+            selected: selectedSessionId, pinned: pinned, active: active,
+            working: SessionRecencyOrder.working(active, indicators: store.globalIndicatorStates),
+            layout: layout, isPointerOverList: isPointerOverList
+        )
         content
             .onReceive(Self.keyboardSelection) { note in
                 guard let target = note.object as? NSWindow, target === window() else { return }
                 keyboardMovedSelection = true
             }
-            .onChange(of: selectedSessionId) { id in
-                guard keyboardMovedSelection else { return }
-                keyboardMovedSelection = false
-                guard let id, widthModel.isCollapsedPresentation else { return }
-                // The list's row ids are uuid strings (`SidebarProjectGroupItem.id`).
-                scrollProxy.scrollTo(id.uuidString)
+            .onChange(of: inputs) { [old = inputs] new in
+                changed(from: old, to: new)
             }
+            .onAppear {
+                guard inputs.layout == .oneView else { return }
+                reorder(.listAppeared, inputs, animated: false)
+                scroll(to: inputs.selectedRowId, in: inputs, animated: false)
+            }
+    }
+
+    private func changed(from old: Inputs, to new: Inputs) {
+        // The first rows, or one view itself, can arrive after the list
+        // appears.
+        if new.layout != old.layout || new.active.map(\.id) != old.active.map(\.id) {
+            reorder(.listAppeared, new, animated: false)
+        }
+        if SessionRecencyOrder.finished(from: old.working, to: new.working) {
+            reorder(.sessionFinished, new)
+        }
+        if new.selected != old.selected || new.selectedRowId != old.selectedRowId {
+            let route: SidebarSelectionFollow.Route = keyboardMovedSelection ? .keyboard : .direct
+            keyboardMovedSelection = false
+            follow(new, route: route)
+        }
+        if old.isPointerOverList, !new.isPointerOverList, reorder(.pointerExited, new) {
+            // The selected row moved with the reorder: keep it in view.
+            scroll(to: new.selectedRowId, in: new, animated: true)
+        }
+    }
+
+    private func follow(_ inputs: Inputs, route: SidebarSelectionFollow.Route) {
+        let plan = SidebarSelectionFollow.plan(
+            layout: inputs.layout, route: route, selected: inputs.selected,
+            rows: SidebarSelectionFollow.Rows(
+                pinned: inputs.pinned, active: inputs.active, collapsed: ProjectAccordionState.decode(collapsedRaw)
+            ),
+            isRail: widthModel.isCollapsedPresentation
+        )
+        if plan.reorders {
+            reorder(.selectionChanged, inputs)
+        }
+        if let projectId = plan.unfold {
+            withAnimation(plan.animates ? ProjectAccordionState.toggleAnimation(unfolding: true) : nil) {
+                collapsedRaw = ProjectAccordionState.expanded(collapsedRaw, projectId)
+            }
+        }
+        scroll(to: plan.scrollTo, in: inputs, animated: plan.animates)
+    }
+
+    /// Hands `event` to the window's recency order. True when the rows
+    /// took a new order. One view only.
+    @discardableResult
+    private func reorder(_ event: SessionRecencyOrder.Event, _ inputs: Inputs, animated: Bool = true) -> Bool {
+        guard inputs.layout == .oneView else { return false }
+        var order = coordinator.sessionRecency
+        let changed = order.handle(
+            event, sessions: inputs.active, selected: inputs.selected, pointerOverList: inputs.isPointerOverList
+        )
+        guard order != coordinator.sessionRecency else { return false }
+        withAnimation(animated ? SidebarUISpring.reflow.animation() : nil) {
+            coordinator.sessionRecency = order
+        }
+        return changed
+    }
+
+    private func scroll(to rowId: String?, in inputs: Inputs, animated: Bool) {
+        guard let rowId else { return }
+        guard inputs.layout == .oneView else {
+            // The list's row ids are uuid strings (`SidebarProjectGroupItem.id`).
+            scrollProxy.scrollTo(rowId)
+            return
+        }
+        // After this update, so an unfolded or reordered row is laid out
+        // where it will rest.
+        DispatchQueue.main.async {
+            withAnimation(animated ? SidebarUISpring.reflow.animation() : nil) {
+                scrollProxy.scrollTo(rowId)
+            }
+        }
     }
 
     /// The notifications the session shortcuts post, with the window.

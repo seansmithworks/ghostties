@@ -31,6 +31,8 @@ Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action it
 - `VERIFY_RAIL_REVEAL_COLLAPSE_AFTER=<s>`: s seconds after the reveal, the pointer-exit path runs (exit grace, then the collapse). Needs `RAIL_REVEAL_AFTER`.
 - `VERIFY_SELECT_SEQUENCE=<s>:<n>`: every s seconds, moves the selection chip n rows along the rows the sidebar or rail lists (Cmd+Shift+] order, wrapping; negative goes back; 12 ticks), pinned or rail. Fixture sessions have no terminal, so it sets the selected session directly (what every row's chip reads); the terminal pane does not change. Use s >= 3 when recording (recording starts ~2s after the window appears).
 - `VERIFY_FOLD_TOGGLE=<project>:<s>`: selects that project once, then every s seconds, 6 times, folds or unfolds its accordion the way its header click does (implies `TAB=projects`). Use s >= 3 when recording.
+- `GHOSTTIES_CAPTURE_HEADER_HOVER=<project>[,<project>]` (set it directly; `up` passes the environment through): draws those one-view project headers' hover state, the quick-create "+", without a pointer.
+- `GHOSTTIES_CAPTURE_FIXTURE_LONG_LIST=1` (set directly): twelve more live sessions in pendulum, silo, trove and wren, so the one-view list is taller than the window. With `VERIFY_SELECT_SEQUENCE=<s>:-1` the first tick selects the last row ("empty states", wren), which the list scrolls to.
 `up` launches the binary directly (not `open`, which only focuses a running Dev build sharing the bundle id), strips `GHOSTTIES_SESSION_ID`/`GHOSTTIES_LAUNCHER`, sets `GHOSTTIES_STATE_DIR` to the evidence dir, records the pid, and records the old `ghostties.sidebarTab` value if a tab was requested. Mode is fixed at launch: one flow = one `up`/`down` cycle.
 
 ## Doctor

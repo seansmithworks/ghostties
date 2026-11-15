@@ -464,22 +464,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     /// has a default template.
     private func handleNewSession() {
         selectedProjectId = project.id
-        switch ProjectRowNewSession.action(
-            for: project,
-            optionHeld: NSEvent.modifierFlags.contains(.option),
-            templates: store.templates
-        ) {
-        case .instantCreate(let template):
-            _Concurrency.Task {
-                await coordinator.createQuickSession(for: project, template: template)
-            }
-        case .openComposer(let binding):
-            guard let container = coordinator.containerView as? WorkspaceViewContainer else {
-                assertionFailure("ProjectDisclosureRow: coordinator.containerView is not a WorkspaceViewContainer")
-                return
-            }
-            container.presentComposerOverlay(projectBinding: binding)
-        }
+        ProjectRowNewSession.perform(for: project, store: store, coordinator: coordinator)
     }
 
     private func relaunchSession(_ session: AgentSession, mode: SessionCoordinator.RelaunchMode) {
@@ -624,5 +609,26 @@ enum ProjectRowNewSession {
             return .instantCreate(template)
         }
         return .openComposer(.prefilled(project))
+    }
+
+    /// Runs a "+" press for `project`: the one create path behind the
+    /// Projects tab row's "+" and the one-view header's "+".
+    @MainActor
+    static func perform(
+        for project: Project, store: WorkspaceStore, coordinator: SessionCoordinator,
+        optionHeld: Bool = NSEvent.modifierFlags.contains(.option)
+    ) {
+        switch action(for: project, optionHeld: optionHeld, templates: store.templates) {
+        case .instantCreate(let template):
+            _Concurrency.Task {
+                await coordinator.createQuickSession(for: project, template: template)
+            }
+        case .openComposer(let binding):
+            guard let container = coordinator.containerView as? WorkspaceViewContainer else {
+                assertionFailure("ProjectRowNewSession: coordinator.containerView is not a WorkspaceViewContainer")
+                return
+            }
+            container.presentComposerOverlay(projectBinding: binding)
+        }
     }
 }

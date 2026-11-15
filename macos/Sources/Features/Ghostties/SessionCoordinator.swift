@@ -70,6 +70,10 @@ final class SessionCoordinator: ObservableObject {
         selectionCause = SelectionCause(id: id, kind: kind)
     }
 
+    /// This window's one-view row order (`SessionRecencyOrder`): the list,
+    /// the rail and the session shortcuts read it; the list writes it.
+    @Published var sessionRecency = SessionRecencyOrder()
+
     /// True while the sidebar's History row is selected and the canvas shows
     /// the history browser (mock I3). `activeSessionId` is left untouched
     /// underneath, so closing the browser returns to the session that was

@@ -505,6 +505,11 @@ struct ProjectAccordionHeader: View {
     var redlineID: String? = nil
     /// The header's place in the expand cascade (`SidebarLabelCascade`).
     var staggerIndex: Int = 0
+    /// DEBUG capture hook: draws the hover state without a pointer.
+    var forceHover: Bool = false
+    /// The quick-create "+" (`ProjectHeaderNewThreadButton`); nil for a
+    /// group with no project to create in.
+    var onNewThread: (() -> Void)?
     let onToggle: () -> Void
 
     /// The chevron's frame and the count's minimum, at rest; held through
@@ -512,14 +517,52 @@ struct ProjectAccordionHeader: View {
     static let chevronWidth: CGFloat = 18
     static let countMinWidth: CGFloat = 18
 
+    /// The "+"'s click target, a square centred on its glyph.
+    static let newThreadHitSize: CGFloat = 24
+    /// The "+" glyph's point size (the header's 11pt type) and drawn width.
+    static let newThreadGlyphSize: CGFloat = 11
+    static let newThreadGlyphWidth: CGFloat = 10
+    /// Clear space between the "+" and a "N need you" label beside it.
+    static let newThreadLabelGap: CGFloat = 8
+
+    /// Where the "+" glyph is centred, from the trailing label's laid-out
+    /// edges: over a plain count, its trailing edge on the count's, so it
+    /// takes the count's place; beside a "N need you" label, one gap before
+    /// the label, which stays.
+    static func newThreadCenterX(labelMinX: CGFloat, labelMaxX: CGFloat, needYouCount: Int) -> CGFloat {
+        needYouCount > 0
+            ? labelMinX - newThreadLabelGap - newThreadGlyphWidth / 2
+            : labelMaxX - newThreadGlyphWidth / 2
+    }
+
+    /// The room a "N need you" header keeps free before its label for the
+    /// "+", always, so a long name never truncates further on hover.
+    static func newThreadReserve(needYouCount: Int, canCreate: Bool) -> CGFloat {
+        needYouCount > 0 && canCreate ? newThreadGlyphWidth + newThreadLabelGap : 0
+    }
+
+    /// The "+" shows while the pointer is over the header or the "+" has
+    /// keyboard focus, on the expanded sidebar only (the rail's header is
+    /// its tile alone).
+    static func showsNewThread(canCreate: Bool, isHovered: Bool, isFocused: Bool, morph: CGFloat) -> Bool {
+        canCreate && morph <= 0 && (isHovered || isFocused)
+    }
+
+    static func newThreadAccessibilityLabel(project name: String) -> String {
+        "New thread in \(name)"
+    }
+
     @ChromeScheme private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @FocusState private var isFocused: Bool
+    @FocusState private var isNewThreadFocused: Bool
+    @State private var isHovered = false
     /// The chevron's and count's resting trailing edges in the header's own
-    /// space, measured outside their ride (`MorphTrailingClusterRide`).
+    /// space, measured outside their ride (`MorphTrailingClusterRide`), and
+    /// the count's leading edge, which places the "+".
     @State private var clusterEdges: [ClusterPart: CGFloat] = [:]
 
     var body: some View {
@@ -528,6 +571,9 @@ struct ProjectAccordionHeader: View {
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
         let slot = dials.sidebarTileSize
+        let showsNewThread = Self.showsNewThread(
+            canCreate: onNewThread != nil, isHovered: isHovered || forceHover, isFocused: isNewThreadFocused, morph: progress
+        )
         // A tap gesture, not a `Button`: the header is also the project's
         // drag handle (`RecentsListView.groupedActiveRows`), and a macOS
         // `Button` takes the mouse-down that `.onDrag` needs — the session
@@ -577,7 +623,7 @@ struct ProjectAccordionHeader: View {
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.chevron), progress: progress))
                     .background(ClusterEdgeReporter(part: .chevron))
-                Spacer(minLength: 8)
+                Spacer(minLength: 8 + Self.newThreadReserve(needYouCount: needYouCount, canCreate: onNewThread != nil))
                 // Never squeezed by a long name: it keeps its own width.
                 Text(SessionNeedsYou.headerCountLabel(sessionCount: count, needYou: needYouCount))
                     .font(.system(size: 11, weight: .medium))
@@ -587,9 +633,13 @@ struct ProjectAccordionHeader: View {
                         minWidth: SidebarMorphMetrics.trailingClusterWidth(resting: Self.countMinWidth, progress: progress),
                         alignment: .trailing
                     )
+                    // The "+" takes a plain count's place on hover; a
+                    // "N need you" label stays, with the "+" beside it.
+                    .opacity(showsNewThread && needYouCount == 0 ? 0 : 1)
+                    .animation(SidebarUISpring.hover.settle(), value: showsNewThread)
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.count), progress: progress))
-                    .background(ClusterEdgeReporter(part: .count))
+                    .background(ClusterEdgeReporter(part: .count, leadingPart: .countLeading))
                     // Sized before the name: the frame's 18pt minimum would
                     // otherwise let a long name take the room "2 need you"
                     // draws in, and the two would overlap.
@@ -629,6 +679,27 @@ struct ProjectAccordionHeader: View {
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
         .accessibilityHint(Self.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
+        // After the header's own accessibility element, so the "+" is a
+        // separate button to VoiceOver and a separate keyboard stop, hover
+        // or not.
+        .overlay(alignment: .leading) {
+            if let onNewThread, let minX = clusterEdges[.countLeading], let maxX = clusterEdges[.count] {
+                ProjectHeaderNewThreadButton(
+                    label: Self.newThreadAccessibilityLabel(project: name),
+                    isVisible: showsNewThread,
+                    isFocused: $isNewThreadFocused,
+                    action: onNewThread
+                )
+                // `clusterEdges` are measured inside the leading padding.
+                .offset(x: SidebarDialTuning.rowLeadingPadding()
+                    + Self.newThreadCenterX(labelMinX: minX, labelMaxX: maxX, needYouCount: needYouCount)
+                    - Self.newThreadHitSize / 2)
+                // The rail's header is its tile alone.
+                .allowsHitTesting(progress <= 0 && !widthModel.isMorphing)
+                .accessibilityHidden(progress > 0)
+            }
+        }
+        .onHover { isHovered = $0 }
     }
 
     /// How far `part`'s trailing edge sits inside the count's (0 for the
@@ -638,17 +709,23 @@ struct ProjectAccordionHeader: View {
         return count - edge
     }
 
-    enum ClusterPart: Hashable { case chevron, count }
+    enum ClusterPart: Hashable { case chevron, count, countLeading }
 
-    /// Reports a cluster part's resting trailing edge. Attached outside the
-    /// part's ride, so it reads the laid-out frame, not the drawn one.
+    /// Reports a cluster part's resting trailing edge (and, under
+    /// `leadingPart`, its leading edge). Attached outside the part's ride,
+    /// so it reads the laid-out frame, not the drawn one.
     private struct ClusterEdgeReporter: View {
         static let space = "ProjectAccordionHeader.cluster"
         let part: ClusterPart
+        var leadingPart: ClusterPart?
 
         var body: some View {
             GeometryReader { proxy in
-                Color.clear.preference(key: ClusterEdgesKey.self, value: [part: proxy.frame(in: .named(Self.space)).maxX])
+                let frame = proxy.frame(in: .named(Self.space))
+                Color.clear.preference(
+                    key: ClusterEdgesKey.self,
+                    value: leadingPart.map { [part: frame.maxX, $0: frame.minX] } ?? [part: frame.maxX]
+                )
             }
         }
     }
@@ -664,6 +741,57 @@ struct ProjectAccordionHeader: View {
     /// unfolds.
     static func accessibilityHint(isEmpty: Bool, isCollapsed: Bool) -> String {
         isEmpty ? "Selects this project" : (isCollapsed ? "Shows this project's sessions" : "Hides this project's sessions")
+    }
+}
+
+// MARK: - Quick create
+
+/// A project header's "+" (one view): a click opens the composer with the
+/// project filled in, Option-click creates a thread at once
+/// (`ProjectRowNewSession.perform`). Drawn only while `isVisible`, but
+/// always a keyboard stop and a VoiceOver button, so neither needs the
+/// pointer; focus draws it too. It fades on the hover spring; Reduce
+/// Motion: it snaps.
+///
+/// A tap gesture and a focus stop, like the header under it, not a
+/// `Button`: the same keyboard behaviour as the header (Space / Return).
+private struct ProjectHeaderNewThreadButton: View {
+    let label: String
+    let isVisible: Bool
+    var isFocused: FocusState<Bool>.Binding
+    let action: () -> Void
+
+    @ChromeScheme private var colorScheme
+    @State private var isHovered = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
+        Image(systemName: "plus")
+            .font(.system(size: ProjectAccordionHeader.newThreadGlyphSize, weight: .semibold))
+            .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+            .frame(width: ProjectAccordionHeader.newThreadHitSize, height: ProjectAccordionHeader.newThreadHitSize)
+            // The row's hover tint (`SidebarRowChipBackground`).
+            .background(shape.fill(Color.primary.opacity(isHovered ? RailProjectColumn.hoverChipTintOpacity : 0)))
+            .overlay {
+                if isFocused.wrappedValue {
+                    // The header's focus mark ink, as a ring.
+                    shape.strokeBorder(SidebarColors.secondaryText(colorScheme), lineWidth: 2)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+            .onHover { isHovered = $0 }
+            .opacity(isVisible ? 1 : 0)
+            .animation(SidebarUISpring.hover.settle(), value: isVisible)
+            .animation(SidebarUISpring.hover.settle(), value: isHovered)
+            .help(label)
+            .modifier(HeaderFocusStop())
+            .focused(isFocused)
+            .modifier(ToggleKeyActivation(action: action))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default, action)
     }
 }
 
