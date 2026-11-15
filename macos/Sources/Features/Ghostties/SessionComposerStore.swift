@@ -854,7 +854,7 @@ final class SessionComposerStore: ObservableObject {
         // existing Option-click instant-create path's behaviour today —
         // the composer is at parity, not newly regressed.
         _Concurrency.Task.detached { [coordinator, launchTemplate] in
-            _ = await coordinator.createQuickSession(for: project, template: launchTemplate)
+            _ = await coordinator.createQuickSession(for: project, template: launchTemplate, browserRoute: .composer)
         }
 
         return true

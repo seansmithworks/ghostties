@@ -334,11 +334,12 @@ final class SessionCoordinator: ObservableObject {
         sourceTaskId: String? = nil,
         sourceTaskFilePath: String? = nil,
         extraEnvironment: [String: String] = [:],
-        commandOverride: String? = nil
+        commandOverride: String? = nil,
+        browserRoute: BrowserEntryRoute = .quickCreate
     ) async -> Bool {
         // Browser sessions bypass the terminal path entirely.
         if template.kind == .browser {
-            return createBrowserSession(session: session, template: template, project: project)
+            return createBrowserSession(session: session, template: template, project: project, route: browserRoute)
         }
 
         guard let ghosttyApp = ghostty?.app else { return false }
@@ -506,7 +507,8 @@ final class SessionCoordinator: ObservableObject {
         template: AgentTemplate,
         sourceTaskId: String? = nil,
         sourceTaskFilePath: String? = nil,
-        extraEnvironment: [String: String] = [:]
+        extraEnvironment: [String: String] = [:],
+        browserRoute: BrowserEntryRoute = .quickCreate
     ) async -> Bool {
         let store = WorkspaceStore.shared
         let count = store.sessions(for: project.id).count
@@ -518,7 +520,8 @@ final class SessionCoordinator: ObservableObject {
             project: project,
             sourceTaskId: sourceTaskId,
             sourceTaskFilePath: sourceTaskFilePath,
-            extraEnvironment: extraEnvironment
+            extraEnvironment: extraEnvironment,
+            browserRoute: browserRoute
         )
         // Settings' "Last used" new-session default (browser excluded there).
         if created { store.recordSessionCreated(template: template, projectId: project.id) }
@@ -556,7 +559,8 @@ final class SessionCoordinator: ObservableObject {
             session: session,
             template: template,
             project: project,
-            commandOverride: override
+            commandOverride: override,
+            browserRoute: .browserRow(created: session.browserPresentation)
         )
     }
 
@@ -593,12 +597,16 @@ final class SessionCoordinator: ObservableObject {
     /// `activate: false` is for a browser an agent opens: it appears beside
     /// the terminal and in the sidebar but never takes the user's selection
     /// (`activeSessionId`), history view or per-project "last session".
+    ///
+    /// `route` is how the browser was asked for; `BrowserPlacement` turns it
+    /// into where the browser goes, and the session record keeps that.
     func createBrowserSession(
         session: AgentSession,
         template: AgentTemplate,
         project: Project,
-        startURL: String = "https://www.google.com",
-        activate: Bool = true
+        startURL: String = SessionCoordinator.defaultBrowserStartURL,
+        activate: Bool = true,
+        route: BrowserEntryRoute
     ) -> Bool {
         CEFBridgeManager.initializeIfNeeded()
         guard CEFBridgeManager.isInitialized else { return false }
@@ -647,12 +655,19 @@ final class SessionCoordinator: ObservableObject {
             isOutput: true
         )
 
-        showBrowserInContainer(manager)
+        let presentation = BrowserPlacement.presentation(for: route)
+        sessionStore.setBrowserPresentation(id: session.id, presentation: presentation)
+        showBrowserInContainer(manager, presentation: presentation)
 
         // Sidebar smart-sections (plan unit 4): browser-session creation is a
         // structural change too — release any held freeze snapshot.
         sessionStore.releaseSnapshot()
         return true
+    }
+
+    /// A new browser's first page; the fixture's placeholder in a capture run.
+    nonisolated static var defaultBrowserStartURL: String {
+        CaptureFixture.isActive ? CaptureFixture.browserStartURL : "https://www.google.com"
     }
 
     /// The store session records live in. `.shared` in production; a test's
@@ -679,7 +694,9 @@ final class SessionCoordinator: ObservableObject {
         }
         manager.closeTab(id: tabId)
         if shownBrowserSessionId == sessionId {
-            showBrowserInContainer(manager)
+            // Same browser, one tab fewer: it stays where it is.
+            let current = (containerView as? WorkspaceViewContainer)?.browserPresentation
+            showBrowserInContainer(manager, presentation: current ?? shownBrowserPresentation ?? .split)
         }
     }
 
@@ -713,7 +730,7 @@ final class SessionCoordinator: ObservableObject {
            let existing = browserManagers[pairedId],
            let view = existing.activeBrowserView as? CEFBrowserView {
             view.loadURL(url)
-            showBrowserInContainer(existing)
+            showBrowserInContainer(existing, route: .agentOpen)
             manager = existing
         } else {
             guard let record = sessionStore.sessions.first(where: { $0.id == sessionId }),
@@ -723,7 +740,7 @@ final class SessionCoordinator: ObservableObject {
             }
             let name = "\(AgentTemplate.browser.name) \(sessionStore.sessions(for: project.id).count + 1)"
             let session = sessionStore.addSession(name: name, templateId: AgentTemplate.browser.id, projectId: project.id)
-            guard createBrowserSession(session: session, template: .browser, project: project, startURL: url, activate: false),
+            guard createBrowserSession(session: session, template: .browser, project: project, startURL: url, activate: false, route: .agentOpen),
                   let created = browserManagers[session.id]
             else {
                 sessionStore.removeSession(id: session.id)
@@ -774,18 +791,27 @@ final class SessionCoordinator: ObservableObject {
         browserBridges.values.first { $0.tabManager === manager }
     }
 
-    /// Show the given browser manager's content in the workspace container.
-    private func showBrowserInContainer(_ manager: BrowserTabManager) {
+    /// Show the given browser manager's content in the workspace container,
+    /// placed as `BrowserPlacement` decides for `route`.
+    private func showBrowserInContainer(_ manager: BrowserTabManager, route: BrowserEntryRoute) {
+        showBrowserInContainer(manager, presentation: BrowserPlacement.presentation(for: route))
+    }
+
+    private func showBrowserInContainer(_ manager: BrowserTabManager, presentation: BrowserPresentation) {
         shownBrowserSessionId = browserManagers.first { $0.value === manager }?.key
+        shownBrowserPresentation = presentation
         guard let container = containerView as? WorkspaceViewContainer else { return }
-        container.showBrowserContent(manager, bridge: browserBridges.values.first {
-            $0.tabManager === manager
-        })
+        container.showBrowserContent(
+            manager,
+            bridge: browserBridges.values.first { $0.tabManager === manager },
+            presentation: presentation
+        )
     }
 
     /// Restore the terminal display in the workspace container.
     private func showTerminalInContainer() {
         shownBrowserSessionId = nil
+        shownBrowserPresentation = nil
         guard let container = containerView as? WorkspaceViewContainer else { return }
         container.showTerminalContent()
     }
@@ -794,6 +820,9 @@ final class SessionCoordinator: ObservableObject {
     /// always `activeSessionId`: a browser an agent opened stays up beside its
     /// terminal while the terminal is the selected session.
     private(set) var shownBrowserSessionId: UUID?
+
+    /// Where the coordinator last put that browser; nil with no browser up.
+    private(set) var shownBrowserPresentation: BrowserPresentation?
 
     /// Terminal session → the browser an agent opened for it (`gt browser
     /// open`). Runtime only, never persisted: it resets on relaunch with the
@@ -846,8 +875,9 @@ final class SessionCoordinator: ObservableObject {
             isHistoryPresented = false
             snapshotActiveTree()
             activeSessionId = id
-            showBrowserInContainer(manager)
-            if let session = sessionStore.sessions.first(where: { $0.id == id }) {
+            let record = sessionStore.sessions.first { $0.id == id }
+            showBrowserInContainer(manager, route: .browserRow(created: record?.browserPresentation))
+            if let session = record {
                 lastActiveSessionPerProject[session.projectId] = id
                 // Focus counts as a touch — refresh activity so the project
                 // stays in `.recent`/`.activeNow` instead of demoting to `.all`.
@@ -870,7 +900,7 @@ final class SessionCoordinator: ObservableObject {
         // Restore terminal display if coming from a browser session — unless
         // an agent opened a browser for this terminal, which stays beside it.
         if let pairedId = pairedBrowserByTerminal[id], let pairedManager = browserManagers[pairedId] {
-            showBrowserInContainer(pairedManager)
+            showBrowserInContainer(pairedManager, route: .terminalRowWithPairedBrowser)
         } else {
             showTerminalInContainer()
         }
@@ -1335,7 +1365,9 @@ final class SessionCoordinator: ObservableObject {
         // Try browser sessions.
         if let (nextId, nextManager) = browserManagers.first(where: { statuses[$0.key] == .running }) {
             activeSessionId = nextId
-            showBrowserInContainer(nextManager)
+            // Selection moved to this browser's row after a close.
+            let made = sessionStore.sessions.first { $0.id == nextId }?.browserPresentation
+            showBrowserInContainer(nextManager, route: .browserRow(created: made))
             return
         }
         activeSessionId = nil
@@ -1379,7 +1411,9 @@ final class SessionCoordinator: ObservableObject {
             showTerminalInContainer()
             showSession(nextTree, focusView: nextTree.first)
         } else if let nextManager = browserManagers[nextId] {
-            showBrowserInContainer(nextManager)
+            // Selection moved to this browser's row after a close.
+            let made = sessionStore.sessions.first { $0.id == nextId }?.browserPresentation
+            showBrowserInContainer(nextManager, route: .browserRow(created: made))
         }
     }
 

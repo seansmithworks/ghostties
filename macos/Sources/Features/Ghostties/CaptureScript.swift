@@ -39,6 +39,15 @@ enum CaptureScript {
         case select(session: String)
         case pin(project: String)
         case unpin(project: String)
+        /// Opens a browser the way `route` does, with no input.
+        case browser(BrowserRoute)
+    }
+
+    /// The product path the `browser` op takes: the composer's launch of the
+    /// browser template, "Toggle Browser" (Cmd+B), or `gt browser open` from
+    /// the selected terminal.
+    enum BrowserRoute: String, Equatable {
+        case composer, toggle, agent
     }
 
     static let namedKeys: Set<String> = ["return", "escape", "tab", "up", "down", "left", "right", "delete"]
@@ -77,6 +86,7 @@ enum CaptureScript {
         "mark": ["op", "name"], "wait": ["op", "seconds"], "pref": ["op", "key", "value"],
         "foldAll": ["op"], "fold": ["op", "project"], "unfold": ["op", "project"],
         "select": ["op", "session"], "pin": ["op", "project"], "unpin": ["op", "project"],
+        "browser": ["op", "route"],
     ]
 
     private static func parseStep(_ d: [String: Any]) throws -> Step {
@@ -123,6 +133,11 @@ enum CaptureScript {
         case "pin": return .pin(project: try name(d, "project", op: op))
         case "unpin": return .unpin(project: try name(d, "project", op: op))
         case "select": return .select(session: try name(d, "session", op: op))
+        case "browser":
+            guard let route = (d["route"] as? String).flatMap(BrowserRoute.init(rawValue:)) else {
+                throw Failure("browser needs a route: composer, toggle or agent")
+            }
+            return .browser(route)
         default:
             throw Failure("unknown op '\(op)'")
         }
@@ -239,6 +254,9 @@ enum CaptureScript {
         func setFolded(project: String, folded: Bool) throws
         func select(session: String) throws
         func setPinned(project: String, pinned: Bool) throws
+        /// Opens a browser by `route`'s own product call; returns once it is
+        /// asked for, not once the page has loaded.
+        func openBrowser(route: BrowserRoute) async throws
     }
 
     /// Runs steps against a host and reports through files in `stateDir`:
@@ -297,6 +315,7 @@ enum CaptureScript {
             case .select(let session): try host.select(session: session)
             case .pin(let project): try host.setPinned(project: project, pinned: true)
             case .unpin(let project): try host.setPinned(project: project, pinned: false)
+            case .browser(let route): try await host.openBrowser(route: route)
             case .wait(let seconds): try await Task.sleep(for: .seconds(seconds))
             case .mark(let name): try await mark(name)
             }
