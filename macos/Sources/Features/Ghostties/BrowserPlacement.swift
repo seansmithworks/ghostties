@@ -31,9 +31,9 @@ enum BrowserEntryRoute: Equatable {
 enum BrowserPlacement {
     static func presentation(for route: BrowserEntryRoute) -> BrowserPresentation {
         switch route {
-        case .composer:
+        case .composer, .quickCreate:
             return .fullCanvas
-        case .toggleShortcut, .agentOpen, .quickCreate, .terminalRowWithPairedBrowser:
+        case .toggleShortcut, .agentOpen, .terminalRowWithPairedBrowser:
             return .split
         case .browserRow(let created):
             return created ?? .split
@@ -53,5 +53,48 @@ enum BrowserPlacement {
         isHistoryPresented: Bool
     ) -> CanvasOccupant {
         presentation == .fullCanvas && !isHistoryPresented ? .browser : .terminalCard
+    }
+
+    /// Where the window's first responder is when the canvas changes.
+    enum KeyHolder: Equatable {
+        /// The window itself: no view has the keys.
+        case nobody
+        /// A view in the terminal card: a terminal surface, or History.
+        case terminalCard
+        /// A view in the browser card: the page, or its address field.
+        case browser
+        /// Anything else: the sidebar, the composer.
+        case elsewhere
+    }
+
+    enum KeyHandOff: Equatable {
+        /// The terminal on the canvas takes the keys.
+        case toTerminal
+        /// Nothing takes them.
+        case release
+    }
+
+    /// Who the keys go to once the canvas shows `presentation`, or nil to
+    /// leave them where they are. Keys never stay with a card nobody can
+    /// see: a browser that left the canvas hands them to the terminal, and
+    /// a terminal under a full-canvas browser gives them up.
+    static func keyHandOff(
+        holder: KeyHolder,
+        presentation: BrowserPresentation?,
+        isHistoryPresented: Bool,
+        terminalWasConcealed: Bool
+    ) -> KeyHandOff? {
+        switch canvasOccupant(presentation: presentation, isHistoryPresented: isHistoryPresented) {
+        case .browser:
+            return holder == .terminalCard ? .release : nil
+        case .terminalCard:
+            // History has the card: its own field keeps the keys.
+            guard !isHistoryPresented else { return nil }
+            switch holder {
+            case .browser: return presentation == nil ? .toTerminal : nil
+            case .nobody: return terminalWasConcealed ? .toTerminal : nil
+            case .terminalCard, .elsewhere: return nil
+            }
+        }
     }
 }

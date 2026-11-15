@@ -629,7 +629,10 @@ final class SessionCoordinator: ObservableObject {
         }
         browserBridges[session.id] = bridge
 
-        if activate { snapshotActiveTree() }
+        if activate {
+            snapshotActiveTree()
+            noteTerminalBehindBrowser()
+        }
 
         browserManagers[session.id] = manager
         sessionIdsStartedThisLaunch.insert(session.id)
@@ -874,6 +877,7 @@ final class SessionCoordinator: ObservableObject {
         if let manager = browserManagers[id] {
             isHistoryPresented = false
             snapshotActiveTree()
+            noteTerminalBehindBrowser()
             activeSessionId = id
             let record = sessionStore.sessions.first { $0.id == id }
             showBrowserInContainer(manager, route: .browserRow(created: record?.browserPresentation))
@@ -916,6 +920,42 @@ final class SessionCoordinator: ObservableObject {
                 projectId: session.projectId
             )
         }
+    }
+
+    /// The terminal the canvas showed before a browser took the selection:
+    /// the one still in the terminal card under a full-canvas browser.
+    private var terminalBehindBrowserId: UUID?
+
+    /// Call before the selection moves to a browser.
+    private func noteTerminalBehindBrowser() {
+        if let current = activeSessionId, sessionTrees[current] != nil {
+            terminalBehindBrowserId = current
+        }
+    }
+
+    /// "Toggle Browser" (Cmd+B) on a full-canvas browser. The browser is the
+    /// selected session, so hiding it selects a terminal, which takes the
+    /// canvas: the one the browser covered, else the most recently active
+    /// running terminal, the browser's own project first. Returns false,
+    /// leaving the browser up, when there is no terminal to show.
+    @discardableResult
+    func selectTerminalBehindActiveBrowser() -> Bool {
+        guard let browserId = activeSessionId, browserManagers[browserId] != nil else { return false }
+        let records = sessionStore.sessions
+        func lastActive(_ id: UUID) -> Date {
+            records.first { $0.id == id }?.lastActiveAt ?? .distantPast
+        }
+        let projectId = records.first { $0.id == browserId }?.projectId
+        let running = sessionTrees.keys.filter { statuses[$0] == .running }
+        let covered = terminalBehindBrowserId.flatMap { sessionTrees[$0] != nil ? $0 : nil }
+        let next = covered
+            ?? running
+                .filter { id in records.first { $0.id == id }?.projectId == projectId }
+                .max { lastActive($0) < lastActive($1) }
+            ?? running.max { lastActive($0) < lastActive($1) }
+        guard let next else { return false }
+        focusSession(id: next)
+        return true
     }
 
     /// Task-row-click entry point: focus the project's last-active session if

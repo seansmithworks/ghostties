@@ -2069,7 +2069,13 @@ class WorkspaceViewContainer: NSView {
     /// Shows the browser as a side panel next to the terminal (Dia Browser style).
     /// If no browser session exists yet, creates one via the coordinator.
     @objc func toggleBrowser() {
-        if isBrowserVisible {
+        if browserPresentation == .fullCanvas {
+            // A full-canvas browser is the selected session, so hiding it
+            // selects the terminal that takes the canvas: the sidebar row
+            // and the canvas stay in step. With no terminal to show, the
+            // browser stays.
+            coordinator.selectTerminalBehindActiveBrowser()
+        } else if isBrowserVisible {
             // Collapse the side panel.
             applyBrowserPresentation(nil)
         } else {
@@ -2170,22 +2176,61 @@ class WorkspaceViewContainer: NSView {
         let wasConcealed = isTerminalCardConcealed
         isTerminalCardConcealed = occupant == .browser
         terminalShadowHost.alphaValue = isTerminalCardConcealed ? 0 : 1
-
-        // Back in view: the terminal takes the keys it gave up below, unless
-        // something else (the page, History) has taken them since.
-        if wasConcealed, !isTerminalCardConcealed, let window, window.firstResponder === window,
-           let surface = (window.windowController as? BaseTerminalController)?.focusedSurface {
-            window.makeFirstResponder(surface)
-        }
+        updateTerminalCardAccessibility()
         browserShadowHost.isHidden = browserPresentation == .fullCanvas && occupant == .terminalCard
 
-        // Keys must not reach a terminal nobody can see.
-        if isTerminalCardConcealed,
-           let responder = window?.firstResponder as? NSView,
-           responder.isDescendant(of: terminalShadowHost) {
+        // Keys never stay with a card nobody can see.
+        let handOff = BrowserPlacement.keyHandOff(
+            holder: keyHolder,
+            presentation: browserPresentation,
+            isHistoryPresented: coordinator.isHistoryPresented,
+            terminalWasConcealed: wasConcealed
+        )
+        switch handOff {
+        case .toTerminal:
+            if let terminalKeyTarget { window?.makeFirstResponder(terminalKeyTarget) }
+        case .release:
             window?.makeFirstResponder(nil)
+        case nil:
+            break
         }
     }
+
+    /// VoiceOver skips the terminal card while nobody can see it: under a
+    /// full-canvas browser, or behind the composer overlay.
+    private func updateTerminalCardAccessibility() {
+        let isBehindComposer = composerOverlayHostingView.superview != nil && !isDismissingComposerOverlay
+        terminalShadowHost.setAccessibilityHidden(isTerminalCardConcealed || isBehindComposer)
+    }
+
+    /// Which card the window's first responder is in.
+    private var keyHolder: BrowserPlacement.KeyHolder {
+        guard let window, let responder = window.firstResponder, responder !== window else { return .nobody }
+        guard let view = responder as? NSView else { return .elsewhere }
+        if view.isDescendant(of: browserShadowHost) { return .browser }
+        if view.isDescendant(of: terminalShadowHost) { return .terminalCard }
+        return .elsewhere
+    }
+
+    /// The terminal surface that takes the keys back from a browser.
+    private var terminalKeyTarget: NSView? {
+        #if DEBUG
+        if let terminalKeyTargetForTesting { return terminalKeyTargetForTesting }
+        #endif
+        return (window?.windowController as? BaseTerminalController)?.focusedSurface
+    }
+
+    #if DEBUG
+    /// Test seam: stands in for the focused terminal surface, which needs a
+    /// live terminal controller.
+    var terminalKeyTargetForTesting: NSView?
+
+    /// Test seam: whether VoiceOver skips the terminal card.
+    var isTerminalCardAccessibilityHiddenForTesting: Bool { terminalShadowHost.isAccessibilityHidden() }
+
+    /// Test seam: the terminal card, to host a stand-in surface.
+    var terminalCardForTesting: NSView { terminalShadowHost }
+    #endif
 
     /// Handle a horizontal drag delta from the browser drag handle.
     /// Negative delta = dragging left (browser grows), positive = dragging right (browser shrinks).
@@ -3852,7 +3897,7 @@ class WorkspaceViewContainer: NSView {
         // sidebar and terminal — the counterpart to the hide in
         // `installComposerOverlayIfNeeded()`.
         sidebarHostingView.setAccessibilityHidden(false)
-        terminalShadowHost.setAccessibilityHidden(false)
+        updateTerminalCardAccessibility()
 
         // R4 (Phase 3 review round 2): only steal first responder back to
         // the terminal if THIS window is actually key. `makeFirstResponder`
@@ -4370,7 +4415,6 @@ class WorkspaceViewContainer: NSView {
                 historyHostingView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
                 historyHostingView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
             ])
-            updateCanvasOccupant()
             window?.makeFirstResponder(historyHostingView)
         } else {
             guard historyHostingView.superview != nil else { return }
@@ -4813,6 +4857,16 @@ extension WorkspaceViewContainer: CaptureScript.Host {
     /// goes, not that the composer row or the shortcut is wired to it.
     func openBrowser(route: CaptureScript.BrowserRoute) async throws {
         switch route {
+        case .quick:
+            // `ProjectDisclosureRow`'s Option-click "+" and the tray's
+            // instant create, for the browser template.
+            guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
+                  let project = store.projects.first(where: { $0.id == projectId }) else {
+                throw CaptureScript.Failure("browser: no project to create it in")
+            }
+            guard await coordinator.createQuickSession(for: project, template: .browser) else {
+                throw CaptureScript.Failure("browser: the browser could not start")
+            }
         case .composer:
             // `SessionComposerStore`'s launch, for the browser template.
             guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),

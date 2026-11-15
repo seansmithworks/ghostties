@@ -44,10 +44,11 @@ enum CaptureScript {
     }
 
     /// The product path the `browser` op takes: the composer's launch of the
-    /// browser template, "Toggle Browser" (Cmd+B), or `gt browser open` from
-    /// the selected terminal.
+    /// browser template, an instant create of it (a project row's
+    /// Option-click "+", the tray), "Toggle Browser" (Cmd+B), or
+    /// `gt browser open` from the selected terminal.
     enum BrowserRoute: String, Equatable {
-        case composer, toggle, agent
+        case composer, quick, toggle, agent
     }
 
     static let namedKeys: Set<String> = ["return", "escape", "tab", "up", "down", "left", "right", "delete"]
@@ -135,7 +136,7 @@ enum CaptureScript {
         case "select": return .select(session: try name(d, "session", op: op))
         case "browser":
             guard let route = (d["route"] as? String).flatMap(BrowserRoute.init(rawValue:)) else {
-                throw Failure("browser needs a route: composer, toggle or agent")
+                throw Failure("browser needs a route: composer, quick, toggle or agent")
             }
             return .browser(route)
         default:

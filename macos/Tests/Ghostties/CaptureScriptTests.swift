@@ -40,13 +40,13 @@ struct CaptureScriptTests {
         ])
     }
 
-    @Test func browserOpParsesItsThreeRoutesAndRejectsOthers() throws {
+    @Test func browserOpParsesItsFourRoutesAndRejectsOthers() throws {
         let steps = try parse(#"""
-        {"steps":[{"op":"browser","route":"composer"},{"op":"browser","route":"toggle"},{"op":"browser","route":"agent"}]}
+        {"steps":[{"op":"browser","route":"composer"},{"op":"browser","route":"quick"},{"op":"browser","route":"toggle"},{"op":"browser","route":"agent"}]}
         """#)
-        #expect(steps == [.browser(.composer), .browser(.toggle), .browser(.agent)])
-        #expect(failure(#"{"steps":[{"op":"browser","route":"popup"}]}"#) == "step 0: browser needs a route: composer, toggle or agent")
-        #expect(failure(#"{"steps":[{"op":"browser"}]}"#) == "step 0: browser needs a route: composer, toggle or agent")
+        #expect(steps == [.browser(.composer), .browser(.quick), .browser(.toggle), .browser(.agent)])
+        #expect(failure(#"{"steps":[{"op":"browser","route":"popup"}]}"#) == "step 0: browser needs a route: composer, quick, toggle or agent")
+        #expect(failure(#"{"steps":[{"op":"browser"}]}"#) == "step 0: browser needs a route: composer, quick, toggle or agent")
     }
 
     @Test func keyModifiersParse() throws {
