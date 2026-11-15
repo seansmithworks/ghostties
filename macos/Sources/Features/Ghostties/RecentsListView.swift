@@ -360,8 +360,11 @@ struct RecentsListView: View {
             .modifier(MorphTrayReserve(scrolls: true, isActive: underTray))
             .accessibilityLabel("Sessions")
             .redlineFrame(RedlineID.listViewport)
-            .modifier(RailScrollToKeyboardSelection(
+            .modifier(SidebarSelectionFollower(
                 selectedSessionId: coordinator.sidebarSelectedSessionId,
+                pinned: sections.pinned,
+                active: sections.active,
+                layout: SidebarProjectsLayout.effective(tab: sidebarTab),
                 window: { [coordinator] in coordinator.containerView?.window },
                 scrollProxy: scrollProxy
             ))
@@ -560,6 +563,7 @@ struct RecentsListView: View {
         _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
         monogram: String, isSelectedProject: Bool, staggerIndex: Int
     ) -> some View {
+        let captureHover = Self.captureHeaderHover(group.name)
         let header = withProjectContextMenu(projectId: group.projectId) { ProjectAccordionHeader(
             name: group.name, monogram: monogram, count: group.sessions.count,
             needYouCount: group.sessions.filter {
@@ -570,7 +574,9 @@ struct RecentsListView: View {
             }.count,
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
             icon: group.projectId.flatMap { projectIcons[$0] },
-            redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex
+            redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex,
+            forceHover: captureHover.header, forceChipPointed: captureHover.chip,
+            onNewThread: newThreadAction(group.projectId)
         ) {
             ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
                 ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
@@ -609,6 +615,29 @@ struct RecentsListView: View {
         } else {
             header
         }
+    }
+
+    /// The header "+" for a real project: the Projects tab row's "+"
+    /// (`ProjectRowNewSession.perform`). The "Unknown" group has no project
+    /// to create in, so no "+".
+    private func newThreadAction(_ projectId: UUID?) -> (() -> Void)? {
+        guard let project = store.projects.first(where: { $0.id == projectId }) else { return nil }
+        return { [store, coordinator] in
+            ProjectRowNewSession.perform(for: project, store: store, coordinator: coordinator)
+        }
+    }
+
+    /// DEBUG capture hook: draws a header's hover state without a pointer,
+    /// and for `<project>!` its chip as it is under the pointer
+    /// (`CaptureFixture.headerHoverProjects`).
+    private static func captureHeaderHover(_ projectName: String) -> (header: Bool, chip: Bool) {
+        #if DEBUG
+        let names = CaptureFixture.headerHoverProjects
+        let chip = names.contains(projectName + "!")
+        return (chip || names.contains(projectName), chip)
+        #else
+        return (false, false)
+        #endif
     }
 
     /// Gives a real project's header the shared project menu and Settings
@@ -972,6 +1001,9 @@ struct RecentsListView: View {
             guard supportsReorder else { return }
             moveWithinSection(session: session, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
         }
+        // What the list scrolls to when this row is selected
+        // (`SidebarSelectionFollower`).
+        .background(alignment: .top) { SidebarSelectionFollow.ScrollTarget(rowId: session.id.uuidString) }
     }
 
     /// Runs one `SessionRowMenu` action on `session`.

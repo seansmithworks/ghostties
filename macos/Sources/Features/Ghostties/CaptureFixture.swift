@@ -221,16 +221,26 @@ enum CaptureFixture {
     ///   - `VERIFY_FIXTURE_TEMPLATE_IN_USE=1` -> `GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE=1`:
     ///     one user template, "Mine", used by two trove sessions (T6: the
     ///     in-use delete alert).
+    ///   - `GHOSTTIES_CAPTURE_FIXTURE_LONG_LIST=1` (DEBUG builds only):
+    ///     twelve more live sessions (`longListSessions`), so the one-view
+    ///     list is taller than the window and has to scroll.
     struct SeedKnobs: Equatable {
         var zeroProjects = false
         var templateInUse = false
+        #if DEBUG
+        var longList = false
+        #endif
     }
 
     static func parseSeedKnobs(_ env: [String: String]) -> SeedKnobs {
-        SeedKnobs(
+        var knobs = SeedKnobs(
             zeroProjects: env["GHOSTTIES_CAPTURE_FIXTURE_PROJECTS"] == "none",
             templateInUse: env["GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE"] == "1"
         )
+        #if DEBUG
+        knobs.longList = env["GHOSTTIES_CAPTURE_FIXTURE_LONG_LIST"] == "1"
+        #endif
+        return knobs
     }
 
     static let seedKnobs: SeedKnobs = isActive ? parseSeedKnobs(ProcessInfo.processInfo.environment) : SeedKnobs()
@@ -283,6 +293,34 @@ enum CaptureFixture {
         FixtureSession(name: "icon pass", project: "wren", ghost: .pinky, state: .inactive, hoursAgo: 168),
     ]
 
+    #if DEBUG
+    /// The long-list knob's extra cast, after `fixtureSessions`. They have
+    /// rows but no terminal (`spawnedSessionIds` covers the default cast).
+    private static let longListSessions: [FixtureSession] = [
+        FixtureSession(name: "axis labels", project: "pendulum", ghost: .mist, state: .waiting, hoursAgo: 0.2),
+        FixtureSession(name: "legend wrap", project: "pendulum", ghost: .gloom, state: .processing, hoursAgo: 0.3),
+        FixtureSession(name: "tooltip lag", project: "pendulum", ghost: .polter, state: .waiting, hoursAgo: 0.4),
+        FixtureSession(name: "index rebuild", project: "silo", ghost: .wraith, state: .processing, hoursAgo: 0.5),
+        FixtureSession(name: "cold storage", project: "silo", ghost: .shade, state: .waiting, hoursAgo: 0.6),
+        FixtureSession(name: "quota alerts", project: "silo", ghost: .hex, state: .waiting, hoursAgo: 0.7),
+        FixtureSession(name: "import csv", project: "trove", ghost: .spike, state: .waiting, hoursAgo: 0.8),
+        FixtureSession(name: "tag merge", project: "trove", ghost: .drift, state: .processing, hoursAgo: 0.9),
+        FixtureSession(name: "search ranking", project: "trove", ghost: .chill, state: .waiting, hoursAgo: 1),
+        FixtureSession(name: "theme audit", project: "wren", ghost: .clyde, state: .waiting, hoursAgo: 1.1),
+        FixtureSession(name: "font fallback", project: "wren", ghost: .pinky, state: .waiting, hoursAgo: 1.2),
+        FixtureSession(name: "empty states", project: "wren", ghost: .mist, state: .processing, hoursAgo: 1.3),
+    ]
+    #endif
+
+    /// The seeded cast: the default one, plus (DEBUG) the long-list knob's.
+    private static func seededCast(_ knobs: SeedKnobs) -> [FixtureSession] {
+        #if DEBUG
+        return fixtureSessions + (knobs.longList ? longListSessions : [])
+        #else
+        return fixtureSessions
+        #endif
+    }
+
     /// Round 6 follow-up: the one session the fixture marks focused, so a
     /// capture actually exercises the sidebar's selected-row styling
     /// (the expanded list's chip, `SidebarRowChipBackground`)
@@ -319,7 +357,7 @@ enum CaptureFixture {
 
     static func seededSessions(_ knobs: SeedKnobs, projects: [Project]) -> [AgentSession] {
         if knobs.zeroProjects { return [] }
-        return fixtureSessions.enumerated().map { index, fs in
+        return seededCast(knobs).enumerated().map { index, fs in
             let now = Date()
             let usesInUseTemplate = knobs.templateInUse && inUseTemplateSessionNames.contains(fs.name)
             return AgentSession(
@@ -363,7 +401,7 @@ enum CaptureFixture {
             hasDismissedPinMigrationNotice: true
         )
         if knobs.templateInUse { store.addTemplate(inUseTemplate) }
-        for (fs, session) in zip(fixtureSessions, store.sessions) {
+        for (fs, session) in zip(seededCast(knobs), store.sessions) {
             store.updateIndicatorState(id: session.id, state: fs.state)
             switch fs.state {
             case .inactive:
@@ -868,6 +906,13 @@ enum CaptureFixture {
     /// draws that tray button's hover highlight without a pointer, so the
     /// hovered state can be captured without synthetic input.
     static var trayHoverItemId: String? { env("GHOSTTIES_CAPTURE_TRAY_HOVER").flatMap { $0.isEmpty ? nil : $0 } }
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_HEADER_HOVER=<project>[,<project>]`: draws those
+    /// one-view project headers' hover state (the quick-create "+" chip)
+    /// without a pointer. A trailing `!` on a name (`wren!`) also draws the
+    /// chip as it is under the pointer.
+    static var headerHoverProjects: Set<String> { Set(projectOrder(env("GHOSTTIES_CAPTURE_HEADER_HOVER"))) }
+    #endif
     /// `GHOSTTIES_CAPTURE_BACKGROUND=1`: the capture app never activates
     /// itself (`suppressActivation`), and opens its first window at launch
     /// instead of on first activation (`AppDelegate`), so a capture launched
