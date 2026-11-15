@@ -70,8 +70,9 @@ enum ComposerWitness {
 
     /// A finished-event the Witness reacts to. `.idle` is the resting
     /// state between beats, never sent explicitly. An identity change is not
-    /// a beat: it flips the sprite on its own clock
-    /// (`ComposerWitnessTransition`).
+    /// a beat: the view blends the old ghost into the new one on its own
+    /// (`ComposerWitnessTransition`), and the flip is the ghost's own habit
+    /// (`ComposerWitnessFrames.selfFlipElapsedMs`), tied to neither.
     enum BeatKind: Equatable {
         case idle
         case open
@@ -100,169 +101,162 @@ enum ComposerWitness {
 /// view is a thin shell (one `onChange`, one call here) and the logic is
 /// directly testable without constructing a View.
 ///
+/// An identity change (the typed project changed) blends: the ghost on
+/// screen dithers into the new one over `buildResolveFrames`, each cell
+/// keeping the colour it had. It never flips. A second change mid-blend
+/// starts its own blend from EXACTLY what is on screen at that instant —
+/// chars, cell offset and per-cell colour — never from a named identity's
+/// resting grid.
+///
 /// R3 review fix: `identity` and `beatTrigger` can change in the SAME
 /// SwiftUI transaction (launch: `SessionComposerStore.precommit` clears
 /// `searchText`, changing `identity`, then `SessionComposerPalette.commit`
 /// arms `.launch`, both before the next render). `ComposerWitnessView`
 /// delivers both as ONE combined value to ONE `onChange`, and `next(...)`
 /// resolves them here in a fixed order: a newly-arming `.launch` always wins
-/// outright, ignores any bundled identity change, never flips, and dissolves
-/// from `onScreen`. Once locked, `identity` changes are a no-op until a later
+/// outright, ignores any bundled identity change, and dissolves from
+/// `onScreen`. Once locked, `identity` changes are a no-op until a later
 /// non-launch beat arrives.
-///
-/// An identity change flips the sprite (scale x 1 -> 0 -> 1, swapped at the
-/// midpoint, `ComposerWitnessFrames.flipTransform`) on its own clock, so a
-/// beat arriving mid-flip never restarts it. A second change mid-flip lands
-/// on the newest identity without a jump: in the first half the flip keeps
-/// running and shows the newest identity at the midpoint; in the second half
-/// it restarts at the mirrored time, where the width is the same.
 ///
 /// Sean's decision (2026-09-13), "always have transitions": a Tab accept or
 /// unknown branch that arrives bundled with an identity change plays the
-/// flip first, then the beat's own frames on the new identity — the beat's
-/// frames are held on the new resting grid until the flip ends.
+/// blend first, then the beat's own frames on the new identity, as one
+/// sequence.
 ///
 /// The open beat is its own transition (the drop): an identity change
-/// bundled with it swaps instantly, and it cancels any flip in flight.
+/// bundled with it swaps instantly.
 enum ComposerWitnessTransition {
     struct ViewState: Equatable {
+        /// The last beat the palette sent. An identity change never
+        /// rewrites it, so a later update can tell a fresh beat from one
+        /// already played.
         var currentBeat: ComposerWitness.Beat
         var displayedIdentity: ComposerWitness.Identity
+        /// The identity a blend in flight is leaving. `nil` outside one.
+        var previousIdentity: ComposerWitness.Identity?
         var beatFrames: [ComposerWitnessFrames.WitnessFrame]
+        /// Bumped whenever `beatFrames` is rebuilt; the view then restarts
+        /// its frame clock.
+        var framesSeq: Int
+        /// Per-cell "from" colours for the blend or dissolve now playing —
+        /// may mix more than one prior ghost's colour when a blend
+        /// interrupts another. `nil` outside one.
+        var resolveFromColors: [[Color]]?
         var isLaunchLocked: Bool
-        /// The identity on screen for the first half of the flip. `nil`
-        /// when no flip has run since the last open.
-        var flipFrom: ComposerWitness.Identity?
-        /// Bumped whenever a flip (re)starts; the view then restarts its
-        /// flip clock at `flipStartMs`.
-        var flipSeq: Int
-        var flipStartMs: Int
 
         init(
             currentBeat: ComposerWitness.Beat,
             displayedIdentity: ComposerWitness.Identity,
+            previousIdentity: ComposerWitness.Identity? = nil,
             beatFrames: [ComposerWitnessFrames.WitnessFrame] = [],
-            isLaunchLocked: Bool = false,
-            flipFrom: ComposerWitness.Identity? = nil,
-            flipSeq: Int = 0,
-            flipStartMs: Int = 0
+            framesSeq: Int = 0,
+            resolveFromColors: [[Color]]? = nil,
+            isLaunchLocked: Bool = false
         ) {
             self.currentBeat = currentBeat
             self.displayedIdentity = displayedIdentity
+            self.previousIdentity = previousIdentity
             self.beatFrames = beatFrames
+            self.framesSeq = framesSeq
+            self.resolveFromColors = resolveFromColors
             self.isLaunchLocked = isLaunchLocked
-            self.flipFrom = flipFrom
-            self.flipSeq = flipSeq
-            self.flipStartMs = flipStartMs
         }
     }
 
-    /// The identity on screen at `flipElapsedMs` into the flip: the outgoing
-    /// one for its first half, else the displayed one.
-    static func visibleIdentity(
-        state: ViewState,
-        flipElapsedMs: Int,
-        reduceMotion: Bool
-    ) -> ComposerWitness.Identity {
-        guard let from = state.flipFrom,
-              !ComposerWitnessFrames.flipTransform(elapsedMs: flipElapsedMs, reduceMotion: reduceMotion).showsNewIdentity
-        else { return state.displayedIdentity }
-        return from
-    }
+    typealias OnScreen = (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?)
 
-    /// `onScreen` MUST be captured from `state` BEFORE this call, at the
-    /// instant `newIdentity`/`newBeat` arrived — exactly what was on screen a
-    /// moment ago. A launch dissolve starts from it, never from a named
-    /// identity's resting grid. `flipElapsedMs` is the flip clock at that
-    /// same instant.
+    /// `onScreen` MUST be captured (via `ComposerWitnessFrames.displayGrid`)
+    /// from `state` BEFORE this call, at the instant `newIdentity`/`newBeat`
+    /// arrived — exactly what was on screen a moment ago (chars, offset,
+    /// per-cell colour provenance). Every blend or dissolve this produces
+    /// starts from that capture.
     static func next(
         state: ViewState,
         newIdentity: ComposerWitness.Identity,
         newBeat: ComposerWitness.Beat,
-        onScreen: (grid: [String], cellOffsetY: Int),
-        flipElapsedMs: Int,
+        onScreen: OnScreen,
         pixelsFor: (ComposerWitness.Identity) -> [String],
+        colorFor: (ComposerWitness.Identity) -> Color,
         reduceMotion: Bool,
         seed: Int32
     ) -> ViewState {
         let beatChanged = newBeat != state.currentBeat
         let identityChanged = newIdentity != state.displayedIdentity
-        let flipMs = ComposerWitnessFrames.flipDurationMs
-        let flipInFlight = state.flipFrom != nil && flipElapsedMs < flipMs
 
         // Launch always wins outright over any identity change bundled into
-        // the same update, and never flips: it dissolves the identity that
-        // is on screen. A flip already turning keeps turning to full width,
-        // on that same identity.
+        // the same update: it dissolves exactly what is on screen, never a
+        // ghost rebuilt from the identity that was about to swap in.
         if beatChanged, newBeat.kind == .launch {
-            let visible = visibleIdentity(state: state, flipElapsedMs: flipElapsedMs, reduceMotion: reduceMotion)
             var launched = state
             launched.currentBeat = newBeat
-            launched.displayedIdentity = visible
-            launched.flipFrom = state.flipFrom == nil ? nil : visible
             launched.beatFrames = launchDissolveFrames(
                 from: onScreen.grid,
                 startCellOffsetY: onScreen.cellOffsetY,
                 seed: seed
+            )
+            launched.framesSeq += 1
+            launched.resolveFromColors = onScreenColors(
+                onScreen: onScreen,
+                current: colorFor(state.displayedIdentity),
+                prior: state.previousIdentity.map(colorFor)
             )
             launched.isLaunchLocked = true
             return launched
         }
 
         // Launch is terminal: locked, and no fresh beat arrived this
-        // update to unlock it — ignore the identity change outright.
-        if state.isLaunchLocked, !beatChanged {
+        // update to unlock it — ignore the identity change outright. And
+        // an update that changes nothing is a no-op.
+        if !beatChanged, state.isLaunchLocked || !identityChanged {
             return state
         }
 
         var updated = state
         updated.isLaunchLocked = false
+        updated.currentBeat = newBeat
         let opens = beatChanged && newBeat.kind == .open
+        // The blend plays only when there is motion to give it and the open
+        // drop isn't already the transition.
+        let blends = identityChanged && !reduceMotion && !opens
 
+        var frames: [ComposerWitnessFrames.WitnessFrame] = []
         if identityChanged {
             updated.displayedIdentity = newIdentity
-            // Frames built on the old identity's silhouette no longer apply.
-            updated.beatFrames = []
-            if reduceMotion || opens {
-                updated.flipFrom = nil
-            } else if flipInFlight, flipElapsedMs < flipMs / 2 {
-                // Still turning away from `flipFrom`: keep the clock; the
-                // newest identity shows at the midpoint.
-            } else if flipInFlight {
-                // Turning back in on an identity that is now outgoing:
-                // restart at the mirrored time, where the width is the same.
-                updated.flipFrom = state.displayedIdentity
-                updated.flipSeq += 1
-                updated.flipStartMs = flipMs - flipElapsedMs
+            if blends {
+                let currentColor = colorFor(state.displayedIdentity)
+                let priorColor = state.previousIdentity.map(colorFor) ?? currentColor
+                updated.resolveFromColors = onScreenColors(onScreen: onScreen, current: currentColor, prior: priorColor)
+                frames = ComposerWitnessFrames.buildResolveFrames(
+                    gridA: onScreen.grid,
+                    gridB: pixelsFor(newIdentity),
+                    seed: seed
+                )
+                blendOffset(&frames, from: onScreen.cellOffsetY)
+                updated.previousIdentity = state.displayedIdentity
             } else {
-                updated.flipFrom = state.displayedIdentity
-                updated.flipSeq += 1
-                updated.flipStartMs = 0
+                updated.previousIdentity = nil
+                updated.resolveFromColors = nil
             }
-        }
-        if opens {
-            updated.flipFrom = nil
         }
 
         if beatChanged {
             // A fresh, explicit beat (`.open`/`.tabAccept`/`.unknownBranch`
             // — `.launch` already returned above), built on whatever
             // identity is displayed after the identity update above.
-            updated.currentBeat = newBeat
-            let restingGrid = pixelsFor(updated.displayedIdentity)
-            var frames = framesFor(kind: newBeat.kind, targetGrid: restingGrid)
-            if identityChanged, updated.flipFrom != nil, !frames.isEmpty {
-                // "Always have transitions": the flip plays first, the
-                // beat's frames after it.
-                let flipNowMs = updated.flipSeq != state.flipSeq ? updated.flipStartMs : flipElapsedMs
-                let holdMs = flipMs - flipNowMs
-                if holdMs > 0 {
-                    frames.insert(ComposerWitnessFrames.WitnessFrame(grid: restingGrid, cellOffsetY: 0, ms: holdMs), at: 0)
-                }
+            let hopFrames = framesFor(kind: newBeat.kind, targetGrid: pixelsFor(updated.displayedIdentity))
+            if blends {
+                // "Always have transitions": the blend plays first, then
+                // the beat's own frames on the new, settled grid.
+                frames += hopFrames
+            } else {
+                frames = hopFrames
+                updated.previousIdentity = nil
+                updated.resolveFromColors = nil
             }
-            updated.beatFrames = frames
         }
 
+        updated.beatFrames = frames
+        updated.framesSeq += 1
         return updated
     }
 
@@ -279,12 +273,25 @@ enum ComposerWitnessTransition {
         }
     }
 
+    /// A blend always plays at cellOffsetY 0 by construction — if the
+    /// interrupted beat had shifted the sprite (e.g. mid tab-accept hop),
+    /// blend that offset back to 0 across the new frames instead of
+    /// snapping to 0 on frame one.
+    private static func blendOffset(_ frames: inout [ComposerWitnessFrames.WitnessFrame], from start: Int) {
+        guard start != 0, !frames.isEmpty else { return }
+        let n = frames.count
+        for i in frames.indices {
+            let progress = Double(i + 1) / Double(n)
+            frames[i].cellOffsetY = Int((Double(start) * (1 - progress)).rounded())
+        }
+    }
+
     /// A launch dissolve from an ARBITRARY on-screen grid (not necessarily
-    /// a named identity's resting grid) straight to empty. Deliberately
-    /// skips the normal `buildLaunchFrames`' leading "stretch" wind-up frame
-    /// (only sensible starting from a calm resting silhouette) and reuses
-    /// the `ComposerWitnessFrames.dither`/`emptyGridLike` primitives
-    /// directly.
+    /// a named identity's resting grid — could be mid-blend) straight to
+    /// empty. Deliberately skips the normal `buildLaunchFrames`' leading
+    /// "stretch" wind-up frame (only sensible starting from a calm resting
+    /// silhouette) and reuses the `ComposerWitnessFrames.dither`/
+    /// `emptyGridLike` primitives directly.
     private static func launchDissolveFrames(
         from grid: [String],
         startCellOffsetY: Int,
@@ -301,11 +308,28 @@ enum ComposerWitnessTransition {
             return ComposerWitnessFrames.WitnessFrame(grid: d.grid, cellOffsetY: blended + drift, ms: stepMs)
         }
     }
+
+    private static func onScreenColors(onScreen: OnScreen, current: Color, prior: Color?) -> [[Color]] {
+        let rows = onScreen.grid.count
+        let cols = onScreen.grid.first?.count ?? 0
+        guard let sourceIsB = onScreen.sourceIsB else {
+            // Not mid-blend: every on-screen cell is the same colour.
+            return Array(repeating: Array(repeating: current, count: cols), count: rows)
+        }
+        // Already mid-blend: some cells are painted the (about-to-be-
+        // outgoing) target colour, the rest still the older source colour —
+        // carry each cell's ACTUAL colour forward.
+        let priorColor = prior ?? current
+        return (0..<rows).map { r in
+            (0..<cols).map { c in sourceIsB[r][c] ? current : priorColor }
+        }
+    }
 }
 
 /// The sprite view. `TimelineView` wraps ONLY this sprite (never the
 /// palette around it — the palette re-parses `query` on every redraw, plan
-/// §4), so its clock never forces the whole composer to re-render.
+/// §4), so its clock never forces the whole composer to re-render, and
+/// nothing here can delay typing.
 struct ComposerWitnessView: View {
     let identity: ComposerWitness.Identity
     /// Written by the palette on `.open`/`.tabAccept`/`.unknownBranch`/
@@ -331,13 +355,19 @@ struct ComposerWitnessView: View {
     /// Round 14: applied as one `.opacity` on the whole sprite, not per
     /// colour.
     let opacity: Double
-    /// Round 14: scales beat time only (tab-accept/error/launch/open drop
-    /// and the identity flip) — never the idle ripple/blink/glance clock.
+    /// Round 14: scales beat time only (tab-accept/error/blend/launch, the
+    /// open drop and each flip) — never the idle ripple/blink/glance clock,
+    /// the wait between idle flips, or the tip.
     let beatSpeed: Double
     /// A soft glow in the ghost's own colour, drawn behind the sprite.
     /// Strength 0 draws none.
     let glowRadius: CGFloat
     let glowStrength: Double
+    /// Short windows: the ghost lies on its side beside the field, a
+    /// quarter turn clockwise (head toward the field), `lyingTravel` away
+    /// from where it stands (`ComposerWitnessSideways`).
+    let isLying: Bool
+    let lyingTravel: CGSize
 
     private static let ditherSeed: Int32 = 11
 
@@ -346,8 +376,13 @@ struct ComposerWitnessView: View {
     /// place (the single `onChange` below) that ever writes it.
     @State private var state: ComposerWitnessTransition.ViewState
     @State private var beatStartedAt: Date = .now
-    @State private var flipStartedAt: Date = .now
+    /// When the open beat last armed: the clock for the drop, the landing
+    /// flip and the idle flips after it. `nil` until the composer opens.
+    @State private var openedAt: Date?
     @State private var mountedAt: Date = .now
+    /// The tip: where it started from (0 standing ... 1 lying) and when.
+    @State private var tipFrom: Double
+    @State private var tipStartedAt: Date = .distantPast
 
     @Environment(\.displayScale) private var displayScale
 
@@ -362,7 +397,9 @@ struct ComposerWitnessView: View {
         opacity: Double = ComposerWitnessOpacity.defaultOpacity,
         beatSpeed: Double = ComposerWitnessBeatSpeed.defaultSpeed,
         glowRadius: CGFloat = ComposerWitnessGlowRadius.defaultRadius,
-        glowStrength: Double = ComposerWitnessGlowStrength.defaultStrength
+        glowStrength: Double = ComposerWitnessGlowStrength.defaultStrength,
+        isLying: Bool = false,
+        lyingTravel: CGSize = .zero
     ) {
         self.identity = identity
         self.beatTrigger = beatTrigger
@@ -375,10 +412,14 @@ struct ComposerWitnessView: View {
         self.beatSpeed = beatSpeed
         self.glowRadius = glowRadius
         self.glowStrength = glowStrength
+        self.isLying = isLying
+        self.lyingTravel = lyingTravel
         _state = State(initialValue: ComposerWitnessTransition.ViewState(
             currentBeat: .idle,
             displayedIdentity: identity
         ))
+        // Mounts already in place: a tip only ever plays on a change.
+        _tipFrom = State(initialValue: isLying ? 1 : 0)
     }
 
     /// `identity` and `beatTrigger` can change in the SAME SwiftUI
@@ -397,20 +438,23 @@ struct ComposerWitnessView: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 0.02, paused: reduceMotion)) { context in
             let beatElapsedMs = scaledElapsedMs(since: beatStartedAt, now: context.date)
-            let flipElapsedMs = scaledElapsedMs(since: flipStartedAt, now: context.date)
             let idleClockMs = Int(context.date.timeIntervalSince(mountedAt) * 1000)
-            let shown = onScreen(
-                beatElapsedMs: beatElapsedMs,
-                flipElapsedMs: flipElapsedMs,
-                idleClockMs: idleClockMs,
-                reduceMotion: reduceMotion
-            )
-            let flip = state.flipFrom == nil
-                ? (scaleX: 1.0, showsNewIdentity: true)
-                : ComposerWitnessFrames.flipTransform(elapsedMs: flipElapsedMs, reduceMotion: reduceMotion)
-            let drop = state.currentBeat.kind == .open
-                ? ComposerWitnessFrames.openTransform(elapsedMs: beatElapsedMs, reduceMotion: reduceMotion)
-                : .identity
+            let display = displayGrid(beatElapsedMs: beatElapsedMs, idleClockMs: idleClockMs, reduceMotion: reduceMotion)
+            let sinceOpenMs = openedAt.map { Int(context.date.timeIntervalSince($0) * 1000) }
+            // The drop runs on the open clock, not the beat clock, so a
+            // blend or Tab accept arriving mid-drop never replays or cuts it.
+            let drop = sinceOpenMs.map {
+                ComposerWitnessFrames.openTransform(elapsedMs: Int(Double($0) * beatSpeed), reduceMotion: reduceMotion)
+            } ?? .identity
+            // The flip is the ghost's own: once as it lands, then an idle
+            // habit while the composer stays open. Nothing else starts one.
+            let flipElapsedMs = state.isLaunchLocked ? nil : sinceOpenMs.flatMap {
+                ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: $0, beatSpeed: beatSpeed, reduceMotion: reduceMotion)
+            }
+            let flipScaleX = flipElapsedMs.map {
+                ComposerWitnessFrames.flipScaleX(elapsedMs: $0, reduceMotion: reduceMotion)
+            } ?? 1
+            let tip = tipPosition(now: context.date, toward: isLying)
             // Round 14: the float bob is applied here, as an `.offset`
             // transform on the sprite, never a layout/frame change — it
             // runs off `idleClockMs`, not the beat clock, so it never
@@ -432,22 +476,33 @@ struct ComposerWitnessView: View {
                 periodMs: floatPeriod * 1000,
                 reduceMotion: reduceMotion
             )
-            let color = bodyColor(for: shown.identity)
+            let color = bodyColor(for: state.displayedIdentity)
             let glows = glowStrength > 0 && glowRadius > 0
             WitnessSprite(
-                grid: shown.grid,
-                cellOffsetY: shown.cellOffsetY,
-                primaryColor: color
+                grid: display.grid,
+                cellOffsetY: display.cellOffsetY,
+                primaryColor: color,
+                secondaryColors: state.resolveFromColors,
+                sourceIsB: display.sourceIsB
             )
             // Drawn behind the sprite; the cells themselves stay sharp.
             .shadow(color: glows ? color.opacity(glowStrength) : .clear, radius: glows ? glowRadius : 0)
             // Scale 0 is a singular transform; the flip's edge-on instant
             // draws a hairline instead.
-            .scaleEffect(x: max(drop.scaleX * flip.scaleX, 0.001), y: drop.scaleY, anchor: .bottom)
-            // Snapped so the sprite never rests between pixels.
+            .scaleEffect(x: max(drop.scaleX * flipScaleX, 0.001), y: drop.scaleY, anchor: .bottom)
+            // The tip turns the ghost about its own centre, after the flip
+            // and squash, so those stay the ghost's own (about its body
+            // axis and feet) when it lies down. At rest it is exactly 0 or
+            // a quarter turn, which maps the pixel grid onto itself.
+            .rotationEffect(.degrees(ComposerWitnessSideways.lyingAngleDegrees * tip))
+            // Float, drop and tip travel are in screen space. Snapped so
+            // the sprite never rests between pixels.
             .offset(
-                x: ComposerWitnessFrames.pixelSnapped(floatOffsetX, scale: displayScale),
-                y: ComposerWitnessFrames.pixelSnapped(floatOffsetY + drop.offsetY, scale: displayScale)
+                x: ComposerWitnessFrames.pixelSnapped(floatOffsetX + lyingTravel.width * tip, scale: displayScale),
+                y: ComposerWitnessFrames.pixelSnapped(
+                    floatOffsetY + drop.offsetY + lyingTravel.height * tip,
+                    scale: displayScale
+                )
             )
             .opacity(drop.opacity)
         }
@@ -466,52 +521,57 @@ struct ComposerWitnessView: View {
         .onChange(of: currentUpdate) { newValue in
             apply(newValue)
         }
+        .onChange(of: isLying) { nowLying in
+            // Start from wherever the ghost is, so a tip that turns round
+            // mid-way never jumps.
+            let now = Date.now
+            tipFrom = tipPosition(now: now, toward: !nowLying)
+            tipStartedAt = now
+        }
     }
 
-    /// Round 14: `beatSpeed` scales beat time only (and the flip, which
-    /// stands in for the old resolve beat) — the idle ripple/blink/glance
-    /// clock (`idleClockMs`, always derived from `mountedAt`) must never go
-    /// through this.
+    /// 0 standing ... 1 lying, at `now`, for a tip heading `toward` lying
+    /// (or standing).
+    private func tipPosition(now: Date, toward lying: Bool) -> Double {
+        ComposerWitnessFrames.tipPosition(
+            from: tipFrom,
+            to: lying ? 1 : 0,
+            elapsedMs: Int(min(now.timeIntervalSince(tipStartedAt), 3600) * 1000),
+            reduceMotion: reduceMotion
+        )
+    }
+
+    /// Round 14: `beatSpeed` scales beat time only — the idle ripple/blink/
+    /// glance clock (`idleClockMs`, always derived from `mountedAt`) must
+    /// never go through this.
     private func scaledElapsedMs(since start: Date, now: Date) -> Int {
         let rawElapsedMs = Int(now.timeIntervalSince(start) * 1000)
         return Int(Double(rawElapsedMs) * beatSpeed)
     }
 
-    /// What is on screen: during a flip's first half, the outgoing
-    /// identity's idle loop; otherwise the displayed identity's beat or
-    /// idle frame.
-    private func onScreen(
+    private func displayGrid(
         beatElapsedMs: Int,
-        flipElapsedMs: Int,
         idleClockMs: Int,
         reduceMotion: Bool
-    ) -> (grid: [String], cellOffsetY: Int, identity: ComposerWitness.Identity) {
-        let visible = ComposerWitnessTransition.visibleIdentity(
-            state: state,
-            flipElapsedMs: flipElapsedMs,
-            reduceMotion: reduceMotion
-        )
-        let showsDisplayed = visible == state.displayedIdentity
-        let display = ComposerWitnessFrames.displayGrid(
-            identityGrid: pixels(for: visible),
-            isIdleBeat: !showsDisplayed || state.currentBeat.kind == .idle,
-            isLaunchBeat: showsDisplayed && state.currentBeat.kind == .launch,
-            beatFrames: showsDisplayed ? state.beatFrames : [],
+    ) -> ComposerWitnessTransition.OnScreen {
+        ComposerWitnessFrames.displayGrid(
+            identityGrid: pixels(for: state.displayedIdentity),
+            // A blend's frames play whatever beat the palette last sent.
+            isIdleBeat: state.beatFrames.isEmpty,
+            isLaunchBeat: state.isLaunchLocked,
+            beatFrames: state.beatFrames,
             beatElapsedMs: beatElapsedMs,
             idleClockMs: idleClockMs,
             reduceMotion: reduceMotion
         )
-        return (display.grid, display.cellOffsetY, visible)
     }
 
     private func apply(_ update: Update) {
         let now = Date.now
-        let flipElapsedMs = scaledElapsedMs(since: flipStartedAt, now: now)
         // What was ACTUALLY on screen a moment ago, at the same scaled
-        // clocks `body` uses — a launch dissolve starts from this.
-        let shown = onScreen(
+        // clock `body` uses — every blend or dissolve starts from this.
+        let onScreen = displayGrid(
             beatElapsedMs: scaledElapsedMs(since: beatStartedAt, now: now),
-            flipElapsedMs: flipElapsedMs,
             idleClockMs: Int(now.timeIntervalSince(mountedAt) * 1000),
             reduceMotion: false
         )
@@ -519,22 +579,23 @@ struct ComposerWitnessView: View {
             state: state,
             newIdentity: update.identity,
             newBeat: update.beat,
-            onScreen: (shown.grid, shown.cellOffsetY),
-            flipElapsedMs: flipElapsedMs,
+            onScreen: onScreen,
             pixelsFor: { pixels(for: $0) },
+            colorFor: { bodyColor(for: $0) },
             reduceMotion: reduceMotion,
             seed: Self.ditherSeed
         )
         // Only reset a clock when its motion ACTUALLY (re)armed — an
         // ignored/no-op update (launch-locked, or a duplicate onAppear/
         // onChange delivery of the same transition) must leave the playing
-        // beat's and flip's clocks alone.
-        if resolved.currentBeat != state.currentBeat {
+        // frames' clock alone.
+        if resolved.framesSeq != state.framesSeq {
             beatStartedAt = now
         }
-        if resolved.flipSeq != state.flipSeq {
-            let offsetSeconds = Double(resolved.flipStartMs) / 1000 / max(beatSpeed, 0.01)
-            flipStartedAt = now.addingTimeInterval(-offsetSeconds)
+        // Only the open beat starts the drop and the flips; a project
+        // change never does.
+        if resolved.currentBeat != state.currentBeat, resolved.currentBeat.kind == .open {
+            openedAt = now
         }
         state = resolved
     }
@@ -595,6 +656,10 @@ private struct WitnessSprite: View, Equatable {
     let grid: [String]
     let cellOffsetY: Int
     let primaryColor: Color
+    /// Per-cell "from" colours for a blend — `nil` outside one, in which
+    /// case every body cell is `primaryColor` (see `color(forCell:row:col:)`).
+    let secondaryColors: [[Color]]?
+    let sourceIsB: [[Bool]]?
 
     @Environment(\.displayScale) private var displayScale
 
@@ -602,6 +667,8 @@ private struct WitnessSprite: View, Equatable {
         lhs.grid == rhs.grid
             && lhs.cellOffsetY == rhs.cellOffsetY
             && lhs.primaryColor == rhs.primaryColor
+            && lhs.secondaryColors == rhs.secondaryColors
+            && lhs.sourceIsB == rhs.sourceIsB
     }
 
     var body: some View {
@@ -635,13 +702,13 @@ private struct WitnessSprite: View, Equatable {
             }
             for (row, line) in grid.enumerated() {
                 for (col, cell) in line.enumerated() {
-                    guard cell == "X", let color = color(forCell: cell) else { continue }
+                    guard cell == "X", let color = color(forCell: cell, row: row, col: col) else { continue }
                     addCell(row: row, col: col, color: color)
                 }
             }
             for (row, line) in grid.enumerated() {
                 for (col, cell) in line.enumerated() {
-                    guard cell == "e" || cell == "l", let color = color(forCell: cell) else { continue }
+                    guard cell == "e" || cell == "l", let color = color(forCell: cell, row: row, col: col) else { continue }
                     addCell(row: row, col: col, color: color)
                 }
             }
@@ -652,9 +719,11 @@ private struct WitnessSprite: View, Equatable {
         }
     }
 
-    private func color(forCell cell: Character) -> Color? {
+    private func color(forCell cell: Character, row: Int, col: Int) -> Color? {
+        let fromB = sourceIsB?[row][col] ?? true
+        let bodyColor = fromB ? primaryColor : (secondaryColors?[row][col] ?? primaryColor)
         switch cell {
-        case "X": return primaryColor
+        case "X": return bodyColor
         case "e": return Color(hex: ComposerWitnessGhost.eyeColorHex)
         case "l": return Color(hex: ComposerWitnessGhost.litColorHex)
         default: return nil

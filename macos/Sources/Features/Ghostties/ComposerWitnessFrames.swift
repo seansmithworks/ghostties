@@ -145,7 +145,8 @@ enum ComposerWitnessFrames {
     }
 
     /// `sourceIsB[row][col] == true` means that cell was taken from `gridB`
-    /// this frame.
+    /// this frame — used to colour a resolve morph per-source-ghost rather
+    /// than in a single colour.
     static func dither(
         gridA: [String],
         gridB: [String]?,
@@ -200,6 +201,8 @@ enum ComposerWitnessFrames {
         var grid: [String]
         var cellOffsetY: Int
         var ms: Int
+        /// Set only on a resolve morph's frames (`buildResolveFrames`).
+        var sourceIsB: [[Bool]]?
     }
 
     static func buildTabFrames(grid: [String]) -> [WitnessFrame] {
@@ -236,6 +239,20 @@ enum ComposerWitnessFrames {
         return frames
     }
 
+    /// The project-change blend: the outgoing ghost dithers into the new
+    /// one over six 40ms steps (240ms).
+    static func buildResolveFrames(gridA: [String], gridB: [String], seed: Int32) -> [WitnessFrame] {
+        let steps = 6
+        let stepMs = 40
+        var frames: [WitnessFrame] = []
+        for i in 0..<steps {
+            let progress = Double(i + 1) / Double(steps)
+            let d = dither(gridA: gridA, gridB: gridB, progress: progress, seed: seed)
+            frames.append(WitnessFrame(grid: d.grid, cellOffsetY: 0, ms: stepMs, sourceIsB: d.sourceIsB))
+        }
+        return frames
+    }
+
     /// Which frame (by index) is showing at `elapsedMs` since the beat
     /// armed. A frame with `ms == 0` is the beat's held end-state — once
     /// reached it stays forever (until the beat kind is reconsidered by the
@@ -268,12 +285,13 @@ enum ComposerWitnessFrames {
         beatElapsedMs: Int,
         idleClockMs: Int,
         reduceMotion: Bool
-    ) -> (grid: [String], cellOffsetY: Int) {
+    ) -> (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) {
         if reduceMotion {
-            return (identityGrid, 0)
+            return (identityGrid, 0, nil)
         }
         if isIdleBeat || beatFrames.isEmpty {
-            return idleFrame(base: identityGrid, atMs: idleClockMs)
+            let idle = idleFrame(base: identityGrid, atMs: idleClockMs)
+            return (idle.grid, idle.cellOffsetY, nil)
         }
         let totalMs = beatFrames.reduce(0) { $0 + $1.ms }
         if isLaunchBeat {
@@ -281,14 +299,15 @@ enum ComposerWitnessFrames {
                 ? beatFrames.count - 1
                 : frameIndex(frames: beatFrames, elapsedMs: beatElapsedMs)
             let f = beatFrames[index]
-            return (f.grid, f.cellOffsetY)
+            return (f.grid, f.cellOffsetY, f.sourceIsB)
         }
         if beatElapsedMs >= totalMs {
-            return idleFrame(base: identityGrid, atMs: idleClockMs)
+            let idle = idleFrame(base: identityGrid, atMs: idleClockMs)
+            return (idle.grid, idle.cellOffsetY, nil)
         }
         let index = frameIndex(frames: beatFrames, elapsedMs: beatElapsedMs)
         let f = beatFrames[index]
-        return (f.grid, f.cellOffsetY)
+        return (f.grid, f.cellOffsetY, f.sourceIsB)
     }
 
     /// Round 14 (session-7): a gentle vertical bob, a sine wave —
@@ -316,7 +335,7 @@ enum ComposerWitnessFrames {
         return amplitude * sin(2 * Double.pi * Double(clockMs) / (2 * periodMs))
     }
 
-    // MARK: - Entrance and flip (transforms, never grid frames)
+    // MARK: - Entrance, flip and tip (transforms, never grid frames)
 
     /// A transform on the whole sprite: a vertical offset in points, a scale
     /// anchored at the sprite's bottom edge, and an opacity.
@@ -381,19 +400,64 @@ enum ComposerWitnessFrames {
         )
     }
 
-    /// The identity flip: scale x 1 -> 0 -> 1 with the sprite swapped at the
-    /// midpoint, as a card turning about its vertical axis. The turn angle
-    /// runs on a symmetric ease-in-out, cubic-bezier(0.65, 0, 0.35, 1), so
-    /// the two halves mirror exactly.
+    /// The flip is the ghost's own motion: scale x 1 -> 0 -> 1, as a card
+    /// turning once about its vertical axis. The turn angle runs on a
+    /// symmetric ease-in-out, cubic-bezier(0.65, 0, 0.35, 1), so the two
+    /// halves mirror exactly. It plays once as the ghost lands and then as
+    /// an idle habit while the composer stays open (`selfFlipElapsedMs`);
+    /// a project change never flips.
     static let flipDurationMs = 240
 
+    /// The landing flip starts as the drop touches down (`openDropMs`),
+    /// over the squash. Not earlier: the composer itself fades in over its
+    /// first 200ms (`WorkspaceViewContainer.installComposerOverlayIfNeeded`),
+    /// which would hide a flip that ran with the drop.
+    static var landingFlipStartMs: Int { openDropMs }
+
+    /// The idle flip repeats this often, in real time, counted from the
+    /// landing flip.
+    static let idleFlipIntervalMs = 10_000
+
     /// `elapsedMs` is the flip's own (speed-scaled) clock. Past the end, or
-    /// under Reduce Motion, the new identity shows at full width.
-    static func flipTransform(elapsedMs: Int, reduceMotion: Bool) -> (scaleX: Double, showsNewIdentity: Bool) {
-        guard !reduceMotion, elapsedMs < flipDurationMs else { return (1, true) }
-        let progress = Double(max(elapsedMs, 0)) / Double(flipDurationMs)
-        let angle = Double.pi * cubicBezier(progress, 0.65, 0, 0.35, 1)
-        return (abs(cos(angle)), progress >= 0.5)
+    /// under Reduce Motion, the sprite is at full width.
+    static func flipScaleX(elapsedMs: Int, reduceMotion: Bool) -> Double {
+        guard !reduceMotion, elapsedMs >= 0, elapsedMs < flipDurationMs else { return 1 }
+        let progress = Double(elapsedMs) / Double(flipDurationMs)
+        return abs(cos(Double.pi * cubicBezier(progress, 0.65, 0, 0.35, 1)))
+    }
+
+    /// How far into a flip the ghost is, on the flip's speed-scaled clock,
+    /// `sinceOpenMs` real milliseconds after the open beat armed — `nil`
+    /// between flips. `beatSpeed` scales the landing and each flip, never
+    /// the interval. Reduce Motion: never flips, landing or idle.
+    static func selfFlipElapsedMs(sinceOpenMs: Int, beatSpeed: Double, reduceMotion: Bool) -> Int? {
+        guard !reduceMotion, beatSpeed > 0 else { return nil }
+        let firstStartMs = Int((Double(landingFlipStartMs) / beatSpeed).rounded())
+        guard sinceOpenMs >= firstStartMs else { return nil }
+        let intoCycleMs = (sinceOpenMs - firstStartMs) % idleFlipIntervalMs
+        let scaled = Int(Double(intoCycleMs) * beatSpeed)
+        return scaled < flipDurationMs ? scaled : nil
+    }
+
+    // MARK: - Tip (short windows)
+
+    /// The tip between standing above the field and lying beside it: one
+    /// move on screen, so a strong ease-in-out, cubic-bezier(0.77, 0, 0.175,
+    /// 1), the same both ways.
+    static let tipDurationMs = 240
+
+    /// How far the tip has run, 0...1, `elapsedMs` (real time) after it
+    /// started. Reduce Motion: 1 at once, so the ghost appears in place
+    /// with no tipping.
+    static func tipProgress(elapsedMs: Int, reduceMotion: Bool) -> Double {
+        guard !reduceMotion, elapsedMs < tipDurationMs else { return 1 }
+        return cubicBezier(Double(max(elapsedMs, 0)) / Double(tipDurationMs), 0.77, 0, 0.175, 1)
+    }
+
+    /// Where the tip is, 0 (standing) ... 1 (lying), part-way from `from`
+    /// to `to`. A tip that turns round mid-way starts from where it is.
+    static func tipPosition(from: Double, to: Double, elapsedMs: Int, reduceMotion: Bool) -> Double {
+        from + (to - from) * tipProgress(elapsedMs: elapsedMs, reduceMotion: reduceMotion)
     }
 
     /// Rounds an offset in points to the display's pixel grid, so the sprite

@@ -894,6 +894,33 @@ enum CaptureFixture {
               width > 0, height > 0 else { return nil }
         return CGSize(width: width, height: height)
     }
+
+    /// `GHOSTTIES_CAPTURE_WINDOW_SIZE_SEQUENCE=<seconds>:<w>x<h>,<w>x<h>,...`:
+    /// every `interval` seconds after the window is up, its content size is
+    /// set to the next one, so a capture can show the composer as the
+    /// window shrinks and grows.
+    struct WindowSizeSequence: Equatable {
+        let interval: TimeInterval
+        let sizes: [CGSize]
+    }
+
+    static var windowSizeSequence: WindowSizeSequence? {
+        parseWindowSizeSequence(env("GHOSTTIES_CAPTURE_WINDOW_SIZE_SEQUENCE"))
+    }
+
+    /// One bad size makes the whole value invalid.
+    static func parseWindowSizeSequence(_ raw: String?) -> WindowSizeSequence? {
+        guard let raw, let split = raw.firstIndex(of: ":"),
+              let interval = parsePositiveSeconds(String(raw[..<split])) else { return nil }
+        let sizes = raw[raw.index(after: split)...].split(separator: ",", omittingEmptySubsequences: false)
+            .map { parseWindowContentSize(String($0)) }
+        guard !sizes.isEmpty, !sizes.contains(nil) else { return nil }
+        return WindowSizeSequence(interval: interval, sizes: sizes.compactMap { $0 })
+    }
+
+    /// `GHOSTTIES_CAPTURE_REDUCE_MOTION=1`: the composer behaves as it does
+    /// with the Mac's Reduce Motion setting on, for this launch only.
+    static var reduceMotion: Bool { env("GHOSTTIES_CAPTURE_REDUCE_MOTION") == "1" }
     /// `GHOSTTIES_CAPTURE_SETTINGS`: opens the Settings window shortly after
     /// launch, so a pane can be captured without a keystroke. `1` is App
     /// Settings' Appearance tab, `app` its General tab, `projects` the

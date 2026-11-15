@@ -117,19 +117,26 @@ struct SessionComposerOverlay: View {
     /// and can never shift the field.
     private var composerZStack: some View {
         GeometryReader { geo in
+            let fieldTopY = SessionComposerPalette.fieldTopY(
+                containerHeight: geo.size.height,
+                titlebarBand: centeringModel.titlebarBandHeight,
+                defaults: composerDefaultsForTesting ?? AppDefaults.store
+            )
             dismissLayer
                 .overlay(alignment: .top) {
                     SessionComposerPalette(
                         isPresented: isPresented,
                         request: request,
-                        tuningDefaultsForTesting: composerDefaultsForTesting
+                        tuningDefaultsForTesting: composerDefaultsForTesting,
+                        containerFit: ComposerContainerFit(
+                            size: geo.size,
+                            titlebarBand: centeringModel.titlebarBandHeight,
+                            fieldTopY: fieldTopY
+                        )
                     )
-                    .padding(.top, SessionComposerPalette.fieldTopY(
-                        containerHeight: geo.size.height,
-                        titlebarBand: centeringModel.titlebarBandHeight,
-                        defaults: composerDefaultsForTesting ?? AppDefaults.store
-                    ) - SessionComposerPalette.shakeClearance)
+                    .padding(.top, fieldTopY - SessionComposerPalette.shakeClearance)
                 }
+                .coordinateSpace(name: ComposerContainerFit.coordinateSpace)
         }
     }
 
@@ -159,11 +166,36 @@ struct SessionComposerOverlay: View {
     }
 }
 
+/// The window the composer sits in, as the overlay measured it: what the
+/// palette needs to keep the ghost and the list inside it.
+struct ComposerContainerFit: Equatable {
+    /// The overlay's coordinate space: y 0 is the window's top edge.
+    static let coordinateSpace = "ghostties.composerOverlay"
+
+    var size: CGSize
+    var titlebarBand: CGFloat
+    /// The y of the field card's top edge (`SessionComposerPalette.fieldTopY`).
+    var fieldTopY: CGFloat
+}
+
 /// Where the composer's field card sits vertically. Pure geometry, no view
 /// state, so the clamp is testable without rendering.
 enum ComposerVerticalAnchor {
     /// Room left under a full Resume list when the window is short.
     static let defaultBottomMargin: CGFloat = 24
+
+    /// The most height the list under the field may take: from its top
+    /// edge (`listTopY`, from the container's top) down to `bottomMargin`
+    /// above the container's bottom, less the card's own `listInset` under
+    /// the list. Never negative.
+    static func listHeightLimit(
+        containerHeight: CGFloat,
+        listTopY: CGFloat,
+        listInset: CGFloat,
+        bottomMargin: CGFloat
+    ) -> CGFloat {
+        max(containerHeight - bottomMargin - listInset - listTopY, 0)
+    }
 
     /// The y of the field card's top edge, from the top of a container
     /// `containerHeight` tall: `fraction` of the height, on a whole point.

@@ -1287,6 +1287,13 @@ class WorkspaceViewContainer: NSView {
                 self?.window?.setContentSize(size)
             }
         }
+        if let sequence = CaptureFixture.windowSizeSequence, CaptureFixture.claimHook("windowSizeSequence") {
+            for (index, size) in sequence.sizes.enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval * Double(index + 1)) { [weak self] in
+                    self?.window?.setContentSize(size)
+                }
+            }
+        }
         if let seconds = CaptureFixture.sidebarToggleAfter, CaptureFixture.claimHook("sidebarToggle") {
             // Cmd+S (`TerminalController.toggleWorkspaceSidebar`), twice:
             // pinned -> rail, then rail -> pinned.

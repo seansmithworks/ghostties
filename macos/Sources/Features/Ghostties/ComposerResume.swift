@@ -427,7 +427,8 @@ struct ComposerResumeListView: View {
 
 /// A5's ↓ list: RESUME, TEMPLATES, PROJECTS as one list
 /// (`ComposerDownList.items`). Sections never scroll on their own; past
-/// `maxHeight` the whole list scrolls, keeping the highlighted row in view.
+/// `maxHeight` the whole list scrolls, keeping the highlighted row in view,
+/// and its bottom edge sits on a whole row (`viewportHeight`).
 struct ComposerDownListView: View {
     let rows: [HistoryEntry]
     let templates: [ComposerTemplateRow]
@@ -461,6 +462,31 @@ struct ComposerDownListView: View {
         return CGFloat(rows) * row + CGFloat(headers) * header
     }
 
+    /// The list's visible height. Content that fits `maxHeight` shows whole;
+    /// taller content shows the most whole lines that fit, so the bottom
+    /// edge never cuts a row and never rests on a header with no row under
+    /// it. 0 when not even the first row fits.
+    static func viewportHeight(
+        contentHeight: CGFloat,
+        items: [ComposerDownList.Item],
+        titleSize: CGFloat,
+        maxHeight: CGFloat
+    ) -> CGFloat {
+        if contentHeight <= maxHeight { return max(contentHeight, 0) }
+        var bottom: CGFloat = 0
+        var fitted: CGFloat = 0
+        for item in items {
+            if case .header = item {
+                bottom += height(rows: 0, headers: 1, titleSize: titleSize)
+            } else {
+                bottom += height(rows: 1, headers: 0, titleSize: titleSize)
+                if bottom <= maxHeight { fitted = bottom }
+            }
+            if bottom > maxHeight { break }
+        }
+        return fitted
+    }
+
     var body: some View {
         let items = ComposerDownList.items(
             resume: rows.map(\.id), templates: templates.map(\.id), projects: projects.map(\.id), expanded: expanded
@@ -483,7 +509,9 @@ struct ComposerDownListView: View {
                         .onChange(of: geo.size.height) { contentHeight = $0 }
                 })
             }
-            .frame(height: min(contentHeight, maxHeight))
+            .frame(height: Self.viewportHeight(
+                contentHeight: contentHeight, items: items, titleSize: titleSize, maxHeight: maxHeight
+            ))
             .onChange(of: selectedID) { id in
                 guard let id, let index = items.firstIndex(where: { $0.keyboardID == id }) else { return }
                 // A section's first row brings its header into view with it.

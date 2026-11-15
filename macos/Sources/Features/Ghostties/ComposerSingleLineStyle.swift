@@ -231,6 +231,67 @@ enum ComposerWitnessGlowStrength {
     }
 }
 
+/// Short windows: when the Witness can't stand above the field without
+/// crossing the titlebar band, it lies on its side to the LEFT of the field
+/// card, a quarter turn clockwise so its head points at the field. Pure
+/// geometry; the motion between the two is `ComposerWitnessFrames.tipProgress`.
+enum ComposerWitnessSideways {
+    enum Placement: Equatable {
+        /// Above the field, upright.
+        case standing
+        /// Left of the field, on its side.
+        case lying
+        /// No room above or beside: not drawn, never clipped.
+        case hidden
+    }
+
+    /// Exactly a quarter turn, so the sprite's cells stay on the pixel grid.
+    static let lyingAngleDegrees: Double = 90
+
+    /// The least clear space kept between the lying ghost and the window's
+    /// left edge (its glow and sideways sway stay inside it).
+    static let sideMargin: CGFloat = 8
+
+    /// The threshold: the ghost stands while its top edge
+    /// (`fieldTopY - gap - size`) is on or below the titlebar band — the
+    /// same room `ComposerVerticalAnchor` keeps for it until the window is
+    /// too short to hold it and a full list. Past that it lies beside the
+    /// card when the window is wide enough, else it is hidden.
+    static func placement(
+        fieldTopY: CGFloat,
+        titlebarBand: CGFloat,
+        containerWidth: CGFloat,
+        cardWidth: CGFloat,
+        size: CGFloat,
+        gap: CGFloat
+    ) -> Placement {
+        if fieldTopY - gap - size >= titlebarBand { return .standing }
+        let roomBeside = (containerWidth - cardWidth) / 2
+        return roomBeside >= size + gap + sideMargin ? .lying : .hidden
+    }
+
+    /// The standing sprite's top-left corner, from the card's: its leading
+    /// edge on the field text's, its bottom edge `gap` above the card. Whole
+    /// points.
+    static func standingOffset(horizontalPadding: CGFloat, size: CGFloat, gap: CGFloat) -> CGSize {
+        CGSize(width: horizontalPadding.rounded(), height: (-(size + gap)).rounded())
+    }
+
+    /// The lying sprite's top-left corner, from the card's: its head `gap`
+    /// left of the card, centred on the field row (`fieldHeight`). Whole
+    /// points.
+    static func lyingOffset(fieldHeight: CGFloat, size: CGFloat, gap: CGFloat) -> CGSize {
+        CGSize(width: (-(size + gap)).rounded(), height: ((fieldHeight - size) / 2).rounded())
+    }
+
+    /// How far the sprite moves, standing to lying. Whole points.
+    static func travel(horizontalPadding: CGFloat, fieldHeight: CGFloat, size: CGFloat, gap: CGFloat) -> CGSize {
+        let standing = standingOffset(horizontalPadding: horizontalPadding, size: size, gap: gap)
+        let lying = lyingOffset(fieldHeight: fieldHeight, size: size, gap: gap)
+        return CGSize(width: lying.width - standing.width, height: lying.height - standing.height)
+    }
+}
+
 /// Where the composer's field card sits: its top edge at this fraction of
 /// the window's height, in every layout (`ComposerVerticalAnchor`).
 enum ComposerFieldTopFraction {
