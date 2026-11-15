@@ -40,6 +40,15 @@ struct CaptureScriptTests {
         ])
     }
 
+    @Test func browserOpParsesItsFourRoutesAndRejectsOthers() throws {
+        let steps = try parse(#"""
+        {"steps":[{"op":"browser","route":"composer"},{"op":"browser","route":"quick"},{"op":"browser","route":"toggle"},{"op":"browser","route":"agent"}]}
+        """#)
+        #expect(steps == [.browser(.composer), .browser(.quick), .browser(.toggle), .browser(.agent)])
+        #expect(failure(#"{"steps":[{"op":"browser","route":"popup"}]}"#) == "step 0: browser needs a route: composer, quick, toggle or agent")
+        #expect(failure(#"{"steps":[{"op":"browser"}]}"#) == "step 0: browser needs a route: composer, quick, toggle or agent")
+    }
+
     @Test func keyModifiersParse() throws {
         let steps = try parse(#"{"steps":[{"op":"key","key":"t","modifiers":["cmd","shift","option","ctrl"]}]}"#)
         #expect(steps == [.key(.init(key: "t", modifiers: [.command, .shift, .option, .control]))])
@@ -229,6 +238,7 @@ struct CaptureScriptTests {
         func setPinned(project: String, pinned: Bool) throws {
             try known(project, op: pinned ? "pin" : "unpin"); calls.append("\(pinned ? "pin" : "unpin"):\(project)")
         }
+        func openBrowser(route: CaptureScript.BrowserRoute) async throws { calls.append("browser:\(route.rawValue)") }
         private func known(_ project: String, op: String) throws {
             if project == "ghost" { throw CaptureScript.Failure("\(op): no project named 'ghost'") }
         }

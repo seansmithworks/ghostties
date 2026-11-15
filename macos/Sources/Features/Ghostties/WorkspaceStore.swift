@@ -893,6 +893,15 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
+    /// Records where a browser session sits on the canvas, so selecting or
+    /// relaunching its row shows it the same way.
+    func setBrowserPresentation(id: UUID, presentation: BrowserPresentation) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }),
+              sessions[index].browserPresentation != presentation else { return }
+        sessions[index].browserPresentation = presentation
+        persist()
+    }
+
     /// Rename a session in place. A manual rename pins the name — see
     /// `isNamePinned` on `AgentSession` — so subsequent agent title updates
     /// (`syncSessionNameFromTitle`) stop overwriting it until the pin is

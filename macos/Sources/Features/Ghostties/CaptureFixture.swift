@@ -39,6 +39,10 @@ enum CaptureFixture {
     /// never reaches argv at all.
     static let isActive: Bool = ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_FIXTURE"] == "1"
 
+    /// The page a fixture browser opens: a public placeholder, so a capture
+    /// never shows a search engine or anyone's browsing.
+    static let browserStartURL = "https://example.com"
+
     // MARK: - Canned Workspace
 
     #if DEBUG

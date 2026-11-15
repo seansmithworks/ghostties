@@ -751,8 +751,20 @@ class WorkspaceViewContainer: NSView {
     private var sidebarDragHandleTrailingToCard: NSLayoutConstraint!
     private var sidebarDragHandleTrailingToPanel: NSLayoutConstraint!
 
-    /// Whether the browser panel is currently visible (expanded).
-    private var isBrowserVisible = false
+    /// Where the browser is on the canvas right now; nil while it is hidden.
+    /// Written by `applyBrowserPresentation`, and by the overlay transition
+    /// when it collapses a split.
+    private(set) var browserPresentation: BrowserPresentation?
+
+    /// Whether the browser is on the canvas at all.
+    private var isBrowserVisible: Bool { browserPresentation != nil }
+
+    /// Whether a full-canvas browser has the terminal card's frame, leaving
+    /// the card invisible beneath it (`updateCanvasOccupant`).
+    private var isTerminalCardConcealed = false
+
+    /// Whether the browser is the panel beside the terminal.
+    private var isBrowserSplit: Bool { browserPresentation == .split }
 
     /// Fraction of the resizable width (terminal + browser) that the browser gets.
     /// Range 0.0–1.0; default comes from `WorkspaceLayout.browserSplitRatio`.
@@ -805,6 +817,13 @@ class WorkspaceViewContainer: NSView {
     private var browserShadowHostTrailingConstraint: NSLayoutConstraint!
     /// Terminal trailing to browser leading (8pt gap when browser is visible).
     private var shadowHostTrailingToBrowser: NSLayoutConstraint!
+    /// Browser leading on the terminal card's leading edge: active only for
+    /// a full-canvas browser, which takes the card's frame in every mode.
+    private var browserLeadingToCardLeading: NSLayoutConstraint!
+    /// Drag handle trailing on the browser's leading edge. Off for a
+    /// full-canvas browser: with the browser's leading edge on the card's,
+    /// the handle would span the card backwards and force its width to zero.
+    private var browserDragHandleTrailingToBrowser: NSLayoutConstraint!
 
     /// Tracking area for hover detection. Only one is active at a time.
     private var activeTrackingArea: NSTrackingArea?
@@ -1532,7 +1551,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Keep the terminal/browser split proportional when the window resizes.
-        if isBrowserVisible {
+        if isBrowserSplit {
             let available = resizableWidth
             let maxBrowser = available - WorkspaceLayout.terminalMinWidth
             let desired = available * browserSplitRatio
@@ -2058,9 +2077,15 @@ class WorkspaceViewContainer: NSView {
     /// Shows the browser as a side panel next to the terminal (Dia Browser style).
     /// If no browser session exists yet, creates one via the coordinator.
     @objc func toggleBrowser() {
-        if isBrowserVisible {
+        if browserPresentation == .fullCanvas {
+            // A full-canvas browser is the selected session, so hiding it
+            // selects the terminal that takes the canvas: the sidebar row
+            // and the canvas stay in step. With no terminal to show, the
+            // browser stays.
+            coordinator.selectTerminalBehindActiveBrowser()
+        } else if isBrowserVisible {
             // Collapse the side panel.
-            animateBrowserPanel(visible: false)
+            applyBrowserPresentation(nil)
         } else {
             // Ensure we have a browser session with a CEFBrowserView.
             // Check for an existing live browser session first.
@@ -2072,7 +2097,7 @@ class WorkspaceViewContainer: NSView {
 
             if let manager = existingManager {
                 embedBrowserInPanel(manager)
-                animateBrowserPanel(visible: true)
+                applyBrowserPresentation(BrowserPlacement.presentation(for: .toggleShortcut))
             } else if let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
                       let project = store.projects.first(where: { $0.id == projectId }) {
                 // Phase 4: use the composer's smart-default cascade instead
@@ -2081,53 +2106,139 @@ class WorkspaceViewContainer: NSView {
                 // Create a new browser session — this will call showBrowserContent,
                 // which embeds into the side panel and animates it open.
                 _Concurrency.Task { @MainActor in
-                    await coordinator.createQuickSession(for: project, template: .browser)
+                    await coordinator.createQuickSession(for: project, template: .browser, browserRoute: .toggleShortcut)
                 }
             }
         }
     }
 
-    /// Animate the browser side panel open or closed.
-    private func animateBrowserPanel(visible: Bool) {
-        isBrowserVisible = visible
+    /// Puts the browser where `target` says, or hides it (nil). The split
+    /// slides open and closed beside the terminal. A full-canvas browser is
+    /// a session filling the canvas, so it swaps in and out as a terminal
+    /// session does, with no motion.
+    private func applyBrowserPresentation(_ target: BrowserPresentation?) {
+        let previous = browserPresentation
+        guard target != previous else { return }
+        browserPresentation = target
 
-        // Swap trailing constraints: terminal trails to browser or to window edge.
-        if visible {
-            shadowHostTrailingConstraint.isActive = false
-            shadowHostTrailingToBrowser.isActive = true
-        } else {
-            shadowHostTrailingToBrowser.isActive = false
-            shadowHostTrailingConstraint.isActive = true
+        let isSplit = target == .split
+        let isFullCanvas = target == .fullCanvas
+
+        // Swap constraints, off before on: the terminal trails to the
+        // browser (split) or the window edge; the browser is a fixed-width
+        // panel, or leads from the card's leading edge (full canvas).
+        if !isSplit { shadowHostTrailingToBrowser.isActive = false }
+        if !isFullCanvas { browserLeadingToCardLeading.isActive = false }
+        if isFullCanvas {
+            browserWidthConstraint.isActive = false
+            browserDragHandleTrailingToBrowser.isActive = false
+        }
+        shadowHostTrailingConstraint.isActive = !isSplit
+        shadowHostTrailingToBrowser.isActive = isSplit
+        browserWidthConstraint.isActive = !isFullCanvas
+        browserLeadingToCardLeading.isActive = isFullCanvas
+        browserDragHandleTrailingToBrowser.isActive = !isFullCanvas
+
+        // The drag handle resizes the split only.
+        browserDragHandle.isHidden = !isSplit
+
+        var width: CGFloat = 0
+        if isSplit {
+            // Expand browser using the stored split ratio.
+            let available = resizableWidth
+            let maxBrowser = available - WorkspaceLayout.terminalMinWidth
+            let desired = available * browserSplitRatio
+            width = min(max(desired, WorkspaceLayout.browserMinWidth), max(maxBrowser, WorkspaceLayout.browserMinWidth))
         }
 
-        // Show/hide the drag handle with the browser panel.
-        browserDragHandle.isHidden = !visible
-
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = reduceMotion ? 0 : 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-
-            if visible {
-                // Expand browser using the stored split ratio.
-                let available = resizableWidth
-                let maxBrowser = available - WorkspaceLayout.terminalMinWidth
-                let desired = available * browserSplitRatio
-                let browserWidth = min(max(desired, WorkspaceLayout.browserMinWidth), max(maxBrowser, WorkspaceLayout.browserMinWidth))
-                browserWidthConstraint.animator().constant = browserWidth
-                browserShadowHost.animator().alphaValue = 1
-            } else {
-                // Collapse browser.
-                browserWidthConstraint.animator().constant = 0
-                browserShadowHost.animator().alphaValue = 0
+        if previous != .fullCanvas && !isFullCanvas {
+            let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = reduceMotion ? 0 : 0.2
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                browserWidthConstraint.animator().constant = width
+                browserShadowHost.animator().alphaValue = isSplit ? 1 : 0
             }
+        } else {
+            browserWidthConstraint.constant = width
+            browserShadowHost.alphaValue = target == nil ? 0 : 1
         }
 
         // Shadow + corner radius (non-animatable).
-        browserShadowHost.castsShadow = visible
+        browserShadowHost.castsShadow = target != nil
 
+        updateCanvasOccupant()
         invalidateIntrinsicContentSize()
     }
+
+    /// A full-canvas browser takes the terminal card's frame, so only one of
+    /// the two shows (`BrowserPlacement.canvasOccupant`).
+    private func updateCanvasOccupant() {
+        let occupant = BrowserPlacement.canvasOccupant(
+            presentation: browserPresentation,
+            isHistoryPresented: coordinator.isHistoryPresented
+        )
+        // Opacity, not `isHidden`: a hidden terminal host reports no
+        // intrinsic width, and the window shrinks to the sidebar to fit it.
+        // The browser card sits above it, so it takes the pointer.
+        let wasConcealed = isTerminalCardConcealed
+        isTerminalCardConcealed = occupant == .browser
+        terminalShadowHost.alphaValue = isTerminalCardConcealed ? 0 : 1
+        updateTerminalCardAccessibility()
+        browserShadowHost.isHidden = browserPresentation == .fullCanvas && occupant == .terminalCard
+
+        // Keys never stay with a card nobody can see.
+        let handOff = BrowserPlacement.keyHandOff(
+            holder: keyHolder,
+            presentation: browserPresentation,
+            isHistoryPresented: coordinator.isHistoryPresented,
+            terminalWasConcealed: wasConcealed
+        )
+        switch handOff {
+        case .toTerminal:
+            if let terminalKeyTarget { window?.makeFirstResponder(terminalKeyTarget) }
+        case .release:
+            window?.makeFirstResponder(nil)
+        case nil:
+            break
+        }
+    }
+
+    /// VoiceOver skips the terminal card while nobody can see it: under a
+    /// full-canvas browser, or behind the composer overlay.
+    private func updateTerminalCardAccessibility() {
+        let isBehindComposer = composerOverlayHostingView.superview != nil && !isDismissingComposerOverlay
+        terminalShadowHost.setAccessibilityHidden(isTerminalCardConcealed || isBehindComposer)
+    }
+
+    /// Which card the window's first responder is in.
+    private var keyHolder: BrowserPlacement.KeyHolder {
+        guard let window, let responder = window.firstResponder, responder !== window else { return .nobody }
+        guard let view = responder as? NSView else { return .elsewhere }
+        if view.isDescendant(of: browserShadowHost) { return .browser }
+        if view.isDescendant(of: terminalShadowHost) { return .terminalCard }
+        return .elsewhere
+    }
+
+    /// The terminal surface that takes the keys back from a browser.
+    private var terminalKeyTarget: NSView? {
+        #if DEBUG
+        if let terminalKeyTargetForTesting { return terminalKeyTargetForTesting }
+        #endif
+        return (window?.windowController as? BaseTerminalController)?.focusedSurface
+    }
+
+    #if DEBUG
+    /// Test seam: stands in for the focused terminal surface, which needs a
+    /// live terminal controller.
+    var terminalKeyTargetForTesting: NSView?
+
+    /// Test seam: whether VoiceOver skips the terminal card.
+    var isTerminalCardAccessibilityHiddenForTesting: Bool { terminalShadowHost.isAccessibilityHidden() }
+
+    /// Test seam: the terminal card, to host a stand-in surface.
+    var terminalCardForTesting: NSView { terminalShadowHost }
+    #endif
 
     /// Handle a horizontal drag delta from the browser drag handle.
     /// Negative delta = dragging left (browser grows), positive = dragging right (browser shrinks).
@@ -2416,9 +2527,14 @@ class WorkspaceViewContainer: NSView {
 
     // MARK: - Browser Session Content
 
-    /// Show a browser session's content in the side panel (terminal stays visible).
+    /// Show a browser session's content where `presentation` puts it: in the
+    /// side panel with the terminal still visible, or filling the canvas.
     /// Called by SessionCoordinator when switching to or creating a browser session.
-    func showBrowserContent(_ manager: BrowserTabManager, bridge: BrowserSessionBridge?) {
+    func showBrowserContent(
+        _ manager: BrowserTabManager,
+        bridge: BrowserSessionBridge?,
+        presentation: BrowserPresentation
+    ) {
         embedBrowserInPanel(manager)
         #if DEBUG
         refreshBrowserDrivenBy()
@@ -2429,10 +2545,7 @@ class WorkspaceViewContainer: NSView {
             bridge.navigationBar = browserPanelView.navigationBar
         }
 
-        // Open the side panel if it isn't already visible.
-        if !isBrowserVisible {
-            animateBrowserPanel(visible: true)
-        }
+        applyBrowserPresentation(presentation)
     }
 
     /// Width of the browser side panel as laid out right now; 0 while it is
@@ -2442,11 +2555,8 @@ class WorkspaceViewContainer: NSView {
     /// Restore terminal-only display (collapse browser side panel).
     /// Called by SessionCoordinator when switching from a browser session to a terminal session.
     func showTerminalContent() {
-        // Terminal is always visible in side-by-side mode, so nothing to un-hide.
-        // Collapse the browser panel if it's open.
-        if isBrowserVisible {
-            animateBrowserPanel(visible: false)
-        }
+        // Collapses a split; a full-canvas browser gives the canvas back.
+        applyBrowserPresentation(nil)
         _activeBrowserManager = nil
         #if DEBUG
         refreshBrowserDrivenBy()
@@ -2780,11 +2890,18 @@ class WorkspaceViewContainer: NSView {
             terminalShadowHost.castsShadow = true
             terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
-            // Browser panel is force-collapsed on entry to overlay (see above);
-            // leave its own card styling untouched.
-            browserShadowHost.layer?.cornerRadius = 0
-            browserShadowHost.layer?.backgroundColor = nil
-            browserShadowHost.castsShadow = false
+            if browserPresentation == .fullCanvas {
+                // A full-canvas browser stays, carded like the terminal.
+                browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
+                browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
+                browserShadowHost.castsShadow = true
+            } else {
+                // A split browser is force-collapsed on entry to overlay
+                // (see above); leave its own card styling untouched.
+                browserShadowHost.layer?.cornerRadius = 0
+                browserShadowHost.layer?.backgroundColor = nil
+                browserShadowHost.castsShadow = false
+            }
             layer?.backgroundColor = canvasBackgroundCGColor
             // The shadow lives on `backgroundEffectView`, not
             // `sidebarOverlayBackground` — the latter is now the opaque,
@@ -2866,7 +2983,7 @@ class WorkspaceViewContainer: NSView {
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .pinned, margin: inset))
-            if !isBrowserVisible {
+            if !isBrowserSplit {
                 set(shadowHostTrailingConstraint, -inset)
             }
             set(shadowHostBottomConstraint, -inset)
@@ -2888,7 +3005,7 @@ class WorkspaceViewContainer: NSView {
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset))
             set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .collapsed, margin: inset))
-            if !isBrowserVisible {
+            if !isBrowserSplit {
                 set(shadowHostTrailingConstraint, -inset)
             }
             set(shadowHostBottomConstraint, -inset)
@@ -2911,7 +3028,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarHostBottomConstraint, 0)
             set(shadowHostTopConstraint, inset)
             set(shadowHostLeadingToSuperview, inset)
-            if !isBrowserVisible {
+            if !isBrowserSplit {
                 set(shadowHostTrailingConstraint, -inset)
             }
             set(shadowHostBottomConstraint, -inset)
@@ -2922,11 +3039,13 @@ class WorkspaceViewContainer: NSView {
             set(browserShadowHostTrailingConstraint, -inset)
 
         case .overlay:
-            // If browser was visible, swap trailing constraint back to window edge.
-            if isBrowserVisible {
+            // A split browser collapses: swap the trailing constraint back
+            // to the window edge. A full-canvas browser is the canvas, and
+            // stays under the overlay as the terminal card does.
+            if isBrowserSplit {
                 shadowHostTrailingToBrowser.isActive = false
                 shadowHostTrailingConstraint.isActive = true
-                isBrowserVisible = false
+                browserPresentation = nil
                 browserDragHandle.isHidden = true
             }
             set(sidebarWidthConstraint, currentSidebarWidth)
@@ -2947,11 +3066,18 @@ class WorkspaceViewContainer: NSView {
             set(shadowHostTrailingConstraint, -inset)
             set(shadowHostBottomConstraint, -inset)
             set(terminalTopConstraint, 0)
-            // Collapse browser in overlay mode.
-            set(browserWidthConstraint, 0)
-            set(browserShadowHostTopConstraint, 0)
-            set(browserShadowHostBottomConstraint, 0)
-            set(browserShadowHostTrailingConstraint, 0)
+            if browserPresentation == .fullCanvas {
+                // Browser insets match terminal.
+                set(browserShadowHostTopConstraint, inset)
+                set(browserShadowHostBottomConstraint, -inset)
+                set(browserShadowHostTrailingConstraint, -inset)
+            } else {
+                // Collapse browser in overlay mode.
+                set(browserWidthConstraint, 0)
+                set(browserShadowHostTopConstraint, 0)
+                set(browserShadowHostBottomConstraint, 0)
+                set(browserShadowHostTrailingConstraint, 0)
+            }
         }
     }
 
@@ -3779,7 +3905,7 @@ class WorkspaceViewContainer: NSView {
         // sidebar and terminal — the counterpart to the hide in
         // `installComposerOverlayIfNeeded()`.
         sidebarHostingView.setAccessibilityHidden(false)
-        terminalShadowHost.setAccessibilityHidden(false)
+        updateTerminalCardAccessibility()
 
         // R4 (Phase 3 review round 2): only steal first responder back to
         // the terminal if THIS window is actually key. `makeFirstResponder`
@@ -3795,7 +3921,10 @@ class WorkspaceViewContainer: NSView {
         // (Claude Code's TUI, vim, tmux) — an inverted pty focus report that
         // never self-corrects, because `SurfaceView_AppKit.focusDidChange`
         // early-returns when `self.focused` already matches on the way back.
+        // Not while a full-canvas browser hides the terminal: keys must not
+        // reach a terminal nobody can see.
         if window?.isKeyWindow == true,
+           !isTerminalCardConcealed,
            let controller = window?.windowController as? BaseTerminalController,
            let focusedSurface = controller.focusedSurface {
             window?.makeFirstResponder(focusedSurface)
@@ -3979,6 +4108,10 @@ class WorkspaceViewContainer: NSView {
 
         // Browser shadow host constraints — starts hidden (width 0, alpha 0).
         browserWidthConstraint = browserShadowHost.widthAnchor.constraint(equalToConstant: 0)
+        browserLeadingToCardLeading = browserShadowHost.leadingAnchor.constraint(
+            equalTo: terminalShadowHost.leadingAnchor)
+        browserDragHandleTrailingToBrowser = browserDragHandle.trailingAnchor.constraint(
+            equalTo: browserShadowHost.leadingAnchor)
         browserShadowHostTopConstraint = browserShadowHost.topAnchor.constraint(
             equalTo: topAnchor, constant: inset)
         browserShadowHostBottomConstraint = browserShadowHost.bottomAnchor.constraint(
@@ -4066,7 +4199,7 @@ class WorkspaceViewContainer: NSView {
             browserDragHandle.topAnchor.constraint(equalTo: terminalShadowHost.topAnchor),
             browserDragHandle.bottomAnchor.constraint(equalTo: terminalShadowHost.bottomAnchor),
             browserDragHandle.leadingAnchor.constraint(equalTo: terminalShadowHost.trailingAnchor),
-            browserDragHandle.trailingAnchor.constraint(equalTo: browserShadowHost.leadingAnchor),
+            browserDragHandleTrailingToBrowser,
 
             // Sidebar drag handle: trailing edge on the card's leading edge,
             // width from `sidebarDragHandleWidthConstraint`. Pinned, that is
@@ -4296,6 +4429,9 @@ class WorkspaceViewContainer: NSView {
             historyHostingView.removeFromSuperview()
             historyHostingView.rootView = AnyView(EmptyView())
         }
+        // History lives in the terminal card: over a full-canvas browser it
+        // takes the canvas, and hands it back when it closes.
+        updateCanvasOccupant()
     }
 
     #if DEBUG
@@ -4720,6 +4856,45 @@ extension WorkspaceViewContainer: CaptureScript.Host {
         }
         // The project context menu's Pin / Unpin.
         store.togglePin(id: project.id)
+    }
+
+    // MARK: Browser op
+
+    /// State injection, no input: each route makes the call its own entry
+    /// point makes once the choice is made. It proves where the browser
+    /// goes, not that the composer row or the shortcut is wired to it.
+    func openBrowser(route: CaptureScript.BrowserRoute) async throws {
+        switch route {
+        case .quick:
+            // `ProjectDisclosureRow`'s Option-click "+" and the tray's
+            // instant create, for the browser template.
+            guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
+                  let project = store.projects.first(where: { $0.id == projectId }) else {
+                throw CaptureScript.Failure("browser: no project to create it in")
+            }
+            guard await coordinator.createQuickSession(for: project, template: .browser) else {
+                throw CaptureScript.Failure("browser: the browser could not start")
+            }
+        case .composer:
+            // `SessionComposerStore`'s launch, for the browser template.
+            guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
+                  let project = store.projects.first(where: { $0.id == projectId }) else {
+                throw CaptureScript.Failure("browser: no project to create it in")
+            }
+            guard await coordinator.createQuickSession(for: project, template: .browser, browserRoute: .composer) else {
+                throw CaptureScript.Failure("browser: the browser could not start")
+            }
+        case .toggle:
+            // `TerminalController.toggleWorkspaceBrowser`.
+            toggleBrowser()
+        case .agent:
+            // `BrowserAgentControl`'s handler for `gt browser open`.
+            guard let terminal = coordinator.activeSessionId, coordinator.ownsTerminalSession(terminal) else {
+                throw CaptureScript.Failure("browser: the selected session is not a terminal")
+            }
+            _ = await coordinator.openAgentBrowser(
+                sessionId: terminal, url: CaptureFixture.browserStartURL, targetTimeout: 1)
+        }
     }
 }
 #endif

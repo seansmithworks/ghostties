@@ -108,6 +108,11 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// hook), or a Shell/Browser session with no agent conversation.
     var resume: AgentResume?
 
+    /// Where this browser session sits on the canvas, as decided when it was
+    /// created (`BrowserPlacement`). Nil for terminal sessions and for
+    /// browser sessions saved before this field existed, which show split.
+    var browserPresentation: BrowserPresentation?
+
     init(
         id: UUID = UUID(),
         name: String,
@@ -120,7 +125,8 @@ struct AgentSession: Identifiable, Codable, Hashable {
         ghostCharacter: GhostCharacter? = nil,
         isPinned: Bool = false,
         sessionViewOrder: Int? = nil,
-        resume: AgentResume? = nil
+        resume: AgentResume? = nil,
+        browserPresentation: BrowserPresentation? = nil
     ) {
         self.id = id
         self.name = name
@@ -134,6 +140,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.isPinned = isPinned
         self.sessionViewOrder = sessionViewOrder
         self.resume = resume
+        self.browserPresentation = browserPresentation
     }
 
     // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
@@ -156,6 +163,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         self.sessionViewOrder = try container.decodeIfPresent(Int.self, forKey: .sessionViewOrder)
         self.resume = try container.decodeIfPresent(AgentResume.self, forKey: .resume)
+        self.browserPresentation = try container.decodeIfPresent(BrowserPresentation.self, forKey: .browserPresentation)
     }
 
     /// The timestamp Sessions rows and the Archive sort should display and
