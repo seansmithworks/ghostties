@@ -112,6 +112,26 @@ enum CaptureFixture {
         return suite
     }()
 
+    /// `GHOSTTIES_CAPTURE_COMPOSER_DIALS`, applied when the composer hook
+    /// fires. The composer reads its dials from `AppDefaults.store`
+    /// (`.standard` in a capture launch, not the throwaway suite), so they
+    /// go in that store's argument domain, which is volatile: it outranks
+    /// the saved values and is never written to disk.
+    static func applyComposerDials() {
+        seedComposerDials(composerDials, into: AppDefaults.store)
+    }
+
+    /// Merges `dials` into `defaults`' volatile argument domain. Empty
+    /// leaves it untouched.
+    static func seedComposerDials(_ dials: [String: Double], into defaults: UserDefaults) {
+        guard !dials.isEmpty else { return }
+        var arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        for (key, value) in dials { arguments[key] = value }
+        // Setting a volatile domain that already exists raises; replace it.
+        defaults.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+        defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+    }
+
     /// Writes the reveal style dial into `suite` (the fixture's per-pid one,
     /// never `.standard`); nil leaves the code default.
     static func seedRevealStyle(_ style: RailRevealStyle?, into suite: UserDefaults) {
@@ -580,6 +600,39 @@ enum CaptureFixture {
         static let defaultDelay: TimeInterval = 1
     }
 
+    /// `GHOSTTIES_CAPTURE_COMPOSER_PROJECT_SEQUENCE=<seconds>:<project>,<project>,...`:
+    /// once the composer is open, every `interval` seconds the next project
+    /// is typed into its field (`SessionComposerPalette.runCaptureHooks`).
+    struct ComposerProjectSequence: Equatable {
+        let interval: TimeInterval
+        let projectNames: [String]
+    }
+
+    static func parseComposerProjectSequence(_ raw: String?) -> ComposerProjectSequence? {
+        guard let raw, let split = raw.firstIndex(of: ":"),
+              let interval = parsePositiveSeconds(String(raw[..<split])) else { return nil }
+        let names = raw[raw.index(after: split)...].split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard !names.isEmpty, !names.contains(where: \.isEmpty) else { return nil }
+        return ComposerProjectSequence(interval: interval, projectNames: names)
+    }
+
+    /// `GHOSTTIES_CAPTURE_COMPOSER_DIALS=<key>=<number>,...`: composer dial
+    /// values for this launch (e.g. `ghostties.composerWitnessGlowStrength=0`).
+    /// Only `ghostties.composer` keys; anything else, or a non-number, makes
+    /// the whole value invalid.
+    static func parseComposerDials(_ raw: String?) -> [String: Double]? {
+        guard let raw, !raw.isEmpty else { return nil }
+        var dials: [String: Double] = [:]
+        for entry in raw.split(separator: ",", omittingEmptySubsequences: false) {
+            let pair = entry.split(separator: "=", omittingEmptySubsequences: false)
+            guard pair.count == 2, pair[0].hasPrefix("ghostties.composer"),
+                  let value = Double(pair[1]), value.isFinite else { return nil }
+            dials[String(pair[0])] = value
+        }
+        return dials
+    }
+
     /// `GHOSTTIES_CAPTURE_PROJECT_SETTINGS`:
     /// `<project>[:templates-edit|:templates-delete]`.
     struct ProjectSettingsHook: Equatable {
@@ -675,6 +728,13 @@ enum CaptureFixture {
     }
 
     static var composerHook: ComposerHook? { parseComposerHook(env("GHOSTTIES_CAPTURE_COMPOSER")) }
+    /// `GHOSTTIES_CAPTURE_COMPOSER_RESUME=open`: once the composer is open,
+    /// its Resume list is revealed the way ↓ does (the default list layout).
+    static var composerResumeOpen: Bool { env("GHOSTTIES_CAPTURE_COMPOSER_RESUME") == "open" }
+    static var composerProjectSequence: ComposerProjectSequence? {
+        parseComposerProjectSequence(env("GHOSTTIES_CAPTURE_COMPOSER_PROJECT_SEQUENCE"))
+    }
+    static var composerDials: [String: Double] { parseComposerDials(env("GHOSTTIES_CAPTURE_COMPOSER_DIALS")) ?? [:] }
     /// `GHOSTTIES_CAPTURE_COMPOSER_TEXT=<text>`: written into the composer's
     /// field once the `GHOSTTIES_CAPTURE_COMPOSER` hook has opened it, as
     /// if typed (e.g. `theme gru`).
@@ -834,6 +894,33 @@ enum CaptureFixture {
               width > 0, height > 0 else { return nil }
         return CGSize(width: width, height: height)
     }
+
+    /// `GHOSTTIES_CAPTURE_WINDOW_SIZE_SEQUENCE=<seconds>:<w>x<h>,<w>x<h>,...`:
+    /// every `interval` seconds after the window is up, its content size is
+    /// set to the next one, so a capture can show the composer as the
+    /// window shrinks and grows.
+    struct WindowSizeSequence: Equatable {
+        let interval: TimeInterval
+        let sizes: [CGSize]
+    }
+
+    static var windowSizeSequence: WindowSizeSequence? {
+        parseWindowSizeSequence(env("GHOSTTIES_CAPTURE_WINDOW_SIZE_SEQUENCE"))
+    }
+
+    /// One bad size makes the whole value invalid.
+    static func parseWindowSizeSequence(_ raw: String?) -> WindowSizeSequence? {
+        guard let raw, let split = raw.firstIndex(of: ":"),
+              let interval = parsePositiveSeconds(String(raw[..<split])) else { return nil }
+        let sizes = raw[raw.index(after: split)...].split(separator: ",", omittingEmptySubsequences: false)
+            .map { parseWindowContentSize(String($0)) }
+        guard !sizes.isEmpty, !sizes.contains(nil) else { return nil }
+        return WindowSizeSequence(interval: interval, sizes: sizes.compactMap { $0 })
+    }
+
+    /// `GHOSTTIES_CAPTURE_REDUCE_MOTION=1`: the composer behaves as it does
+    /// with the Mac's Reduce Motion setting on, for this launch only.
+    static var reduceMotion: Bool { env("GHOSTTIES_CAPTURE_REDUCE_MOTION") == "1" }
     /// `GHOSTTIES_CAPTURE_SETTINGS`: opens the Settings window shortly after
     /// launch, so a pane can be captured without a keystroke. `1` is App
     /// Settings' Appearance tab, `app` its General tab, `projects` the

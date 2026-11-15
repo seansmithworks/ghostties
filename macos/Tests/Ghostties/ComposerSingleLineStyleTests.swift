@@ -123,7 +123,12 @@ struct ComposerSingleLineStyleTests {
     /// the window alone does not pin what SwiftUI resolves colors against,
     /// which is why callers also wrap the render in
     /// `NSAppearance(named:).performAsCurrentDrawingAppearance`.
-    private func renderPNG<Content: View>(_ content: Content, size: NSSize, appearance: NSAppearance.Name = .aqua) -> Data? {
+    private func renderPNG<Content: View>(
+        _ content: Content,
+        size: NSSize,
+        appearance: NSAppearance.Name = .aqua,
+        settle: TimeInterval = 0
+    ) -> Data? {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless],
@@ -140,6 +145,10 @@ struct ComposerSingleLineStyleTests {
         window.orderFrontRegardless()
         hosting.layoutSubtreeIfNeeded()
         hosting.layoutSubtreeIfNeeded()
+        if settle > 0 {
+            RunLoop.current.run(until: Date().addingTimeInterval(settle))
+            hosting.layoutSubtreeIfNeeded()
+        }
 
         defer { window.orderOut(nil) }
 
@@ -457,11 +466,15 @@ struct ComposerSingleLineStyleTests {
         return (view, NSSize(width: Self.derivedRenderCanvasWidth, height: 140))
     }
 
+    /// The ghost drops in from opacity 0, so capture after its entrance
+    /// (`ComposerWitnessFrames.openDurationMs`) has finished.
+    private static let witnessEntranceSettle = Double(ComposerWitnessFrames.openDurationMs) / 1000 + 0.3
+
     /// red mutation: gate `showsWitness` on `false` unconditionally — this
     /// test then fails (0 flicker-red pixels with the toggle on).
     @Test func witnessGhostPixelsPresentAboveCardWhenToggleOn() {
         let fixture = witnessFixture(witnessEnabled: true)
-        let png = renderPNG(fixture.view, size: fixture.size)
+        let png = renderPNG(fixture.view, size: fixture.size, settle: Self.witnessEntranceSettle)
         writeScratchPNG(png, filename: "witness-toggle-on.png")
         #expect(png != nil)
         if let png {
@@ -474,7 +487,7 @@ struct ComposerSingleLineStyleTests {
     /// off).
     @Test func witnessGhostPixelsAbsentWhenToggleOff() {
         let fixture = witnessFixture(witnessEnabled: false)
-        let png = renderPNG(fixture.view, size: fixture.size)
+        let png = renderPNG(fixture.view, size: fixture.size, settle: Self.witnessEntranceSettle)
         writeScratchPNG(png, filename: "witness-toggle-off.png")
         #expect(png != nil)
         if let png {
@@ -1469,9 +1482,11 @@ struct ComposerSingleLineStyleTests {
 
     // MARK: - Round 14 (session-7): new Witness dials — fallback defaults
 
-    @Test func composerWitnessSizeDefaultsToThirty() {
+    @Test func composerWitnessSizeDefaultsToFortyEight() {
         let suite = UserDefaults(suiteName: "ghostties.witnessSize.default.test.\(UUID().uuidString)")!
-        #expect(ComposerWitnessSize.size(defaults: suite) == 30)
+        #expect(ComposerWitnessSize.size(defaults: suite) == 48)
+        #expect(ComposerWitnessSize.range.upperBound > 48, "the default must not be pinned at the dial's max")
+        #expect((48 - ComposerWitnessSize.range.lowerBound).truncatingRemainder(dividingBy: 6) == 0, "48 sits on the dial's 6pt step")
     }
 
     @Test func composerWitnessSizeReadsStoredValue() {
@@ -1480,9 +1495,10 @@ struct ComposerSingleLineStyleTests {
         #expect(ComposerWitnessSize.size(defaults: suite) == 36)
     }
 
-    @Test func composerWitnessFloatAmplitudeDefaultsToTwo() {
+    @Test func composerWitnessFloatAmplitudeDefaultsToFour() {
         let suite = UserDefaults(suiteName: "ghostties.witnessFloatAmplitude.default.test.\(UUID().uuidString)")!
-        #expect(ComposerWitnessFloatAmplitude.amplitude(defaults: suite) == 2)
+        #expect(ComposerWitnessFloatAmplitude.amplitude(defaults: suite) == 4)
+        #expect(ComposerWitnessFloatAmplitude.range.upperBound > 4, "the default must not be pinned at the dial's max")
     }
 
     @Test func composerWitnessFloatAmplitudeReadsStoredValue() {
@@ -1529,6 +1545,36 @@ struct ComposerSingleLineStyleTests {
         #expect(ComposerWitnessBeatSpeed.speed(defaults: suite) == 1.0)
     }
 
+    @Test func composerWitnessGlowDefaultsToRadiusEightStrengthHalf() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessGlow.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessGlowRadius.radius(defaults: suite) == 8)
+        #expect(ComposerWitnessGlowStrength.strength(defaults: suite) == 0.5)
+        #expect(ComposerWitnessGlowStrength.range.lowerBound == 0, "strength 0 must be reachable: no glow")
+    }
+
+    @Test func composerWitnessGlowReadsStoredValues() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessGlow.stored.test.\(UUID().uuidString)")!
+        suite.set(12.0, forKey: ComposerWitnessGlowRadius.storageKey)
+        suite.set(0.0, forKey: ComposerWitnessGlowStrength.storageKey)
+        #expect(ComposerWitnessGlowRadius.radius(defaults: suite) == 12)
+        #expect(ComposerWitnessGlowStrength.strength(defaults: suite) == 0)
+    }
+
+    @Test func composerFieldTopFractionDefaultsToAThird() {
+        let suite = UserDefaults(suiteName: "ghostties.fieldTopFraction.default.test.\(UUID().uuidString)")!
+        #expect(ComposerFieldTopFraction.fraction(defaults: suite) == 1.0 / 3)
+        #expect(ComposerFieldTopFraction.range.contains(1.0 / 3))
+        suite.set(0.4, forKey: ComposerFieldTopFraction.storageKey)
+        #expect(ComposerFieldTopFraction.fraction(defaults: suite) == 0.4)
+    }
+
+    @Test func composerSingleLineResetCoversTheNewDials() {
+        let keys = ComposerSingleLineReset.resetKeys
+        #expect(keys.contains(ComposerWitnessGlowRadius.storageKey))
+        #expect(keys.contains(ComposerWitnessGlowStrength.storageKey))
+        #expect(keys.contains(ComposerFieldTopFraction.storageKey))
+    }
+
     @Test func composerWitnessBeatSpeedReadsStoredValue() {
         let suite = UserDefaults(suiteName: "ghostties.witnessBeatSpeed.stored.test.\(UUID().uuidString)")!
         suite.set(2.0, forKey: ComposerWitnessBeatSpeed.storageKey)
@@ -1550,7 +1596,13 @@ struct ComposerSingleLineStyleTests {
         coordinator.state.values.witnessFloatPeriod = 4.5
         coordinator.state.values.witnessOpacity = 0.6
         coordinator.state.values.witnessBeatSpeed = 1.5
+        coordinator.state.values.witnessGlowRadius = 12
+        coordinator.state.values.witnessGlowStrength = 0.25
+        coordinator.state.values.fieldTopFraction = 0.4
 
+        #expect(suite.object(forKey: ComposerWitnessGlowRadius.storageKey) as? Double == 12)
+        #expect(suite.object(forKey: ComposerWitnessGlowStrength.storageKey) as? Double == 0.25)
+        #expect(suite.object(forKey: ComposerFieldTopFraction.storageKey) as? Double == 0.4)
         #expect(suite.object(forKey: ComposerWitnessSize.storageKey) as? Double == 42)
         #expect(suite.object(forKey: ComposerWitnessFloatAmplitude.storageKey) as? Double == 3)
         #expect(suite.object(forKey: ComposerWitnessFloatHorizontal.storageKey) as? Double == 3.5)
@@ -1565,6 +1617,9 @@ struct ComposerSingleLineStyleTests {
         #expect(reread.state.values.witnessFloatPeriod == 4.5)
         #expect(reread.state.values.witnessOpacity == 0.6)
         #expect(reread.state.values.witnessBeatSpeed == 1.5)
+        #expect(reread.state.values.witnessGlowRadius == 12)
+        #expect(reread.state.values.witnessGlowStrength == 0.25)
+        #expect(reread.state.values.fieldTopFraction == 0.4)
     }
 
     /// Acceptance criterion 6: beat speed 2.0 finishes a beat in half the
@@ -1655,12 +1710,15 @@ struct ComposerSingleLineStyleTests {
         coordinator.state.values.singleLineWidth = 512
         coordinator.state.values.singleLineCornerRadius = 20
         coordinator.state.values.witnessGap = 12
-        coordinator.state.values.witnessSize = 48
-        coordinator.state.values.witnessFloatAmplitude = 4
+        coordinator.state.values.witnessSize = 60
+        coordinator.state.values.witnessFloatAmplitude = 6
         coordinator.state.values.witnessFloatHorizontalAmplitude = 4
         coordinator.state.values.witnessFloatPeriod = 6
         coordinator.state.values.witnessOpacity = 0.2
         coordinator.state.values.witnessBeatSpeed = 2.0
+        coordinator.state.values.witnessGlowRadius = 20
+        coordinator.state.values.witnessGlowStrength = 0
+        coordinator.state.values.fieldTopFraction = 0.2
 
         coordinator.handleAction("resetSingleLine")
 
@@ -1673,6 +1731,10 @@ struct ComposerSingleLineStyleTests {
         #expect(coordinator.state.values.witnessFloatPeriod == ComposerWitnessFloatPeriod.defaultPeriod)
         #expect(coordinator.state.values.witnessOpacity == ComposerWitnessOpacity.defaultOpacity)
         #expect(coordinator.state.values.witnessBeatSpeed == ComposerWitnessBeatSpeed.defaultSpeed)
+        #expect(coordinator.state.values.witnessGlowRadius == Double(ComposerWitnessGlowRadius.defaultRadius))
+        #expect(coordinator.state.values.witnessGlowStrength == ComposerWitnessGlowStrength.defaultStrength)
+        // The panel may round to its 0.01 step.
+        #expect(abs(coordinator.state.values.fieldTopFraction - ComposerFieldTopFraction.defaultFraction) < 0.005)
 
         for key in ComposerSingleLineReset.resetKeys {
             #expect(suite.object(forKey: key) == nil, "expected \(key) to be cleared by the panel's reset action")

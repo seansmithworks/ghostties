@@ -23,9 +23,10 @@ import SwiftUI
 /// dismiss layer spans the full terminal, matching where a click should
 /// dismiss the composer — a hosting view sized only to the composer card's
 /// own bounds would have nothing wider than the card to hit-test against.
-/// The card itself is centered and fixed-width via ordinary SwiftUI layout
-/// (`ZStack`'s default center alignment + `.frame(width:)` on
-/// `SessionComposerPalette`), not AppKit constraints.
+/// The card is centered horizontally and top-anchored vertically via
+/// ordinary SwiftUI layout, not AppKit constraints: its field's top edge
+/// sits at `SessionComposerPalette.fieldTopY` (a third of the way down by
+/// default) in every layout, and everything else grows downward from it.
 struct SessionComposerOverlay: View {
     let request: SessionComposerRequest
 
@@ -110,37 +111,113 @@ struct SessionComposerOverlay: View {
     }
     #endif
 
-    /// Dismiss layer + centered `SessionComposerPalette`.
+    /// Dismiss layer + top-anchored `SessionComposerPalette`. The palette is
+    /// an overlay of the full-size dismiss layer, aligned at the top, so a
+    /// taller card (Resume list, theme grid, status strip) grows downward
+    /// and can never shift the field.
     private var composerZStack: some View {
-        ZStack {
-            // F7 (Phase 3 review): this layer excludes the titlebar band
-            // (traffic lights + drag region) rather than covering the full
-            // window height — painting a full-height tap target under the
-            // titlebar would claim mouse-down there too, so the window
-            // couldn't be dragged by its titlebar while the composer was
-            // open, and a click up there would dismiss it instead.
-            // `Color.clear` no longer dims the terminal (shadow-only
-            // treatment), but it still relies on the explicit
-            // `.contentShape(Rectangle())` below to act as a tap target —
-            // do not remove it.
-            VStack(spacing: 0) {
-                Color.clear
-                    .frame(height: centeringModel.titlebarBandHeight)
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        composerStore.cancel()
-                    }
-                    .accessibilityElement()
-                    .accessibilityLabel("Dismiss session composer")
-                    .accessibilityAddTraits(.isButton)
-            }
-
-            SessionComposerPalette(
-                isPresented: isPresented,
-                request: request,
-                tuningDefaultsForTesting: composerDefaultsForTesting
+        GeometryReader { geo in
+            let fieldTopY = SessionComposerPalette.fieldTopY(
+                containerHeight: geo.size.height,
+                titlebarBand: centeringModel.titlebarBandHeight,
+                defaults: composerDefaultsForTesting ?? AppDefaults.store
             )
+            dismissLayer
+                .overlay(alignment: .top) {
+                    SessionComposerPalette(
+                        isPresented: isPresented,
+                        request: request,
+                        tuningDefaultsForTesting: composerDefaultsForTesting,
+                        containerFit: ComposerContainerFit(
+                            size: geo.size,
+                            titlebarBand: centeringModel.titlebarBandHeight,
+                            fieldTopY: fieldTopY
+                        )
+                    )
+                    .padding(.top, fieldTopY - SessionComposerPalette.shakeClearance)
+                }
+                .coordinateSpace(name: ComposerContainerFit.coordinateSpace)
         }
+    }
+
+    private var dismissLayer: some View {
+        // F7 (Phase 3 review): this layer excludes the titlebar band
+        // (traffic lights + drag region) rather than covering the full
+        // window height — painting a full-height tap target under the
+        // titlebar would claim mouse-down there too, so the window
+        // couldn't be dragged by its titlebar while the composer was
+        // open, and a click up there would dismiss it instead.
+        // `Color.clear` no longer dims the terminal (shadow-only
+        // treatment), but it still relies on the explicit
+        // `.contentShape(Rectangle())` below to act as a tap target —
+        // do not remove it.
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: centeringModel.titlebarBandHeight)
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    composerStore.cancel()
+                }
+                .accessibilityElement()
+                .accessibilityLabel("Dismiss session composer")
+                .accessibilityAddTraits(.isButton)
+        }
+    }
+}
+
+/// The window the composer sits in, as the overlay measured it: what the
+/// palette needs to keep the ghost and the list inside it.
+struct ComposerContainerFit: Equatable {
+    /// The overlay's coordinate space: y 0 is the window's top edge.
+    static let coordinateSpace = "ghostties.composerOverlay"
+
+    var size: CGSize
+    var titlebarBand: CGFloat
+    /// The y of the field card's top edge (`SessionComposerPalette.fieldTopY`).
+    var fieldTopY: CGFloat
+}
+
+/// Where the composer's field card sits vertically. Pure geometry, no view
+/// state, so the clamp is testable without rendering.
+enum ComposerVerticalAnchor {
+    /// Room left under a full Resume list when the window is short.
+    static let defaultBottomMargin: CGFloat = 24
+
+    /// The most height the list under the field may take: from its top
+    /// edge (`listTopY`, from the container's top) down to `bottomMargin`
+    /// above the container's bottom, less the card's own `listInset` under
+    /// the list. Never negative.
+    static func listHeightLimit(
+        containerHeight: CGFloat,
+        listTopY: CGFloat,
+        listInset: CGFloat,
+        bottomMargin: CGFloat
+    ) -> CGFloat {
+        max(containerHeight - bottomMargin - listInset - listTopY, 0)
+    }
+
+    /// The y of the field card's top edge, from the top of a container
+    /// `containerHeight` tall: `fraction` of the height, on a whole point.
+    /// A short container moves it up only as far as needed to keep the
+    /// field and a full list (`fieldHeight + listHeight`) above
+    /// `bottomMargin`. It never goes above `titlebarBand`, and it stays low
+    /// enough for the ghost (`ghostClearance` above the card) to clear the
+    /// band whenever the field and list still fit; when both can't hold,
+    /// the list wins.
+    static func fieldTopY(
+        containerHeight: CGFloat,
+        fraction: CGFloat,
+        titlebarBand: CGFloat,
+        ghostClearance: CGFloat,
+        fieldHeight: CGFloat,
+        listHeight: CGFloat,
+        bottomMargin: CGFloat
+    ) -> CGFloat {
+        let lowestThatFits = containerHeight - bottomMargin - fieldHeight - listHeight
+        var y = min(containerHeight * fraction, lowestThatFits)
+        y = max(y, min(titlebarBand + ghostClearance, lowestThatFits))
+        // Rounding down only ever moves the card up, so the list still fits.
+        return max(y.rounded(.down), titlebarBand.rounded(.up))
     }
 }
