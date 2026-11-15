@@ -80,7 +80,7 @@ struct ComposerWitnessTests {
         #expect(identity == .placeholder)
     }
 
-    // MARK: - R2 review: identity transitions mid-playback
+    // MARK: - Identity transitions: the blend (a project change never flips)
 
     private static let identityA = ComposerWitness.Identity.ghost(.flicker)
     private static let identityB = ComposerWitness.Identity.ghost(.shade)
@@ -106,79 +106,111 @@ struct ComposerWitnessTests {
         }
     }
 
-    private static func makeState(
-        beat: ComposerWitness.Beat = .idle,
-        displayed: ComposerWitness.Identity,
-        previous: ComposerWitness.Identity? = nil,
-        frames: [ComposerWitnessFrames.WitnessFrame] = [],
-        colors: [[Color]]? = nil,
-        locked: Bool = false
+    private static func resting(_ identity: ComposerWitness.Identity) -> ComposerWitnessTransition.OnScreen {
+        (pixelsFor(identity), 0, nil)
+    }
+
+    private static func next(
+        _ state: ComposerWitnessTransition.ViewState,
+        identity: ComposerWitness.Identity,
+        beat: ComposerWitness.Beat? = nil,
+        onScreen: ComposerWitnessTransition.OnScreen? = nil,
+        pixelsFor: ((ComposerWitness.Identity) -> [String])? = nil,
+        reduceMotion: Bool = false
     ) -> ComposerWitnessTransition.ViewState {
-        ComposerWitnessTransition.ViewState(
-            currentBeat: beat,
-            displayedIdentity: displayed,
-            previousIdentity: previous,
-            beatFrames: frames,
-            resolveFromColors: colors,
-            isLaunchLocked: locked
+        ComposerWitnessTransition.next(
+            state: state,
+            newIdentity: identity,
+            newBeat: beat ?? state.currentBeat,
+            onScreen: onScreen ?? resting(state.displayedIdentity),
+            pixelsFor: pixelsFor ?? Self.pixelsFor(_:),
+            colorFor: Self.testColor(for:),
+            reduceMotion: reduceMotion,
+            seed: 11
         )
     }
 
-    /// red mutation (the ef496f46d bug): the identity handler rebuilt
-    /// `buildResolveFrames` from the interrupted beat's full named target
-    /// grid, discarding whatever fraction of the in-flight morph had
-    /// already played. A second identity change arriving mid-morph must
-    /// instead start from EXACTLY the on-screen grid at that instant.
-    @Test func identityChangeMidMorphStartsFromTheOnScreenFrameNotTheNamedTarget() {
+    private static let openBeat = ComposerWitness.Beat.idle.next(.open)
+
+    /// red mutation: drop the blend arming in `ComposerWitnessTransition
+    /// .next` — the ghost then swaps with no frames and this fails.
+    @Test func identityChangeBlendsFromTheGhostOnScreen() {
+        let start = ComposerWitnessTransition.ViewState(currentBeat: Self.openBeat, displayedIdentity: Self.identityA)
+        let blended = Self.next(start, identity: Self.identityB)
+        let expected = ComposerWitnessFrames.buildResolveFrames(
+            gridA: Self.pixelsFor(Self.identityA), gridB: Self.pixelsFor(Self.identityB), seed: 11
+        )
+        #expect(blended.displayedIdentity == Self.identityB)
+        #expect(blended.previousIdentity == Self.identityA)
+        #expect(blended.beatFrames == expected)
+        #expect(blended.beatFrames.last?.grid == Self.pixelsFor(Self.identityB))
+        #expect(blended.beatFrames.reduce(0) { $0 + $1.ms } == 240, "the blend is 240ms")
+        #expect(blended.framesSeq == start.framesSeq + 1, "the blend restarts the frame clock")
+        #expect(blended.resolveFromColors?.first?.first == .red, "cells start in the outgoing ghost's colour")
+    }
+
+    /// Sean's decision (2026-11-14): changing project no longer flips. The
+    /// flip and the drop run off the open beat alone (`ComposerWitnessView
+    /// .openedAt` is set only when `currentBeat` changes to an open beat),
+    /// so an identity change must leave the beat exactly as the palette
+    /// sent it — however many changes follow.
+    ///
+    /// red mutation: rewrite `currentBeat` on an identity change (as the
+    /// old `.resolve` beat did) — the second change then reads as a fresh
+    /// open beat and the ghost drops in and flips again.
+    @Test func projectChangesNeverReArmTheOpenBeatSoTheyNeverFlip() {
+        let opened = ComposerWitnessTransition.ViewState(currentBeat: Self.openBeat, displayedIdentity: .placeholder)
+        let first = Self.next(opened, identity: Self.identityA)
+        let second = Self.next(first, identity: Self.identityB)
+        let third = Self.next(second, identity: .placeholder)
+        for state in [first, second, third] {
+            #expect(state.currentBeat == Self.openBeat, "a project change is not a beat")
+            #expect(!state.beatFrames.isEmpty, "it blends instead")
+        }
+    }
+
+    /// Placeholder (grey) ↔ a project's ghost blends too.
+    @Test func placeholderToAGhostBlends() {
+        let start = ComposerWitnessTransition.ViewState(currentBeat: Self.openBeat, displayedIdentity: .placeholder)
+        let blended = Self.next(start, identity: Self.identityA)
+        #expect(blended.previousIdentity == .placeholder)
+        #expect(blended.beatFrames.last?.grid == Self.pixelsFor(Self.identityA))
+    }
+
+    /// red mutation (the ef496f46d bug): rebuilding the blend from the
+    /// interrupted one's full named target grid discards whatever fraction
+    /// had already played. A second identity change arriving mid-blend must
+    /// start from EXACTLY the on-screen grid at that instant.
+    @Test func identityChangeMidBlendStartsFromTheOnScreenFrameNotTheNamedTarget() {
         let gridA = ComposerWitnessGhost.flicker.pixels
         let gridB = ComposerWitnessGhost.shade.pixels
         let gridC = ComposerWitnessGhost.murk.pixels
-
-        // Simulate "midway through an A→B morph": a real dither frame that
-        // is neither A nor B verbatim.
-        let midMorph = ComposerWitnessFrames.dither(gridA: gridA, gridB: gridB, progress: 0.5, seed: 11)
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
-            (midMorph.grid, 0, midMorph.sourceIsB)
-        let startState = Self.makeState(beat: .idle.next(.resolve), displayed: Self.identityB, previous: Self.identityA)
-
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: Self.identityC,
-            newBeat: startState.currentBeat, // beat unchanged — only identity changes
-            onScreen: onScreen,
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let midBlend = ComposerWitnessFrames.dither(gridA: gridA, gridB: gridB, progress: 0.5, seed: 11)
+        let start = ComposerWitnessTransition.ViewState(
+            currentBeat: Self.openBeat, displayedIdentity: Self.identityB, previousIdentity: Self.identityA
         )
+
+        let resolved = Self.next(start, identity: Self.identityC, onScreen: (midBlend.grid, 0, midBlend.sourceIsB))
         let fromNamedTarget = ComposerWitnessFrames.buildResolveFrames(gridA: gridB, gridB: gridC, seed: 11)
-        let fromOnScreen = ComposerWitnessFrames.buildResolveFrames(gridA: midMorph.grid, gridB: gridC, seed: 11)
+        let fromOnScreen = ComposerWitnessFrames.buildResolveFrames(gridA: midBlend.grid, gridB: gridC, seed: 11)
 
         #expect(resolved.beatFrames.first?.grid == fromOnScreen.first?.grid)
         #expect(resolved.beatFrames.first?.grid != fromNamedTarget.first?.grid,
-                "restarting from B's full grid instead of the on-screen mid-morph frame is exactly the bug being fixed")
+                "restarting from B's full grid instead of the on-screen mid-blend frame is exactly the bug")
     }
 
     /// The captured per-cell colours must reflect what was ACTUALLY on
-    /// screen (a mix of the outgoing and incoming ghost's colours mid-morph),
-    /// not a single flat colour.
-    @Test func identityChangeMidMorphCapturesEachCellsActualOnScreenColor() {
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) = (
-            ["XX", "XX"],
-            0,
-            [[true, false], [false, true]]
+    /// screen (a mix of the outgoing and incoming ghost's colours
+    /// mid-blend), not a single flat colour.
+    @Test func identityChangeMidBlendCapturesEachCellsActualOnScreenColor() {
+        let start = ComposerWitnessTransition.ViewState(
+            currentBeat: Self.openBeat, displayedIdentity: Self.identityB, previousIdentity: Self.identityA
         )
-        let startState = Self.makeState(beat: .idle.next(.resolve), displayed: Self.identityB, previous: Self.identityA)
-
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: Self.identityC,
-            newBeat: startState.currentBeat,
-            onScreen: onScreen,
-            pixelsFor: { _ in ["XX", "XX"] },
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let resolved = Self.next(
+            start,
+            identity: Self.identityC,
+            onScreen: (["XX", "XX"], 0, [[true, false], [false, true]]),
+            pixelsFor: { _ in ["XX", "XX"] }
         )
         let colors = resolved.resolveFromColors
         #expect(colors?[0][0] == .blue, "true (fromB) cells were already B's (shade) colour")
@@ -187,74 +219,55 @@ struct ComposerWitnessTests {
         #expect(colors?[1][1] == .blue)
     }
 
-    /// A resolve interrupting a beat that had shifted the sprite (e.g.
-    /// mid tab-accept hop) must blend that offset back to 0 across the new
-    /// morph, never snap to 0 on frame one.
+    /// A blend interrupting a beat that had shifted the sprite (e.g. mid
+    /// tab-accept hop) must ease that offset back to 0, never snap.
     @Test func identityChangeMidShiftedBeatBlendsTheOffsetBackToZeroWithoutSnapping() {
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) = (["XX", "XX"], -2, nil)
-        let startState = Self.makeState(beat: .idle.next(.tabAccept), displayed: Self.identityB)
-
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: Self.identityC,
-            newBeat: startState.currentBeat,
-            onScreen: onScreen,
-            pixelsFor: { _ in ["XX", "XX"] },
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let start = ComposerWitnessTransition.ViewState(
+            currentBeat: ComposerWitness.Beat.idle.next(.tabAccept), displayedIdentity: Self.identityB
+        )
+        let resolved = Self.next(
+            start, identity: Self.identityC, onScreen: (["XX", "XX"], -2, nil), pixelsFor: { _ in ["XX", "XX"] }
         )
         let offsets = resolved.beatFrames.map(\.cellOffsetY)
         #expect(offsets.first != 0, "the first frame must not snap straight to 0")
         #expect(offsets.first! < 0, "the first frame should still read close to the captured -2 start")
-        #expect(offsets.last == 0, "the morph must still land on 0 by its final frame")
+        #expect(offsets.last == 0, "the blend must still land on 0 by its final frame")
     }
 
-    /// red mutation (the ef496f46d bug): the identity handler always
-    /// rearmed a `.resolve` beat unconditionally, even while `.launch` was
-    /// playing/held — overriding "ends empty and stays empty". Once locked,
-    /// every identity change with no fresh beat this update must be a no-op.
-    @Test func identityChangeWhileLaunchLockedAndNoFreshBeatIsIgnored() {
-        let startState = Self.makeState(beat: .idle.next(.launch), displayed: Self.identityB, previous: Self.identityA, locked: true)
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) = (["..", ".."], 0, nil)
+    /// Reduce Motion: no blend frames, no mixed colours — the new ghost is
+    /// simply there.
+    @Test func identityChangeUnderReduceMotionSwapsInstantly() {
+        let start = ComposerWitnessTransition.ViewState(currentBeat: Self.openBeat, displayedIdentity: Self.identityA)
+        let swapped = Self.next(start, identity: Self.identityB, reduceMotion: true)
+        #expect(swapped.displayedIdentity == Self.identityB)
+        #expect(swapped.beatFrames.isEmpty)
+        #expect(swapped.resolveFromColors == nil)
+        #expect(swapped.currentBeat == Self.openBeat)
+    }
 
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: Self.identityC,
-            newBeat: startState.currentBeat, // no fresh beat this update
-            onScreen: onScreen,
-            pixelsFor: { _ in ["XX", "XX"] },
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+    /// red mutation (the ef496f46d bug): once launch locks, every identity
+    /// change with no fresh beat this update must be a no-op.
+    @Test func identityChangeWhileLaunchLockedAndNoFreshBeatIsIgnored() {
+        let locked = ComposerWitnessTransition.ViewState(
+            currentBeat: ComposerWitness.Beat.idle.next(.launch), displayedIdentity: Self.identityB, isLaunchLocked: true
         )
-        #expect(resolved == startState, "launch is terminal — an identity change must not re-arm a resolve while locked")
+        let resolved = Self.next(locked, identity: Self.identityC, onScreen: (["..", ".."], 0, nil))
+        #expect(resolved == locked, "launch is terminal — an identity change must not blend while locked")
     }
 
     // MARK: - R3 review: identity and beatTrigger racing in one SwiftUI update
 
-    /// red mutation (the 204fc5bdb bug): two separate `onChange` handlers
-    /// had no defined order when `identity` and `beatTrigger` changed in the
-    /// SAME transaction (the real launch path —
-    /// `SessionComposerStore.precommit` clears `searchText`, then
-    /// `SessionComposerPalette.commit` arms `.launch`). If identity's
-    /// handler ran first, launch built its dissolve from the JUST-SWAPPED
-    /// identity instead of what was actually on screen.
+    /// red mutation (the 204fc5bdb bug): launch arriving in the same update
+    /// as an identity change must dissolve what was on screen, never the
+    /// identity it was about to swap to.
     @Test func identityAndLaunchInTheSameUpdateDissolveFromOnScreenNotTheNewIdentity() {
         let onScreenGrid = ComposerWitnessGhost.flicker.pixels
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) = (onScreenGrid, 0, nil)
-        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
-        let launchBeat = startState.currentBeat.next(.launch)
-
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: .placeholder, // identity ALSO changed in the same update
-            newBeat: launchBeat,
-            onScreen: onScreen,
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let start = ComposerWitnessTransition.ViewState(currentBeat: .idle, displayedIdentity: Self.identityA)
+        let resolved = Self.next(
+            start,
+            identity: .placeholder, // identity ALSO changed in the same update
+            beat: start.currentBeat.next(.launch),
+            onScreen: (onScreenGrid, 0, nil)
         )
 
         #expect(resolved.isLaunchLocked == true)
@@ -266,58 +279,39 @@ struct ComposerWitnessTests {
                 "the dissolve must start from what was on screen (ghost A), not the placeholder it was about to swap to")
     }
 
-    /// Same on-screen state and the same launch arming, once with a bundled
-    /// identity change and once without — the dissolve itself must be
-    /// identical either way, proving it depends only on what's on screen,
-    /// never on whether an identity change happened to land in the same
-    /// update.
+    /// The dissolve depends only on what's on screen, never on whether an
+    /// identity change happened to land in the same update.
     @Test func launchDissolveIsIdenticalWhetherOrNotIdentityAlsoChangedInTheSameUpdate() {
-        let onScreenGrid = ComposerWitnessGhost.flicker.pixels
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) = (onScreenGrid, 0, nil)
-        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
-        let launchBeat = startState.currentBeat.next(.launch)
+        let onScreen: ComposerWitnessTransition.OnScreen = (ComposerWitnessGhost.flicker.pixels, 0, nil)
+        let start = ComposerWitnessTransition.ViewState(currentBeat: .idle, displayedIdentity: Self.identityA)
+        let launch = start.currentBeat.next(.launch)
 
-        let withIdentityChange = ComposerWitnessTransition.next(
-            state: startState, newIdentity: .placeholder, newBeat: launchBeat,
-            onScreen: onScreen, pixelsFor: Self.pixelsFor(_:), colorFor: Self.testColor(for:),
-            reduceMotion: false, seed: 11
-        )
-        let withoutIdentityChange = ComposerWitnessTransition.next(
-            state: startState, newIdentity: startState.displayedIdentity, newBeat: launchBeat,
-            onScreen: onScreen, pixelsFor: Self.pixelsFor(_:), colorFor: Self.testColor(for:),
-            reduceMotion: false, seed: 11
-        )
+        let withIdentityChange = Self.next(start, identity: .placeholder, beat: launch, onScreen: onScreen)
+        let withoutIdentityChange = Self.next(start, identity: Self.identityA, beat: launch, onScreen: onScreen)
 
         #expect(withIdentityChange.beatFrames == withoutIdentityChange.beatFrames)
         #expect(withIdentityChange.isLaunchLocked == true)
         #expect(withoutIdentityChange.isLaunchLocked == true)
     }
 
-    /// Launch arming while a resolve morph is already mid-flight must
-    /// dissolve from the partially-morphed frame, not from either ghost's
-    /// pristine named grid.
-    @Test func launchArmedMidResolveMorphDissolvesFromThePartiallyMorphedFrame() {
+    /// Launch arming while a blend is mid-flight must dissolve from the
+    /// partially-blended frame, not from either ghost's pristine grid.
+    @Test func launchArmedMidBlendDissolvesFromThePartiallyBlendedFrame() {
         let gridA = ComposerWitnessGhost.flicker.pixels
         let gridB = ComposerWitnessGhost.shade.pixels
-        let midMorph = ComposerWitnessFrames.dither(gridA: gridA, gridB: gridB, progress: 0.5, seed: 11)
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
-            (midMorph.grid, 0, midMorph.sourceIsB)
-        let startState = Self.makeState(beat: .idle.next(.resolve), displayed: Self.identityB, previous: Self.identityA)
-        let launchBeat = startState.currentBeat.next(.launch)
-
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: startState.displayedIdentity,
-            newBeat: launchBeat,
-            onScreen: onScreen,
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let midBlend = ComposerWitnessFrames.dither(gridA: gridA, gridB: gridB, progress: 0.5, seed: 11)
+        let start = ComposerWitnessTransition.ViewState(
+            currentBeat: Self.openBeat, displayedIdentity: Self.identityB, previousIdentity: Self.identityA
+        )
+        let resolved = Self.next(
+            start,
+            identity: Self.identityB,
+            beat: start.currentBeat.next(.launch),
+            onScreen: (midBlend.grid, 0, midBlend.sourceIsB)
         )
 
         let expectedFirstFrame = ComposerWitnessFrames.dither(
-            gridA: midMorph.grid, gridB: ComposerWitnessFrames.emptyGridLike(midMorph.grid), progress: 0.25, seed: 11
+            gridA: midBlend.grid, gridB: ComposerWitnessFrames.emptyGridLike(midBlend.grid), progress: 0.25, seed: 11
         )
         let fromNamedTarget = ComposerWitnessFrames.dither(
             gridA: gridB, gridB: ComposerWitnessFrames.emptyGridLike(gridB), progress: 0.25, seed: 11
@@ -328,156 +322,81 @@ struct ComposerWitnessTests {
 
     // MARK: - R4 review: non-launch beat + identity change in one update
 
-    /// The real trigger: `ComposerGhostTextField.swift:1018` sets
-    /// `parent.query` synchronously, then `:1024` fires
-    /// `.acceptedGhost` — `SessionComposerPalette.swift:3018` arms
-    /// `.tabAccept` from that same call, so a Tab-accept that completes a
-    /// project name changes `commandProject` (and so `identity`) in the
-    /// SAME update as the beat. Sean's decision (2026-09-13), "always have
-    /// transitions": the hop no longer plays immediately on the new
-    /// identity with no morph — it plays the resolve dither morph (old
-    /// identity's on-screen frame -> new identity), THEN the tab-accept hop
-    /// on the new, settled grid, as one concatenated sequence, and the
-    /// total duration is the morph's plus the hop's.
-    @Test func tabPlusIdentityChangeInOneUpdatePlaysAMorphThenTheHopOnTheNewIdentity() {
-        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
-        let onScreenGrid = Self.pixelsFor(Self.identityA)
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
-            (onScreenGrid, 0, nil)
+    /// Sean's decision (2026-09-13), "always have transitions": a Tab
+    /// accept that completes a project name changes the identity in the
+    /// SAME update as the beat. The blend plays first, then the hop on the
+    /// new, settled grid, as one sequence.
+    @Test func tabPlusIdentityChangeInOneUpdateBlendsThenHops() {
+        let start = ComposerWitnessTransition.ViewState(currentBeat: .idle, displayedIdentity: Self.identityA)
+        let resolved = Self.next(start, identity: Self.identityB, beat: start.currentBeat.next(.tabAccept))
 
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: Self.identityB,
-            newBeat: startState.currentBeat.next(.tabAccept),
-            onScreen: onScreen,
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let blend = ComposerWitnessFrames.buildResolveFrames(
+            gridA: Self.pixelsFor(Self.identityA), gridB: Self.pixelsFor(Self.identityB), seed: 11
         )
-
-        let expectedMorph = ComposerWitnessFrames.buildResolveFrames(
-            gridA: onScreenGrid, gridB: Self.pixelsFor(Self.identityB), seed: 11
-        )
-        let expectedHop = ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB))
-
+        let hop = ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB))
         #expect(resolved.displayedIdentity == Self.identityB)
-        #expect(resolved.beatFrames.count == expectedMorph.count + expectedHop.count)
-        #expect(resolved.beatFrames.first?.grid == expectedMorph.first?.grid, "sequence starts with the resolve morph")
-        #expect(resolved.beatFrames.first?.sourceIsB == expectedMorph.first?.sourceIsB)
-        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "sequence ends on the hop's rest frame")
-        #expect(resolved.resolveFromColors != nil, "morph colours are carried through the morph portion of the combined sequence")
-
-        let totalDuration = resolved.beatFrames.reduce(0) { $0 + $1.ms }
-        let expectedDuration = expectedMorph.reduce(0) { $0 + $1.ms } + expectedHop.reduce(0) { $0 + $1.ms }
-        #expect(totalDuration == expectedDuration, "total duration equals resolve + beat")
+        #expect(resolved.beatFrames == blend + hop)
+        #expect(resolved.resolveFromColors != nil, "blend colours carry through the blend portion")
+        #expect(resolved.currentBeat.kind == .tabAccept)
     }
 
-    /// Same rule for `.unknownBranch`: morph, then the error lean on the
-    /// new identity.
-    @Test func unknownBranchPlusIdentityChangeInOneUpdatePlaysAMorphThenTheLeanOnTheNewIdentity() {
-        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
-        let onScreenGrid = Self.pixelsFor(Self.identityA)
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
-            (onScreenGrid, 0, nil)
+    @Test func unknownBranchPlusIdentityChangeInOneUpdateBlendsThenLeans() {
+        let start = ComposerWitnessTransition.ViewState(currentBeat: .idle, displayedIdentity: Self.identityA)
+        let resolved = Self.next(start, identity: Self.identityB, beat: start.currentBeat.next(.unknownBranch))
 
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: Self.identityB,
-            newBeat: startState.currentBeat.next(.unknownBranch),
-            onScreen: onScreen,
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let blend = ComposerWitnessFrames.buildResolveFrames(
+            gridA: Self.pixelsFor(Self.identityA), gridB: Self.pixelsFor(Self.identityB), seed: 11
         )
-
-        let expectedMorph = ComposerWitnessFrames.buildResolveFrames(
-            gridA: onScreenGrid, gridB: Self.pixelsFor(Self.identityB), seed: 11
-        )
-        let expectedLean = ComposerWitnessFrames.buildErrorFrames(grid: Self.pixelsFor(Self.identityB))
-
-        #expect(resolved.displayedIdentity == Self.identityB)
-        #expect(resolved.beatFrames.count == expectedMorph.count + expectedLean.count)
-        #expect(resolved.beatFrames.first?.grid == expectedMorph.first?.grid, "sequence starts with the resolve morph")
-        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "sequence ends on the lean's rest frame")
-        #expect(resolved.resolveFromColors != nil, "morph colours are carried through the morph portion of the combined sequence")
-
-        let totalDuration = resolved.beatFrames.reduce(0) { $0 + $1.ms }
-        let expectedDuration = expectedMorph.reduce(0) { $0 + $1.ms } + expectedLean.reduce(0) { $0 + $1.ms }
-        #expect(totalDuration == expectedDuration, "total duration equals resolve + beat")
+        let lean = ComposerWitnessFrames.buildErrorFrames(grid: Self.pixelsFor(Self.identityB))
+        #expect(resolved.beatFrames == blend + lean)
     }
 
-    /// Reduce Motion floor: a beat bundled with an identity change is still
-    /// an instant swap with no morph — the beat itself still plays (on the
-    /// already-swapped identity), but nothing plays a dither sequence.
-    @Test func tabPlusIdentityChangeUnderReduceMotionIsAnInstantSwapWithNoMorph() {
-        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
-        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
-            (Self.pixelsFor(Self.identityA), 0, nil)
+    /// Reduce Motion: a beat bundled with an identity change is an instant
+    /// swap — the beat itself still plays, on the new identity, with no
+    /// blend ahead of it.
+    @Test func tabPlusIdentityChangeUnderReduceMotionIsAnInstantSwapWithNoBlend() {
+        let start = ComposerWitnessTransition.ViewState(currentBeat: .idle, displayedIdentity: Self.identityA)
+        let resolved = Self.next(start, identity: Self.identityB, beat: start.currentBeat.next(.tabAccept), reduceMotion: true)
 
-        let resolved = ComposerWitnessTransition.next(
-            state: startState,
-            newIdentity: Self.identityB,
-            newBeat: startState.currentBeat.next(.tabAccept),
-            onScreen: onScreen,
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: true,
-            seed: 11
-        )
-
-        let expectedHop = ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB))
         #expect(resolved.displayedIdentity == Self.identityB, "identity swaps instantly")
-        #expect(resolved.beatFrames.allSatisfy { $0.sourceIsB == nil }, "no morph frames — nothing mixes two identities' colours")
-        #expect(resolved.resolveFromColors == nil, "no morph colours captured under Reduce Motion")
-        #expect(resolved.beatFrames.count == expectedHop.count, "the beat's own hop still plays, just with no morph ahead of it")
+        #expect(resolved.resolveFromColors == nil)
+        #expect(resolved.beatFrames.allSatisfy { $0.sourceIsB == nil }, "nothing mixes two identities' colours")
+        #expect(resolved.beatFrames == ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB)))
+    }
+
+    /// The open beat is its own transition (the drop): an identity change
+    /// bundled with it swaps instantly, and it ends a blend in flight.
+    @Test func openSwapsIdentityInstantlyWithNoBlend() {
+        let blending = Self.next(
+            ComposerWitnessTransition.ViewState(currentBeat: .idle, displayedIdentity: Self.identityA),
+            identity: Self.identityB
+        )
+        let opened = Self.next(blending, identity: Self.identityC, beat: blending.currentBeat.next(.open))
+        #expect(opened.currentBeat.kind == .open)
+        #expect(opened.displayedIdentity == Self.identityC)
+        #expect(opened.beatFrames.isEmpty, "the drop is a transform, not grid frames")
+        #expect(opened.resolveFromColors == nil)
+        #expect(opened.previousIdentity == nil)
     }
 
     // MARK: - R4 review: initial-mount beat (onAppear feeding `next()`)
 
-    /// `ComposerWitnessView` now feeds its mount-time `(identity,
-    /// beatTrigger)` through the same `next(...)` its `onChange` uses (see
-    /// `ComposerWitnessView.apply(_:)`), covering the case where
-    /// `beatTrigger` is already `.open` the very first time the view's body
-    /// runs (the palette's `onAppear` — `SessionComposerPalette.swift
-    /// :1452` — can run before this view's subtree is even inserted).
-    /// Can't construct a View in a pure test, so this proves the property
-    /// that makes doing so at BOTH `onAppear` and `onChange` safe: applying
-    /// the SAME already-current `(identity, beat)` a second time is a
-    /// no-op, so whichever of the two call sites fires first does the real
-    /// work and the other can never double-play it.
-    ///
-    /// red mutation: hardcode `isLaunchLocked: false` unconditionally on
-    /// the shared (no beat/identity changed) return path instead of leaving
-    /// it — this test's second `#expect` would still pass (`false ==
-    /// false`), but drop the `!beatChanged` guard on the earlier
-    /// launch-locked early return and the FIRST `#expect` below fails
-    /// instead (a locked idle state stops being idempotent).
+    /// `ComposerWitnessView` feeds its mount-time `(identity, beatTrigger)`
+    /// through the same `next(...)` its `onChange` uses. Applying the SAME
+    /// already-current `(identity, beat)` a second time must be a no-op, so
+    /// whichever of `onAppear`/`onChange` fires first does the real work and
+    /// the other can never double-play it (or restart a clock).
     @Test func reapplyingTheSameIdentityAndBeatIsANoOp() {
-        let armed = ComposerWitnessTransition.next(
-            state: Self.makeState(beat: .idle, displayed: .placeholder),
-            newIdentity: Self.identityA,
-            newBeat: ComposerWitness.Beat.idle.next(.open),
-            onScreen: (Self.pixelsFor(.placeholder), 0, nil),
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
+        let armed = Self.next(
+            ComposerWitnessTransition.ViewState(currentBeat: .idle, displayedIdentity: .placeholder),
+            identity: Self.identityA,
+            beat: Self.openBeat
         )
+        #expect(Self.next(armed, identity: Self.identityA, beat: armed.currentBeat) == armed,
+                "re-delivering the same (identity, beat) must not re-arm or reset anything")
 
-        let reapplied = ComposerWitnessTransition.next(
-            state: armed,
-            newIdentity: Self.identityA, // same identity `armed` already shows
-            newBeat: armed.currentBeat, // same beat `armed` already has
-            onScreen: (armed.beatFrames.first?.grid ?? Self.pixelsFor(Self.identityA), 0, nil),
-            pixelsFor: Self.pixelsFor(_:),
-            colorFor: Self.testColor(for:),
-            reduceMotion: false,
-            seed: 11
-        )
-
-        #expect(reapplied == armed, "re-delivering the same (identity, beat) must not re-arm or reset anything")
+        let blended = Self.next(armed, identity: Self.identityB)
+        #expect(Self.next(blended, identity: Self.identityB) == blended)
     }
 
     // MARK: - Witness sprite geometry (gray mesh-line fix)
@@ -486,7 +405,7 @@ struct ComposerWitnessTests {
     /// `WitnessSpriteGeometry.cellRect` (or widen a cell independently of
     /// its neighbour's shared edge) — adjacent cells stop sharing an exact
     /// edge and these tests fail.
-    private static let meshFixSizes: [CGFloat] = [12, 18, 24, 30, 36, 42, 48]
+    private static let meshFixSizes: [CGFloat] = [12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
     private static let gridDimension = 12
 
     private static func isMultiple(of edge: CGFloat, scale: CGFloat, tolerance: CGFloat = 1e-9) -> Bool {
@@ -496,7 +415,7 @@ struct ComposerWitnessTests {
 
     @Test func adjacentCellsShareExactEdgesAtEveryWitnessSize() {
         for size in Self.meshFixSizes {
-            for scale: CGFloat in size == 30 ? [1, 2] : [2] {
+            for scale: CGFloat in size == 30 || size == 48 ? [1, 2] : [2] {
                 let dim = Self.gridDimension
                 let sizeCG = CGSize(width: size, height: size)
 
@@ -545,6 +464,25 @@ struct ComposerWitnessTests {
                 #expect(first.minY == 0)
                 #expect(last.maxX == size)
                 #expect(last.maxY == size)
+            }
+        }
+    }
+
+    /// The default 48pt ghost: every cell is exactly 4pt square, on whole
+    /// pixels at 1x and 2x, so it draws crisp at rest.
+    @Test func size48CellsAreExactlyFourPointsAtOneXAndTwoX() {
+        let dim = Self.gridDimension
+        let size = ComposerWitnessSize.defaultSize
+        #expect(size == 48)
+        for scale: CGFloat in [1, 2] {
+            for row in 0..<dim {
+                for col in 0..<dim {
+                    let rect = WitnessSpriteGeometry.cellRect(
+                        row: row, col: col, rows: dim, cols: dim,
+                        size: CGSize(width: size, height: size), cellOffsetY: 0, scale: scale
+                    )
+                    #expect(rect == CGRect(x: CGFloat(col * 4), y: CGFloat(row * 4), width: 4, height: 4))
+                }
             }
         }
     }
