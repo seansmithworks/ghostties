@@ -588,14 +588,21 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             }
         }
 
-        let row = SidebarDialTuning.rowHeight()
+        // A working thread's row under a project header is one line.
+        let row = SidebarListRowHeight.row(hasSubtitle: false, hasActions: false)
+        let tabsRow = SidebarDialTuning.rowHeight()
         let gap = SidebarDialTuning.rowGap()
         let tabs = height(.tabs, collapsed: [])
         let open = height(.oneView, collapsed: [])
         let folded = height(.oneView, collapsed: [atlas.id])
 
-        // Two headers, one spacer between groups, each with its row gap.
-        XCTAssertEqual(open - tabs, 2 * (ProjectAccordionHeader.height(.sidebar) + gap) + SidebarProjectGroupItem.spacerHeight + gap, accuracy: 0.5)
+        // Two headers, one spacer between groups, each with its row gap;
+        // and the three rows are one line each, where Tabs draws two.
+        XCTAssertEqual(
+            open - tabs,
+            2 * (ProjectAccordionHeader.height(.sidebar) + gap) + SidebarProjectGroupItem.spacerHeight + gap - 3 * (tabsRow - row),
+            accuracy: 0.5
+        )
         // Folding atlas-api removes its two rows.
         XCTAssertEqual(open - folded, 2 * (row + gap), accuracy: 0.5)
     }

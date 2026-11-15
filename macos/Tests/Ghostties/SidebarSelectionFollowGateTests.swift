@@ -151,6 +151,43 @@ final class SidebarSelectionFollowGateTests: PrivateDefaultsTestCase {
         XCTAssertGreaterThanOrEqual(try gapAboveTray(rig, last), clearance - tolerance, "the last row's clear space above the tray")
     }
 
+    /// Threads above the selected one, scrolled out of view, start needing
+    /// you: each row gains its second line and its action line, which
+    /// pushes every row under it down. The selected row was resting 8pt
+    /// above the tray, so the list scrolls just enough to keep it there
+    /// (`SidebarSelectionFollow.KeepClear`).
+    ///
+    /// Without the fix this is intermittent: in some runs the scroll view
+    /// holds the selected row by itself, in others the row lands 39pt, then
+    /// 87pt, under the tray's top. Two threads, one after the other,
+    /// because the first to flip was the one most often held.
+    func testARowAboveGrowingKeepsTheSelectedRowClearOfTheTray() throws {
+        let rig = makeRig()
+        defer { rig.close() }
+        let target = rig.sessions[13]
+        rig.container.coordinatorForTesting.setActiveSessionIdForTesting(target.id)
+        settle(rig)
+        XCTAssertEqual(try gapAboveTray(rig, target), clearance, accuracy: tolerance, "control: the selected row rests 8pt above the tray")
+
+        // The second project's second thread, then the first project's
+        // third: both above the viewport's top once the list has followed
+        // the selection.
+        for above in [rig.sessions[7], rig.sessions[2]] {
+            let before = try frame(rig, RedlineID.row(above.id)).height
+            rig.store.updateIndicatorState(id: above.id, state: .needsAttention)
+            settle(rig)
+
+            let after = try frame(rig, RedlineID.row(above.id)).height
+            XCTAssertGreaterThan(after, before + SessionRowActionLine.addedHeight - tolerance, "control: \(above.name) grew by at least its action line")
+            let gap = try gapAboveTray(rig, target)
+            XCTAssertGreaterThanOrEqual(gap, clearance - tolerance, "after \(above.name) grew, the selected row is still clear of the tray (gap \(gap))")
+            // The growing row overshoots on the fold's spring (about 3% of
+            // its 48pt growth) and the list holds the selected row clear at
+            // the peak, so it can rest a point or two higher, never more.
+            XCTAssertLessThanOrEqual(gap, clearance + 2, "and the list scrolled no further than the spring's overshoot (gap \(gap))")
+        }
+    }
+
     /// The row order is the user's, so nothing but a selection scrolls:
     /// another thread working, printing and finishing leaves the list where
     /// the selection put it.

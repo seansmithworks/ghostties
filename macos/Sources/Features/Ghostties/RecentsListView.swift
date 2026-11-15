@@ -347,6 +347,7 @@ struct RecentsListView: View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 sectionsContent(sections, slots: slots)
+                    .coordinateSpace(name: SidebarSelectionFollow.contentSpace)
                     .modifier(SidebarColumnPadding())
                     .animation(reflowAnimation, value: dragState)
                     .animation(reflowAnimation, value: projectDragState)
@@ -361,6 +362,15 @@ struct RecentsListView: View {
                     // The card also reaches past the column's trailing edge
                     // into the gutter before the canvas card.
                     .padding(.trailing, trailingBleed)
+            }
+            // Where the selected row is on screen, and how much of the
+            // list shows above the tray: a background is laid out inside
+            // the safe area (`SidebarSelectionFollow.KeepClear`).
+            .coordinateSpace(name: SidebarSelectionFollow.viewportSpace)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: SidebarSelectionFollow.ViewportHeightKey.self, value: proxy.size.height)
+                }
             }
             .padding(.top, -scrollBleed)
             .padding(.trailing, -trailingBleed)
@@ -456,11 +466,10 @@ struct RecentsListView: View {
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
         let projectGapBefore = projectGapTarget(groups)
-        // A row that needs you draws an action line (card 01), so drag
-        // reflow measures it at its full height.
-        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items) {
-            SidebarListRowHeight.row(hasActions: rowPrompt($0) != nil)
-        }
+        // A row is one line unless its thread needs you, and a row that
+        // needs you draws an action line (card 01), so drag reflow measures
+        // each at its drawn height.
+        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items) { drawnRowHeight($0) }
         let gapHeight = draggedRowHeight
         // Option D: each header leads with its project's monogram tile (the
         // rail's), and the group holding the selected session sits on one
@@ -524,14 +533,13 @@ struct RecentsListView: View {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView(height: gapHeight)
                     }
+                    let kind = shownKind(session)
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        // A row that isn't asking anything says what the
-                        // session is doing.
-                        subtitle: SessionNeedsYou.subtitle(
-                            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
-                            state: coordinator.claudeStateStore.state(for: session.id)
-                        ),
+                        // The glyph says what the session is doing; the
+                        // words show only when it needs the user.
+                        subtitle: kind.groupedRowSubtitle,
+                        showsSubtitle: SessionRowSecondLine.isShown(kind),
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
@@ -553,13 +561,33 @@ struct RecentsListView: View {
     private func liveUnfoldedProjects(_ active: [AgentSession]) -> Set<UUID> {
         _ = promptRevision
         let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
-        let activeIds = SidebarIdleFold.activeProjectIds(groups) { session in
-            SessionNeedsYou.shownKind(
-                indicator: store.globalIndicatorStates[session.id] ?? .inactive,
-                state: coordinator.claudeStateStore.state(for: session.id)
-            )
-        }
+        let activeIds = SidebarIdleFold.activeProjectIds(groups, kind: shownKind)
         return SidebarIdleFold.unfolded(active: activeIds, selectedProjectId: selectedProjectId(active))
+    }
+
+    /// The status a thread's row stands for (`SessionNeedsYou.shownKind`).
+    private func shownKind(_ session: AgentSession) -> SessionStatusGlyphKind {
+        SessionNeedsYou.shownKind(
+            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
+            state: coordinator.claudeStateStore.state(for: session.id)
+        )
+    }
+
+    /// Whether `session`'s row draws a second line. A row under a project
+    /// header (one view's Active) draws one only when its thread needs the
+    /// user; every other row always does (the project's name).
+    private func showsSecondLine(_ session: AgentSession, prompt: SessionRowPrompt?) -> Bool {
+        let isGroupedRow = SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView
+            && !session.isPinnedForDisplay(pinningAvailable: pinningAvailable)
+        return !isGroupedRow || prompt != nil || coordinator.codexHookUnconfirmed(for: session)
+            || SessionRowSecondLine.isShown(shownKind(session))
+    }
+
+    /// A row's drawn height on the sidebar (`SidebarListRowHeight`).
+    private func drawnRowHeight(_ id: UUID) -> CGFloat {
+        let prompt = rowPrompt(id)
+        let hasSubtitle = store.sessions.first { $0.id == id }.map { showsSecondLine($0, prompt: prompt) } ?? true
+        return SidebarListRowHeight.row(hasSubtitle: hasSubtitle, hasActions: prompt != nil)
     }
 
     /// The selected thread's project, when the thread has a row in Active.
@@ -598,7 +626,7 @@ struct RecentsListView: View {
     /// height never changes mid-drag.
     private var draggedRowHeight: CGFloat {
         guard let id = dragState.draggingSessionId else { return SessionDragReflow.rowHeight }
-        return SidebarListRowHeight.row(hasActions: rowPrompt(id) != nil)
+        return drawnRowHeight(id)
     }
 
     /// The selected session's project group, or none (nothing selected,
@@ -1006,7 +1034,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
+        subtitle: String? = nil, showsSubtitle: Bool = true, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         // A row that needs you says what it asks and draws its action line,
@@ -1028,6 +1056,7 @@ struct RecentsListView: View {
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
             subtitle: prompt?.subtitle ?? subtitle,
+            showsSubtitle: showsSubtitle || prompt != nil,
             prompt: prompt,
             approvalsEnabled: approvalsEnabled,
             hasPairedBrowser: PairedBrowserRows.hasBrowser(session.id, pairedBrowsers: coordinator.pairedBrowserByTerminal),
@@ -1072,7 +1101,7 @@ struct RecentsListView: View {
             draggedContext: { [self] id in draggedContext(for: id) },
             performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) },
             projectDrop: projectDrop,
-            rowHeight: SidebarListRowHeight.row(hasActions: prompt != nil)
+            rowHeight: drawnRowHeight(session.id)
         ))
         .accessibilityAction(named: Text("Move Up")) {
             guard supportsReorder else { return }
@@ -1084,7 +1113,11 @@ struct RecentsListView: View {
         }
         // What the list scrolls to when this row is selected
         // (`SidebarSelectionFollower`).
-        .background(alignment: .top) { SidebarSelectionFollow.ScrollTarget(rowId: session.id.uuidString) }
+        .background(alignment: .top) {
+            SidebarSelectionFollow.ScrollTarget(
+                rowId: session.id.uuidString, isSelected: coordinator.sidebarSelectedSessionId == session.id
+            )
+        }
     }
 
     /// Runs one `SessionRowMenu` action on `session`.

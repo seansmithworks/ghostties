@@ -372,16 +372,129 @@ enum SidebarSelectionFollow {
     /// A row's scroll target, as its background: the row's frame reaching
     /// `trayClearance` past its bottom edge, so scrolling the least distance
     /// that shows the target rests the row that far above the tray. Takes
-    /// no room and no clicks.
+    /// no room and no clicks. The selected row's also reports where it is
+    /// (`SelectedTargetFrameKey`), for `KeepClear`.
     struct ScrollTarget: View {
         let rowId: String
+        var isSelected = false
 
         var body: some View {
             Color.clear
                 .id(SidebarSelectionFollow.scrollTargetId(row: rowId))
                 .padding(.bottom, -SidebarSelectionFollow.trayClearance)
+                .background {
+                    if isSelected {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: SelectedTargetFrameKey.self,
+                                value: SelectedTargetFrame(
+                                    rowId: rowId,
+                                    contentMinY: proxy.frame(in: .named(SidebarSelectionFollow.contentSpace)).minY,
+                                    viewport: proxy.frame(in: .named(SidebarSelectionFollow.viewportSpace))
+                                )
+                            )
+                        }
+                    }
+                }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
+        }
+    }
+
+    // MARK: Keeping the selected row clear
+
+    /// The list's content, inside the scroll view: a frame in it moves
+    /// only when the list's layout does, never on a scroll.
+    static let contentSpace = "ghostties.sidebar.list.content"
+    /// The scroll view: a frame in it is where a row is on screen.
+    static let viewportSpace = "ghostties.sidebar.list.viewport"
+
+    /// The selected row, as laid out.
+    struct SelectedTargetFrame: Equatable {
+        var rowId: String
+        /// Its top in `contentSpace`.
+        var contentMinY: CGFloat
+        /// Its frame in `viewportSpace`: the row's own, without the
+        /// clearance its scroll target adds below it.
+        var viewport: CGRect
+    }
+
+    struct SelectedTargetFrameKey: PreferenceKey {
+        static var defaultValue: SelectedTargetFrame?
+        static func reduce(value: inout SelectedTargetFrame?, nextValue: () -> SelectedTargetFrame?) {
+            value = value ?? nextValue()
+        }
+    }
+
+    /// The scroll view's height above the tray: its safe area, which the
+    /// tray's reserve insets (`MorphTrayReserve`).
+    struct ViewportHeightKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
+        }
+    }
+
+    /// Where the selected row's scroll target sits: in the list's layout,
+    /// and on screen.
+    struct Placement: Equatable {
+        var rowId: String
+        /// The target's top in the list's content (`contentSpace`).
+        var contentMinY: CGFloat
+        /// The target's top and bottom in the viewport (`viewportSpace`);
+        /// the bottom is `trayClearance` below the row's.
+        var minY: CGFloat
+        var maxY: CGFloat
+        /// The viewport's height above the tray.
+        var visibleHeight: CGFloat
+
+        static let tolerance: CGFloat = 0.5
+        /// The least change that counts as the layout moving the row. Far
+        /// under a point: an animated growth arrives in steps smaller than
+        /// `tolerance`, and each one is still the layout's doing.
+        static let layoutEpsilon: CGFloat = 0.01
+
+        /// The whole row is in view, `trayClearance` clear of the tray.
+        var isClear: Bool { minY >= -Self.tolerance && maxY <= visibleHeight + Self.tolerance }
+    }
+
+    /// Keeps the selected row in full view when the list's layout moves it:
+    /// a row above it grows (a thread starts needing you), a project above
+    /// it unfolds, the tray grows. A row that was in full view and is
+    /// pushed part-way out, under the tray or past the top, scrolls back
+    /// the least distance. Nothing else scrolls: a row the user scrolled
+    /// away from stays where they left it, and a scroll never triggers one.
+    struct KeepClear: Equatable {
+        private(set) var last: Placement?
+        /// The row was in full view before the layout last moved it.
+        private(set) var wasClear = false
+
+        /// Takes the selected row's placement after a layout or a scroll;
+        /// true when the list should scroll the row back into view.
+        mutating func take(_ placement: Placement?) -> Bool {
+            defer { last = placement }
+            guard let placement else {
+                wasClear = false
+                return false
+            }
+            // A new selection is the follower's to scroll to.
+            guard let last, last.rowId == placement.rowId else {
+                wasClear = placement.isClear
+                return false
+            }
+            let layoutMoved = abs(placement.contentMinY - last.contentMinY) > Placement.layoutEpsilon
+                || abs(placement.visibleHeight - last.visibleHeight) > Placement.layoutEpsilon
+            // A scroll: the row is wherever the user (or the follower) put it.
+            guard layoutMoved else {
+                wasClear = placement.isClear
+                return false
+            }
+            if placement.isClear {
+                wasClear = true
+                return false
+            }
+            // Still owed its place until a scroll says otherwise.
+            return wasClear
         }
     }
 }
@@ -392,8 +505,10 @@ enum SidebarSelectionFollow {
 /// unfolds the selected session's project if it is folded and scrolls its
 /// row into view, the least distance (`anchor: nil`), `trayClearance` clear
 /// of the tray. Only a change of selection scrolls: the pointer, activity
-/// and time never do. Keyboard moves don't animate (motion spec, "stays
-/// still"); Reduce Motion animates nothing.
+/// and time never do, except to hold the selected row in full view when
+/// the list's layout pushes it out (`SidebarSelectionFollow.KeepClear`).
+/// Keyboard moves don't animate (motion spec, "stays still"); Reduce Motion
+/// animates nothing.
 ///
 /// The tabs layout keeps what it had: on the rail, a selection moved by
 /// keyboard (Next/Previous Session, Cmd+1-9) scrolls into view, instantly.
@@ -406,7 +521,18 @@ struct SidebarSelectionFollower: ViewModifier {
     let window: () -> NSWindow?
     let scrollProxy: ScrollViewProxy
 
+    /// The selected row's last placement (`KeepClear`). A reference, not
+    /// view state: it changes on every scroll and redraws nothing.
+    private final class KeepClearBox {
+        var state = SidebarSelectionFollow.KeepClear()
+        var frame: SidebarSelectionFollow.SelectedTargetFrame?
+        /// The viewport's height above the tray (`ViewportHeightKey`).
+        var viewportHeight: CGFloat = 0
+        var isOneView = false
+    }
+
     @State private var keyboardMovedSelection = false
+    @State private var keepClear = KeepClearBox()
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedRaw = ""
 
@@ -429,7 +555,17 @@ struct SidebarSelectionFollower: ViewModifier {
 
     func body(content: Content) -> some View {
         let inputs = Inputs(selected: selectedSessionId, pinned: pinned, active: active, layout: layout)
+        // Read by the preference handlers below, which run outside `body`.
+        let _ = keepClear.isOneView = layout == .oneView
         content
+            .onPreferenceChange(SidebarSelectionFollow.SelectedTargetFrameKey.self) { [keepClear] frame in
+                keepClear.frame = frame
+                keepSelectedRowClear()
+            }
+            .onPreferenceChange(SidebarSelectionFollow.ViewportHeightKey.self) { [keepClear] height in
+                keepClear.viewportHeight = height
+                keepSelectedRowClear()
+            }
             .onReceive(Self.keyboardSelection) { note in
                 guard let target = note.object as? NSWindow, target === window() else { return }
                 keyboardMovedSelection = true
@@ -445,6 +581,27 @@ struct SidebarSelectionFollower: ViewModifier {
                 guard inputs.layout == .oneView else { return }
                 scroll(to: inputs.selectedRowId, in: inputs, animated: false)
             }
+    }
+
+    /// Scrolls the selected row back into full view when the list's layout
+    /// has pushed it out (`SidebarSelectionFollow.KeepClear`). Not
+    /// animated: the row holds its place while the list moves round it.
+    private func keepSelectedRowClear() {
+        let box = keepClear
+        guard box.isOneView, let frame = box.frame, box.viewportHeight > 0 else {
+            _ = box.state.take(nil)
+            return
+        }
+        let placement = SidebarSelectionFollow.Placement(
+            rowId: frame.rowId, contentMinY: frame.contentMinY,
+            minY: frame.viewport.minY, maxY: frame.viewport.maxY + SidebarSelectionFollow.trayClearance,
+            visibleHeight: box.viewportHeight
+        )
+        guard box.state.take(placement) else { return }
+        // On the next turn: this runs inside a layout pass.
+        DispatchQueue.main.async { [scrollProxy] in
+            scrollProxy.scrollTo(SidebarSelectionFollow.scrollTargetId(row: frame.rowId))
+        }
     }
 
     private func follow(_ inputs: Inputs, route: SidebarSelectionFollow.Route) {
