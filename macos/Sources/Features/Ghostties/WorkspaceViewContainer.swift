@@ -1271,6 +1271,7 @@ class WorkspaceViewContainer: NSView {
     private func triggerCaptureLaunchHooksIfNeeded() {
         if let hook = CaptureFixture.composerHook, CaptureFixture.claimHook("composer") {
             CaptureFixture.applyThemePresentation()
+            CaptureFixture.applyComposerDials()
             DispatchQueue.main.asyncAfter(deadline: .now() + hook.delay) { [weak self] in
                 guard let self else { return }
                 defer { Self.applyCaptureComposerText() }
@@ -1303,6 +1304,13 @@ class WorkspaceViewContainer: NSView {
             // After the window's own restore/default sizing has run.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.window?.setContentSize(size)
+            }
+        }
+        if let sequence = CaptureFixture.windowSizeSequence, CaptureFixture.claimHook("windowSizeSequence") {
+            for (index, size) in sequence.sizes.enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval * Double(index + 1)) { [weak self] in
+                    self?.window?.setContentSize(size)
+                }
             }
         }
         if let seconds = CaptureFixture.sidebarToggleAfter, CaptureFixture.claimHook("sidebarToggle") {

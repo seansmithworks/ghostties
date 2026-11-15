@@ -123,21 +123,6 @@ struct ComposerWitnessFramesTests {
         #expect(frames.last?.grid == ComposerWitnessFrames.emptyGridLike(Self.grid))
     }
 
-    @Test func resolveFramesHaveSixFortyMsStepsAndEndOnGridB() {
-        let gridB = ComposerWitnessFrames.emptyGridLike(Self.grid)
-        let frames = ComposerWitnessFrames.buildResolveFrames(gridA: Self.grid, gridB: gridB, seed: 11)
-        #expect(frames.count == 6)
-        #expect(frames.map(\.ms) == [40, 40, 40, 40, 40, 40])
-        #expect(frames.last?.grid == gridB)
-    }
-
-    @Test func openFramesHaveSixFortyMsStepsAndEndOnTheBaseGrid() {
-        let frames = ComposerWitnessFrames.buildOpenFrames(grid: Self.grid, seed: 11)
-        #expect(frames.count == 6)
-        #expect(frames.map(\.ms) == [40, 40, 40, 40, 40, 40])
-        #expect(frames.last?.grid == Self.grid)
-    }
-
     // MARK: - Frame-at-elapsed boundaries
 
     @Test func tabFrameIndexBoundaries() {
@@ -179,7 +164,6 @@ struct ComposerWitnessFramesTests {
             )
             #expect(result.grid == Self.grid, "combo \(combo) did not hold the base grid under Reduce Motion")
             #expect(result.cellOffsetY == 0)
-            #expect(result.sourceIsB == nil)
         }
     }
 
@@ -221,5 +205,224 @@ struct ComposerWitnessFramesTests {
 
     @Test func floatOffsetXIsZeroAtZeroAmplitude() {
         #expect(ComposerWitnessFrames.floatOffsetX(clockMs: 1500, amplitude: 0, periodMs: 3000, reduceMotion: false) == 0)
+    }
+
+    // MARK: - Entrance (the open drop)
+
+    private static func openSamples() -> [ComposerWitnessFrames.WitnessTransform] {
+        (0...ComposerWitnessFrames.openDurationMs + 20).map {
+            ComposerWitnessFrames.openTransform(elapsedMs: $0, reduceMotion: false)
+        }
+    }
+
+    @Test func entranceStartsTwelvePointsAboveAndInvisible() {
+        let start = ComposerWitnessFrames.openTransform(elapsedMs: 0, reduceMotion: false)
+        #expect(start.offsetY == -12)
+        #expect(start.opacity == 0)
+        #expect(start.scaleX == 1)
+        #expect(start.scaleY == 1)
+    }
+
+    @Test func entranceEndsExactlyAtTheIdentityTransformWithin250Ms() {
+        #expect(ComposerWitnessFrames.openDurationMs <= 250)
+        let end = ComposerWitnessFrames.openTransform(elapsedMs: ComposerWitnessFrames.openDurationMs, reduceMotion: false)
+        #expect(end == .identity)
+        #expect(ComposerWitnessFrames.openTransform(elapsedMs: 10_000, reduceMotion: false) == .identity)
+    }
+
+    @Test func entranceDropOnlyEverMovesDownAndIsEasedOut() {
+        let samples = Self.openSamples()
+        for (a, b) in zip(samples, samples.dropFirst()) {
+            #expect(b.offsetY >= a.offsetY, "the drop must never move back up")
+        }
+        // A strong ease-out covers most of the distance in the first third.
+        let third = ComposerWitnessFrames.openTransform(elapsedMs: ComposerWitnessFrames.openDropMs / 3, reduceMotion: false)
+        #expect(third.offsetY > -12 * 0.3)
+    }
+
+    /// Exactly one squash: scale y dips below 1 in one unbroken run, never
+    /// rises above 1, and the squash's scale x never shrinks below 1.
+    @Test func entranceSquashesExactlyOnce() {
+        let samples = Self.openSamples()
+        let dipping = samples.map { $0.scaleY < 1 }
+        let runs = zip([false] + dipping, dipping).filter { !$0 && $1 }.count
+        #expect(runs == 1, "expected one squash, saw \(runs)")
+        #expect(samples.allSatisfy { $0.scaleY <= 1 }, "scale y must never stretch past 1")
+        #expect(samples.allSatisfy { $0.scaleX >= 1 })
+        #expect(samples.map(\.scaleY).min()! < 0.95, "the squash should be visible")
+    }
+
+    @Test func dropIsOffUnderReduceMotion() {
+        for ms in [0, 40, 120, 200, 239] {
+            #expect(ComposerWitnessFrames.openTransform(elapsedMs: ms, reduceMotion: true) == .identity)
+        }
+    }
+
+    // MARK: - Blend (project change)
+
+    @Test func resolveFramesHaveSixFortyMsStepsAndEndOnGridB() {
+        let gridB = ComposerWitnessFrames.emptyGridLike(Self.grid)
+        let frames = ComposerWitnessFrames.buildResolveFrames(gridA: Self.grid, gridB: gridB, seed: 11)
+        #expect(frames.count == 6)
+        #expect(frames.map(\.ms) == [40, 40, 40, 40, 40, 40])
+        #expect(frames.last?.grid == gridB)
+        #expect(frames.allSatisfy { $0.sourceIsB != nil }, "each frame says which ghost each cell came from")
+    }
+
+    // MARK: - Flip (the ghost's own: landing, then idle)
+
+    @Test func flipLastsAbout240Ms() {
+        #expect(ComposerWitnessFrames.flipDurationMs == 240)
+        #expect(ComposerWitnessFrames.flipDurationMs < 300)
+    }
+
+    @Test func flipHitsZeroWidthAtTheMidpoint() {
+        let half = ComposerWitnessFrames.flipDurationMs / 2
+        #expect(ComposerWitnessFrames.flipScaleX(elapsedMs: 0, reduceMotion: false) == 1)
+        #expect(ComposerWitnessFrames.flipScaleX(elapsedMs: half, reduceMotion: false) < 1e-9)
+    }
+
+    @Test func flipEndsAtFullWidth() {
+        #expect(ComposerWitnessFrames.flipScaleX(elapsedMs: ComposerWitnessFrames.flipDurationMs, reduceMotion: false) == 1)
+        #expect(ComposerWitnessFrames.flipScaleX(elapsedMs: 100_000, reduceMotion: false) == 1)
+    }
+
+    @Test func flipIsSymmetric() {
+        let total = ComposerWitnessFrames.flipDurationMs
+        for ms in stride(from: 0, through: total / 2, by: 10) {
+            let turningAway = ComposerWitnessFrames.flipScaleX(elapsedMs: ms, reduceMotion: false)
+            let turningBack = ComposerWitnessFrames.flipScaleX(elapsedMs: total - ms, reduceMotion: false)
+            #expect(abs(turningAway - turningBack) < 1e-6, "ms \(ms)")
+        }
+    }
+
+    @Test func flipIsOffUnderReduceMotion() {
+        for ms in stride(from: 0, through: ComposerWitnessFrames.flipDurationMs, by: 20) {
+            #expect(ComposerWitnessFrames.flipScaleX(elapsedMs: ms, reduceMotion: true) == 1)
+        }
+    }
+
+    /// The landing flip starts as the drop touches down, so its edge-on
+    /// instant falls after the composer's own 200ms fade-in, where it can
+    /// be seen.
+    ///
+    /// red mutation: start the landing flip at 0 — it is edge-on at 120ms,
+    /// while the composer is still fading in.
+    @Test func landingFlipStartsAtTouchdownAndIsEdgeOnAfterTheComposerHasFadedIn() {
+        let start = ComposerWitnessFrames.landingFlipStartMs
+        #expect(start == ComposerWitnessFrames.openDropMs)
+        #expect(start + ComposerWitnessFrames.flipDurationMs / 2 > 200, "edge-on after the composer's 200ms fade")
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: start - 1, beatSpeed: 1, reduceMotion: false) == nil)
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: start, beatSpeed: 1, reduceMotion: false) == 0)
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(
+            sinceOpenMs: start + 120, beatSpeed: 1, reduceMotion: false
+        ) == ComposerWitnessFrames.flipDurationMs / 2)
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(
+            sinceOpenMs: start + ComposerWitnessFrames.flipDurationMs, beatSpeed: 1, reduceMotion: false
+        ) == nil, "the landing flip is over")
+    }
+
+    /// While the composer stays open the ghost flips again every 10s, and
+    /// not in between.
+    ///
+    /// red mutation: drop the `% idleFlipIntervalMs` — only the landing
+    /// flip ever plays.
+    @Test func idleFlipRepeatsEveryTenSecondsAndOnlyThen() {
+        let start = ComposerWitnessFrames.landingFlipStartMs
+        let interval = ComposerWitnessFrames.idleFlipIntervalMs
+        #expect(interval == 10_000)
+        for n in 1...6 {
+            let flipStart = start + n * interval
+            #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: flipStart - 1, beatSpeed: 1, reduceMotion: false) == nil)
+            #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: flipStart, beatSpeed: 1, reduceMotion: false) == 0)
+            #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: flipStart + 120, beatSpeed: 1, reduceMotion: false) == 120)
+            #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: flipStart + 240, beatSpeed: 1, reduceMotion: false) == nil)
+        }
+        // Flipping for 240ms of every 10s, at rest for the other 9760ms.
+        let flippingMs = (start..<(start + interval)).filter {
+            ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: $0, beatSpeed: 1, reduceMotion: false) != nil
+        }.count
+        #expect(flippingMs == ComposerWitnessFrames.flipDurationMs)
+    }
+
+    /// Beat speed scales the landing and each flip, never the 10s wait.
+    @Test func beatSpeedScalesTheFlipButNotTheWaitBetweenFlips() {
+        let interval = ComposerWitnessFrames.idleFlipIntervalMs
+        // At 2x the landing flip starts at 75ms and lasts 120ms of real time.
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: 74, beatSpeed: 2, reduceMotion: false) == nil)
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: 75, beatSpeed: 2, reduceMotion: false) == 0)
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: 135, beatSpeed: 2, reduceMotion: false) == 120)
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: 195, beatSpeed: 2, reduceMotion: false) == nil)
+        #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: 75 + interval, beatSpeed: 2, reduceMotion: false) == 0)
+    }
+
+    /// Reduce Motion: no flip at all, landing or idle.
+    ///
+    /// red mutation: drop the `!reduceMotion` guard in `selfFlipElapsedMs`.
+    @Test func noLandingOrIdleFlipUnderReduceMotion() {
+        for ms in stride(from: 0, through: 3 * ComposerWitnessFrames.idleFlipIntervalMs, by: 10) {
+            #expect(ComposerWitnessFrames.selfFlipElapsedMs(sinceOpenMs: ms, beatSpeed: 1, reduceMotion: true) == nil)
+        }
+    }
+
+    // MARK: - Tip (short windows)
+
+    @Test func tipLasts240MsAndIsEasedInOut() {
+        #expect(ComposerWitnessFrames.tipDurationMs == 240)
+        #expect(ComposerWitnessFrames.tipDurationMs < 300)
+        #expect(ComposerWitnessFrames.tipProgress(elapsedMs: 0, reduceMotion: false) == 0)
+        #expect(ComposerWitnessFrames.tipProgress(elapsedMs: 240, reduceMotion: false) == 1)
+        #expect(ComposerWitnessFrames.tipProgress(elapsedMs: 100_000, reduceMotion: false) == 1)
+        // Slow out of rest, slow into rest.
+        #expect(ComposerWitnessFrames.tipProgress(elapsedMs: 24, reduceMotion: false) < 0.1)
+        #expect(ComposerWitnessFrames.tipProgress(elapsedMs: 216, reduceMotion: false) > 0.9)
+        var last = 0.0
+        for ms in stride(from: 0, through: 240, by: 8) {
+            let progress = ComposerWitnessFrames.tipProgress(elapsedMs: ms, reduceMotion: false)
+            #expect(progress >= last, "never tips backwards")
+            last = progress
+        }
+    }
+
+    /// Standing up is the same move in reverse, and a tip that turns round
+    /// mid-way starts from where the ghost is.
+    @Test func tipRunsBothWaysAndTurnsRoundWithoutAJump() {
+        #expect(ComposerWitnessFrames.tipPosition(from: 0, to: 1, elapsedMs: 240, reduceMotion: false) == 1)
+        #expect(ComposerWitnessFrames.tipPosition(from: 1, to: 0, elapsedMs: 240, reduceMotion: false) == 0)
+        let midway = ComposerWitnessFrames.tipPosition(from: 0, to: 1, elapsedMs: 90, reduceMotion: false)
+        #expect(ComposerWitnessFrames.tipPosition(from: midway, to: 0, elapsedMs: 0, reduceMotion: false) == midway)
+    }
+
+    /// Reduce Motion: the ghost appears in place, no tipping.
+    ///
+    /// red mutation: drop the `!reduceMotion` guard in `tipProgress`.
+    @Test func noTippingUnderReduceMotion() {
+        for ms in [0, 1, 60, 120, 239] {
+            #expect(ComposerWitnessFrames.tipProgress(elapsedMs: ms, reduceMotion: true) == 1)
+            #expect(ComposerWitnessFrames.tipPosition(from: 0, to: 1, elapsedMs: ms, reduceMotion: true) == 1)
+            #expect(ComposerWitnessFrames.tipPosition(from: 1, to: 0, elapsedMs: ms, reduceMotion: true) == 0)
+        }
+    }
+
+    @Test func floatIsOffUnderReduceMotion() {
+        let amplitude = ComposerWitnessFloatAmplitude.defaultAmplitude
+        for ms in [750, 1500, 2250] {
+            #expect(ComposerWitnessFrames.floatOffset(clockMs: ms, amplitude: amplitude, periodMs: 3000, reduceMotion: true) == 0)
+            #expect(ComposerWitnessFrames.floatOffsetX(clockMs: ms, amplitude: amplitude, periodMs: 3000, reduceMotion: true) == 0)
+        }
+    }
+
+    // MARK: - Pixel snapping
+
+    @Test func pixelSnappedOffsetsLandOnWholePixels() {
+        #expect(ComposerWitnessFrames.pixelSnapped(1.3, scale: 1) == 1)
+        #expect(ComposerWitnessFrames.pixelSnapped(1.3, scale: 2) == 1.5)
+        #expect(ComposerWitnessFrames.pixelSnapped(-3.8, scale: 2) == -4)
+    }
+
+    @Test func cubicBezierHitsItsEndpoints() {
+        #expect(ComposerWitnessFrames.cubicBezier(0, 0.23, 1, 0.32, 1) == 0)
+        #expect(ComposerWitnessFrames.cubicBezier(1, 0.23, 1, 0.32, 1) == 1)
+        #expect(abs(ComposerWitnessFrames.cubicBezier(0.5, 0.65, 0, 0.35, 1) - 0.5) < 1e-9)
     }
 }

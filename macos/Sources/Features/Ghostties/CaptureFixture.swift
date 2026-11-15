@@ -116,6 +116,26 @@ enum CaptureFixture {
         return suite
     }()
 
+    /// `GHOSTTIES_CAPTURE_COMPOSER_DIALS`, applied when the composer hook
+    /// fires. The composer reads its dials from `AppDefaults.store`
+    /// (`.standard` in a capture launch, not the throwaway suite), so they
+    /// go in that store's argument domain, which is volatile: it outranks
+    /// the saved values and is never written to disk.
+    static func applyComposerDials() {
+        seedComposerDials(composerDials, into: AppDefaults.store)
+    }
+
+    /// Merges `dials` into `defaults`' volatile argument domain. Empty
+    /// leaves it untouched.
+    static func seedComposerDials(_ dials: [String: Double], into defaults: UserDefaults) {
+        guard !dials.isEmpty else { return }
+        var arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        for (key, value) in dials { arguments[key] = value }
+        // Setting a volatile domain that already exists raises; replace it.
+        defaults.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+        defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+    }
+
     /// Writes the reveal style dial into `suite` (the fixture's per-pid one,
     /// never `.standard`); nil leaves the code default.
     static func seedRevealStyle(_ style: RailRevealStyle?, into suite: UserDefaults) {
@@ -205,16 +225,26 @@ enum CaptureFixture {
     ///   - `VERIFY_FIXTURE_TEMPLATE_IN_USE=1` -> `GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE=1`:
     ///     one user template, "Mine", used by two trove sessions (T6: the
     ///     in-use delete alert).
+    ///   - `GHOSTTIES_CAPTURE_FIXTURE_LONG_LIST=1` (DEBUG builds only):
+    ///     twelve more live sessions (`longListSessions`), so the one-view
+    ///     list is taller than the window and has to scroll.
     struct SeedKnobs: Equatable {
         var zeroProjects = false
         var templateInUse = false
+        #if DEBUG
+        var longList = false
+        #endif
     }
 
     static func parseSeedKnobs(_ env: [String: String]) -> SeedKnobs {
-        SeedKnobs(
+        var knobs = SeedKnobs(
             zeroProjects: env["GHOSTTIES_CAPTURE_FIXTURE_PROJECTS"] == "none",
             templateInUse: env["GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE"] == "1"
         )
+        #if DEBUG
+        knobs.longList = env["GHOSTTIES_CAPTURE_FIXTURE_LONG_LIST"] == "1"
+        #endif
+        return knobs
     }
 
     static let seedKnobs: SeedKnobs = isActive ? parseSeedKnobs(ProcessInfo.processInfo.environment) : SeedKnobs()
@@ -267,6 +297,34 @@ enum CaptureFixture {
         FixtureSession(name: "icon pass", project: "wren", ghost: .pinky, state: .inactive, hoursAgo: 168),
     ]
 
+    #if DEBUG
+    /// The long-list knob's extra cast, after `fixtureSessions`. They have
+    /// rows but no terminal (`spawnedSessionIds` covers the default cast).
+    private static let longListSessions: [FixtureSession] = [
+        FixtureSession(name: "axis labels", project: "pendulum", ghost: .mist, state: .waiting, hoursAgo: 0.2),
+        FixtureSession(name: "legend wrap", project: "pendulum", ghost: .gloom, state: .processing, hoursAgo: 0.3),
+        FixtureSession(name: "tooltip lag", project: "pendulum", ghost: .polter, state: .waiting, hoursAgo: 0.4),
+        FixtureSession(name: "index rebuild", project: "silo", ghost: .wraith, state: .processing, hoursAgo: 0.5),
+        FixtureSession(name: "cold storage", project: "silo", ghost: .shade, state: .waiting, hoursAgo: 0.6),
+        FixtureSession(name: "quota alerts", project: "silo", ghost: .hex, state: .waiting, hoursAgo: 0.7),
+        FixtureSession(name: "import csv", project: "trove", ghost: .spike, state: .waiting, hoursAgo: 0.8),
+        FixtureSession(name: "tag merge", project: "trove", ghost: .drift, state: .processing, hoursAgo: 0.9),
+        FixtureSession(name: "search ranking", project: "trove", ghost: .chill, state: .waiting, hoursAgo: 1),
+        FixtureSession(name: "theme audit", project: "wren", ghost: .clyde, state: .waiting, hoursAgo: 1.1),
+        FixtureSession(name: "font fallback", project: "wren", ghost: .pinky, state: .waiting, hoursAgo: 1.2),
+        FixtureSession(name: "empty states", project: "wren", ghost: .mist, state: .processing, hoursAgo: 1.3),
+    ]
+    #endif
+
+    /// The seeded cast: the default one, plus (DEBUG) the long-list knob's.
+    private static func seededCast(_ knobs: SeedKnobs) -> [FixtureSession] {
+        #if DEBUG
+        return fixtureSessions + (knobs.longList ? longListSessions : [])
+        #else
+        return fixtureSessions
+        #endif
+    }
+
     /// Round 6 follow-up: the one session the fixture marks focused, so a
     /// capture actually exercises the sidebar's selected-row styling
     /// (the expanded list's chip, `SidebarRowChipBackground`)
@@ -303,7 +361,7 @@ enum CaptureFixture {
 
     static func seededSessions(_ knobs: SeedKnobs, projects: [Project]) -> [AgentSession] {
         if knobs.zeroProjects { return [] }
-        return fixtureSessions.enumerated().map { index, fs in
+        return seededCast(knobs).enumerated().map { index, fs in
             let now = Date()
             let usesInUseTemplate = knobs.templateInUse && inUseTemplateSessionNames.contains(fs.name)
             return AgentSession(
@@ -347,7 +405,7 @@ enum CaptureFixture {
             hasDismissedPinMigrationNotice: true
         )
         if knobs.templateInUse { store.addTemplate(inUseTemplate) }
-        for (fs, session) in zip(fixtureSessions, store.sessions) {
+        for (fs, session) in zip(seededCast(knobs), store.sessions) {
             store.updateIndicatorState(id: session.id, state: fs.state)
             switch fs.state {
             case .inactive:
@@ -584,6 +642,39 @@ enum CaptureFixture {
         static let defaultDelay: TimeInterval = 1
     }
 
+    /// `GHOSTTIES_CAPTURE_COMPOSER_PROJECT_SEQUENCE=<seconds>:<project>,<project>,...`:
+    /// once the composer is open, every `interval` seconds the next project
+    /// is typed into its field (`SessionComposerPalette.runCaptureHooks`).
+    struct ComposerProjectSequence: Equatable {
+        let interval: TimeInterval
+        let projectNames: [String]
+    }
+
+    static func parseComposerProjectSequence(_ raw: String?) -> ComposerProjectSequence? {
+        guard let raw, let split = raw.firstIndex(of: ":"),
+              let interval = parsePositiveSeconds(String(raw[..<split])) else { return nil }
+        let names = raw[raw.index(after: split)...].split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard !names.isEmpty, !names.contains(where: \.isEmpty) else { return nil }
+        return ComposerProjectSequence(interval: interval, projectNames: names)
+    }
+
+    /// `GHOSTTIES_CAPTURE_COMPOSER_DIALS=<key>=<number>,...`: composer dial
+    /// values for this launch (e.g. `ghostties.composerWitnessGlowStrength=0`).
+    /// Only `ghostties.composer` keys; anything else, or a non-number, makes
+    /// the whole value invalid.
+    static func parseComposerDials(_ raw: String?) -> [String: Double]? {
+        guard let raw, !raw.isEmpty else { return nil }
+        var dials: [String: Double] = [:]
+        for entry in raw.split(separator: ",", omittingEmptySubsequences: false) {
+            let pair = entry.split(separator: "=", omittingEmptySubsequences: false)
+            guard pair.count == 2, pair[0].hasPrefix("ghostties.composer"),
+                  let value = Double(pair[1]), value.isFinite else { return nil }
+            dials[String(pair[0])] = value
+        }
+        return dials
+    }
+
     /// `GHOSTTIES_CAPTURE_PROJECT_SETTINGS`:
     /// `<project>[:templates-edit|:templates-delete]`.
     struct ProjectSettingsHook: Equatable {
@@ -679,6 +770,13 @@ enum CaptureFixture {
     }
 
     static var composerHook: ComposerHook? { parseComposerHook(env("GHOSTTIES_CAPTURE_COMPOSER")) }
+    /// `GHOSTTIES_CAPTURE_COMPOSER_RESUME=open`: once the composer is open,
+    /// its Resume list is revealed the way ↓ does (the default list layout).
+    static var composerResumeOpen: Bool { env("GHOSTTIES_CAPTURE_COMPOSER_RESUME") == "open" }
+    static var composerProjectSequence: ComposerProjectSequence? {
+        parseComposerProjectSequence(env("GHOSTTIES_CAPTURE_COMPOSER_PROJECT_SEQUENCE"))
+    }
+    static var composerDials: [String: Double] { parseComposerDials(env("GHOSTTIES_CAPTURE_COMPOSER_DIALS")) ?? [:] }
     /// `GHOSTTIES_CAPTURE_COMPOSER_TEXT=<text>`: written into the composer's
     /// field once the `GHOSTTIES_CAPTURE_COMPOSER` hook has opened it, as
     /// if typed (e.g. `theme gru`).
@@ -812,6 +910,13 @@ enum CaptureFixture {
     /// draws that tray button's hover highlight without a pointer, so the
     /// hovered state can be captured without synthetic input.
     static var trayHoverItemId: String? { env("GHOSTTIES_CAPTURE_TRAY_HOVER").flatMap { $0.isEmpty ? nil : $0 } }
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_HEADER_HOVER=<project>[,<project>]`: draws those
+    /// one-view project headers' hover state (the quick-create "+" chip)
+    /// without a pointer. A trailing `!` on a name (`wren!`) also draws the
+    /// chip as it is under the pointer.
+    static var headerHoverProjects: Set<String> { Set(projectOrder(env("GHOSTTIES_CAPTURE_HEADER_HOVER"))) }
+    #endif
     /// `GHOSTTIES_CAPTURE_BACKGROUND=1`: the capture app never activates
     /// itself (`suppressActivation`), and opens its first window at launch
     /// instead of on first activation (`AppDelegate`), so a capture launched
@@ -838,6 +943,33 @@ enum CaptureFixture {
               width > 0, height > 0 else { return nil }
         return CGSize(width: width, height: height)
     }
+
+    /// `GHOSTTIES_CAPTURE_WINDOW_SIZE_SEQUENCE=<seconds>:<w>x<h>,<w>x<h>,...`:
+    /// every `interval` seconds after the window is up, its content size is
+    /// set to the next one, so a capture can show the composer as the
+    /// window shrinks and grows.
+    struct WindowSizeSequence: Equatable {
+        let interval: TimeInterval
+        let sizes: [CGSize]
+    }
+
+    static var windowSizeSequence: WindowSizeSequence? {
+        parseWindowSizeSequence(env("GHOSTTIES_CAPTURE_WINDOW_SIZE_SEQUENCE"))
+    }
+
+    /// One bad size makes the whole value invalid.
+    static func parseWindowSizeSequence(_ raw: String?) -> WindowSizeSequence? {
+        guard let raw, let split = raw.firstIndex(of: ":"),
+              let interval = parsePositiveSeconds(String(raw[..<split])) else { return nil }
+        let sizes = raw[raw.index(after: split)...].split(separator: ",", omittingEmptySubsequences: false)
+            .map { parseWindowContentSize(String($0)) }
+        guard !sizes.isEmpty, !sizes.contains(nil) else { return nil }
+        return WindowSizeSequence(interval: interval, sizes: sizes.compactMap { $0 })
+    }
+
+    /// `GHOSTTIES_CAPTURE_REDUCE_MOTION=1`: the composer behaves as it does
+    /// with the Mac's Reduce Motion setting on, for this launch only.
+    static var reduceMotion: Bool { env("GHOSTTIES_CAPTURE_REDUCE_MOTION") == "1" }
     /// `GHOSTTIES_CAPTURE_SETTINGS`: opens the Settings window shortly after
     /// launch, so a pane can be captured without a keystroke. `1` is App
     /// Settings' Appearance tab, `app` its General tab, `projects` the

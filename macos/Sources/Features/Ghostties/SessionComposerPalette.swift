@@ -94,14 +94,21 @@ struct SessionComposerPalette: View {
     let resumeRelaunchForTesting: ((AgentSession, SessionCoordinator.RelaunchMode) -> Void)?
     let nowForTesting: Date?
 
+    /// The window this palette sits in (`SessionComposerOverlay`). `nil`
+    /// (a palette mounted on its own, as tests do) means a window with room
+    /// for everything: the ghost stands and the list takes its full height.
+    let containerFit: ComposerContainerFit?
+
     init(
         isPresented: Binding<Bool>,
         request: SessionComposerRequest,
         composerStore: SessionComposerStore = .shared,
         tuningDefaultsForTesting: UserDefaults? = nil,
         resumeRelaunchForTesting: ((AgentSession, SessionCoordinator.RelaunchMode) -> Void)? = nil,
-        nowForTesting: Date? = nil
+        nowForTesting: Date? = nil,
+        containerFit: ComposerContainerFit? = nil
     ) {
+        self.containerFit = containerFit
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
@@ -115,6 +122,9 @@ struct SessionComposerPalette: View {
     /// The Resume list's keyboard state (`ComposerResumeState`): revealed
     /// (A5), resume column focused (A4), highlighted row.
     @State private var resumeState = ComposerResumeState()
+    /// The ↓ list's top edge, from the window's top, while it shows
+    /// (`downListMaxHeight`).
+    @State private var downListTopY: CGFloat?
     /// Blocker 2 fix (Slice B review round 2): debounced re-refresh when a
     /// typed command resolves a DIFFERENT project than whatever the
     /// composer's worktree cache currently describes — see
@@ -137,8 +147,8 @@ struct SessionComposerPalette: View {
     // MARK: - R14 Witness ghost (composer-only trial, single-line + centered only)
 
     /// Bumped on the four finished-event beats the Witness view doesn't
-    /// detect on its own (`.resolve` is `ComposerWitnessView`'s own
-    /// `.onChange(of: identity)`, not here). See `ComposerWitness.Beat`
+    /// detect on its own (an identity change is `ComposerWitnessView`'s own
+    /// blend, not a beat sent here). See `ComposerWitness.Beat`
     /// hook sites: open (`onAppear`/`onChange(focusSearchFieldTrigger)`
     /// below), Tab accept (`handle(_:)` `.acceptedGhost` case above),
     /// unknown branch (`commit(template:)`'s `.unresolved` branch), launch
@@ -1178,7 +1188,10 @@ struct SessionComposerPalette: View {
     }
 
     private var reduceMotionEnabled: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        #if DEBUG
+        if CaptureFixture.reduceMotion { return true }
+        #endif
+        return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
     // MARK: - Body
@@ -1186,11 +1199,14 @@ struct SessionComposerPalette: View {
     var body: some View {
         let scheme: ColorScheme = NSColor(Color(nsColor: .windowBackgroundColor)).isLightColor ? .light : .dark
 
+        // The card always takes its own height and grows downward from its
+        // top edge, which `SessionComposerOverlay` pins at `fieldTopY`.
         // Shake-clearance wrapper: an 8pt clear inset on all four sides
         // (DESIGN.md §5 Layout Tokens — the nearest valid step above the
         // ±6pt shake amplitude) so the lateral translation has room.
-        anchoredComposerCard
-            .padding(8)
+        singleLineComposerCard
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(Self.shakeClearance)
             .environment(\.colorScheme, scheme)
             .onAppear {
                 resumeState.reset()
@@ -1204,6 +1220,9 @@ struct SessionComposerPalette: View {
                 // re-open of an already-mounted palette — see the matching
                 // `onChange(focusSearchFieldTrigger)` below.
                 witnessBeat = witnessBeat.next(.open)
+                #if DEBUG
+                runCaptureHooks()
+                #endif
             }
             .onChange(of: isPresented) { presented in
                 if !presented {
@@ -1357,21 +1376,99 @@ struct SessionComposerPalette: View {
             }
     }
 
-    // MARK: - Resume surfaces
-
-    /// A5 lays out at the one-line card's height and lets the Resume list
-    /// hang below it, so revealing the list never moves the field. A4 is
-    /// always open and centres as a whole.
-    @ViewBuilder
-    private var anchoredComposerCard: some View {
-        if resumeLayout == .list || themePicker.isActive {
-            singleLineComposerCard
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(height: newStyleFieldLineHeight + 2 * singleLineVerticalPadding, alignment: .top)
-        } else {
-            singleLineComposerCard
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_COMPOSER_RESUME` / `_PROJECT_SEQUENCE`
+    /// (`CaptureFixture`): reveal the Resume list the way ↓ does, and set
+    /// the typed project the way typing its name and a space does. Once per
+    /// launch each.
+    private func runCaptureHooks() {
+        if CaptureFixture.composerResumeOpen, CaptureFixture.claimHook("composerResume") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                _ = routeToResume(.down)
+            }
+        }
+        if let sequence = CaptureFixture.composerProjectSequence, CaptureFixture.claimHook("composerProjectSequence") {
+            for (index, name) in sequence.projectNames.enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval * Double(index + 1)) {
+                    composerStore.searchText = name + " "
+                }
+            }
         }
     }
+    #endif
+
+    // MARK: - Vertical position
+
+    /// The clear inset around the card (see `body`): the card's top edge
+    /// sits this far below the palette's own top edge.
+    static let shakeClearance: CGFloat = 8
+
+    /// The y, from the overlay's top, of the field card's top edge — the
+    /// tuned fraction of `containerHeight`, clamped so the field plus the
+    /// ↓ list at its full height (`resumeListHeight`) stays on screen
+    /// (`ComposerVerticalAnchor`). Reads nothing that typing, the status
+    /// strip, or opening the list changes, so the field never moves.
+    static func fieldTopY(containerHeight: CGFloat, titlebarBand: CGFloat, defaults: UserDefaults) -> CGFloat {
+        let fieldSize = ComposerSingleLineTuning.fieldSize(defaults: defaults)
+        let fieldHeight = ComposerSingleLineTuning.lineHeight(fieldSize: fieldSize)
+            + 2 * ComposerSingleLineTuning.verticalPadding(fieldSize: fieldSize)
+        let ghostClearance = ComposerWitnessSetting.isEnabled(defaults: defaults)
+            ? ComposerWitnessSize.size(defaults: defaults) + ComposerWitnessGap.gap(defaults: defaults)
+            : 0
+        return ComposerVerticalAnchor.fieldTopY(
+            containerHeight: containerHeight,
+            fraction: CGFloat(ComposerFieldTopFraction.fraction(defaults: defaults)),
+            titlebarBand: titlebarBand,
+            ghostClearance: ghostClearance,
+            fieldHeight: fieldHeight,
+            listHeight: resumeListHeight(titleSize: ComposerSingleLineTuning.rowSize(defaults: defaults)),
+            bottomMargin: ComposerVerticalAnchor.defaultBottomMargin
+        )
+    }
+
+    /// A5's ↓ list at the tallest it grows (`ComposerDownListView
+    /// .maxHeight`: six rows under two headers), with its hairline and
+    /// inset (`resumeSurface`).
+    static func resumeListHeight(titleSize: CGFloat) -> CGFloat {
+        1 + 2 * resumeListInset + ComposerDownListView.maxHeight(titleSize: titleSize)
+    }
+
+    /// The field row's height: the card with the list closed and no status
+    /// strip.
+    private var fieldRowHeight: CGFloat {
+        newStyleFieldLineHeight + 2 * singleLineVerticalPadding
+    }
+
+    /// The ↓ list's height cap: its full height, or less in a window too
+    /// short to hold that under the field (`ComposerDownListView
+    /// .viewportHeight` then shows whole rows only). Measured from the
+    /// list's real top edge, so a status strip above it counts.
+    private var downListMaxHeight: CGFloat {
+        let full = ComposerDownListView.maxHeight(titleSize: rowTitleSize)
+        guard let fit = containerFit else { return full }
+        let top = downListTopY ?? (fit.fieldTopY + fieldRowHeight + 1 + Self.resumeListInset)
+        return min(full, ComposerVerticalAnchor.listHeightLimit(
+            containerHeight: fit.size.height,
+            listTopY: top,
+            listInset: Self.resumeListInset,
+            bottomMargin: ComposerVerticalAnchor.defaultBottomMargin
+        ))
+    }
+
+    /// Where the Witness sits for this window (`ComposerWitnessSideways`).
+    private var witnessPlacement: ComposerWitnessSideways.Placement {
+        guard let fit = containerFit else { return .standing }
+        return ComposerWitnessSideways.placement(
+            fieldTopY: fit.fieldTopY,
+            titlebarBand: fit.titlebarBand,
+            containerWidth: fit.size.width,
+            cardWidth: composerCardWidth,
+            size: ComposerWitnessSize.size(defaults: tuningDefaults),
+            gap: ComposerWitnessGap.gap(defaults: tuningDefaults)
+        )
+    }
+
+    // MARK: - Resume surfaces
 
     private static let resumeRowCap = 5
     private static let resumeListInset: CGFloat = 8
@@ -1398,6 +1495,13 @@ struct SessionComposerPalette: View {
                 ComposerCardHairline()
                     .padding(.horizontal, Self.resumeListInset + 4)
                 downListView
+                    .background(GeometryReader { geo in
+                        let top = geo.frame(in: .named(ComposerContainerFit.coordinateSpace)).minY
+                        Color.clear
+                            .onAppear { downListTopY = top }
+                            .onChange(of: top) { downListTopY = $0 }
+                            .onDisappear { downListTopY = nil }
+                    })
                     .padding(Self.resumeListInset)
             }
         case .columns:
@@ -1446,7 +1550,7 @@ struct SessionComposerPalette: View {
             selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
             hasHistory: !historyEntries.isEmpty,
             titleSize: rowTitleSize,
-            maxHeight: ComposerDownListView.maxHeight(titleSize: rowTitleSize),
+            maxHeight: downListMaxHeight,
             now: resumeNow,
             onResume: { resumeSession($0) },
             onShowMore: { showMore($0) }
@@ -1769,7 +1873,18 @@ struct SessionComposerPalette: View {
                     floatHorizontalAmplitude: ComposerWitnessFloatHorizontal.amplitude(defaults: tuningDefaults),
                     floatPeriod: ComposerWitnessFloatPeriod.period(defaults: tuningDefaults),
                     opacity: ComposerWitnessOpacity.opacity(defaults: tuningDefaults),
-                    beatSpeed: ComposerWitnessBeatSpeed.speed(defaults: tuningDefaults)
+                    beatSpeed: ComposerWitnessBeatSpeed.speed(defaults: tuningDefaults),
+                    glowRadius: ComposerWitnessGlowRadius.radius(defaults: tuningDefaults),
+                    glowStrength: ComposerWitnessGlowStrength.strength(defaults: tuningDefaults),
+                    // Short windows: it lies beside the field instead; the
+                    // offset below stays its standing spot.
+                    isLying: witnessPlacement != .standing,
+                    lyingTravel: ComposerWitnessSideways.travel(
+                        horizontalPadding: singleLineHorizontalPadding,
+                        fieldHeight: fieldRowHeight,
+                        size: ComposerWitnessSize.size(defaults: tuningDefaults),
+                        gap: ComposerWitnessGap.gap(defaults: tuningDefaults)
+                    )
                 )
                 // R18 fix: was a hardcoded 20 — now the SAME
                 // `singleLineHorizontalPadding` value the field's own text
@@ -1779,13 +1894,17 @@ struct SessionComposerPalette: View {
                 // Session-7 brief: `y: -24` was flush against the sprite's
                 // own bottom edge — `ComposerWitnessGap` adds the tunable
                 // gap on top of the sprite's own (now dial-driven) height.
+                // Both rounded to whole points so the sprite's cells land
+                // on the pixel grid (the padding scales with field size).
                 .offset(
-                    x: singleLineHorizontalPadding,
+                    x: singleLineHorizontalPadding.rounded(),
                     y: Self.witnessOverlayYOffset(
                         size: ComposerWitnessSize.size(defaults: tuningDefaults),
                         ghostGap: ComposerWitnessGap.gap(defaults: tuningDefaults)
-                    )
+                    ).rounded()
                 )
+                // No room above or beside the card: gone, never clipped.
+                .opacity(witnessPlacement == .hidden ? 0 : 1)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
