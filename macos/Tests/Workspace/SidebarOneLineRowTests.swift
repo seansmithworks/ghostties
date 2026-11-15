@@ -164,6 +164,61 @@ final class SidebarOneLineRowTests: PrivateDefaultsTestCase {
         XCTAssertTrue(keep.take(placement(top: -38, contentTop: 852)), "pulled past the top: scroll it back")
     }
 
+    /// The user scrolls the selected row away while a row above is still
+    /// animating taller. Each frame carries the growth and the scroll
+    /// together, so it reads as the layout moving the row; the scroll
+    /// event is what says otherwise, and from then the growth is not held.
+    func testAUserScrollDuringAGrowthWinsUntilTheGrowthEnds() {
+        var keep = SidebarSelectionFollow.KeepClear()
+        XCTAssertFalse(keep.take(placement(top: 460, contentTop: 900), at: 10.00))
+        XCTAssertTrue(keep.take(placement(top: 470, contentTop: 910), at: 10.02), "control: the growth is held")
+        XCTAssertFalse(keep.take(placement(top: 460, contentTop: 910), at: 10.03), "control: the scroll lands")
+
+        // The user scrolls the row down under the tray as the growth goes on.
+        keep.userScrolled(at: 10.04)
+        XCTAssertFalse(keep.take(placement(top: 500, contentTop: 920), at: 10.05), "their scroll and a growth step in one frame: not scrolled back")
+        XCTAssertFalse(keep.take(placement(top: 540, contentTop: 930), at: 10.07), "nor on any later step of this growth")
+        XCTAssertFalse(keep.take(placement(top: 548, contentTop: 938), at: 10.09), "even with no further scroll event")
+    }
+
+    func testAScrollUnderWayWhenAGrowthStartsWinsFromItsFirstStep() {
+        var keep = SidebarSelectionFollow.KeepClear()
+        XCTAssertFalse(keep.take(placement(top: 460, contentTop: 900), at: 10.00))
+        keep.userScrolled(at: 10.10)
+        XCTAssertFalse(keep.take(placement(top: 480, contentTop: 910), at: 10.12), "mid-scroll: the growth's first step is not held")
+    }
+
+    func testAfterAUserScrollTheNextSeparateGrowthIsHeldAgain() {
+        var keep = SidebarSelectionFollow.KeepClear()
+        XCTAssertFalse(keep.take(placement(top: 300, contentTop: 900), at: 10.00))
+        XCTAssertFalse(keep.take(placement(top: 310, contentTop: 910), at: 10.02))
+        keep.userScrolled(at: 10.03)
+        // They leave the row resting 8pt above the tray, and the growth ends.
+        XCTAssertFalse(keep.take(placement(top: 460, contentTop: 920), at: 10.04))
+        // Seconds later another row above grows.
+        XCTAssertTrue(keep.take(placement(top: 470, contentTop: 930), at: 14.00), "a separate growth: held again")
+    }
+
+    func testAfterAUserScrollANewSelectionIsHeldAgain() {
+        var keep = SidebarSelectionFollow.KeepClear()
+        XCTAssertFalse(keep.take(placement("a", top: 460, contentTop: 900), at: 10.00))
+        XCTAssertTrue(keep.take(placement("a", top: 470, contentTop: 910), at: 10.02))
+        keep.userScrolled(at: 10.03)
+        XCTAssertFalse(keep.take(placement("a", top: 500, contentTop: 920), at: 10.04), "control: yielded")
+        // The selection moves to a row resting above the tray, mid-growth.
+        XCTAssertFalse(keep.take(placement("b", top: 460, contentTop: 700), at: 10.05))
+        XCTAssertTrue(keep.take(placement("b", top: 470, contentTop: 710), at: 10.06), "the new selection's row is held")
+    }
+
+    func testAUserScrollWithNoGrowthUnderWayChangesNothing() {
+        var keep = SidebarSelectionFollow.KeepClear()
+        XCTAssertFalse(keep.take(placement(top: 460, contentTop: 900), at: 10.00))
+        keep.userScrolled(at: 11.00)
+        // The scroll put the row back where it rests; long after, a row grows.
+        XCTAssertFalse(keep.take(placement(top: 460, contentTop: 900, visible: 500), at: 11.02))
+        XCTAssertTrue(keep.take(placement(top: 470, contentTop: 910), at: 15.00), "held: the scroll was long over")
+    }
+
     func testATallerTrayThatCoversTheRowScrollsItBack() {
         var keep = SidebarSelectionFollow.KeepClear()
         XCTAssertFalse(keep.take(placement(top: 460, contentTop: 900, visible: 500)))

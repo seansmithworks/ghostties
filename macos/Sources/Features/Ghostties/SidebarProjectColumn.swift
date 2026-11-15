@@ -464,28 +464,70 @@ enum SidebarSelectionFollow {
     /// pushed part-way out, under the tray or past the top, scrolls back
     /// the least distance. Nothing else scrolls: a row the user scrolled
     /// away from stays where they left it, and a scroll never triggers one.
+    ///
+    /// The user's scroll wins over a growth under way. An animated growth
+    /// moves the row on every frame, and a frame that carries the user's
+    /// scroll as well looks like the layout's doing alone, so the scroll is
+    /// taken as what it is, an input (`userScrolled`): from then the row is
+    /// theirs to place until the selection changes or a separate growth
+    /// starts.
     struct KeepClear: Equatable {
         private(set) var last: Placement?
         /// The row was in full view before the layout last moved it.
         private(set) var wasClear = false
+        /// The user scrolled during the growth under way.
+        private(set) var yielded = false
+        /// When the layout last moved the row, and when the user last
+        /// scrolled the list (system uptime).
+        private var lastLayoutMove: TimeInterval?
+        private var lastUserScroll: TimeInterval?
+
+        /// The longest pause inside one growth: layout moves further apart
+        /// than this are separate growths. An animated one moves the row
+        /// every frame, and none runs past 300ms.
+        static let growthGap: TimeInterval = 0.25
+
+        /// The user scrolled the list (wheel, trackpad or its momentum).
+        mutating func userScrolled(at time: TimeInterval) {
+            lastUserScroll = time
+            if isRecent(lastLayoutMove, at: time) { yielded = true }
+        }
+
+        private func isRecent(_ earlier: TimeInterval?, at time: TimeInterval) -> Bool {
+            earlier.map { time - $0 <= Self.growthGap } ?? false
+        }
 
         /// Takes the selected row's placement after a layout or a scroll;
         /// true when the list should scroll the row back into view.
-        mutating func take(_ placement: Placement?) -> Bool {
+        mutating func take(_ placement: Placement?, at time: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
             defer { last = placement }
             guard let placement else {
                 wasClear = false
+                yielded = false
+                lastLayoutMove = nil
                 return false
             }
             // A new selection is the follower's to scroll to.
             guard let last, last.rowId == placement.rowId else {
                 wasClear = placement.isClear
+                yielded = false
+                lastLayoutMove = nil
+                lastUserScroll = nil
                 return false
             }
             let layoutMoved = abs(placement.contentMinY - last.contentMinY) > Placement.layoutEpsilon
                 || abs(placement.visibleHeight - last.visibleHeight) > Placement.layoutEpsilon
             // A scroll: the row is wherever the user (or the follower) put it.
             guard layoutMoved else {
+                wasClear = placement.isClear
+                return false
+            }
+            // A separate growth starts held, unless the user is mid-scroll.
+            if !isRecent(lastLayoutMove, at: time) {
+                yielded = isRecent(lastUserScroll, at: time)
+            }
+            lastLayoutMove = time
+            guard !yielded else {
                 wasClear = placement.isClear
                 return false
             }
@@ -529,6 +571,14 @@ struct SidebarSelectionFollower: ViewModifier {
         /// The viewport's height above the tray (`ViewportHeightKey`).
         var viewportHeight: CGFloat = 0
         var isOneView = false
+        /// The pointer is over the list: a scroll event is the list's.
+        var pointerInside = false
+        /// Reports the user's scrolls (`KeepClear.userScrolled`).
+        var scrollMonitor: Any?
+
+        deinit {
+            if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
+        }
     }
 
     @State private var keyboardMovedSelection = false
@@ -581,6 +631,26 @@ struct SidebarSelectionFollower: ViewModifier {
                 guard inputs.layout == .oneView else { return }
                 scroll(to: inputs.selectedRowId, in: inputs, animated: false)
             }
+            .onHover { [keepClear] in keepClear.pointerInside = $0 }
+            .onAppear(perform: watchUserScrolls)
+            .onDisappear { [keepClear] in
+                if let monitor = keepClear.scrollMonitor { NSEvent.removeMonitor(monitor) }
+                keepClear.scrollMonitor = nil
+            }
+    }
+
+    /// Tells `KeepClear` when the user scrolls the list, so it stops
+    /// holding the selected row against them. Only listens: every event
+    /// goes on unchanged.
+    private func watchUserScrolls() {
+        let box = keepClear
+        guard box.scrollMonitor == nil else { return }
+        box.scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak box, window] event in
+            if let box, box.pointerInside, event.window === window() {
+                box.state.userScrolled(at: event.timestamp)
+            }
+            return event
+        }
     }
 
     /// Scrolls the selected row back into full view when the list's layout

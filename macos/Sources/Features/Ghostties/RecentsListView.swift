@@ -47,7 +47,9 @@ struct RecentsListView: View {
     @AppStorage(SidebarIdleFold.expandedKey, store: SidebarDialTuning.store) private var idleProjectsExpanded = false
     /// The projects outside the idle fold as they were when the pointer
     /// entered the list; nil while it is outside (`SidebarIdleFold.shown`).
-    @State private var idleFoldHeld: Set<UUID>?
+    @State private var idleFoldHeld: Set<UUID>? = captureIdleFoldHeld
+    /// The sidebar's mode, which ends a hold when it changes.
+    @Environment(\.sidebarMode) private var sidebarMode
     @AppStorage("ghostties.sidebarTab", store: AppDefaults.store) private var sidebarTab: SidebarTab = .projects
     /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
     @AppStorage(ApprovalFlag.defaultsKey, store: AppDefaults.store) private var approvalsEnabled = true
@@ -243,6 +245,21 @@ struct RecentsListView: View {
             guard note.object as? NSWindow === coordinator.containerView?.window, editingSessionId != nil else { return }
             cancelRename()
         }
+        // The idle fold's hold ends with the pointer's exit, and no exit
+        // arrives when the sidebar hides or goes to the rail under a still
+        // pointer, or when the user leaves the window with the pointer
+        // resting over the list (`SidebarIdleFold.held`).
+        .onChange(of: sidebarMode) { _ in
+            idleFoldHeld = SidebarIdleFold.held(after: .sidebarModeChanged, live: [])
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceSidebarWillMorph)) { note in
+            guard note.object as? NSWindow === coordinator.containerView?.window else { return }
+            idleFoldHeld = SidebarIdleFold.held(after: .sidebarModeChanged, live: [])
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
+            guard note.object as? NSWindow === coordinator.containerView?.window else { return }
+            idleFoldHeld = SidebarIdleFold.held(after: .windowResignedKey, live: [])
+        }
     }
 
     // MARK: - Sections Content
@@ -377,7 +394,9 @@ struct RecentsListView: View {
             // No project changes sides of the idle fold while the pointer
             // is in the list, so no row moves under it.
             .onHover { inside in
-                idleFoldHeld = inside ? liveUnfoldedProjects(sections.active) : nil
+                idleFoldHeld = SidebarIdleFold.held(
+                    after: inside ? .pointerEntered : .pointerLeft, live: liveUnfoldedProjects(sections.active)
+                )
             }
             // Rows scroll under the floating tray; the inset is where the
             // last one rests, clear of it.
@@ -512,7 +531,16 @@ struct RecentsListView: View {
                     ProjectDragGapView()
                 }
                 IdleProjectsFoldRow(
-                    count: row.count, isExpanded: row.isExpanded,
+                    count: row.count,
+                    // Read from the threads as they are now, not as the
+                    // hold left the fold.
+                    needYouCount: SidebarIdleFold.needYouCount(arrangement.idle) {
+                        SessionNeedsYou.isGenuine(
+                            indicator: store.globalIndicatorStates[$0.id] ?? .inactive,
+                            state: coordinator.claudeStateStore.state(for: $0.id)
+                        )
+                    },
+                    isExpanded: row.isExpanded,
                     staggerIndex: cascade.headers[SidebarIdleFold.rowId] ?? cascadeStart
                 ) {
                     SidebarIdleFold.rowClicked(expanded: $idleProjectsExpanded)
@@ -557,11 +585,13 @@ struct RecentsListView: View {
 
     /// The projects that belong outside the idle fold right now
     /// (`SidebarIdleFold.unfolded`): the ones with a thread working or
-    /// needing you, and the selected thread's.
+    /// needing you, under their header or in Pinned, and the selected
+    /// thread's.
     private func liveUnfoldedProjects(_ active: [AgentSession]) -> Set<UUID> {
         _ = promptRevision
         let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
-        let activeIds = SidebarIdleFold.activeProjectIds(groups, kind: shownKind)
+        let pinned = store.sessions.filter { $0.isPinnedForDisplay(pinningAvailable: pinningAvailable) }
+        let activeIds = SidebarIdleFold.activeProjectIds(groups, pinned: pinned, kind: shownKind)
         return SidebarIdleFold.unfolded(active: activeIds, selectedProjectId: selectedProjectId(active))
     }
 
@@ -734,6 +764,17 @@ struct RecentsListView: View {
         return { [store, coordinator] in
             ProjectRowNewSession.perform(for: project, store: store, coordinator: coordinator)
         }
+    }
+
+    /// DEBUG capture hook: the idle fold starts held, as if the pointer had
+    /// entered the list while only the named projects were outside it
+    /// (`CaptureFixture.idleFoldHeldProjects`). Nil in a normal launch.
+    private static var captureIdleFoldHeld: Set<UUID>? {
+        #if DEBUG
+        return CaptureFixture.idleFoldHeldProjects
+        #else
+        return nil
+        #endif
     }
 
     /// DEBUG capture hook: draws a header's hover state without a pointer,

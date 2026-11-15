@@ -246,7 +246,109 @@ final class SidebarIdleFoldTests: XCTestCase {
         XCTAssertEqual(names(after.idle), ["beta"])
     }
 
+    /// The pointer's exit is what ends a hold, and none arrives when the
+    /// sidebar hides or goes to the rail under a still pointer, or when the
+    /// user leaves the window with the pointer resting over the list.
+    func testAHoldEndsWhenTheSidebarHidesCollapsesOrTheWindowIsLeft() {
+        let live: Set<UUID> = [UUID(), UUID()]
+        XCTAssertEqual(SidebarIdleFold.held(after: .pointerEntered, live: live), live, "entering holds the list as it is")
+        XCTAssertNil(SidebarIdleFold.held(after: .pointerLeft, live: live))
+        XCTAssertNil(SidebarIdleFold.held(after: .sidebarModeChanged, live: live), "hidden, or collapsed to the rail")
+        XCTAssertNil(SidebarIdleFold.held(after: .windowResignedKey, live: live), "the window lost the pointer without an exit")
+    }
+
+    // MARK: - A pinned thread
+
+    /// A pinned thread draws in the Pinned section, not under its
+    /// project's header, so no group holds it. Its project is still active.
+    func testAProjectWhoseOnlyWorkingThreadIsPinnedIsActive() {
+        let wren = project("wren"), silo = project("silo"), atlas = project("atlas")
+        let pinnedWorking = session("pw", wren), pinnedAsking = session("pa", silo), pinnedDone = session("pd", atlas)
+        let quiet = session("q", wren)
+        let kinds: [String: SessionStatusGlyphKind] = ["pw": .working, "pa": .needsInput, "pd": .done]
+        // Active holds only the unpinned thread.
+        let groups = SidebarProjectGroup.make(active: [quiet], projects: [wren, silo, atlas])
+
+        XCTAssertEqual(
+            SidebarIdleFold.activeProjectIds(groups) { kinds[$0.name] ?? .done }, [],
+            "control: by their own rows alone, all three are idle"
+        )
+        let active = SidebarIdleFold.activeProjectIds(groups, pinned: [pinnedWorking, pinnedAsking, pinnedDone]) {
+            kinds[$0.name] ?? .done
+        }
+        XCTAssertEqual(active, [wren.id, silo.id], "a pinned thread working or needing you makes its project active")
+
+        let result = SidebarIdleFold.arrange(
+            groups, unfolded: SidebarIdleFold.unfolded(active: active, selectedProjectId: nil), isExpanded: false
+        )
+        XCTAssertEqual(names(result.listed), ["silo", "wren"])
+        XCTAssertEqual(names(result.idle), ["atlas"], "a pinned thread that is done leaves its project idle")
+    }
+
+    // MARK: - Needs you, behind the fold
+
+    func testTheIdleRowReadsNNeedYouWhenAFoldedProjectNeedsYou() {
+        let silo = project("silo"), wren = project("wren")
+        let s1 = session("s1", silo), s2 = session("s2", silo), w = session("w", wren)
+        let idle = SidebarProjectGroup.make(active: [s1, s2, w], projects: [silo, wren])
+        let asking: Set<String> = ["s1", "w"]
+
+        let count = SidebarIdleFold.needYouCount(idle) { asking.contains($0.name) }
+        XCTAssertEqual(count, 2, "every asking thread in every folded project")
+        XCTAssertEqual(SidebarIdleFold.needYouLabel(count), "2 need you")
+        XCTAssertEqual(
+            SidebarIdleFold.needYouLabel(count), SessionNeedsYou.headerCountLabel(sessionCount: 3, needYou: count),
+            "a project header's own words"
+        )
+    }
+
+    func testTheIdleRowHasNoNeedYouLabelWhenNothingFoldedNeedsYou() {
+        let silo = project("silo")
+        let idle = SidebarProjectGroup.make(active: [session("s", silo)], projects: [silo])
+
+        let count = SidebarIdleFold.needYouCount(idle) { _ in false }
+        XCTAssertEqual(count, 0)
+        XCTAssertNil(SidebarIdleFold.needYouLabel(count))
+        XCTAssertNil(SidebarIdleFold.needYouLabel(SidebarIdleFold.needYouCount([]) { _ in true }), "an empty fold")
+    }
+
+    /// The pointer is in the list when a folded project's thread starts
+    /// needing you: the hold keeps the project folded, and the row counts
+    /// the thread from its state now, not from the held set.
+    func testTheNeedYouCountIsLiveWhileTheFoldIsHeld() {
+        let alpha = project("alpha"), beta = project("beta")
+        let a = session("a", alpha), b = session("b", beta)
+        // The pointer entered with only alpha outside the fold; since then
+        // beta's thread started needing you.
+        let during = arrangement([alpha, beta], [a, b], kinds: ["a": .working, "b": .needsInput], held: [alpha.id])
+        XCTAssertEqual(names(during.idle), ["beta"], "control: the hold keeps beta folded")
+        XCTAssertEqual(during.row?.count, 1, "and the row where it was")
+
+        let count = SidebarIdleFold.needYouCount(during.idle) { $0.name == "b" }
+        XCTAssertEqual(SidebarIdleFold.needYouLabel(count), "1 need you")
+
+        // The pointer leaves: beta comes out, and the row has nothing to say.
+        let after = arrangement([alpha, beta], [a, b], kinds: ["a": .working, "b": .needsInput])
+        XCTAssertNil(after.row, "beta is listed, under its own \"1 need you\" header")
+    }
+
     // MARK: - Accessibility
+
+    func testTheIdleRowSpeaksHowManyNeedYou() {
+        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 1), "Idle projects, 5, 1 need you")
+        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 3), "Idle projects, 5, 3 need you")
+        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 0), "Idle projects, 5")
+    }
+
+    // MARK: - Capture knob
+
+    func testTheHeldFoldCaptureKnobNamesTheProjectsOutsideTheFold() {
+        let alpha = project("alpha"), beta = project("beta")
+        XCTAssertNil(CaptureFixture.parseIdleFoldHeld(nil, projects: [alpha, beta]), "unset: no hold")
+        XCTAssertNil(CaptureFixture.parseIdleFoldHeld("", projects: [alpha, beta]))
+        XCTAssertEqual(CaptureFixture.parseIdleFoldHeld("none", projects: [alpha, beta]), [], "held with nothing outside")
+        XCTAssertEqual(CaptureFixture.parseIdleFoldHeld("beta, gone", projects: [alpha, beta]), [beta.id])
+    }
 
     func testTheRowSpeaksItsCountAndWhatAClickDoes() {
         XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 4), "Idle projects, 4")

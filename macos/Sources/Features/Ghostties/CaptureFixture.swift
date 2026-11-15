@@ -132,6 +132,20 @@ enum CaptureFixture {
         guard expanded else { return }
         SidebarIdleFold.setExpanded(true, defaults: suite)
     }
+
+    /// `GHOSTTIES_CAPTURE_IDLE_FOLD_HELD=none|<project>[,<project>]`: the
+    /// one-view list launches with its idle fold held, as if the pointer
+    /// had entered while only those projects were outside it, so a project
+    /// that needs you can be shot still inside the fold. Unset, no hold.
+    static var idleFoldHeldProjects: Set<UUID>? {
+        parseIdleFoldHeld(env("GHOSTTIES_CAPTURE_IDLE_FOLD_HELD"), projects: projects)
+    }
+
+    static func parseIdleFoldHeld(_ raw: String?, projects: [Project]) -> Set<UUID>? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let names = Set(projectOrder(raw))
+        return Set(projects.filter { names.contains($0.name) }.map(\.id))
+    }
     #endif
 
     /// `GHOSTTIES_CAPTURE_COMPOSER_DIALS`, applied when the composer hook
