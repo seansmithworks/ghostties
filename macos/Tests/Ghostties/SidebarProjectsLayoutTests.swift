@@ -76,6 +76,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             case .spacer: return "-"
             case .header(let g, let folded): return "\(g.name)\(folded ? "+" : "")"
             case .row(let s, _): return s.name
+            case .idleFold: return "idle"
             }
         }
         XCTAssertEqual(shape, ["atlas-api", "a", "-", "quiet"])
@@ -133,6 +134,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
                 case .spacer: return "-"
                 case .header(let g, let folded): return "\(g.name)\(folded ? "+" : "")"
                 case .row(let s, _): return s.name
+                case .idleFold: return "idle"
                 }
             }
         }
@@ -564,6 +566,9 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let sessions = [session("a", atlas), session("b", atlas), session("c", fieldwork)]
         let store = WorkspaceStore(testingProjects: [atlas, fieldwork], testingSessions: sessions)
         for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
+        // Every thread is working, so neither project folds into the idle
+        // row (`SidebarIdleFold`).
+        for s in sessions { store.updateIndicatorState(id: s.id, state: .processing) }
 
         // Each measurement binds its own private dial suite (`withDials`),
         // so no other test reads or clears the layout it sets.

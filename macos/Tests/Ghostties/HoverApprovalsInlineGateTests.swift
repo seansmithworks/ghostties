@@ -231,6 +231,9 @@ final class HoverApprovalsInlineGateTests: PrivateDefaultsTestCase {
 
     func testRowsThatDoNotNeedYouHaveNoActionLineAndNoQuestion() {
         defaults.set(true, forKey: ApprovalFlag.defaultsKey)
+        // A project whose only thread doesn't need you is idle: open the
+        // idle fold so its row draws (`SidebarIdleFold`).
+        SidebarIdleFold.setExpanded(true, defaults: defaults)
         // The needs-you rows prove the same list DOES draw questions and an
         // action line when asked to, so the absences below are not vacuous.
         let needing = listText([bash, ask])

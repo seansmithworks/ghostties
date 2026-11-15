@@ -113,8 +113,26 @@ enum CaptureFixture {
         if let suite, hoverRevealLoopStart != nil {
             suite.set(true, forKey: SidebarDialTuning.hoverBarPushesCanvasKey)
         }
+        #if DEBUG
+        if let suite { seedIdleFold(idleFoldExpanded, into: suite) }
+        #endif
         return suite
     }()
+
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_IDLE_FOLD=expanded`: the one-view list launches
+    /// with its idle fold open (`SidebarIdleFold`). Unset, it is folded.
+    static var idleFoldExpanded: Bool { parseIdleFold(env("GHOSTTIES_CAPTURE_IDLE_FOLD")) }
+
+    static func parseIdleFold(_ raw: String?) -> Bool { raw == "expanded" }
+
+    /// Writes the fold's state into `suite` (the fixture's per-pid one,
+    /// never `.standard`); false leaves the code default.
+    static func seedIdleFold(_ expanded: Bool, into suite: UserDefaults) {
+        guard expanded else { return }
+        SidebarIdleFold.setExpanded(true, defaults: suite)
+    }
+    #endif
 
     /// `GHOSTTIES_CAPTURE_COMPOSER_DIALS`, applied when the composer hook
     /// fires. The composer reads its dials from `AppDefaults.store`

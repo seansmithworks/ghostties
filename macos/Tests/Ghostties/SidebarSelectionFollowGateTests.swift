@@ -68,6 +68,12 @@ final class SidebarSelectionFollowGateTests: PrivateDefaultsTestCase {
             store.updateSessionStatus(id: s.id, status: .running)
             store.updateIndicatorState(id: s.id, state: .idle)
         }
+        // Each project's last thread is working, so every project is active
+        // and none folds into the idle row (`SidebarIdleFold`).
+        for p in projects {
+            guard let busy = sessions.last(where: { $0.projectId == p.id }) else { continue }
+            store.updateIndicatorState(id: busy.id, state: .processing)
+        }
         store.updateSidebarMode(.pinned)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         container.coordinatorForTesting.setActiveSessionIdForTesting(sessions[0].id)

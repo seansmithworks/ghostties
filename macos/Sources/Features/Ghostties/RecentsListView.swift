@@ -43,6 +43,11 @@ struct RecentsListView: View {
 
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
+    /// The idle fold is open (`SidebarIdleFold`).
+    @AppStorage(SidebarIdleFold.expandedKey, store: SidebarDialTuning.store) private var idleProjectsExpanded = false
+    /// The projects outside the idle fold as they were when the pointer
+    /// entered the list; nil while it is outside (`SidebarIdleFold.shown`).
+    @State private var idleFoldHeld: Set<UUID>?
     @AppStorage("ghostties.sidebarTab", store: AppDefaults.store) private var sidebarTab: SidebarTab = .projects
     /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
     @AppStorage(ApprovalFlag.defaultsKey, store: AppDefaults.store) private var approvalsEnabled = true
@@ -327,8 +332,10 @@ struct RecentsListView: View {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else {
             return sections.pinned.count + sections.active.count
         }
-        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects)
-        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        let arrangement = idleArrangement(sections.active)
+        let items = SidebarProjectGroupItem.items(
+            arrangement.groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw), idleFold: arrangement.row
+        )
         return SidebarProjectGroupItem.cascade(items, start: sections.pinned.count).end
     }
 
@@ -345,6 +352,8 @@ struct RecentsListView: View {
                     .animation(reflowAnimation, value: projectDragState)
                     // Pin/Unpin moves a project group (`ProjectListOrder`).
                     .animation(reflowAnimation, value: Set(store.projects.filter(\.isPinned).map(\.id)))
+                    // So does a project going idle or active (`SidebarIdleFold`).
+                    .animation(reflowAnimation, value: idleArrangement(sections.active).listed.map(\.id))
                     // Room for the group card above a first-row header,
                     // inside the clip; the scroll view reaches up the same
                     // amount, so rows keep their y.
@@ -355,6 +364,11 @@ struct RecentsListView: View {
             }
             .padding(.top, -scrollBleed)
             .padding(.trailing, -trailingBleed)
+            // No project changes sides of the idle fold while the pointer
+            // is in the list, so no row moves under it.
+            .onHover { inside in
+                idleFoldHeld = inside ? liveUnfoldedProjects(sections.active) : nil
+            }
             // Rows scroll under the floating tray; the inset is where the
             // last one rests, clear of it.
             .modifier(MorphTrayReserve(scrolls: true, isActive: underTray))
@@ -426,7 +440,9 @@ struct RecentsListView: View {
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
-        let allGroups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        // Idle projects sit behind the fold's row (`SidebarIdleFold`).
+        let arrangement = idleArrangement(active)
+        let allGroups = arrangement.groups
         let groups = allGroups
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         // The pinned break comes from the whole list, so a pinned drag
@@ -434,7 +450,7 @@ struct RecentsListView: View {
         let pinnedBreakId = SidebarProjectGroupItem.pinnedBreakGroupId(allGroups)
         let items = SidebarProjectGroupItem.items(
             groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw),
-            pinnedBreakBefore: pinnedBreakId
+            pinnedBreakBefore: pinnedBreakId, idleFold: arrangement.row
         )
         // One cascade through every header and row, in reading order.
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
@@ -449,8 +465,11 @@ struct RecentsListView: View {
         // Option D: each header leads with its project's monogram tile (the
         // rail's), and the group holding the selected session sits on one
         // card (`ProjectGroupCard`), its rows marked by chips.
+        // Read from every project, folded or not, so a project's letters
+        // don't change as others fold.
+        let everyGroup = arrangement.listed + arrangement.idle
         let monograms = Dictionary(
-            zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
+            zip(everyGroup.map(\.id), ProjectMonogram.monograms(for: everyGroup.map(\.name))),
             uniquingKeysWith: { first, _ in first }
         )
         let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
@@ -460,17 +479,37 @@ struct RecentsListView: View {
         // where it lands, not below it among the alphabetical projects.
         // Every other gap opens directly above its header.
         let gapAbovePinnedBreak = pinnedBreakId != nil && projectGapBefore == .some(pinnedBreakId)
+        // A drop at the end of Pinned with only the fold's row below it
+        // (no other project is listed) opens its gap above the row's break.
+        let gapAboveIdleFold = arrangement.row.map { row in
+            projectGapBefore == .some(nil) || (row.beforeGroupId != nil && projectGapBefore == .some(row.beforeGroupId))
+        } ?? false
         ForEach(items) { item in
             switch item {
             case .spacer(let groupId, let height):
-                if gapAbovePinnedBreak, groupId == pinnedBreakId {
+                if gapAbovePinnedBreak, groupId == pinnedBreakId, !gapAboveIdleFold {
+                    ProjectDragGapView()
+                }
+                if gapAboveIdleFold, groupId == SidebarIdleFold.rowId {
                     ProjectDragGapView()
                 }
                 Color.clear
                     .frame(height: height)
                     .accessibilityHidden(true)
+            case .idleFold(let row):
+                // The row leads the list (no spacer above it) only while
+                // the one pinned project is in flight.
+                if gapAboveIdleFold, items.first?.id == SidebarIdleFold.rowId {
+                    ProjectDragGapView()
+                }
+                IdleProjectsFoldRow(
+                    count: row.count, isExpanded: row.isExpanded,
+                    staggerIndex: cascade.headers[SidebarIdleFold.rowId] ?? cascadeStart
+                ) {
+                    SidebarIdleFold.rowClicked(expanded: $idleProjectsExpanded)
+                }
             case .header(let group, let isCollapsed):
-                if projectGapBefore == .some(group.id), !(gapAbovePinnedBreak && group.id == pinnedBreakId) {
+                if projectGapBefore == .some(group.id), !(gapAbovePinnedBreak && group.id == pinnedBreakId), !gapAboveIdleFold {
                     ProjectDragGapView()
                 }
                 projectHeader(
@@ -503,9 +542,43 @@ struct RecentsListView: View {
         if gapBeforeId == .some(nil) {
             SessionDragGapView(height: gapHeight)
         }
-        if projectGapBefore == .some(nil) {
+        if projectGapBefore == .some(nil), !gapAboveIdleFold {
             ProjectDragGapView()
         }
+    }
+
+    /// The projects that belong outside the idle fold right now
+    /// (`SidebarIdleFold.unfolded`): the ones with a thread working or
+    /// needing you, and the selected thread's.
+    private func liveUnfoldedProjects(_ active: [AgentSession]) -> Set<UUID> {
+        _ = promptRevision
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let activeIds = SidebarIdleFold.activeProjectIds(groups) { session in
+            SessionNeedsYou.shownKind(
+                indicator: store.globalIndicatorStates[session.id] ?? .inactive,
+                state: coordinator.claudeStateStore.state(for: session.id)
+            )
+        }
+        return SidebarIdleFold.unfolded(active: activeIds, selectedProjectId: selectedProjectId(active))
+    }
+
+    /// The selected thread's project, when the thread has a row in Active.
+    private func selectedProjectId(_ active: [AgentSession]) -> UUID? {
+        guard let selected = coordinator.sidebarSelectedSessionId else { return nil }
+        return active.first { $0.id == selected }?.projectId
+    }
+
+    /// One view's groups either side of the idle fold, held as they were
+    /// while the pointer is in the list.
+    private func idleArrangement(_ active: [AgentSession]) -> SidebarIdleFold.Arrangement {
+        SidebarIdleFold.arrange(
+            SidebarProjectGroup.make(active: active, projects: store.projects),
+            unfolded: SidebarIdleFold.shown(
+                live: liveUnfoldedProjects(active), held: idleFoldHeld,
+                selectedProjectId: selectedProjectId(active), isExpanded: idleProjectsExpanded
+            ),
+            isExpanded: idleProjectsExpanded
+        )
     }
 
     /// The inline prompt of a row that genuinely needs you
@@ -550,7 +623,15 @@ struct RecentsListView: View {
             group: selectedGroupId(sections.active) ?? SelectedRowMix.noGroup,
             rows: Set(sections.pinned.map(\.id) + sections.active.map(\.id)),
             collapsed: Set(ProjectAccordionState.decode(collapsedProjectsRaw).map(\.uuidString))
+                .union(hiddenIdleGroupIds(sections.active))
         )
+    }
+
+    /// The groups behind a closed idle fold: to the selected-row mix they
+    /// are folded, their rows off screen.
+    private func hiddenIdleGroupIds(_ active: [AgentSession]) -> Set<String> {
+        guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView, !idleProjectsExpanded else { return [] }
+        return Set(idleArrangement(active).idle.map(\.id))
     }
 
     /// One project's accordion header. A real project's header is a
