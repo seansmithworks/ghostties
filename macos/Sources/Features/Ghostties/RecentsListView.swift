@@ -562,6 +562,9 @@ struct RecentsListView: View {
                         SessionDragGapView(height: gapHeight)
                     }
                     let kind = shownKind(session)
+                    let rowBand = SidebarListRowHeight.band(
+                        hasSubtitle: showsSecondLine(session, prompt: rowPrompt(session.id))
+                    )
                     sessionRow(
                         for: session, section: .active, sectionList: active,
                         // The glyph says what the session is doing; the
@@ -571,7 +574,7 @@ struct RecentsListView: View {
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
-                    .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
+                    .railGroupColumn(group.id, isLit: cardGroups.contains(group.id), rowBand: rowBand)
                 }
             }
         }

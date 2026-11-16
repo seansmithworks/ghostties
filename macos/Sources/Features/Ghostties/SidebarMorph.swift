@@ -222,7 +222,11 @@ struct SidebarMorphMetrics: Equatable {
 
     /// The rail column: the tile (or the wider chip) plus the column inset
     /// on each side, centred on the rail (`RailProjectColumn.columnWidth`).
-    func railColumn(hasRows: Bool) -> Card {
+    /// `lastRowBand` is the title band of the group's last row
+    /// (`SidebarListRowHeight.band`), which its chip centres in; nil reads
+    /// the row height dial, a two-line row.
+    func railColumn(hasRows: Bool, lastRowBand: CGFloat? = nil) -> Card {
+        let band = lastRowBand ?? dials.rowHeight
         let width = dials.railTileSize
             + (sideOverhang(tile: dials.railTileSize, chip: dials.railChipSize, hasRows: hasRows) + dials.columnInset) * 2
         return Card(
@@ -232,15 +236,15 @@ struct SidebarMorphMetrics: Equatable {
             verticalInset: dials.columnInset,
             cornerRadius: dials.chipCornerRadius + dials.columnInset,
             tileTrim: (dials.railHeaderHeight - dials.railTileSize) / 2,
-            chipTrim: max(0, (dials.rowHeight - dials.railChipSize) / 2)
+            chipTrim: (band - SidebarListRowHeight.chip(dials.railChipSize, band: band)) / 2
         )
     }
 
     /// The card narrowing into the column: every edge on a straight line
     /// between the two.
-    func card(hasRows: Bool) -> Card {
+    func card(hasRows: Bool, lastRowBand: CGFloat? = nil) -> Card {
         let from = sidebarCard(hasRows: hasRows)
-        let to = railColumn(hasRows: hasRows)
+        let to = railColumn(hasRows: hasRows, lastRowBand: lastRowBand)
         return Card(
             minX: lerp(from.minX, to.minX),
             width: lerp(from.width, to.width),

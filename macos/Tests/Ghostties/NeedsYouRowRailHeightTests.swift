@@ -13,11 +13,8 @@ import GhosttiesCore
 /// (and again on the hover reveal). The beta-26 morph moves tiles on its
 /// own (they travel to the rail's centre and change size), so this compares
 /// each frame's movement against a control world whose two needs-you rows
-/// are error rows instead (two lines, like a needs-you row, but no action
-/// line): a needs-you row's action line may add no movement of its own.
-/// A one-line row is shorter in the sidebar than on the rail, so it moves
-/// across the morph by design, the same in both worlds. Only y and height
-/// are compared; x travel is beta 26's design.
+/// are working rows instead: a needs-you row may add no movement of its
+/// own. Only y and height are compared; x travel is beta 26's design.
 ///
 /// Harness from the rail-05 vertical gate (`RailStaysPutVerticalGateTests`
 /// on sidebar/6-approvals): the real `WorkspaceViewContainer`, held at each
@@ -88,8 +85,8 @@ final class NeedsYouRowRailHeightTests: PrivateDefaultsTestCase {
         let claude = ClaudeStateStore(directoryURL: dir)
         claude.resumeWriterForTesting = { _, _ in }
         let rows: [(UUID, String, SessionIndicatorState)] = [
-            (bashId, needsYou ? bashPermission : busyTool, needsYou ? .needsAttention : .error),
-            (askId, needsYou ? askQuestion : busyTool, needsYou ? .needsAttention : .error),
+            (bashId, needsYou ? bashPermission : busyTool, needsYou ? .needsAttention : .processing),
+            (askId, needsYou ? askQuestion : busyTool, needsYou ? .needsAttention : .processing),
             (workingId, busyTool, .processing),
             (otherId, busyTool, .processing),
         ]

@@ -146,17 +146,28 @@ enum RailProjectColumn {
 /// fading, by group: the rail's column and the expanded list's group card
 /// both read it.
 struct RailGroupColumnKey: PreferenceKey {
-    static var defaultValue: [SidebarProjectGroup.ID: [Anchor<CGRect>]] = [:]
-    static func reduce(value: inout [SidebarProjectGroup.ID: [Anchor<CGRect>]], nextValue: () -> [SidebarProjectGroup.ID: [Anchor<CGRect>]]) {
+    /// One of a group's items: its bounds, and for a row its title band
+    /// (`SidebarListRowHeight.band`), which its chip centres in. The
+    /// header has none.
+    struct Item {
+        var bounds: Anchor<CGRect>
+        var rowBand: CGFloat?
+    }
+
+    static var defaultValue: [SidebarProjectGroup.ID: [Item]] = [:]
+    static func reduce(value: inout [SidebarProjectGroup.ID: [Item]], nextValue: () -> [SidebarProjectGroup.ID: [Item]]) {
         value.merge(nextValue()) { $0 + $1 }
     }
 }
 
 extension View {
+    /// `rowBand` is a row's title band; nil for the group's header.
     @ViewBuilder
-    func railGroupColumn(_ group: SidebarProjectGroup.ID, isLit: Bool) -> some View {
+    func railGroupColumn(_ group: SidebarProjectGroup.ID, isLit: Bool, rowBand: CGFloat? = nil) -> some View {
         if isLit {
-            anchorPreference(key: RailGroupColumnKey.self, value: .bounds) { [group: [$0]] }
+            anchorPreference(key: RailGroupColumnKey.self, value: .bounds) {
+                [group: [RailGroupColumnKey.Item(bounds: $0, rowBand: rowBand)]]
+            }
         } else {
             self
         }
@@ -185,7 +196,7 @@ struct ProjectGroupCard: View {
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
     /// Each lit or fading group's laid-out items.
-    let groups: [SidebarProjectGroup.ID: [Anchor<CGRect>]]
+    let groups: [SidebarProjectGroup.ID: [RailGroupColumnKey.Item]]
     /// The selected session's group: its card carries the Redlines tag.
     let selected: SidebarProjectGroup.ID?
 
@@ -215,15 +226,18 @@ struct ProjectGroupCard: View {
         let metrics = widthModel.metrics(morphOverride ?? widthModel.morph, dials: morphDials)
         GeometryReader { proxy in
             ForEach(groups.keys.sorted(), id: \.self) { id in
-                if let anchors = groups[id], let first = anchors.first {
-                    let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
+                if let items = groups[id], let first = items.first {
+                    let union = items.dropFirst().reduce(proxy[first.bounds]) { $0.union(proxy[$1.bounds]) }
+                    // The group's last row: the lowest item that is a row.
+                    let lastRow = items.filter { $0.rowBand != nil }.max { proxy[$0.bounds].maxY < proxy[$1.bounds].maxY }
                     // The card's opacity: 1 at rest on the selected group,
                     // cross-fading between groups on a project switch.
                     SelectedRowMixGroupReader(id: id, fallback: 1) { card in
                         ProjectGroupCardShape(
                             metrics: metrics,
                             progress: metrics.progress,
-                            hasRows: anchors.count > 1,
+                            hasRows: items.count > 1,
+                            lastRowBand: lastRow?.rowBand,
                             unionMinY: union.minY,
                             unionMaxY: union.maxY,
                             originX: proxy.frame(in: .named(Self.sidebarSpace)).minX,
@@ -247,6 +261,8 @@ private struct ProjectGroupCardShape: View, Animatable {
     let metrics: SidebarMorphMetrics
     var progress: CGFloat
     let hasRows: Bool
+    /// The title band of the group's last row, which its chip centres in.
+    let lastRowBand: CGFloat?
     /// The group's laid-out top and bottom, in the card's local space.
     let unionMinY: CGFloat
     let unionMaxY: CGFloat
@@ -266,7 +282,7 @@ private struct ProjectGroupCardShape: View, Animatable {
     var body: some View {
         let card = SidebarMorphMetrics(
             dials: metrics.dials, expandedWidth: metrics.expandedWidth, railWidth: metrics.railWidth, progress: progress
-        ).card(hasRows: hasRows)
+        ).card(hasRows: hasRows, lastRowBand: lastRowBand)
         let top = unionMinY + card.tileTrim - card.topInset
         let bottom = max(top, unionMaxY - (hasRows ? card.chipTrim : card.tileTrim) + card.verticalInset)
         RoundedRectangle(cornerRadius: card.cornerRadius, style: .continuous)

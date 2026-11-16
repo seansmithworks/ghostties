@@ -285,11 +285,12 @@ struct RecentsRowView: View, Equatable {
 
 // MARK: - Row height
 
-/// A sidebar list row's height at rest on the sidebar: the title band (the
-/// row height dial with a second line, `oneLineBand` without) plus the room
-/// a needs-you row holds for its action line. Drag reflow splits a row and
-/// sizes its gap with this, so both follow what is drawn. On the rail every
-/// row keeps the dial's band (`railRow`).
+/// A sidebar list row's height, on the sidebar and the rail alike: the
+/// title band (the row height dial with a second line, `oneLineBand`
+/// without) plus the room a needs-you row holds for its action line. Drag
+/// reflow splits a row and sizes its gap with this, so both follow what is
+/// drawn. The rail has no height of its own: a row's slot there is its row
+/// here, so no row moves when the sidebar collapses, expands or reveals.
 enum SidebarListRowHeight {
     /// A one-line row's title band, never taller than the dial's.
     static var oneLineBand: CGFloat {
@@ -309,10 +310,10 @@ enum SidebarListRowHeight {
         band(hasSubtitle: hasSubtitle) + actionLine(hasActions: hasActions)
     }
 
-    /// The row on the rail, where only its glyph shows: the dial's band
-    /// whatever the row's lines, plus the action line's held room.
-    static func railRow(hasActions: Bool) -> CGFloat {
-        SidebarDialTuning.rowHeight() + actionLine(hasActions: hasActions)
+    /// A row's chip (its hover and selection mark) in `band`: the dial's
+    /// side, never taller than the band, so it never spills out of its row.
+    static func chip(_ size: CGFloat, band: CGFloat) -> CGFloat {
+        min(size, band)
     }
 }
 
@@ -326,25 +327,19 @@ enum SessionRowSecondLine {
     }
 }
 
-/// A row's height at one step of the morph, between its sidebar and rail
-/// heights. Every value animates, so a row that gains or loses a line
-/// grows or shrinks on its transaction's spring.
-private struct MorphRowHeight: ViewModifier, Animatable {
-    var sidebar: CGFloat
-    var rail: CGFloat
-    var progress: CGFloat
+/// A row's height, the same at every step of the morph. It animates, so a
+/// row that gains or loses a line grows or shrinks on its transaction's
+/// spring.
+private struct RowHeight: ViewModifier, Animatable {
+    var height: CGFloat
 
-    var animatableData: AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>> {
-        get { AnimatablePair(sidebar, AnimatablePair(rail, progress)) }
-        set {
-            sidebar = newValue.first
-            rail = newValue.second.first
-            progress = newValue.second.second
-        }
+    var animatableData: CGFloat {
+        get { height }
+        set { height = newValue }
     }
 
     func body(content: Content) -> some View {
-        content.frame(height: SidebarMorphMetrics.lerp(sidebar, rail, progress))
+        content.frame(height: height)
     }
 }
 
@@ -518,7 +513,7 @@ struct SidebarListRowTitle: View {
 /// identically by construction. Callers add tap and accessibility on top.
 struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     /// The second line; nil draws a one-line row, shorter on the sidebar
-    /// (`SidebarListRowHeight.band`) and the dial's height on the rail.
+    /// and the rail alike (`SidebarListRowHeight.band`).
     let subtitle: String?
     let isActive: Bool
     /// An SF Symbol shown after the labels (a small accessory such as the
@@ -539,8 +534,8 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     /// The tooltip the row shows on the rail, where its labels are gone.
     var railHelp: String? = nil
     /// A needs-you row's action line, under the labels. The row grows by
-    /// its height in the sidebar and loses it on the rail, where only the
-    /// glyph shows; the glyph never moves off the title band.
+    /// its height in the sidebar and keeps that room on the rail, where
+    /// only the glyph shows; the glyph never moves off the title band.
     var actions: SessionRowActionLine? = nil
     @ViewBuilder let title: () -> Title
     /// The status glyph at a given side (the morph's size for this frame).
@@ -561,10 +556,13 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         let progress = morphOverride ?? widthModel.morph
         let metrics = widthModel.metrics(progress, dials: morphDials)
         let dials = metrics.dials
+        // The band is the row's on the sidebar and the rail alike, so the
+        // row never moves across the morph or the hover reveal.
         let bandHeight = SidebarListRowHeight.band(hasSubtitle: subtitle != nil)
-        // The rail's rows keep the dial's band, so a one-line row grows to
-        // it across the morph.
-        let railBandHeight = SidebarDialTuning.rowHeight()
+        let chipSizes = (
+            SidebarListRowHeight.chip(dials.sidebarChipSize, band: bandHeight),
+            SidebarListRowHeight.chip(dials.railChipSize, band: bandHeight)
+        )
         // The labels' leading edge in the row's content: the glyph slot,
         // then the stack spacing (same sum the HStack lays out), so the
         // action line starts under the title.
@@ -585,7 +583,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                         progress: progress,
                         slotWidth: dials.sidebarTileSize,
                         glyphSizes: (dials.sidebarGlyphSize, dials.railGlyphSize),
-                        chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                        chipSizes: chipSizes,
                         // The chip is hover only; selection is the row's outline.
                         isHovered: isHovered && !isActive,
                         chipID: redlineID + ".chip",
@@ -620,7 +618,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 }
                 // The title band: the glyph and labels centre in it whether or
                 // not an action line follows.
-                .modifier(MorphRowHeight(sidebar: bandHeight, rail: railBandHeight, progress: progress))
+                .modifier(RowHeight(height: bandHeight))
                 if let actions {
                     actions
                         .padding(.leading, labelLeading)
@@ -638,11 +636,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
             // pitch; one line: 32pt, a 36pt pitch; plus a needs-you row's
             // action line. A new row's slot, gap included, grows from
             // nothing (N4).
-            .modifier(MorphRowHeight(
-                sidebar: (bandHeight + actionsHeight) * look.height,
-                rail: (railBandHeight + actionsHeight) * look.height,
-                progress: progress
-            ))
+            .modifier(RowHeight(height: (bandHeight + actionsHeight) * look.height))
             // A row that gains or loses its second line or its action line
             // grows or shrinks on the fold's spring, the way an accordion
             // opens and closes.
@@ -658,7 +652,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     progress: progress,
                     chipCenterX: dials.rowLeadingPadding + dials.sidebarTileSize / 2,
                     chipTravel: metrics.tileTravel,
-                    chipSizes: (dials.sidebarChipSize, dials.railChipSize),
+                    chipSizes: chipSizes,
                     // The content centres in the row, so the band's centre
                     // sits half the action line above the row's.
                     chipCenterYOffset: -actionsHeight / 2

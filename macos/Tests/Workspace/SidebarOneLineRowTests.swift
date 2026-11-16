@@ -55,28 +55,38 @@ final class SidebarOneLineRowTests: PrivateDefaultsTestCase {
         XCTAssertEqual(SidebarListRowHeight.row(hasActions: false), SidebarDialTuning.rowHeight(), "callers that name no lines get two")
     }
 
-    func testTheRailsRowKeepsTheDialsHeight() {
-        XCTAssertEqual(SidebarListRowHeight.railRow(hasActions: false), SidebarDialTuning.rowHeight())
-        XCTAssertEqual(SidebarListRowHeight.railRow(hasActions: true), SidebarDialTuning.rowHeight() + SessionRowActionLine.addedHeight)
+    /// A chip is the dial's side, never taller than its row's band: the
+    /// rail's 40pt chip is 32pt in a one-line row.
+    func testAChipNeverSpillsOutOfItsRowsBand() {
+        XCTAssertEqual(SidebarListRowHeight.chip(40, band: 32), 32)
+        XCTAssertEqual(SidebarListRowHeight.chip(40, band: 48), 40)
+        XCTAssertEqual(SidebarListRowHeight.chip(24, band: 32), 24)
     }
 
     /// The drawn row: its frame is the one-line height, so its hit area
-    /// and selection outline (both the row's frame) follow.
-    func testAOneLineRowDrawsAtItsMeasuredHeight() {
-        func height(subtitle: String?) -> CGFloat {
+    /// and selection outline (both the row's frame) follow. The rail draws
+    /// the row at the same height as the sidebar, at every step between.
+    func testARowDrawsAtItsMeasuredHeightOnTheSidebarAndTheRail() {
+        func height(subtitle: String?, morph: CGFloat) -> CGFloat {
             let view = SidebarListRowChrome(
                 subtitle: subtitle, isActive: false, redlineID: "row.test",
                 title: { SidebarListRowTitle(text: "reconnect race", isActive: false) },
                 glyph: { size in SessionStatusGlyph(kind: .working, size: size) }
             )
+            .environment(\.sidebarMorphOverride, morph)
             .environmentObject(SidebarWidthModel(width: 260))
             .frame(width: 260)
             let hosting = NSHostingView(rootView: view)
             hosting.layoutSubtreeIfNeeded()
             return hosting.fittingSize.height
         }
-        XCTAssertEqual(height(subtitle: nil), 32, accuracy: 0.5)
-        XCTAssertEqual(height(subtitle: "needs you"), SidebarDialTuning.rowHeight(), accuracy: 0.5, "control: a two-line row")
+        for morph: CGFloat in [0, 0.5, 1] {
+            XCTAssertEqual(height(subtitle: nil, morph: morph), 32, accuracy: 0.5, "one line, morph \(morph)")
+            XCTAssertEqual(
+                height(subtitle: "needs you", morph: morph), SidebarDialTuning.rowHeight(), accuracy: 0.5,
+                "two lines, morph \(morph)"
+            )
+        }
     }
 
     // MARK: - Accessibility

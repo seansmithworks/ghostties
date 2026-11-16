@@ -231,12 +231,11 @@ final class SidebarHistoryPlacementTests: XCTestCase {
 
     // MARK: - Morph alignment
 
-    /// The first session's row starts at the same y in the expanded list
-    /// and the rail. The expanded list marks it with the row-tall selected
-    /// tint, inside the group card; the rail with a tile-sized chip (option
-    /// D) inside its project column (`RailProjectColumn`). A one-line row
-    /// is shorter in the sidebar than its slot on the rail, so the marks'
-    /// centres differ by half that difference and no more.
+    /// The first session's row sits at the same y in the expanded list and
+    /// the rail. The expanded list marks it with the row-tall selected tint,
+    /// inside the group card; the rail with a tile-sized chip (option D)
+    /// inside its project column (`RailProjectColumn`). The two marks'
+    /// centres must match.
     func testFirstRowSitsAtTheSameYInExpandedAndRail() throws {
         let e = try selectedChip(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
         let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
@@ -244,16 +243,17 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         // heights moves the row under it; both are 40 at the defaults
         // (keyframe spec D1), so the row keeps its y.
         let headerGrowth = ProjectAccordionHeader.height(.rail) - ProjectAccordionHeader.height(.sidebar)
-        let rowGrowth = SidebarListRowHeight.railRow(hasActions: false) - Self.expandedRowHeight
-        XCTAssertEqual(
-            (e.lowerBound + e.upperBound) / 2 + headerGrowth + rowGrowth / 2, (r.lowerBound + r.upperBound) / 2,
-            accuracy: 0.6, "first row centre"
-        )
+        XCTAssertEqual((e.lowerBound + e.upperBound) / 2 + headerGrowth, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
     }
 
     /// The fixture's rows are stopped threads under a project header: one
     /// line in the expanded list.
     private static var expandedRowHeight: CGFloat { SidebarListRowHeight.row(hasSubtitle: false, hasActions: false) }
+
+    /// The rail's chip in one of those rows: never taller than the row.
+    private static var railChipSize: CGFloat {
+        SidebarListRowHeight.chip(RailProjectColumn.chipSize(.rail), band: expandedRowHeight)
+    }
 
     /// The x of the selected chip's centre: the rail's centre, or, in the
     /// expanded list, the leading glyph slot's (`SidebarListRowChrome`).
@@ -283,7 +283,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let chipOverCardDrop = base - cardSum * (1 - chipAlpha)
         let lowerBound = (cardDrop + chipOverCardDrop) / 2
         let upperBound = chipOverCardDrop + (chipOverCardDrop - lowerBound)
-        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4) * r.scale)
+        let px = Int((chipCentreX(r, rail: rail) - (rail ? Self.railChipSize : RailProjectColumn.chipSize(.sidebar)) / 2 + 4) * r.scale)
         var runs: [(Int, Int)] = []
         for y in 0..<r.rep.pixelsHigh {
             guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
@@ -293,7 +293,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             if let last = runs.last, y - last.1 <= Int(2 * r.scale) { runs[runs.count - 1].1 = y } else { runs.append((y, y)) }
         }
         let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
-            .filter { abs(($0.upperBound - $0.lowerBound) - (rail ? RailProjectColumn.chipSize(.rail) : Self.expandedRowHeight)) <= 4 }
+            .filter { abs(($0.upperBound - $0.lowerBound) - (rail ? Self.railChipSize : Self.expandedRowHeight)) <= 4 }
         return try XCTUnwrap(chips.first, "no selected chip found (rail: \(rail))")
     }
 }
