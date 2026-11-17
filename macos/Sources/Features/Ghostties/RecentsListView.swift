@@ -43,6 +43,13 @@ struct RecentsListView: View {
 
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
+    /// The idle fold is open (`SidebarIdleFold`).
+    @AppStorage(SidebarIdleFold.expandedKey, store: SidebarDialTuning.store) private var idleProjectsExpanded = false
+    /// The projects outside the idle fold as they were when the pointer
+    /// entered the list; nil while it is outside (`SidebarIdleFold.shown`).
+    @State private var idleFoldHeld: Set<UUID>? = captureIdleFoldHeld
+    /// The sidebar's mode, which ends a hold when it changes.
+    @Environment(\.sidebarMode) private var sidebarMode
     @AppStorage("ghostties.sidebarTab", store: AppDefaults.store) private var sidebarTab: SidebarTab = .projects
     /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
     @AppStorage(ApprovalFlag.defaultsKey, store: AppDefaults.store) private var approvalsEnabled = true
@@ -238,6 +245,21 @@ struct RecentsListView: View {
             guard note.object as? NSWindow === coordinator.containerView?.window, editingSessionId != nil else { return }
             cancelRename()
         }
+        // The idle fold's hold ends with the pointer's exit, and no exit
+        // arrives when the sidebar hides or goes to the rail under a still
+        // pointer, or when the user leaves the window with the pointer
+        // resting over the list (`SidebarIdleFold.held`).
+        .onChange(of: sidebarMode) { _ in
+            idleFoldHeld = SidebarIdleFold.held(after: .sidebarModeChanged, live: [])
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceSidebarWillMorph)) { note in
+            guard note.object as? NSWindow === coordinator.containerView?.window else { return }
+            idleFoldHeld = SidebarIdleFold.held(after: .sidebarModeChanged, live: [])
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
+            guard note.object as? NSWindow === coordinator.containerView?.window else { return }
+            idleFoldHeld = SidebarIdleFold.held(after: .windowResignedKey, live: [])
+        }
     }
 
     // MARK: - Sections Content
@@ -327,8 +349,10 @@ struct RecentsListView: View {
         guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView else {
             return sections.pinned.count + sections.active.count
         }
-        let groups = SidebarProjectGroup.make(active: sections.active, projects: store.projects)
-        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        let arrangement = idleArrangement(sections.active)
+        let items = SidebarProjectGroupItem.items(
+            arrangement.groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw), idleFold: arrangement.row
+        )
         return SidebarProjectGroupItem.cascade(items, start: sections.pinned.count).end
     }
 
@@ -340,11 +364,14 @@ struct RecentsListView: View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 sectionsContent(sections, slots: slots)
+                    .coordinateSpace(name: SidebarSelectionFollow.contentSpace)
                     .modifier(SidebarColumnPadding())
                     .animation(reflowAnimation, value: dragState)
                     .animation(reflowAnimation, value: projectDragState)
                     // Pin/Unpin moves a project group (`ProjectListOrder`).
                     .animation(reflowAnimation, value: Set(store.projects.filter(\.isPinned).map(\.id)))
+                    // So does a project going idle or active (`SidebarIdleFold`).
+                    .animation(reflowAnimation, value: idleArrangement(sections.active).listed.map(\.id))
                     // Room for the group card above a first-row header,
                     // inside the clip; the scroll view reaches up the same
                     // amount, so rows keep their y.
@@ -353,8 +380,24 @@ struct RecentsListView: View {
                     // into the gutter before the canvas card.
                     .padding(.trailing, trailingBleed)
             }
+            // Where the selected row is on screen, and how much of the
+            // list shows above the tray: a background is laid out inside
+            // the safe area (`SidebarSelectionFollow.KeepClear`).
+            .coordinateSpace(name: SidebarSelectionFollow.viewportSpace)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: SidebarSelectionFollow.ViewportHeightKey.self, value: proxy.size.height)
+                }
+            }
             .padding(.top, -scrollBleed)
             .padding(.trailing, -trailingBleed)
+            // No project changes sides of the idle fold while the pointer
+            // is in the list, so no row moves under it.
+            .onHover { inside in
+                idleFoldHeld = SidebarIdleFold.held(
+                    after: inside ? .pointerEntered : .pointerLeft, live: liveUnfoldedProjects(sections.active)
+                )
+            }
             // Rows scroll under the floating tray; the inset is where the
             // last one rests, clear of it.
             .modifier(MorphTrayReserve(scrolls: true, isActive: underTray))
@@ -426,7 +469,9 @@ struct RecentsListView: View {
     /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession], cascadeStart: Int) -> some View {
-        let allGroups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        // Idle projects sit behind the fold's row (`SidebarIdleFold`).
+        let arrangement = idleArrangement(active)
+        let allGroups = arrangement.groups
         let groups = allGroups
             .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         // The pinned break comes from the whole list, so a pinned drag
@@ -434,23 +479,25 @@ struct RecentsListView: View {
         let pinnedBreakId = SidebarProjectGroupItem.pinnedBreakGroupId(allGroups)
         let items = SidebarProjectGroupItem.items(
             groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw),
-            pinnedBreakBefore: pinnedBreakId
+            pinnedBreakBefore: pinnedBreakId, idleFold: arrangement.row
         )
         // One cascade through every header and row, in reading order.
         let cascade = SidebarProjectGroupItem.cascade(items, start: cascadeStart)
         let gapBeforeId = groupedGapTarget(active)
         let projectGapBefore = projectGapTarget(groups)
-        // A row that needs you draws an action line (card 01), so drag
-        // reflow measures it at its full height.
-        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items) {
-            SidebarListRowHeight.row(hasActions: rowPrompt($0) != nil)
-        }
+        // A row is one line unless its thread needs you, and a row that
+        // needs you draws an action line (card 01), so drag reflow measures
+        // each at its drawn height.
+        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items) { drawnRowHeight($0) }
         let gapHeight = draggedRowHeight
         // Option D: each header leads with its project's monogram tile (the
         // rail's), and the group holding the selected session sits on one
         // card (`ProjectGroupCard`), its rows marked by chips.
+        // Read from every project, folded or not, so a project's letters
+        // don't change as others fold.
+        let everyGroup = arrangement.listed + arrangement.idle
         let monograms = Dictionary(
-            zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
+            zip(everyGroup.map(\.id), ProjectMonogram.monograms(for: everyGroup.map(\.name))),
             uniquingKeysWith: { first, _ in first }
         )
         let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
@@ -460,17 +507,46 @@ struct RecentsListView: View {
         // where it lands, not below it among the alphabetical projects.
         // Every other gap opens directly above its header.
         let gapAbovePinnedBreak = pinnedBreakId != nil && projectGapBefore == .some(pinnedBreakId)
+        // A drop at the end of Pinned with only the fold's row below it
+        // (no other project is listed) opens its gap above the row's break.
+        let gapAboveIdleFold = arrangement.row.map { row in
+            projectGapBefore == .some(nil) || (row.beforeGroupId != nil && projectGapBefore == .some(row.beforeGroupId))
+        } ?? false
         ForEach(items) { item in
             switch item {
             case .spacer(let groupId, let height):
-                if gapAbovePinnedBreak, groupId == pinnedBreakId {
+                if gapAbovePinnedBreak, groupId == pinnedBreakId, !gapAboveIdleFold {
+                    ProjectDragGapView()
+                }
+                if gapAboveIdleFold, groupId == SidebarIdleFold.rowId {
                     ProjectDragGapView()
                 }
                 Color.clear
                     .frame(height: height)
                     .accessibilityHidden(true)
+            case .idleFold(let row):
+                // The row leads the list (no spacer above it) only while
+                // the one pinned project is in flight.
+                if gapAboveIdleFold, items.first?.id == SidebarIdleFold.rowId {
+                    ProjectDragGapView()
+                }
+                IdleProjectsFoldRow(
+                    count: row.count,
+                    // Read from the threads as they are now, not as the
+                    // hold left the fold.
+                    needYouCount: SidebarIdleFold.needYouCount(arrangement.idle) {
+                        SessionNeedsYou.isGenuine(
+                            indicator: store.globalIndicatorStates[$0.id] ?? .inactive,
+                            state: coordinator.claudeStateStore.state(for: $0.id)
+                        )
+                    },
+                    isExpanded: row.isExpanded,
+                    staggerIndex: cascade.headers[SidebarIdleFold.rowId] ?? cascadeStart
+                ) {
+                    SidebarIdleFold.rowClicked(expanded: $idleProjectsExpanded)
+                }
             case .header(let group, let isCollapsed):
-                if projectGapBefore == .some(group.id), !(gapAbovePinnedBreak && group.id == pinnedBreakId) {
+                if projectGapBefore == .some(group.id), !(gapAbovePinnedBreak && group.id == pinnedBreakId), !gapAboveIdleFold {
                     ProjectDragGapView()
                 }
                 projectHeader(
@@ -485,27 +561,85 @@ struct RecentsListView: View {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView(height: gapHeight)
                     }
+                    let kind = shownKind(session)
+                    let rowBand = SidebarListRowHeight.band(
+                        hasSubtitle: showsSecondLine(session, prompt: rowPrompt(session.id))
+                    )
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        // A row that isn't asking anything says what the
-                        // session is doing.
-                        subtitle: SessionNeedsYou.subtitle(
-                            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
-                            state: coordinator.claudeStateStore.state(for: session.id)
-                        ),
+                        // The glyph says what the session is doing; the
+                        // words show only when it needs the user.
+                        subtitle: kind.groupedRowSubtitle,
+                        showsSubtitle: SessionRowSecondLine.isShown(kind),
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
-                    .railGroupColumn(group.id, isLit: cardGroups.contains(group.id))
+                    .railGroupColumn(group.id, isLit: cardGroups.contains(group.id), rowBand: rowBand)
                 }
             }
         }
         if gapBeforeId == .some(nil) {
             SessionDragGapView(height: gapHeight)
         }
-        if projectGapBefore == .some(nil) {
+        if projectGapBefore == .some(nil), !gapAboveIdleFold {
             ProjectDragGapView()
         }
+    }
+
+    /// The projects that belong outside the idle fold right now
+    /// (`SidebarIdleFold.unfolded`): the ones with a thread working or
+    /// needing you, under their header or in Pinned, and the selected
+    /// thread's.
+    private func liveUnfoldedProjects(_ active: [AgentSession]) -> Set<UUID> {
+        _ = promptRevision
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let pinned = store.sessions.filter { $0.isPinnedForDisplay(pinningAvailable: pinningAvailable) }
+        let activeIds = SidebarIdleFold.activeProjectIds(groups, pinned: pinned, kind: shownKind)
+        return SidebarIdleFold.unfolded(active: activeIds, selectedProjectId: selectedProjectId(active))
+    }
+
+    /// The status a thread's row stands for (`SessionNeedsYou.shownKind`).
+    private func shownKind(_ session: AgentSession) -> SessionStatusGlyphKind {
+        SessionNeedsYou.shownKind(
+            indicator: store.globalIndicatorStates[session.id] ?? .inactive,
+            state: coordinator.claudeStateStore.state(for: session.id)
+        )
+    }
+
+    /// Whether `session`'s row draws a second line. A row under a project
+    /// header (one view's Active) draws one only when its thread needs the
+    /// user; every other row always does (the project's name).
+    private func showsSecondLine(_ session: AgentSession, prompt: SessionRowPrompt?) -> Bool {
+        let isGroupedRow = SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView
+            && !session.isPinnedForDisplay(pinningAvailable: pinningAvailable)
+        return !isGroupedRow || prompt != nil || coordinator.codexHookUnconfirmed(for: session)
+            || SessionRowSecondLine.isShown(shownKind(session))
+    }
+
+    /// A row's drawn height on the sidebar (`SidebarListRowHeight`).
+    private func drawnRowHeight(_ id: UUID) -> CGFloat {
+        let prompt = rowPrompt(id)
+        let hasSubtitle = store.sessions.first { $0.id == id }.map { showsSecondLine($0, prompt: prompt) } ?? true
+        return SidebarListRowHeight.row(hasSubtitle: hasSubtitle, hasActions: prompt != nil)
+    }
+
+    /// The selected thread's project, when the thread has a row in Active.
+    private func selectedProjectId(_ active: [AgentSession]) -> UUID? {
+        guard let selected = coordinator.sidebarSelectedSessionId else { return nil }
+        return active.first { $0.id == selected }?.projectId
+    }
+
+    /// One view's groups either side of the idle fold, held as they were
+    /// while the pointer is in the list.
+    private func idleArrangement(_ active: [AgentSession]) -> SidebarIdleFold.Arrangement {
+        SidebarIdleFold.arrange(
+            SidebarProjectGroup.make(active: active, projects: store.projects),
+            unfolded: SidebarIdleFold.shown(
+                live: liveUnfoldedProjects(active), held: idleFoldHeld,
+                selectedProjectId: selectedProjectId(active), isExpanded: idleProjectsExpanded
+            ),
+            isExpanded: idleProjectsExpanded
+        )
     }
 
     /// The inline prompt of a row that genuinely needs you
@@ -525,7 +659,7 @@ struct RecentsListView: View {
     /// height never changes mid-drag.
     private var draggedRowHeight: CGFloat {
         guard let id = dragState.draggingSessionId else { return SessionDragReflow.rowHeight }
-        return SidebarListRowHeight.row(hasActions: rowPrompt(id) != nil)
+        return drawnRowHeight(id)
     }
 
     /// The selected session's project group, or none (nothing selected,
@@ -550,7 +684,15 @@ struct RecentsListView: View {
             group: selectedGroupId(sections.active) ?? SelectedRowMix.noGroup,
             rows: Set(sections.pinned.map(\.id) + sections.active.map(\.id)),
             collapsed: Set(ProjectAccordionState.decode(collapsedProjectsRaw).map(\.uuidString))
+                .union(hiddenIdleGroupIds(sections.active))
         )
+    }
+
+    /// The groups behind a closed idle fold: to the selected-row mix they
+    /// are folded, their rows off screen.
+    private func hiddenIdleGroupIds(_ active: [AgentSession]) -> Set<String> {
+        guard SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView, !idleProjectsExpanded else { return [] }
+        return Set(idleArrangement(active).idle.map(\.id))
     }
 
     /// One project's accordion header. A real project's header is a
@@ -625,6 +767,17 @@ struct RecentsListView: View {
         return { [store, coordinator] in
             ProjectRowNewSession.perform(for: project, store: store, coordinator: coordinator)
         }
+    }
+
+    /// DEBUG capture hook: the idle fold starts held, as if the pointer had
+    /// entered the list while only the named projects were outside it
+    /// (`CaptureFixture.idleFoldHeldProjects`). Nil in a normal launch.
+    private static var captureIdleFoldHeld: Set<UUID>? {
+        #if DEBUG
+        return CaptureFixture.idleFoldHeldProjects
+        #else
+        return nil
+        #endif
     }
 
     /// DEBUG capture hook: draws a header's hover state without a pointer,
@@ -925,7 +1078,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
+        subtitle: String? = nil, showsSubtitle: Bool = true, projectDrop: ProjectDropTarget? = nil, staggerIndex: Int
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         // A row that needs you says what it asks and draws its action line,
@@ -947,6 +1100,7 @@ struct RecentsListView: View {
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
             subtitle: prompt?.subtitle ?? subtitle,
+            showsSubtitle: showsSubtitle || prompt != nil,
             prompt: prompt,
             approvalsEnabled: approvalsEnabled,
             hasPairedBrowser: PairedBrowserRows.hasBrowser(session.id, pairedBrowsers: coordinator.pairedBrowserByTerminal),
@@ -991,7 +1145,7 @@ struct RecentsListView: View {
             draggedContext: { [self] id in draggedContext(for: id) },
             performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) },
             projectDrop: projectDrop,
-            rowHeight: SidebarListRowHeight.row(hasActions: prompt != nil)
+            rowHeight: drawnRowHeight(session.id)
         ))
         .accessibilityAction(named: Text("Move Up")) {
             guard supportsReorder else { return }
@@ -1003,7 +1157,11 @@ struct RecentsListView: View {
         }
         // What the list scrolls to when this row is selected
         // (`SidebarSelectionFollower`).
-        .background(alignment: .top) { SidebarSelectionFollow.ScrollTarget(rowId: session.id.uuidString) }
+        .background(alignment: .top) {
+            SidebarSelectionFollow.ScrollTarget(
+                rowId: session.id.uuidString, isSelected: coordinator.sidebarSelectedSessionId == session.id
+            )
+        }
     }
 
     /// Runs one `SessionRowMenu` action on `session`.

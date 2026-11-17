@@ -407,6 +407,11 @@ enum WorkspaceLayout {
     /// (`recentsRowGap`) below, the row-to-row pitch is 52pt. See `RecentsRowView.body`'s `.frame(height:)` comment.
     static let recentsRowHeight: CGFloat = 48
 
+    /// A one-line row's height in the one-view list: the title alone, the
+    /// thread tile's side (`RailProjectColumn.defaultThreadTileSize`), on
+    /// the 8pt grid. With `recentsRowGap` the pitch is 36pt.
+    static let recentsRowOneLineHeight: CGFloat = 32
+
     /// Inter-row gap in the Sessions tab's section `VStack`
     /// (`RecentsListView.sectionsContent`).
     static let recentsRowGap: CGFloat = 4

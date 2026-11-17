@@ -118,6 +118,9 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
         let sessions = projects.map { AgentSession(name: "s-\($0.name)", templateId: UUID(), projectId: $0.id) }
         let store = WorkspaceStore(testingProjects: projects, testingSessions: sessions)
         for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
+        // Every thread is working, so no project folds into the idle row
+        // (`SidebarIdleFold`).
+        for s in sessions { store.updateIndicatorState(id: s.id, state: .processing) }
         let registry = RedlineRegistry()
         return withDials({
             $0.set(SidebarProjectsLayout.oneView.rawValue, forKey: SidebarDialTuning.projectsLayoutKey)
@@ -215,6 +218,9 @@ final class ProjectPinnedAlphaOrderTests: XCTestCase {
         let sessions = projects.map { AgentSession(name: "s-\($0.name)", templateId: UUID(), projectId: $0.id) }
         let store = WorkspaceStore(testingProjects: projects, testingSessions: sessions)
         for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
+        // Every thread is working, so no project folds into the idle row
+        // (`SidebarIdleFold`).
+        for s in sessions { store.updateIndicatorState(id: s.id, state: .processing) }
         return withDials({ $0.set(SidebarProjectsLayout.oneView.rawValue, forKey: SidebarDialTuning.projectsLayoutKey) }) {
             let expanded: CGFloat = 260
             let width = rail ? WorkspaceLayout.sidebarRailWidth : expanded

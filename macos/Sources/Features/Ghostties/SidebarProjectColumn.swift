@@ -146,17 +146,28 @@ enum RailProjectColumn {
 /// fading, by group: the rail's column and the expanded list's group card
 /// both read it.
 struct RailGroupColumnKey: PreferenceKey {
-    static var defaultValue: [SidebarProjectGroup.ID: [Anchor<CGRect>]] = [:]
-    static func reduce(value: inout [SidebarProjectGroup.ID: [Anchor<CGRect>]], nextValue: () -> [SidebarProjectGroup.ID: [Anchor<CGRect>]]) {
+    /// One of a group's items: its bounds, and for a row its title band
+    /// (`SidebarListRowHeight.band`), which its chip centres in. The
+    /// header has none.
+    struct Item {
+        var bounds: Anchor<CGRect>
+        var rowBand: CGFloat?
+    }
+
+    static var defaultValue: [SidebarProjectGroup.ID: [Item]] = [:]
+    static func reduce(value: inout [SidebarProjectGroup.ID: [Item]], nextValue: () -> [SidebarProjectGroup.ID: [Item]]) {
         value.merge(nextValue()) { $0 + $1 }
     }
 }
 
 extension View {
+    /// `rowBand` is a row's title band; nil for the group's header.
     @ViewBuilder
-    func railGroupColumn(_ group: SidebarProjectGroup.ID, isLit: Bool) -> some View {
+    func railGroupColumn(_ group: SidebarProjectGroup.ID, isLit: Bool, rowBand: CGFloat? = nil) -> some View {
         if isLit {
-            anchorPreference(key: RailGroupColumnKey.self, value: .bounds) { [group: [$0]] }
+            anchorPreference(key: RailGroupColumnKey.self, value: .bounds) {
+                [group: [RailGroupColumnKey.Item(bounds: $0, rowBand: rowBand)]]
+            }
         } else {
             self
         }
@@ -185,7 +196,7 @@ struct ProjectGroupCard: View {
     @Environment(\.sidebarMorphOverride) private var morphOverride
     @Environment(\.sidebarMorphDials) private var morphDials
     /// Each lit or fading group's laid-out items.
-    let groups: [SidebarProjectGroup.ID: [Anchor<CGRect>]]
+    let groups: [SidebarProjectGroup.ID: [RailGroupColumnKey.Item]]
     /// The selected session's group: its card carries the Redlines tag.
     let selected: SidebarProjectGroup.ID?
 
@@ -215,15 +226,18 @@ struct ProjectGroupCard: View {
         let metrics = widthModel.metrics(morphOverride ?? widthModel.morph, dials: morphDials)
         GeometryReader { proxy in
             ForEach(groups.keys.sorted(), id: \.self) { id in
-                if let anchors = groups[id], let first = anchors.first {
-                    let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
+                if let items = groups[id], let first = items.first {
+                    let union = items.dropFirst().reduce(proxy[first.bounds]) { $0.union(proxy[$1.bounds]) }
+                    // The group's last row: the lowest item that is a row.
+                    let lastRow = items.filter { $0.rowBand != nil }.max { proxy[$0.bounds].maxY < proxy[$1.bounds].maxY }
                     // The card's opacity: 1 at rest on the selected group,
                     // cross-fading between groups on a project switch.
                     SelectedRowMixGroupReader(id: id, fallback: 1) { card in
                         ProjectGroupCardShape(
                             metrics: metrics,
                             progress: metrics.progress,
-                            hasRows: anchors.count > 1,
+                            hasRows: items.count > 1,
+                            lastRowBand: lastRow?.rowBand,
                             unionMinY: union.minY,
                             unionMaxY: union.maxY,
                             originX: proxy.frame(in: .named(Self.sidebarSpace)).minX,
@@ -247,6 +261,8 @@ private struct ProjectGroupCardShape: View, Animatable {
     let metrics: SidebarMorphMetrics
     var progress: CGFloat
     let hasRows: Bool
+    /// The title band of the group's last row, which its chip centres in.
+    let lastRowBand: CGFloat?
     /// The group's laid-out top and bottom, in the card's local space.
     let unionMinY: CGFloat
     let unionMaxY: CGFloat
@@ -266,7 +282,7 @@ private struct ProjectGroupCardShape: View, Animatable {
     var body: some View {
         let card = SidebarMorphMetrics(
             dials: metrics.dials, expandedWidth: metrics.expandedWidth, railWidth: metrics.railWidth, progress: progress
-        ).card(hasRows: hasRows)
+        ).card(hasRows: hasRows, lastRowBand: lastRowBand)
         let top = unionMinY + card.tileTrim - card.topInset
         let bottom = max(top, unionMaxY - (hasRows ? card.chipTrim : card.tileTrim) + card.verticalInset)
         RoundedRectangle(cornerRadius: card.cornerRadius, style: .continuous)
@@ -372,16 +388,171 @@ enum SidebarSelectionFollow {
     /// A row's scroll target, as its background: the row's frame reaching
     /// `trayClearance` past its bottom edge, so scrolling the least distance
     /// that shows the target rests the row that far above the tray. Takes
-    /// no room and no clicks.
+    /// no room and no clicks. The selected row's also reports where it is
+    /// (`SelectedTargetFrameKey`), for `KeepClear`.
     struct ScrollTarget: View {
         let rowId: String
+        var isSelected = false
 
         var body: some View {
             Color.clear
                 .id(SidebarSelectionFollow.scrollTargetId(row: rowId))
                 .padding(.bottom, -SidebarSelectionFollow.trayClearance)
+                .background {
+                    if isSelected {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: SelectedTargetFrameKey.self,
+                                value: SelectedTargetFrame(
+                                    rowId: rowId,
+                                    contentMinY: proxy.frame(in: .named(SidebarSelectionFollow.contentSpace)).minY,
+                                    viewport: proxy.frame(in: .named(SidebarSelectionFollow.viewportSpace))
+                                )
+                            )
+                        }
+                    }
+                }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
+        }
+    }
+
+    // MARK: Keeping the selected row clear
+
+    /// The list's content, inside the scroll view: a frame in it moves
+    /// only when the list's layout does, never on a scroll.
+    static let contentSpace = "ghostties.sidebar.list.content"
+    /// The scroll view: a frame in it is where a row is on screen.
+    static let viewportSpace = "ghostties.sidebar.list.viewport"
+
+    /// The selected row, as laid out.
+    struct SelectedTargetFrame: Equatable {
+        var rowId: String
+        /// Its top in `contentSpace`.
+        var contentMinY: CGFloat
+        /// Its frame in `viewportSpace`: the row's own, without the
+        /// clearance its scroll target adds below it.
+        var viewport: CGRect
+    }
+
+    struct SelectedTargetFrameKey: PreferenceKey {
+        static var defaultValue: SelectedTargetFrame?
+        static func reduce(value: inout SelectedTargetFrame?, nextValue: () -> SelectedTargetFrame?) {
+            value = value ?? nextValue()
+        }
+    }
+
+    /// The scroll view's height above the tray: its safe area, which the
+    /// tray's reserve insets (`MorphTrayReserve`).
+    struct ViewportHeightKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
+        }
+    }
+
+    /// Where the selected row's scroll target sits: in the list's layout,
+    /// and on screen.
+    struct Placement: Equatable {
+        var rowId: String
+        /// The target's top in the list's content (`contentSpace`).
+        var contentMinY: CGFloat
+        /// The target's top and bottom in the viewport (`viewportSpace`);
+        /// the bottom is `trayClearance` below the row's.
+        var minY: CGFloat
+        var maxY: CGFloat
+        /// The viewport's height above the tray.
+        var visibleHeight: CGFloat
+
+        static let tolerance: CGFloat = 0.5
+        /// The least change that counts as the layout moving the row. Far
+        /// under a point: an animated growth arrives in steps smaller than
+        /// `tolerance`, and each one is still the layout's doing.
+        static let layoutEpsilon: CGFloat = 0.01
+
+        /// The whole row is in view, `trayClearance` clear of the tray.
+        var isClear: Bool { minY >= -Self.tolerance && maxY <= visibleHeight + Self.tolerance }
+    }
+
+    /// Keeps the selected row in full view when the list's layout moves it:
+    /// a row above it grows (a thread starts needing you), a project above
+    /// it unfolds, the tray grows. A row that was in full view and is
+    /// pushed part-way out, under the tray or past the top, scrolls back
+    /// the least distance. Nothing else scrolls: a row the user scrolled
+    /// away from stays where they left it, and a scroll never triggers one.
+    ///
+    /// The user's scroll wins over a growth under way. An animated growth
+    /// moves the row on every frame, and a frame that carries the user's
+    /// scroll as well looks like the layout's doing alone, so the scroll is
+    /// taken as what it is, an input (`userScrolled`): from then the row is
+    /// theirs to place until the selection changes or a separate growth
+    /// starts.
+    struct KeepClear: Equatable {
+        private(set) var last: Placement?
+        /// The row was in full view before the layout last moved it.
+        private(set) var wasClear = false
+        /// The user scrolled during the growth under way.
+        private(set) var yielded = false
+        /// When the layout last moved the row, and when the user last
+        /// scrolled the list (system uptime).
+        private var lastLayoutMove: TimeInterval?
+        private var lastUserScroll: TimeInterval?
+
+        /// The longest pause inside one growth: layout moves further apart
+        /// than this are separate growths. An animated one moves the row
+        /// every frame, and none runs past 300ms.
+        static let growthGap: TimeInterval = 0.25
+
+        /// The user scrolled the list (wheel, trackpad or its momentum).
+        mutating func userScrolled(at time: TimeInterval) {
+            lastUserScroll = time
+            if isRecent(lastLayoutMove, at: time) { yielded = true }
+        }
+
+        private func isRecent(_ earlier: TimeInterval?, at time: TimeInterval) -> Bool {
+            earlier.map { time - $0 <= Self.growthGap } ?? false
+        }
+
+        /// Takes the selected row's placement after a layout or a scroll;
+        /// true when the list should scroll the row back into view.
+        mutating func take(_ placement: Placement?, at time: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
+            defer { last = placement }
+            guard let placement else {
+                wasClear = false
+                yielded = false
+                lastLayoutMove = nil
+                return false
+            }
+            // A new selection is the follower's to scroll to.
+            guard let last, last.rowId == placement.rowId else {
+                wasClear = placement.isClear
+                yielded = false
+                lastLayoutMove = nil
+                lastUserScroll = nil
+                return false
+            }
+            let layoutMoved = abs(placement.contentMinY - last.contentMinY) > Placement.layoutEpsilon
+                || abs(placement.visibleHeight - last.visibleHeight) > Placement.layoutEpsilon
+            // A scroll: the row is wherever the user (or the follower) put it.
+            guard layoutMoved else {
+                wasClear = placement.isClear
+                return false
+            }
+            // A separate growth starts held, unless the user is mid-scroll.
+            if !isRecent(lastLayoutMove, at: time) {
+                yielded = isRecent(lastUserScroll, at: time)
+            }
+            lastLayoutMove = time
+            guard !yielded else {
+                wasClear = placement.isClear
+                return false
+            }
+            if placement.isClear {
+                wasClear = true
+                return false
+            }
+            // Still owed its place until a scroll says otherwise.
+            return wasClear
         }
     }
 }
@@ -392,8 +563,10 @@ enum SidebarSelectionFollow {
 /// unfolds the selected session's project if it is folded and scrolls its
 /// row into view, the least distance (`anchor: nil`), `trayClearance` clear
 /// of the tray. Only a change of selection scrolls: the pointer, activity
-/// and time never do. Keyboard moves don't animate (motion spec, "stays
-/// still"); Reduce Motion animates nothing.
+/// and time never do, except to hold the selected row in full view when
+/// the list's layout pushes it out (`SidebarSelectionFollow.KeepClear`).
+/// Keyboard moves don't animate (motion spec, "stays still"); Reduce Motion
+/// animates nothing.
 ///
 /// The tabs layout keeps what it had: on the rail, a selection moved by
 /// keyboard (Next/Previous Session, Cmd+1-9) scrolls into view, instantly.
@@ -406,7 +579,26 @@ struct SidebarSelectionFollower: ViewModifier {
     let window: () -> NSWindow?
     let scrollProxy: ScrollViewProxy
 
+    /// The selected row's last placement (`KeepClear`). A reference, not
+    /// view state: it changes on every scroll and redraws nothing.
+    private final class KeepClearBox {
+        var state = SidebarSelectionFollow.KeepClear()
+        var frame: SidebarSelectionFollow.SelectedTargetFrame?
+        /// The viewport's height above the tray (`ViewportHeightKey`).
+        var viewportHeight: CGFloat = 0
+        var isOneView = false
+        /// The pointer is over the list: a scroll event is the list's.
+        var pointerInside = false
+        /// Reports the user's scrolls (`KeepClear.userScrolled`).
+        var scrollMonitor: Any?
+
+        deinit {
+            if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
+        }
+    }
+
     @State private var keyboardMovedSelection = false
+    @State private var keepClear = KeepClearBox()
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedRaw = ""
 
@@ -429,7 +621,17 @@ struct SidebarSelectionFollower: ViewModifier {
 
     func body(content: Content) -> some View {
         let inputs = Inputs(selected: selectedSessionId, pinned: pinned, active: active, layout: layout)
+        // Read by the preference handlers below, which run outside `body`.
+        let _ = keepClear.isOneView = layout == .oneView
         content
+            .onPreferenceChange(SidebarSelectionFollow.SelectedTargetFrameKey.self) { [keepClear] frame in
+                keepClear.frame = frame
+                keepSelectedRowClear()
+            }
+            .onPreferenceChange(SidebarSelectionFollow.ViewportHeightKey.self) { [keepClear] height in
+                keepClear.viewportHeight = height
+                keepSelectedRowClear()
+            }
             .onReceive(Self.keyboardSelection) { note in
                 guard let target = note.object as? NSWindow, target === window() else { return }
                 keyboardMovedSelection = true
@@ -445,6 +647,47 @@ struct SidebarSelectionFollower: ViewModifier {
                 guard inputs.layout == .oneView else { return }
                 scroll(to: inputs.selectedRowId, in: inputs, animated: false)
             }
+            .onHover { [keepClear] in keepClear.pointerInside = $0 }
+            .onAppear(perform: watchUserScrolls)
+            .onDisappear { [keepClear] in
+                if let monitor = keepClear.scrollMonitor { NSEvent.removeMonitor(monitor) }
+                keepClear.scrollMonitor = nil
+            }
+    }
+
+    /// Tells `KeepClear` when the user scrolls the list, so it stops
+    /// holding the selected row against them. Only listens: every event
+    /// goes on unchanged.
+    private func watchUserScrolls() {
+        let box = keepClear
+        guard box.scrollMonitor == nil else { return }
+        box.scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak box, window] event in
+            if let box, box.pointerInside, event.window === window() {
+                box.state.userScrolled(at: event.timestamp)
+            }
+            return event
+        }
+    }
+
+    /// Scrolls the selected row back into full view when the list's layout
+    /// has pushed it out (`SidebarSelectionFollow.KeepClear`). Not
+    /// animated: the row holds its place while the list moves round it.
+    private func keepSelectedRowClear() {
+        let box = keepClear
+        guard box.isOneView, let frame = box.frame, box.viewportHeight > 0 else {
+            _ = box.state.take(nil)
+            return
+        }
+        let placement = SidebarSelectionFollow.Placement(
+            rowId: frame.rowId, contentMinY: frame.contentMinY,
+            minY: frame.viewport.minY, maxY: frame.viewport.maxY + SidebarSelectionFollow.trayClearance,
+            visibleHeight: box.viewportHeight
+        )
+        guard box.state.take(placement) else { return }
+        // On the next turn: this runs inside a layout pass.
+        DispatchQueue.main.async { [scrollProxy] in
+            scrollProxy.scrollTo(SidebarSelectionFollow.scrollTargetId(row: frame.rowId))
+        }
     }
 
     private func follow(_ inputs: Inputs, route: SidebarSelectionFollow.Route) {

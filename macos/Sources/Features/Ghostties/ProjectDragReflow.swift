@@ -56,7 +56,7 @@ enum ProjectDragReflow {
         let groupIndex = Dictionary(uniqueKeysWithValues: groups.filter { $0.projectId != nil }.enumerated().map { ($1.id, $0) })
         func member(_ item: SidebarProjectGroupItem) -> (group: SidebarProjectGroup, height: CGFloat)? {
             switch item {
-            case .spacer: return nil
+            case .spacer, .idleFold: return nil
             case .header(let group, _): return (group, ProjectAccordionHeader.height(.sidebar))
             case .row(let session, let group): return (group, rowHeight(session.id))
             }

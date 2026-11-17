@@ -30,6 +30,9 @@ struct RailListScrollRegionTests {
         for index in 0..<24 {
             let session = store.addSession(name: "s\(index)", templateId: UUID(), projectId: project.id)
             store.updateSessionStatus(id: session.id, status: .running)
+            // Working, so the project is listed, not folded into the idle
+            // row (`SidebarIdleFold`).
+            store.updateIndicatorState(id: session.id, state: .processing)
         }
         store.updateSidebarMode(.collapsed)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)

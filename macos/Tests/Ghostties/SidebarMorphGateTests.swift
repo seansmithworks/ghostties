@@ -144,7 +144,10 @@ struct SidebarMorphGateTests {
                 #expect(abs(t.midX - m.tileCenterX) <= 0.5, "tile centre x at \(progress): \(t.midX) vs \(m.tileCenterX)")
                 #expect(abs(t.width - m.tileSize) <= 0.5, "tile size at \(progress): \(t.width) vs \(m.tileSize)")
                 #expect(abs(c.midX - m.tileCenterX) <= 0.5, "chip centre x at \(progress): \(c.midX) vs \(m.tileCenterX)")
-                #expect(abs(c.width - m.chipSize) <= 0.5, "chip size at \(progress): \(c.width) vs \(m.chipSize)")
+                // The rig's rows are one line, and a chip is never taller
+                // than its row's band.
+                let chipSize = SidebarListRowHeight.chip(m.chipSize, band: SidebarListRowHeight.band(hasSubtitle: false))
+                #expect(abs(c.width - chipSize) <= 0.5, "chip size at \(progress): \(c.width) vs \(chipSize)")
                 let shape = m.card(hasRows: true)
                 #expect(abs(k.minX - shape.minX) <= 0.5, "card min x at \(progress): \(k.minX) vs \(shape.minX)")
                 #expect(abs(k.width - shape.width) <= 0.5, "card width at \(progress): \(k.width) vs \(shape.width)")

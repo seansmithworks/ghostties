@@ -71,7 +71,7 @@ final class SidebarRetiredDialsTests: XCTestCase {
             // Both mark the selected session with a tile-sized chip over its
             // project's card or column (`RailProjectColumn`), not a row-tall
             // card.
-            let minimum = RailProjectColumn.chipSize(rail ? .rail : .sidebar) - 10
+            let minimum = Self.chipSize(rail: rail) - 10
             XCTAssertGreaterThan(longestTintRun(migrated, width: rail ? 80 : 260, rail: rail), minimum, "the selected row is not blank (rail: \(rail))")
         }
     }
@@ -161,6 +161,14 @@ final class SidebarRetiredDialsTests: XCTestCase {
         return count
     }
 
+    /// The selected row's chip as drawn: the fixture's rows are one line,
+    /// and a chip is never taller than its row's band.
+    private static func chipSize(rail: Bool) -> CGFloat {
+        SidebarListRowHeight.chip(
+            RailProjectColumn.chipSize(rail ? .rail : .sidebar), band: SidebarListRowHeight.band(hasSubtitle: false)
+        )
+    }
+
     /// The longest run, in points, of pixels the selected row's tint darkens
     /// below the chrome, down one column clear of the rim and the row's ink:
     /// 4pt inside the selected chip, in the rail's centre or the expanded
@@ -176,7 +184,7 @@ final class SidebarRetiredDialsTests: XCTestCase {
         let chipCentre = rail ? width / 2
             : SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading()
                 + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
-        let x = chipCentre - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4
+        let x = chipCentre - Self.chipSize(rail: rail) / 2 + 4
         let px = Int(x * scale)
         let cardAlpha = RailProjectColumn.columnFillOpacity(.light)
         let cardSum = base * (1 - cardAlpha) + 3 * cardAlpha

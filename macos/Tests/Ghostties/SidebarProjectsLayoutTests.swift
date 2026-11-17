@@ -76,6 +76,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             case .spacer: return "-"
             case .header(let g, let folded): return "\(g.name)\(folded ? "+" : "")"
             case .row(let s, _): return s.name
+            case .idleFold: return "idle"
             }
         }
         XCTAssertEqual(shape, ["atlas-api", "a", "-", "quiet"])
@@ -133,6 +134,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
                 case .spacer: return "-"
                 case .header(let g, let folded): return "\(g.name)\(folded ? "+" : "")"
                 case .row(let s, _): return s.name
+                case .idleFold: return "idle"
                 }
             }
         }
@@ -564,6 +566,9 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let sessions = [session("a", atlas), session("b", atlas), session("c", fieldwork)]
         let store = WorkspaceStore(testingProjects: [atlas, fieldwork], testingSessions: sessions)
         for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
+        // Every thread is working, so neither project folds into the idle
+        // row (`SidebarIdleFold`).
+        for s in sessions { store.updateIndicatorState(id: s.id, state: .processing) }
 
         // Each measurement binds its own private dial suite (`withDials`),
         // so no other test reads or clears the layout it sets.
@@ -583,14 +588,21 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             }
         }
 
-        let row = SidebarDialTuning.rowHeight()
+        // A working thread's row under a project header is one line.
+        let row = SidebarListRowHeight.row(hasSubtitle: false, hasActions: false)
+        let tabsRow = SidebarDialTuning.rowHeight()
         let gap = SidebarDialTuning.rowGap()
         let tabs = height(.tabs, collapsed: [])
         let open = height(.oneView, collapsed: [])
         let folded = height(.oneView, collapsed: [atlas.id])
 
-        // Two headers, one spacer between groups, each with its row gap.
-        XCTAssertEqual(open - tabs, 2 * (ProjectAccordionHeader.height(.sidebar) + gap) + SidebarProjectGroupItem.spacerHeight + gap, accuracy: 0.5)
+        // Two headers, one spacer between groups, each with its row gap;
+        // and the three rows are one line each, where Tabs draws two.
+        XCTAssertEqual(
+            open - tabs,
+            2 * (ProjectAccordionHeader.height(.sidebar) + gap) + SidebarProjectGroupItem.spacerHeight + gap - 3 * (tabsRow - row),
+            accuracy: 0.5
+        )
         // Folding atlas-api removes its two rows.
         XCTAssertEqual(open - folded, 2 * (row + gap), accuracy: 0.5)
     }

@@ -17,7 +17,7 @@ import GhosttiesCore
 ///   Approve (ink) and Deny (quiet).
 /// - "schema notes": `?`, title, subtitle "Which env name?", then the inline
 ///   link "Answer in terminal →".
-/// - "auth refactor": spinner, subtitle "working", no action line.
+/// - "auth refactor": spinner, title only (a one-line row), no action line.
 ///
 /// Same harness as `HoverApprovalsGateTests`: real `RecentsListView` (or the
 /// real `WorkspaceViewContainer` for rail and tile-x), fixture hook state in
@@ -173,7 +173,7 @@ final class HoverApprovalsInlineGateTests: PrivateDefaultsTestCase {
         for title in ["deploy preview", "schema notes", "auth refactor"] {
             XCTAssertTrue(shown.contains(title), "reader failed on \"\(title)\": \(shown.debugDescription)")
         }
-        XCTAssertTrue(shown.contains("working"), "a working row says \"working\": \(shown.debugDescription)")
+        XCTAssertFalse(shown.contains("working"), "a working row is one line, its status the glyph alone: \(shown.debugDescription)")
     }
 
     // MARK: - (g) a bounded prompt's subtitle is its question
@@ -231,6 +231,9 @@ final class HoverApprovalsInlineGateTests: PrivateDefaultsTestCase {
 
     func testRowsThatDoNotNeedYouHaveNoActionLineAndNoQuestion() {
         defaults.set(true, forKey: ApprovalFlag.defaultsKey)
+        // A project whose only thread doesn't need you is idle: open the
+        // idle fold so its row draws (`SidebarIdleFold`).
+        SidebarIdleFold.setExpanded(true, defaults: defaults)
         // The needs-you rows prove the same list DOES draw questions and an
         // action line when asked to, so the absences below are not vacuous.
         let needing = listText([bash, ask])
@@ -238,11 +241,11 @@ final class HoverApprovalsInlineGateTests: PrivateDefaultsTestCase {
                       "control: needs-you rows show their questions; list shows \(needing.debugDescription)")
         XCTAssertTrue(needing.contains("answer in terminal"), "control: needs-you rows draw an action line; list shows \(needing.debugDescription)")
 
-        for (label, row, subtitle) in [("working", working, "working"), ("done", done, "done"), ("idle_prompt stale", stale, "done")] {
+        for (label, row) in [("working", working), ("done", done), ("idle_prompt stale", stale)] {
             let shown = listText([row])
             XCTAssertTrue(shown.contains(row.name), "\(label): the row renders; list shows \(shown.debugDescription)")
-            XCTAssertTrue(shown.contains(subtitle), "\(label): subtitle \"\(subtitle)\"; list shows \(shown.debugDescription)")
-            for forbidden in ["approve", "deny", "answer in terminal", "run npm test?", "which env name?", "needs you"] {
+            // One line: no status word under the title (`SessionRowSecondLine`).
+            for forbidden in ["working", "done", "stopped", "approve", "deny", "answer in terminal", "run npm test?", "which env name?", "needs you"] {
                 XCTAssertFalse(shown.contains(forbidden), "\(label): no \"\(forbidden)\" on a row that doesn't need you; list shows \(shown.debugDescription)")
             }
         }

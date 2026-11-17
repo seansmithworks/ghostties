@@ -246,6 +246,15 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         XCTAssertEqual((e.lowerBound + e.upperBound) / 2 + headerGrowth, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
     }
 
+    /// The fixture's rows are stopped threads under a project header: one
+    /// line in the expanded list.
+    private static var expandedRowHeight: CGFloat { SidebarListRowHeight.row(hasSubtitle: false, hasActions: false) }
+
+    /// The rail's chip in one of those rows: never taller than the row.
+    private static var railChipSize: CGFloat {
+        SidebarListRowHeight.chip(RailProjectColumn.chipSize(.rail), band: expandedRowHeight)
+    }
+
     /// The x of the selected chip's centre: the rail's centre, or, in the
     /// expanded list, the leading glyph slot's (`SidebarListRowChrome`).
     private func chipCentreX(_ r: Render, rail: Bool) -> CGFloat {
@@ -274,7 +283,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let chipOverCardDrop = base - cardSum * (1 - chipAlpha)
         let lowerBound = (cardDrop + chipOverCardDrop) / 2
         let upperBound = chipOverCardDrop + (chipOverCardDrop - lowerBound)
-        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4) * r.scale)
+        let px = Int((chipCentreX(r, rail: rail) - (rail ? Self.railChipSize : RailProjectColumn.chipSize(.sidebar)) / 2 + 4) * r.scale)
         var runs: [(Int, Int)] = []
         for y in 0..<r.rep.pixelsHigh {
             guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
@@ -284,7 +293,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             if let last = runs.last, y - last.1 <= Int(2 * r.scale) { runs[runs.count - 1].1 = y } else { runs.append((y, y)) }
         }
         let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
-            .filter { abs(($0.upperBound - $0.lowerBound) - (rail ? RailProjectColumn.chipSize(.rail) : SidebarDialTuning.rowHeight())) <= 4 }
+            .filter { abs(($0.upperBound - $0.lowerBound) - (rail ? Self.railChipSize : Self.expandedRowHeight)) <= 4 }
         return try XCTUnwrap(chips.first, "no selected chip found (rail: \(rail))")
     }
 }

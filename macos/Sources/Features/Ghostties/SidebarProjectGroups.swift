@@ -120,6 +120,9 @@ enum SidebarProjectGroupItem: Identifiable {
     case spacer(groupId: String, height: CGFloat)
     case header(SidebarProjectGroup, isCollapsed: Bool)
     case row(AgentSession, group: SidebarProjectGroup)
+    /// The idle fold's row (`SidebarIdleFold`): after every listed group,
+    /// and before the idle ones while it is expanded.
+    case idleFold(SidebarIdleFold.Row)
 
     /// Mock B5's break between groups: the hairline's 6pt margins and 1pt
     /// line (`.hair`). The rule itself now sits in the header.
@@ -130,6 +133,10 @@ enum SidebarProjectGroupItem: Identifiable {
     /// usual break. The rail renders the same items, so the gap is the same
     /// height in both widths and no tile moves between them.
     static let pinnedBreakHeight: CGFloat = WorkspaceLayout.projectPinnedBreak
+
+    /// The break above the idle fold's row, added to the usual one: the
+    /// pinned break's step, so the list has one size of break.
+    static let idleBreakHeight: CGFloat = pinnedBreakHeight
 
     /// The group the pinned break sits before: the first unpinned project,
     /// when a pinned project leads it. Read from the whole list, never the
@@ -145,20 +152,44 @@ enum SidebarProjectGroupItem: Identifiable {
         case .spacer(let groupId, _): return "spacer-\(groupId)"
         case .header(let group, _): return "header-\(group.id)"
         case .row(let session, _): return session.id.uuidString
+        case .idleFold: return SidebarIdleFold.rowId
         }
     }
 
-    static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>) -> [SidebarProjectGroupItem] {
-        items(groups, collapsed: collapsed, pinnedBreakBefore: pinnedBreakGroupId(groups))
+    static func items(
+        _ groups: [SidebarProjectGroup], collapsed: Set<UUID>, idleFold: SidebarIdleFold.Row? = nil
+    ) -> [SidebarProjectGroupItem] {
+        items(groups, collapsed: collapsed, pinnedBreakBefore: pinnedBreakGroupId(groups), idleFold: idleFold)
     }
 
     /// `pinnedBreakBefore` is `pinnedBreakGroupId` of the whole list when
     /// `groups` is the rendered one with a dragged group removed.
-    static func items(_ groups: [SidebarProjectGroup], collapsed: Set<UUID>, pinnedBreakBefore: String?) -> [SidebarProjectGroupItem] {
+    /// `idleFold` is the fold's row (`SidebarIdleFold.Arrangement.row`),
+    /// with `groups` in the arrangement's order: the row sits one break
+    /// below whatever is above it, before its first idle group, or last
+    /// while folded.
+    static func items(
+        _ groups: [SidebarProjectGroup], collapsed: Set<UUID>, pinnedBreakBefore: String?,
+        idleFold: SidebarIdleFold.Row? = nil
+    ) -> [SidebarProjectGroupItem] {
         var items: [SidebarProjectGroupItem] = []
-        for (index, group) in groups.enumerated() {
-            let breakHeight = group.id == pinnedBreakBefore ? pinnedBreakHeight : 0
-            let height = (index > 0 ? spacerHeight : 0) + breakHeight
+        var foldPlaced = false
+        func placeFold(_ row: SidebarIdleFold.Row) {
+            if !items.isEmpty {
+                items.append(.spacer(groupId: SidebarIdleFold.rowId, height: spacerHeight + idleBreakHeight))
+            }
+            items.append(.idleFold(row))
+            foldPlaced = true
+        }
+        for group in groups {
+            var breakHeight = group.id == pinnedBreakBefore ? pinnedBreakHeight : 0
+            if let idleFold, idleFold.beforeGroupId == group.id {
+                placeFold(idleFold)
+                // The row's own break stands in for a pinned break that
+                // would fall on the first idle project.
+                breakHeight = 0
+            }
+            let height = (items.isEmpty ? 0 : spacerHeight) + breakHeight
             if height > 0 {
                 items.append(.spacer(groupId: group.id, height: height))
             }
@@ -168,6 +199,7 @@ enum SidebarProjectGroupItem: Identifiable {
                 items += group.sessions.map { .row($0, group: group) }
             }
         }
+        if let idleFold, !foldPlaced { placeFold(idleFold) }
         return items
     }
 
@@ -184,6 +216,9 @@ enum SidebarProjectGroupItem: Identifiable {
                 rowIds.append([])
             case .row(let session, _):
                 if !rowIds.isEmpty { rowIds[rowIds.count - 1].append(session.id) }
+            case .idleFold:
+                groupIds.append(SidebarIdleFold.rowId)
+                rowIds.append([])
             case .spacer:
                 break
             }
@@ -344,14 +379,19 @@ enum SessionNeedsYou {
         return SessionAttention.make(indicator: indicator, state: state) != nil
     }
 
-    /// The one-view row subtitle. A needs-attention row its hook state
-    /// contradicts reads what the hook state says instead.
-    static func subtitle(indicator: SessionIndicatorState, state: ClaudeState?) -> String {
+    /// The status a one-view row stands for. A needs-attention row its
+    /// hook state contradicts stands for what the hook state says instead.
+    static func shownKind(indicator: SessionIndicatorState, state: ClaudeState?) -> SessionStatusGlyphKind {
         guard indicator == .needsAttention, !isGenuine(indicator: indicator, state: state), let state else {
-            return indicator.statusGlyphKind.groupedRowSubtitle
+            return indicator.statusGlyphKind
         }
         let hookIndicator = SessionCoordinator.claudeIndicator(kind: state.state, isLongRunning: false) ?? .idle
-        return hookIndicator.statusGlyphKind.groupedRowSubtitle
+        return hookIndicator.statusGlyphKind
+    }
+
+    /// The one-view row subtitle: `shownKind` in words.
+    static func subtitle(indicator: SessionIndicatorState, state: ClaudeState?) -> String {
+        shownKind(indicator: indicator, state: state).groupedRowSubtitle
     }
 
     /// The trailing label of a project header: "N need you" while any of
@@ -395,6 +435,285 @@ struct SessionRowPrompt: Equatable {
                     : nil
             )
         }
+    }
+}
+
+// MARK: - Idle fold
+
+/// One view folds every idle project into one row at the bottom of the
+/// list, "Idle · N" (Sean, 2026-11-15, "Idle folded").
+///
+/// A project is active while any of its threads is working or needs you;
+/// every other project (no threads, or only done, stopped or error ones) is
+/// idle. Pinned projects never fold, and neither does the "Unknown" group.
+/// The project holding the selected thread shows outside the fold: it is
+/// where the user is. Clicking the row shows the idle projects under it, as
+/// they draw anywhere else; the choice persists (`expandedKey`), folded by
+/// default. With no idle project there is no row.
+enum SidebarIdleFold {
+    /// The fold's persisted state: true while the idle projects show.
+    static let expandedKey = "ghostties.sidebar.idleProjectsExpanded"
+
+    /// The fold row's id among the list's items and in the expand cascade.
+    static let rowId = "idle-projects"
+
+    static func isExpanded(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
+        defaults.bool(forKey: expandedKey)
+    }
+
+    static func setExpanded(_ expanded: Bool, defaults: UserDefaults = SidebarDialTuning.store) {
+        defaults.set(expanded, forKey: expandedKey)
+    }
+
+    /// The row's label.
+    static func label(count: Int) -> String { "Idle · \(count)" }
+
+    /// A project is active while a thread of it is working or needs you.
+    /// `kinds` are its threads' statuses as their rows show them
+    /// (`SessionNeedsYou.shownKind`).
+    static func isActive(_ kinds: [SessionStatusGlyphKind]) -> Bool {
+        kinds.contains { $0 == .working || $0 == .needsInput }
+    }
+
+    /// The active projects among `groups`. `pinned` are the threads drawn
+    /// in the Pinned section, which no group holds: a project is as active
+    /// through one of those as through a row under its own header.
+    static func activeProjectIds(
+        _ groups: [SidebarProjectGroup], pinned: [AgentSession] = [], kind: (AgentSession) -> SessionStatusGlyphKind
+    ) -> Set<UUID> {
+        Set(groups.compactMap { group in
+            guard let projectId = group.projectId else { return nil }
+            let threads = group.sessions + pinned.filter { $0.projectId == projectId }
+            return isActive(threads.map(kind)) ? projectId : nil
+        })
+    }
+
+    /// The projects that belong outside the fold right now: the active
+    /// ones, and the one holding the selected thread.
+    static func unfolded(active: Set<UUID>, selectedProjectId: UUID?) -> Set<UUID> {
+        selectedProjectId.map { active.union([$0]) } ?? active
+    }
+
+    /// The projects drawn outside the fold. `held` is `unfolded` as it was
+    /// when the pointer entered the list, nil while the pointer is outside:
+    /// a project changes sides only once the pointer has left, so no row
+    /// moves under it. One exception: the selected thread's project comes
+    /// out of a closed fold at once, because its row has to exist.
+    static func shown(live: Set<UUID>, held: Set<UUID>?, selectedProjectId: UUID?, isExpanded: Bool) -> Set<UUID> {
+        guard var shown = held else { return live }
+        if let selectedProjectId, !isExpanded { shown.insert(selectedProjectId) }
+        return shown
+    }
+
+    /// What can change whether the fold is held.
+    enum HoldEvent {
+        case pointerEntered
+        case pointerLeft
+        /// The sidebar hid, collapsed to the rail, or came back: the list
+        /// under the pointer is not the one it entered.
+        case sidebarModeChanged
+        /// The window stopped being key: no hover exit arrives while the
+        /// pointer rests over a window the user has left.
+        case windowResignedKey
+    }
+
+    /// The held set after `event` (`shown`'s `held`): the projects outside
+    /// the fold as the pointer enters, and nothing once the pointer leaves
+    /// or can no longer be trusted to be over the list.
+    static func held(after event: HoldEvent, live: Set<UUID>) -> Set<UUID>? {
+        event == .pointerEntered ? live : nil
+    }
+
+    /// How many threads in the folded projects need the user right now.
+    /// `idle` is the fold as drawn (`Arrangement.idle`), which a hold can
+    /// leave behind the threads' real state; `needsYou` reads that state
+    /// (`SessionNeedsYou.isGenuine`), so a project that started asking
+    /// while the fold was held still counts.
+    static func needYouCount(_ idle: [SidebarProjectGroup], needsYou: (AgentSession) -> Bool) -> Int {
+        idle.reduce(0) { $0 + $1.sessions.filter(needsYou).count }
+    }
+
+    /// The row's trailing label, a project header's "N need you"
+    /// (`SessionNeedsYou.headerCountLabel`); nil while nothing in the fold
+    /// needs the user.
+    static func needYouLabel(_ needYou: Int) -> String? {
+        needYou > 0 ? SessionNeedsYou.headerCountLabel(sessionCount: 0, needYou: needYou) : nil
+    }
+
+    /// The fold row, as the list draws it.
+    struct Row: Equatable {
+        /// How many projects the fold holds.
+        var count: Int
+        var isExpanded: Bool
+        /// The first idle group, which the row sits before while expanded;
+        /// nil while folded, when the row ends the list.
+        var beforeGroupId: String?
+    }
+
+    /// The one-view groups either side of the fold.
+    struct Arrangement: Equatable {
+        /// Pinned projects, then the unfolded ones, then "Unknown": in
+        /// `SidebarProjectGroup.make`'s order.
+        var listed: [SidebarProjectGroup]
+        /// The idle projects, in the same order.
+        var idle: [SidebarProjectGroup]
+        var isExpanded: Bool
+
+        /// The groups the list draws, in order.
+        var groups: [SidebarProjectGroup] { listed + (isExpanded ? idle : []) }
+
+        /// The fold row; nil with no idle project.
+        var row: Row? {
+            idle.isEmpty ? nil : Row(count: idle.count, isExpanded: isExpanded, beforeGroupId: isExpanded ? idle.first?.id : nil)
+        }
+    }
+
+    /// Splits `groups` (`SidebarProjectGroup.make`) at the fold: a group
+    /// folds when it is a real, unpinned project that `unfolded` leaves out.
+    static func arrange(_ groups: [SidebarProjectGroup], unfolded: Set<UUID>, isExpanded: Bool) -> Arrangement {
+        var arrangement = Arrangement(listed: [], idle: [], isExpanded: isExpanded)
+        for group in groups {
+            if let projectId = group.projectId, !group.isPinned, !unfolded.contains(projectId) {
+                arrangement.idle.append(group)
+            } else {
+                arrangement.listed.append(group)
+            }
+        }
+        return arrangement
+    }
+
+    /// What a click on the row does: shows or hides the idle projects on
+    /// the fold's spring, written through `expanded` (the views'
+    /// `@AppStorage` binding, so it persists). Reduce Motion: instant.
+    static func rowClicked(expanded: Binding<Bool>) {
+        let unfolding = !expanded.wrappedValue
+        withAnimation(ProjectAccordionState.toggleAnimation(unfolding: unfolding)) {
+            expanded.wrappedValue = unfolding
+        }
+    }
+}
+
+/// The idle fold's row (`SidebarIdleFold`): `[tile] IDLE · N ⌄`, drawn as a
+/// quiet project header: the dimmed tile of an empty project, the header's
+/// type in the dimmed ink, and its chevron. While a thread behind it needs
+/// the user it ends with a project header's "N need you", in the header's
+/// own ink. On the rail it is the tile alone. Clicking anywhere on it shows
+/// or hides the idle projects.
+struct IdleProjectsFoldRow: View {
+    /// The tile's face: more projects are behind it.
+    static let tileText = "…"
+
+    let count: Int
+    /// How many threads in the folded projects need the user
+    /// (`SidebarIdleFold.needYouCount`).
+    var needYouCount: Int = 0
+    let isExpanded: Bool
+    /// The row's place in the expand cascade (`SidebarLabelCascade`).
+    var staggerIndex: Int = 0
+    let onToggle: () -> Void
+
+    @ChromeScheme private var colorScheme
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @Environment(\.sidebarMorphOverride) private var morphOverride
+    @Environment(\.sidebarMorphDials) private var morphDials
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @FocusState private var isFocused: Bool
+
+    /// Ends as a project header's does: ", N need you".
+    static func accessibilityLabel(count: Int, needYouCount: Int = 0) -> String {
+        "Idle projects, \(count)" + (SidebarIdleFold.needYouLabel(needYouCount).map { ", \($0)" } ?? "")
+    }
+
+    static func accessibilityHint(isExpanded: Bool) -> String {
+        isExpanded ? "Hides the idle projects" : "Shows the idle projects"
+    }
+
+    var body: some View {
+        let progress = morphOverride ?? widthModel.morph
+        let metrics = widthModel.metrics(progress, dials: morphDials)
+        let dials = metrics.dials
+        let slot = dials.sidebarTileSize
+        let label = SidebarIdleFold.label(count: count)
+        let needYouLabel = SidebarIdleFold.needYouLabel(needYouCount)
+        // A tap gesture and a focus stop, like a project header.
+        HStack(spacing: 0) {
+            Color.clear
+                .frame(width: slot, height: slot)
+                .overlay {
+                    MorphTileFace(
+                        progress: progress,
+                        sizes: (dials.sidebarTileSize, dials.railTileSize),
+                        textSizes: (
+                            dials.tileTextSize(rail: false, letters: 1),
+                            dials.tileTextSize(rail: true, letters: 1)
+                        ),
+                        monogram: Self.tileText,
+                        isEmpty: true,
+                        isSelectedProject: false,
+                        redlineID: RedlineID.header(SidebarIdleFold.rowId) + ".tile",
+                        badgeCount: nil
+                    )
+                }
+                .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
+                .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
+            Text(label.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .monospacedDigit()
+                .lineLimit(1)
+                .modifier(MorphLabelFade(element: .names, staggerIndex: staggerIndex))
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .bold))
+                .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                .frame(width: ProjectAccordionHeader.chevronWidth)
+                .padding(.leading, 4)
+                .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
+            Spacer(minLength: needYouLabel == nil ? 0 : 8)
+            // A project header's trailing label: its type, ink and place.
+            if let needYouLabel {
+                Text(needYouLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .fixedSize()
+                    .frame(
+                        minWidth: SidebarMorphMetrics.trailingClusterWidth(
+                            resting: ProjectAccordionHeader.countMinWidth, progress: progress
+                        ),
+                        alignment: .trailing
+                    )
+                    .foregroundStyle(SidebarColors.secondaryText(colorScheme))
+                    .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
+                    .modifier(MorphTrailingClusterRide(metrics: metrics, slack: 0, progress: progress))
+                    .layoutPriority(2)
+            }
+        }
+        .foregroundStyle(SidebarColors.dimmedProject(colorScheme))
+        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+        .modifier(MorphHeight(from: dials.sidebarHeaderHeight, to: dials.railHeaderHeight, progress: progress))
+        .redlineFrame(RedlineID.header(SidebarIdleFold.rowId))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+        // Mid-morph the row is in flight: no clicks land.
+        .allowsHitTesting(!widthModel.isMorphing)
+        .help(progress >= 0.5 ? label : "")
+        .modifier(HeaderFocusStop())
+        .focused($isFocused)
+        .overlay(alignment: .leading) {
+            if isFocused {
+                Rectangle()
+                    .fill(SidebarColors.secondaryText(colorScheme))
+                    .frame(width: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .modifier(ToggleKeyActivation(action: onToggle))
+        .accessibilityElement(children: .ignore)
+        .accessibilityAction(.default, onToggle)
+        .accessibilityLabel(Self.accessibilityLabel(count: count, needYouCount: needYouCount))
+        .accessibilityValue(isExpanded ? "expanded" : "collapsed")
+        .accessibilityAddTraits([.isHeader, .isButton])
+        .accessibilityHint(Self.accessibilityHint(isExpanded: isExpanded))
     }
 }
 
