@@ -443,9 +443,9 @@ struct SessionRowPrompt: Equatable {
 /// One view folds every idle project into one row at the bottom of the
 /// list, "Idle · N" (Sean, 2026-11-15, "Idle folded").
 ///
-/// A project is active while any of its threads is working or needs you;
-/// every other project (no threads, or only done, stopped or error ones) is
-/// idle. Pinned projects never fold, and neither does the "Unknown" group.
+/// A project with an open thread is "literally not idle" (Sean, 2026-11-18):
+/// it is active whatever its threads' status. Only a project with no
+/// threads at all is idle. Pinned projects never fold, and neither does the "Unknown" group.
 /// The project holding the selected thread shows outside the fold: it is
 /// where the user is. Clicking the row shows the idle projects under it, as
 /// they draw anywhere else; the choice persists (`expandedKey`), folded by
@@ -468,11 +468,11 @@ enum SidebarIdleFold {
     /// The row's label.
     static func label(count: Int) -> String { "Idle · \(count)" }
 
-    /// A project is active while a thread of it is working or needs you.
+    /// A project is active while it has any thread, whatever its status.
     /// `kinds` are its threads' statuses as their rows show them
-    /// (`SessionNeedsYou.shownKind`).
+    /// (`SessionNeedsYou.shownKind`); only whether there are any matters.
     static func isActive(_ kinds: [SessionStatusGlyphKind]) -> Bool {
-        kinds.contains { $0 == .working || $0 == .needsInput }
+        !kinds.isEmpty
     }
 
     /// The active projects among `groups`. `pinned` are the threads drawn

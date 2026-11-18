@@ -260,11 +260,15 @@ enum CaptureFixture {
     ///   - `GHOSTTIES_CAPTURE_FIXTURE_LONG_LIST=1` (DEBUG builds only):
     ///     twelve more live sessions (`longListSessions`), so the one-view
     ///     list is taller than the window and has to scroll.
+    ///   - `GHOSTTIES_CAPTURE_FIXTURE_EMPTY_PROJECT=1` (DEBUG builds only):
+    ///     one more unpinned project, "quiet", with no thread, so the idle
+    ///     fold has a project to hold.
     struct SeedKnobs: Equatable {
         var zeroProjects = false
         var templateInUse = false
         #if DEBUG
         var longList = false
+        var emptyProject = false
         #endif
     }
 
@@ -275,6 +279,7 @@ enum CaptureFixture {
         )
         #if DEBUG
         knobs.longList = env["GHOSTTIES_CAPTURE_FIXTURE_LONG_LIST"] == "1"
+        knobs.emptyProject = env["GHOSTTIES_CAPTURE_FIXTURE_EMPTY_PROJECT"] == "1"
         #endif
         return knobs
     }
@@ -289,7 +294,7 @@ enum CaptureFixture {
 
     static func seededProjects(_ knobs: SeedKnobs) -> [Project] {
         if knobs.zeroProjects { return [] }
-        return fixtureProjects.map { fp in
+        let seeded = fixtureProjects.map { fp in
             Project(
                 id: fixedId(String(format: "%04d", fixtureProjects.firstIndex { $0.name == fp.name }! + 1)),
                 name: fp.name,
@@ -299,6 +304,15 @@ enum CaptureFixture {
                 lastActiveAt: Date()
             )
         }
+        #if DEBUG
+        if knobs.emptyProject {
+            return seeded + [Project(
+                id: fixedId("0008"), name: "quiet", rootPath: fixtureWorkingDirectory(for: "quiet"),
+                isPinned: false, ghostCharacter: .wisp, lastActiveAt: Date()
+            )]
+        }
+        #endif
+        return seeded
     }
 
     static let projects: [Project] = seededProjects(seedKnobs)

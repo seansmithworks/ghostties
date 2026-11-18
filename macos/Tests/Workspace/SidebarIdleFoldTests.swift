@@ -4,7 +4,8 @@ import GhosttiesCore
 @testable import Ghostty
 
 /// One view folds idle projects into one "Idle · N" row at the bottom of
-/// the list (`SidebarIdleFold`): which projects are idle, which never fold,
+/// the list (`SidebarIdleFold`): which projects are idle (only those with no
+/// thread), which never fold,
 /// what the row reads, where it sits, that its state persists, and that no
 /// project changes sides while the pointer is inside the list.
 @MainActor
@@ -47,12 +48,38 @@ final class SidebarIdleFoldTests: XCTestCase {
 
     // MARK: - Active or idle
 
-    func testAProjectIsActiveOnlyWhileAThreadIsWorkingOrNeedsYou() {
+    func testAProjectIsActiveWhileItHasAnyThread() {
         XCTAssertTrue(SidebarIdleFold.isActive([.working]))
         XCTAssertTrue(SidebarIdleFold.isActive([.needsInput]))
-        XCTAssertTrue(SidebarIdleFold.isActive([.done, .stopped, .working]), "one working thread is enough")
-        XCTAssertFalse(SidebarIdleFold.isActive([.done, .stopped, .error]), "done, stopped and error threads are idle")
+        XCTAssertTrue(SidebarIdleFold.isActive([.done]), "a done thread is an open thread")
+        XCTAssertTrue(SidebarIdleFold.isActive([.stopped, .error]), "so are stopped and error ones")
         XCTAssertFalse(SidebarIdleFold.isActive([]), "a project with no threads is idle")
+    }
+
+    func testAProjectWithOnlyADoneThreadIsOutsideTheFold() {
+        let quiet = project("quiet")
+        let result = arrangement([quiet], [session("q", quiet)], kinds: ["q": .done])
+
+        XCTAssertEqual(names(result.listed), ["quiet"])
+        XCTAssertTrue(result.idle.isEmpty)
+        XCTAssertNil(result.row)
+    }
+
+    func testAProjectWithOnlyAPlainShellIsOutsideTheFold() {
+        let shell = project("shell")
+        let result = arrangement([shell], [session("sh", shell)], kinds: ["sh": .stopped])
+
+        XCTAssertEqual(names(result.listed), ["shell"])
+        XCTAssertNil(result.row)
+    }
+
+    func testAProjectWithNoThreadFolds() {
+        let empty = project("empty")
+        let result = arrangement([empty], [])
+
+        XCTAssertTrue(result.listed.isEmpty)
+        XCTAssertEqual(names(result.idle), ["empty"])
+        XCTAssertEqual(result.row?.count, 1)
     }
 
     func testAThreadsStatusIsWhatItsRowShows() {
@@ -70,9 +97,9 @@ final class SidebarIdleFoldTests: XCTestCase {
         let w = session("w", wren), a = session("a", atlas), s = session("s", silo)
         let result = arrangement([wren, atlas, silo, empty], [w, a, s], kinds: ["w": .working, "a": .needsInput, "s": .error])
 
-        XCTAssertEqual(names(result.listed), ["atlas", "wren"], "a working and a needs-you project, by name")
-        XCTAssertEqual(names(result.idle), ["empty", "silo"], "no threads, and an error thread only")
-        XCTAssertEqual(names(result.groups), ["atlas", "wren"], "folded: the idle projects are not drawn")
+        XCTAssertEqual(names(result.listed), ["atlas", "silo", "wren"], "any thread, whatever its status, by name")
+        XCTAssertEqual(names(result.idle), ["empty"], "no threads")
+        XCTAssertEqual(names(result.groups), ["atlas", "silo", "wren"], "folded: the idle project is not drawn")
     }
 
     // MARK: - Never folded
@@ -80,17 +107,17 @@ final class SidebarIdleFoldTests: XCTestCase {
     func testPinnedProjectsNeverFold() {
         let pinnedIdle = project("pinned-idle", pinned: true), pinnedEmpty = project("pinned-empty", pinned: true)
         let busy = project("busy"), quiet = project("quiet")
-        let p = session("p", pinnedIdle), b = session("b", busy), q = session("q", quiet)
-        let result = arrangement([pinnedIdle, pinnedEmpty, busy, quiet], [p, b, q], kinds: ["p": .stopped, "b": .working])
+        let p = session("p", pinnedIdle), b = session("b", busy)
+        let result = arrangement([pinnedIdle, pinnedEmpty, busy, quiet], [p, b], kinds: ["p": .stopped, "b": .working])
 
-        XCTAssertEqual(names(result.listed), ["pinned-idle", "pinned-empty", "busy"], "pinned stay on top, active or not")
+        XCTAssertEqual(names(result.listed), ["pinned-idle", "pinned-empty", "busy"], "pinned stay on top, with a thread or without")
         XCTAssertEqual(names(result.idle), ["quiet"])
     }
 
     func testTheSelectedThreadsIdleProjectStaysOutOfTheFold() {
         let busy = project("busy"), here = project("here"), quiet = project("quiet")
-        let b = session("b", busy), h = session("h", here), q = session("q", quiet)
-        let result = arrangement([busy, here, quiet], [b, h, q], kinds: ["b": .working], selected: h)
+        let b = session("b", busy), h = session("h", here)
+        let result = arrangement([busy, here, quiet], [b, h], kinds: ["b": .working], selected: h)
 
         XCTAssertEqual(names(result.listed), ["busy", "here"], "the selected thread's project is listed, in its place by name")
         XCTAssertEqual(names(result.idle), ["quiet"])
@@ -140,11 +167,11 @@ final class SidebarIdleFoldTests: XCTestCase {
 
     func testTheExpandedRowLeadsTheIdleProjects() {
         let busy = project("busy"), x = project("x")
-        let b = session("b", busy), x1 = session("x1", x)
-        let result = arrangement([busy, x, project("y")], [b, x1], kinds: ["b": .working], isExpanded: true)
+        let b = session("b", busy)
+        let result = arrangement([busy, x, project("y")], [b], kinds: ["b": .working], isExpanded: true)
 
         XCTAssertEqual(names(result.groups), ["busy", "x", "y"])
-        XCTAssertEqual(itemWords(result), ["busy", "row", "-", "idle", "-", "x", "row", "-", "y"])
+        XCTAssertEqual(itemWords(result), ["busy", "row", "-", "idle", "-", "x", "-", "y"])
         XCTAssertEqual(result.row, SidebarIdleFold.Row(count: 2, isExpanded: true, beforeGroupId: x.id.uuidString))
     }
 
@@ -233,17 +260,24 @@ final class SidebarIdleFoldTests: XCTestCase {
     func testArrangingByTheHeldSetKeepsEveryProjectWhereItWas() {
         let alpha = project("alpha"), beta = project("beta"), gamma = project("gamma")
         let a = session("a", alpha), b = session("b", beta), g = session("g", gamma)
-        let before = arrangement([alpha, beta, gamma], [a, b, g], kinds: ["a": .working, "b": .working])
-        // beta finishes and gamma starts while the pointer is inside.
-        let during = arrangement(
-            [alpha, beta, gamma], [a, b, g], kinds: ["a": .working, "g": .working], held: [alpha.id, beta.id]
-        )
-        let after = arrangement([alpha, beta, gamma], [a, b, g], kinds: ["a": .working, "g": .working])
+        let before = arrangement([alpha, beta, gamma], [a, b])
+        // beta's thread closes and gamma gets one while the pointer is inside.
+        let during = arrangement([alpha, beta, gamma], [a, g], held: [alpha.id, beta.id])
+        let after = arrangement([alpha, beta, gamma], [a, g])
 
         XCTAssertEqual(names(during.listed), names(before.listed))
         XCTAssertEqual(names(during.idle), names(before.idle))
         XCTAssertEqual(names(after.listed), ["alpha", "gamma"], "once the pointer leaves, the projects change sides")
         XCTAssertEqual(names(after.idle), ["beta"])
+    }
+
+    func testAProjectGainingAThreadStaysFoldedUnderThePointer() {
+        let alpha = project("alpha"), beta = project("beta")
+        let a = session("a", alpha), b = session("b", beta)
+        let during = arrangement([alpha, beta], [a, b], held: [alpha.id])
+
+        XCTAssertEqual(names(during.idle), ["beta"], "the hold keeps beta where it was")
+        XCTAssertNil(arrangement([alpha, beta], [a, b]).row, "pointer gone: beta comes out")
     }
 
     /// The pointer's exit is what ends a hold, and none arrives when the
@@ -261,7 +295,7 @@ final class SidebarIdleFoldTests: XCTestCase {
 
     /// A pinned thread draws in the Pinned section, not under its
     /// project's header, so no group holds it. Its project is still active.
-    func testAProjectWhoseOnlyWorkingThreadIsPinnedIsActive() {
+    func testAProjectWhoseOnlyThreadIsPinnedIsActive() {
         let wren = project("wren"), silo = project("silo"), atlas = project("atlas")
         let pinnedWorking = session("pw", wren), pinnedAsking = session("pa", silo), pinnedDone = session("pd", atlas)
         let quiet = session("q", wren)
@@ -270,19 +304,19 @@ final class SidebarIdleFoldTests: XCTestCase {
         let groups = SidebarProjectGroup.make(active: [quiet], projects: [wren, silo, atlas])
 
         XCTAssertEqual(
-            SidebarIdleFold.activeProjectIds(groups) { kinds[$0.name] ?? .done }, [],
-            "control: by their own rows alone, all three are idle"
+            SidebarIdleFold.activeProjectIds(groups) { kinds[$0.name] ?? .done }, [wren.id],
+            "control: by their own rows alone, only wren has a thread"
         )
         let active = SidebarIdleFold.activeProjectIds(groups, pinned: [pinnedWorking, pinnedAsking, pinnedDone]) {
             kinds[$0.name] ?? .done
         }
-        XCTAssertEqual(active, [wren.id, silo.id], "a pinned thread working or needing you makes its project active")
+        XCTAssertEqual(active, [wren.id, silo.id, atlas.id], "a pinned thread, whatever its status, makes its project active")
 
         let result = SidebarIdleFold.arrange(
             groups, unfolded: SidebarIdleFold.unfolded(active: active, selectedProjectId: nil), isExpanded: false
         )
-        XCTAssertEqual(names(result.listed), ["silo", "wren"])
-        XCTAssertEqual(names(result.idle), ["atlas"], "a pinned thread that is done leaves its project idle")
+        XCTAssertEqual(names(result.listed), ["atlas", "silo", "wren"])
+        XCTAssertTrue(result.idle.isEmpty)
     }
 
     // MARK: - Needs you, behind the fold

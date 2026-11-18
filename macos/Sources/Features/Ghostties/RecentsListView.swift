@@ -587,9 +587,8 @@ struct RecentsListView: View {
     }
 
     /// The projects that belong outside the idle fold right now
-    /// (`SidebarIdleFold.unfolded`): the ones with a thread working or
-    /// needing you, under their header or in Pinned, and the selected
-    /// thread's.
+    /// (`SidebarIdleFold.unfolded`): the ones with any thread, under their
+    /// header or in Pinned, and the selected thread's.
     private func liveUnfoldedProjects(_ active: [AgentSession]) -> Set<UUID> {
         _ = promptRevision
         let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
