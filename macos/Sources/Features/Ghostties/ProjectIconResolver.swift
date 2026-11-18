@@ -6,14 +6,18 @@ import ImageIO
 /// anything, and never follows a path out of the project root.
 ///
 /// Candidate order (first decodable hit wins):
-/// 1. `apple-touch-icon.png` in `public/ static/ web/ app/` then the root
+/// 1. `apple-touch-icon.png` in `public/ static/ web/ app/ src/app/` then the root
 /// 2. the largest PNG named by an `*.xcassets/AppIcon.appiconset/Contents.json`
 ///    (depth <= 4; build and dependency directories skipped)
-/// 3. `app/icon.png`, `app/apple-icon.png`, `src/app/icon.png`
-/// 4. `favicon.png` / `favicon.ico` in `public/ static/ assets/ web/ app/` then the root
-/// 5. `icon.png` at the root
+/// 3. `Resources/AppIcon.icns`, `AppIcon.icns`, then any other `*.icns` the
+///    same bounded walk finds (sorted by path)
+/// 4. `app/icon.png`, `app/apple-icon.png`, `src/app/icon.png`, `src/app/apple-icon.png`
+/// 5. `favicon.png` / `favicon.ico` in `public/ static/ assets/ web/ app/ src/app/`
+///    then the root
+/// 6. `icon.png` at the root
 ///
-/// No SVG in v1.
+/// No SVG in v1. Changing this list changes what "no icon" means, so bump
+/// `candidatesVersion` with it: the store's negative cache is keyed on it.
 ///
 /// Safety model: a file is opened first and judged second. The descriptor is
 /// `fstat`ed (must be a regular file within the size cap) and `F_GETPATH`
@@ -22,6 +26,9 @@ import ImageIO
 /// ImageIO's thumbnail path, capped at 128px.
 enum ProjectIconResolver {
     static let maxThumbnailPixels = 128
+    /// The candidate list's revision. A negative result cached under an
+    /// older one is stale (`ProjectIconStore`): the project re-resolves.
+    static let candidatesVersion = 2
 
     struct Limits {
         var maxFileBytes = 1_048_576
@@ -98,7 +105,7 @@ enum ProjectIconResolver {
             dirs.flatMap { dir in names.map { dir.isEmpty ? $0 : "\(dir)/\($0)" } }
         }
 
-        if let hit = first(inDirs(["public", "static", "web", "app", ""], ["apple-touch-icon.png"])) {
+        if let hit = first(inDirs(["public", "static", "web", "app", "src/app", ""], ["apple-touch-icon.png"])) {
             return .hit(hit)
         }
         let walk = appIconSets(realRoot: realRoot, limits: limits, deadline: deadline)
@@ -107,8 +114,13 @@ enum ProjectIconResolver {
                 if let hit = attempt(set + "/" + file) { return .hit(hit) }
             }
         }
-        if let hit = first(["app/icon.png", "app/apple-icon.png", "src/app/icon.png"]) { return .hit(hit) }
-        if let hit = first(inDirs(["public", "static", "assets", "web", "app", ""], ["favicon.png", "favicon.ico"])) {
+        let namedIcns = ["Resources/AppIcon.icns", "AppIcon.icns"]
+        let walkedIcns = walk.icns.map { String($0.dropFirst(realRoot.count + 1)) }.filter { !namedIcns.contains($0) }
+        if let hit = first(namedIcns + walkedIcns) { return .hit(hit) }
+        if let hit = first(["app/icon.png", "app/apple-icon.png", "src/app/icon.png", "src/app/apple-icon.png"]) {
+            return .hit(hit)
+        }
+        if let hit = first(inDirs(["public", "static", "assets", "web", "app", "src/app", ""], ["favicon.png", "favicon.ico"])) {
             return .hit(hit)
         }
         if let hit = first(["icon.png"]) { return .hit(hit) }
@@ -188,17 +200,21 @@ enum ProjectIconResolver {
         "node_modules", ".git", "build", "DerivedData", "Pods", ".build",
     ]
 
-    /// `AppIcon.appiconset` directories inside an `*.xcassets`, depth <= 4,
-    /// bounded by entry count and wall-clock budget. Sorted for determinism.
-    private static func appIconSets(realRoot: String, limits: Limits, deadline: TimeInterval) -> (sets: [String], truncated: Bool) {
+    /// `AppIcon.appiconset` directories inside an `*.xcassets`, and `*.icns`
+    /// files, depth <= 4, bounded by entry count and wall-clock budget.
+    /// Sorted for determinism.
+    private static func appIconSets(
+        realRoot: String, limits: Limits, deadline: TimeInterval
+    ) -> (sets: [String], icns: [String], truncated: Bool) {
         let rootURL = URL(fileURLWithPath: realRoot, isDirectory: true)
         guard let walker = FileManager.default.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: []
-        ) else { return ([], false) }
+        ) else { return ([], [], false) }
 
         var found: [String] = []
+        var icns: [String] = []
         var seen = 0
         var truncated = false
         while let url = walker.nextObject() as? URL {
@@ -209,7 +225,10 @@ enum ProjectIconResolver {
             }
 
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-            guard isDirectory else { continue }
+            guard isDirectory else {
+                if url.pathExtension.lowercased() == "icns" { icns.append(url.path) }
+                continue
+            }
             let name = url.lastPathComponent
             if skippedDirectories.contains(name) { walker.skipDescendants(); continue }
             if name == "AppIcon.appiconset" {
@@ -221,7 +240,7 @@ enum ProjectIconResolver {
             }
             if walker.level >= 4 { walker.skipDescendants() }
         }
-        return (found.sorted(), truncated)
+        return (found.sorted(), icns.sorted(), truncated)
     }
 
     /// Filenames from `Contents.json`, largest pixel size first. Only PNGs.

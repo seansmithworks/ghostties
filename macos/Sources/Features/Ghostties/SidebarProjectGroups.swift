@@ -846,15 +846,15 @@ struct ProjectAccordionHeader: View {
     /// Clear space between the chip and a "N need you" label beside it.
     static let newThreadLabelGap: CGFloat = 8
 
-    /// The chip's leading edge, from the trailing label's laid-out edges.
-    /// Over a plain count its trailing edge is the count's, so it takes the
-    /// count's place and sits at the same x whatever the count's width;
-    /// beside a "N need you" label it ends one gap before the label, which
-    /// stays.
+    /// The chip's leading edge, from the trailing label's text edges (the
+    /// text itself, not its 18pt minimum frame). Over a plain count the chip
+    /// is centred on the count, so the "+" glyph lands where the digits
+    /// were; the square may overhang into the trailing padding. Beside a
+    /// "N need you" label it ends one gap before the label, which stays.
     static func newThreadChipMinX(labelMinX: CGFloat, labelMaxX: CGFloat, needYouCount: Int) -> CGFloat {
         needYouCount > 0
             ? labelMinX - newThreadLabelGap - newThreadChipSize
-            : labelMaxX - newThreadChipSize
+            : (labelMinX + labelMaxX) / 2 - newThreadChipSize / 2
     }
 
     /// The room a "N need you" header keeps free before its label for the
@@ -909,7 +909,8 @@ struct ProjectAccordionHeader: View {
     @State private var isHovered = false
     /// The chevron's and count's resting trailing edges in the header's own
     /// space, measured outside their ride (`MorphTrailingClusterRide`), and
-    /// the count's leading edge, which places the "+" chip.
+    /// the count text's own width, which with the count's trailing edge
+    /// places the "+" chip.
     @State private var clusterEdges: [ClusterPart: CGFloat] = [:]
 
     var body: some View {
@@ -976,6 +977,10 @@ struct ProjectAccordionHeader: View {
                     .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
                     .fixedSize()
+                    // The text's own width: it trails the minimum frame, so
+                    // a one-digit count is narrower than the frame measured
+                    // below. A width, so the ride's travel can't skew it.
+                    .background(CountTextWidthReporter())
                     .frame(
                         minWidth: SidebarMorphMetrics.trailingClusterWidth(resting: Self.countMinWidth, progress: progress),
                         alignment: .trailing
@@ -986,7 +991,7 @@ struct ProjectAccordionHeader: View {
                     .animation(SidebarUISpring.hover.settle(), value: showsNewThread)
                     .modifier(MorphLabelFade(element: .trailingCluster, staggerIndex: staggerIndex))
                     .modifier(MorphTrailingClusterRide(metrics: metrics, slack: clusterSlack(.count), progress: progress))
-                    .background(ClusterEdgeReporter(part: .count, leadingPart: .countLeading))
+                    .background(ClusterEdgeReporter(part: .count))
                     // Sized before the name: the frame's 18pt minimum would
                     // otherwise let a long name take the room "2 need you"
                     // draws in, and the two would overlap.
@@ -1030,7 +1035,7 @@ struct ProjectAccordionHeader: View {
         // separate button to VoiceOver and a separate keyboard stop, hover
         // or not.
         .overlay(alignment: .leading) {
-            if let onNewThread, let minX = clusterEdges[.countLeading], let maxX = clusterEdges[.count] {
+            if let onNewThread, let maxX = clusterEdges[.count], let textWidth = clusterEdges[.countTextWidth] {
                 ProjectHeaderNewThreadButton(
                     label: Self.newThreadLabel(project: name),
                     isVisible: showsNewThread,
@@ -1038,9 +1043,10 @@ struct ProjectAccordionHeader: View {
                     isFocused: $isNewThreadFocused,
                     action: onNewThread
                 )
-                // `clusterEdges` are measured inside the leading padding.
+                // `clusterEdges` are measured inside the leading padding;
+                // the count's text ends at its frame's trailing edge.
                 .offset(x: SidebarDialTuning.rowLeadingPadding()
-                    + Self.newThreadChipMinX(labelMinX: minX, labelMaxX: maxX, needYouCount: needYouCount))
+                    + Self.newThreadChipMinX(labelMinX: maxX - textWidth, labelMaxX: maxX, needYouCount: needYouCount))
                 // The rail's header is its tile alone.
                 .allowsHitTesting(progress <= 0 && !widthModel.isMorphing)
                 .accessibilityHidden(progress > 0)
@@ -1056,23 +1062,30 @@ struct ProjectAccordionHeader: View {
         return count - edge
     }
 
-    enum ClusterPart: Hashable { case chevron, count, countLeading }
+    /// `countTextWidth` is a width, not an edge (`CountTextWidthReporter`).
+    enum ClusterPart: Hashable { case chevron, count, countTextWidth }
 
-    /// Reports a cluster part's resting trailing edge (and, under
-    /// `leadingPart`, its leading edge). Attached outside the part's ride,
-    /// so it reads the laid-out frame, not the drawn one.
+    /// Reports a cluster part's resting trailing edge. Attached outside the
+    /// part's ride, so it reads the laid-out frame, not the drawn one.
     private struct ClusterEdgeReporter: View {
         static let space = "ProjectAccordionHeader.cluster"
         let part: ClusterPart
-        var leadingPart: ClusterPart?
 
         var body: some View {
             GeometryReader { proxy in
-                let frame = proxy.frame(in: .named(Self.space))
                 Color.clear.preference(
                     key: ClusterEdgesKey.self,
-                    value: leadingPart.map { [part: frame.maxX, $0: frame.minX] } ?? [part: frame.maxX]
+                    value: [part: proxy.frame(in: .named(Self.space)).maxX]
                 )
+            }
+        }
+    }
+
+    /// Reports the count text's own width, under `.countTextWidth`.
+    private struct CountTextWidthReporter: View {
+        var body: some View {
+            GeometryReader { proxy in
+                Color.clear.preference(key: ClusterEdgesKey.self, value: [.countTextWidth: proxy.size.width])
             }
         }
     }

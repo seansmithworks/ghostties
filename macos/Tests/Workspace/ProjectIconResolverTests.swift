@@ -18,17 +18,26 @@ struct ProjectIconResolverTests {
             "icon.png",
             "favicon.ico",
             "favicon.png",
+            "src/app/favicon.ico",
             "public/favicon.png",
+            "src/app/apple-icon.png",
             "src/app/icon.png",
             "app/apple-icon.png",
             "app/icon.png",
+            "Tools/Other.icns",
+            "AppIcon.icns",
+            "Resources/AppIcon.icns",
             "Sources/Assets.xcassets/AppIcon.appiconset/big.png",
+            "src/app/apple-touch-icon.png",
             "public/apple-touch-icon.png",
         ]
-        for rel in ordered where !rel.contains("xcassets") && rel != "favicon.ico" {
-            try ProjectIconFixtures.writePNG(root, rel)
+        for rel in ordered where !rel.contains("xcassets") {
+            switch (rel as NSString).pathExtension {
+            case "ico": try ProjectIconFixtures.write(root, rel, data: ProjectIconFixtures.pngData())
+            case "icns": try ProjectIconFixtures.write(root, rel, data: ProjectIconFixtures.icnsData())
+            default: try ProjectIconFixtures.writePNG(root, rel)
+            }
         }
-        try ProjectIconFixtures.write(root, "favicon.ico", data: ProjectIconFixtures.pngData())
         try ProjectIconFixtures.writeAppIconSet(
             root, under: "Sources/Assets.xcassets/AppIcon.appiconset",
             entries: [("big.png", "512x512", "1x", 128)]
@@ -188,6 +197,24 @@ struct ProjectIconResolverTests {
         try ProjectIconFixtures.write(root, "public/favicon.ico", data: ProjectIconFixtures.icoData(pixels: 48))
         let hit = try #require(ProjectIconResolver.resolve(root: root))
         #expect(hit.source.url.lastPathComponent == "favicon.ico")
+        #expect(hit.image.width > 0)
+    }
+
+    /// Next.js with a `src/` layout keeps its favicon in `src/app`.
+    @Test func nextSrcAppFaviconResolves() throws {
+        let root = try ProjectIconFixtures.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ProjectIconFixtures.write(root, "src/app/favicon.ico", data: ProjectIconFixtures.icoData(pixels: 48))
+        #expect(winner(root) == "src/app/favicon.ico")
+    }
+
+    /// A Mac app with no asset catalog, its icon an `.icns` in `Resources`.
+    @Test func resourcesAppIconIcnsResolves() throws {
+        let root = try ProjectIconFixtures.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ProjectIconFixtures.write(root, "Resources/AppIcon.icns", data: ProjectIconFixtures.icnsData())
+        let hit = try #require(ProjectIconResolver.resolve(root: root))
+        #expect(hit.source.url.lastPathComponent == "AppIcon.icns")
         #expect(hit.image.width > 0)
     }
 
