@@ -1861,6 +1861,10 @@ class WorkspaceViewContainer: NSView {
         morphClock = nil
         widthModel.isMorphing = false
         setCardLeadingClamp(nil)
+        // A close or reopen fades the sidebar on the spring's frames: land
+        // the fade at the mode's own value. (`transitionTo` restarts the
+        // fade from where it was.)
+        sidebarHostingView.alphaValue = sidebarMode == .closed ? 0 : 1
     }
 
     /// Where the card's leading edge is, from the constraints rather than the
@@ -1989,7 +1993,9 @@ class WorkspaceViewContainer: NSView {
                 sidebarWidthConstraint.animator().constant = railWidth
                 widthModel.width = railWidth
             case .closed:
-                break
+                // Lands a spring close the cancel above stopped mid-way.
+                sidebarWidthConstraint.animator().constant = 0
+                shadowHostLeadingToSuperview.animator().constant = SidebarDialTuning.windowMargin()
             }
         }, completionHandler: { [weak self] in
             guard let self, self.sidebarTransitionGeneration == generation else { return }
@@ -2663,6 +2669,16 @@ class WorkspaceViewContainer: NSView {
         let isCollapsePair = (previousMode == .pinned && newMode == .collapsed)
             || (previousMode == .collapsed && newMode == .pinned)
         let morphs = isCollapsePair && sidebarBodyMorphs
+        // The full close and reopen (pinned/rail ⇄ closed) run on a spring
+        // too (`sidebarCloseReopenSpring`), on the same driver as the morph.
+        // Read before the cancel below: where the card and the sidebar's
+        // fade are now, so the spring starts there.
+        let closeReopenSpring = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            ? nil
+            : WorkspaceLayout.sidebarCloseReopenSpring(from: previousMode, to: newMode)
+        let springCloses = closeReopenSpring != nil && newMode == .closed
+        let cardLeadingAtStart = cardLeadingFromConstraints
+        let sidebarAlphaAtStart = sidebarHostingView.alphaValue
         if !isCollapsePair || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             // Not a spring: the duration-curve path (or the Reduce Motion
             // snap) below takes the constraints from wherever a running
@@ -2691,10 +2707,14 @@ class WorkspaceViewContainer: NSView {
         // `shadowHostLeadingToSuperview` still holds the closed inset from
         // before the reveal, so the swap below would jump the card there in
         // the first layout pass, over the sidebar still animating out — the
-        // close read as instant. (Cmd+Shift+S from pinned has the same jump;
-        // left as is in this spike.)
+        // close read as instant. Cmd+Shift+S from pinned or the rail had the
+        // same jump; its spring close starts the card where it is too.
         if endsClosedHoverReveal {
             shadowHostLeadingToSuperview.constant = cardLeadingFromConstraints
+        } else if springCloses {
+            // The spring close: the card rides from the sidebar's edge to
+            // the window margin on the spring, not a jump at the swap.
+            shadowHostLeadingToSuperview.constant = cardLeadingAtStart
         }
 
         // 1. Swap leading constraints before animation.
@@ -2779,6 +2799,9 @@ class WorkspaceViewContainer: NSView {
             self.setCardLeadingClamp(nil)
             // A pinned reveal's backing and z-order outlive its motion.
             if !self.isRailRevealPresented { self.hideRailRevealLayers() }
+            // A spring close arms the closed hot zone once it has settled
+            // (step 7 below), not on a fixed delay that would beat it.
+            if springCloses && self.sidebarMode == .closed { self.updateTrackingAreas() }
             // A Window margin change made mid-transition was skipped.
             self.applyWindowMargin()
             // Settle the Flow 05 collapse cross-fade (if this transition
@@ -2843,6 +2866,34 @@ class WorkspaceViewContainer: NSView {
                 targets,
                 spring: WorkspaceLayout.sidebarMorphSpring(collapsing: newMode == .collapsed),
                 onFrame: pinsReveal ? { [weak self] p in self?.setRailRevealShadow(shadowFrom * (1 - min(max(p, 0), 1))) } : nil,
+                completion: animationCompletion
+            )
+        } else if let spring = closeReopenSpring {
+            // The full close and reopen: every constraint on one spring, as
+            // the morph above, and the sidebar's fade on its progress. The
+            // fade starts from wherever an interrupted one left it.
+            var targets: [(NSLayoutConstraint, CGFloat)] = []
+            applyTransitionConstraints(for: newMode, inset: inset, write: { targets.append(($0, $1)) })
+            sidebarOverlayBackground.alphaValue = 0
+            sidebarHostingView.alphaValue = sidebarAlphaAtStart
+            let alphaTarget: CGFloat = newMode == .closed ? 0 : 1
+            if !springCloses {
+                // Reopen overshoots: the card stays between where it was
+                // (the closed margin) and its pinned/rail place, as the
+                // morph's expand does.
+                let targetWidth = targets.first { $0.0 === sidebarWidthConstraint }?.1 ?? sidebarWidthConstraint.constant
+                let targetGap = targets.first { $0.0 === shadowHostLeadingToSidebar }?.1 ?? shadowHostLeadingToSidebar.constant
+                let cardFrom = shadowHostLeadingToSuperview.constant
+                let cardTo = targetWidth + targetGap
+                setCardLeadingClamp(min(cardFrom, cardTo)...max(cardFrom, cardTo))
+            }
+            motion.animate(
+                targets,
+                spring: spring,
+                onFrame: { [weak self] p in
+                    let t = CGFloat(min(max(p, 0), 1))
+                    self?.sidebarHostingView.alphaValue = sidebarAlphaAtStart + (alphaTarget - sidebarAlphaAtStart) * t
+                },
                 completion: animationCompletion
             )
         } else {
@@ -2919,15 +2970,18 @@ class WorkspaceViewContainer: NSView {
         // its tracking area immediately; closing delays the 24pt hot zone's
         // activation until the close motion has actually finished (Flow 05:
         // "hidden → 24px at 180ms, step") so a fast mouse can't trigger the
-        // reveal overlay while the card is still mid-close.
+        // reveal overlay while the card is still mid-close. A spring close
+        // has no fixed length: its completion arms the hot zone instead.
         if newMode == .closed {
             if let area = activeTrackingArea {
                 removeTrackingArea(area)
                 activeTrackingArea = nil
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + WorkspaceLayout.closedHotZoneActivationDelay) { [weak self] in
-                guard let self, self.sidebarMode == .closed else { return }
-                self.updateTrackingAreas()
+            if !springCloses {
+                DispatchQueue.main.asyncAfter(deadline: .now() + WorkspaceLayout.closedHotZoneActivationDelay) { [weak self] in
+                    guard let self, self.sidebarMode == .closed else { return }
+                    self.updateTrackingAreas()
+                }
             }
         } else {
             updateTrackingAreas()

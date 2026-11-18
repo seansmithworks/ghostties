@@ -210,24 +210,67 @@ struct SidebarPresenceTests {
         }
     }
 
-    /// Full close runs 180ms on the close curve regardless of which visible
-    /// mode it closes from — closing has nothing left to read, so it never
-    /// waits on the slower drawer curve.
-    @Test func fullCloseTimingIs180msOnCloseCurveFromAnyVisibleMode() {
-        for start: SidebarMode in [.pinned, .collapsed, .overlay] {
-            let timing = WorkspaceLayout.sidebarTransitionTiming(from: start, to: .closed)
-            #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.18, curve: .close))
+    /// Full close (pinned or rail → closed) runs on a spring in the
+    /// collapse spring's family — Sean: the flat 180ms close had "no play to
+    /// it like the other state changes" — and never overshoots
+    /// (motion-standards: "never bounce a close").
+    @Test func fullCloseRunsOnTheCollapseSpringWithNoOvershoot() {
+        withDials {
+            for start: SidebarMode in [.pinned, .collapsed] {
+                let spring = WorkspaceLayout.sidebarCloseReopenSpring(from: start, to: .closed)
+                #expect(spring == WorkspaceLayout.sidebarCloseSpring)
+                #expect(spring == WorkspaceLayout.sidebarMorphCollapseSpring)
+                #expect(spring?.bounce == 0)
+            }
         }
     }
 
-    /// Reopen (closed → pinned or collapsed) runs 240ms on the drawer curve —
-    /// coming back, the user is reading again, so it mirrors expand's timing
-    /// rather than the faster close.
-    @Test func reopenTimingIs240msOnDrawerCurve() {
-        for target: SidebarMode in [.pinned, .collapsed] {
-            let timing = WorkspaceLayout.sidebarTransitionTiming(from: .closed, to: target)
-            #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.24, curve: .drawer))
+    /// Reopen (closed → pinned or rail) runs on a spring in the open
+    /// spring's family, overshoot included.
+    @Test func reopenRunsOnTheOpenSpring() {
+        withDials {
+            for target: SidebarMode in [.pinned, .collapsed] {
+                let spring = WorkspaceLayout.sidebarCloseReopenSpring(from: .closed, to: target)
+                #expect(spring == WorkspaceLayout.sidebarReopenSpring)
+                #expect(spring == WorkspaceLayout.sidebarMorphOpenSpring)
+            }
         }
+    }
+
+    /// The "Close springs" dials reach the close and reopen springs. The
+    /// close has no bounce dial: whatever else is dialled, it never bounces.
+    @Test func closeSpringDialsDriveTheCloseAndReopenSprings() {
+        withDials({
+            $0.set(0.5, forKey: SidebarDialTuning.motionCloseResponseKey)
+            $0.set(0.45, forKey: SidebarDialTuning.motionReopenResponseKey)
+            $0.set(0.1, forKey: SidebarDialTuning.motionReopenBounceKey)
+            $0.set(0.4, forKey: SidebarDialTuning.motionCollapseBounceKey)
+        }) {
+            #expect(WorkspaceLayout.sidebarCloseReopenSpring(from: .pinned, to: .closed) == SidebarSpring(response: 0.5, bounce: 0))
+            #expect(WorkspaceLayout.sidebarCloseReopenSpring(from: .closed, to: .collapsed) == SidebarSpring(response: 0.45, bounce: 0.1))
+        }
+    }
+
+    /// Only the full close and reopen take this spring: the morph has its
+    /// own, and a peek out of closed (overlay, hover reveal) keeps its
+    /// duration curve.
+    @Test func closeReopenSpringCoversOnlyTheCloseAndReopenPairs() {
+        let others: [(SidebarMode, SidebarMode)] = [
+            (.pinned, .collapsed), (.collapsed, .pinned),
+            (.overlay, .closed), (.closed, .overlay),
+            (.hoverRevealed, .closed), (.closed, .hoverRevealed),
+            (.overlay, .pinned),
+        ]
+        for (from, to) in others {
+            #expect(WorkspaceLayout.sidebarCloseReopenSpring(from: from, to: to) == nil)
+        }
+    }
+
+    /// A peek out of closed (the overlay) dismissing back to closed keeps
+    /// its 180ms on the close curve.
+    @Test func overlayDismissToClosedKeeps180msOnCloseCurve() {
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .overlay, to: .closed)
+        #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.18, curve: .close))
     }
 
     /// Pairs the Flow 05 canvas never named — anything routing through
@@ -269,12 +312,12 @@ struct SidebarPresenceTests {
             == collapseTiming.duration)
     }
 
-    /// The closed-state hot zone activates only after the full-close motion
-    /// (180ms) has actually finished — the delay must be at least as long as
-    /// the close animation itself, or the reveal overlay could fire before
-    /// the card has reached the edge.
+    /// The closed-state hot zone activates only after a timed close (180ms)
+    /// has actually finished — the delay must be at least as long as the
+    /// close animation itself, or the reveal overlay could fire before the
+    /// card has reached the edge. (A spring close arms it when it settles.)
     @Test func closedHotZoneActivatesNoSoonerThanCloseFinishes() {
-        let closeTiming = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .closed)
+        let closeTiming = WorkspaceLayout.sidebarTransitionTiming(from: .overlay, to: .closed)
         #expect(WorkspaceLayout.closedHotZoneActivationDelay >= closeTiming.duration)
     }
 

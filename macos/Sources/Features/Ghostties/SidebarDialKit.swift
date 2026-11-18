@@ -216,6 +216,13 @@ enum SidebarDialTuning {
     static let motionCollapseResponseKey = "ghostties.sidebarDial.motion.collapseResponse"
     static let motionCollapseBounceKey = "ghostties.sidebarDial.motion.collapseBounce"
 
+    // MARK: Motion: the full close and reopen's springs
+    // (`WorkspaceLayout.sidebarCloseReopenSpring`). The close has no bounce
+    // dial: it never overshoots.
+    static let motionCloseResponseKey = "ghostties.sidebarDial.motion.closeResponse"
+    static let motionReopenResponseKey = "ghostties.sidebarDial.motion.reopenResponse"
+    static let motionReopenBounceKey = "ghostties.sidebarDial.motion.reopenBounce"
+
     // MARK: Tray shadow per sidebar state (light appearance)
     // The tray pills' shadow in light, tuned per state: the pinned sidebar,
     // the rail, and the hover bar (the overlay revealed from closed).
@@ -574,6 +581,17 @@ enum SidebarDialTuning {
     static func motionCollapseBounce(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
         double(motionCollapseBounceKey, default: WorkspaceLayout.sidebarMorphCollapseSpring.bounce, defaults: defaults)
     }
+    /// Pinned or rail -> closed spring's response (its bounce is always 0).
+    static func motionCloseResponse(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(motionCloseResponseKey, default: WorkspaceLayout.sidebarCloseSpring.response, defaults: defaults)
+    }
+    /// Closed -> pinned or rail spring.
+    static func motionReopenResponse(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(motionReopenResponseKey, default: WorkspaceLayout.sidebarReopenSpring.response, defaults: defaults)
+    }
+    static func motionReopenBounce(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(motionReopenBounceKey, default: WorkspaceLayout.sidebarReopenSpring.bounce, defaults: defaults)
+    }
 
     /// See `hoverBarPushesCanvasKey`. On by default in the spike branch.
     static func hoverBarPushesCanvas(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
@@ -666,6 +684,7 @@ enum SidebarDialTuning {
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
         hoverBarPushesCanvasKey, hoverRevealOpenMsKey, hoverRevealCloseMsKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
+        motionCloseResponseKey, motionReopenResponseKey, motionReopenBounceKey,
         uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
     ] + railKeys + trayShadowStateKeys + colorKeys + canvasKeys
 
@@ -710,6 +729,7 @@ enum SidebarDialTuning {
         hoverRevealEnabledKey, hoverRevealDwellKey, hoverRevealExitGraceKey, hoverRevealStyleKey,
         hoverBarPushesCanvasKey, hoverRevealOpenMsKey, hoverRevealCloseMsKey,
         motionOpenResponseKey, motionOpenBounceKey, motionCollapseResponseKey, motionCollapseBounceKey,
+        motionCloseResponseKey, motionReopenResponseKey, motionReopenBounceKey,
         uiSpringResponseKey, uiSpringBounceKey, uiSpringHoverResponseKey
     ]
 
@@ -895,6 +915,9 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var motionOpenBounce: Double
     var motionCollapseResponse: Double
     var motionCollapseBounce: Double
+    var motionCloseResponse: Double
+    var motionReopenResponse: Double
+    var motionReopenBounce: Double
     var uiSpringResponse: Double
     var uiSpringBounce: Double
     var uiSpringHoverResponse: Double
@@ -1490,6 +1513,9 @@ enum SidebarListDialPanel: FocusedDialPanel {
             motionOpenBounce: SidebarDialTuning.motionOpenBounce(defaults: defaults),
             motionCollapseResponse: SidebarDialTuning.motionCollapseResponse(defaults: defaults),
             motionCollapseBounce: SidebarDialTuning.motionCollapseBounce(defaults: defaults),
+            motionCloseResponse: SidebarDialTuning.motionCloseResponse(defaults: defaults),
+            motionReopenResponse: SidebarDialTuning.motionReopenResponse(defaults: defaults),
+            motionReopenBounce: SidebarDialTuning.motionReopenBounce(defaults: defaults),
             uiSpringResponse: SidebarDialTuning.uiSpringResponse(defaults: defaults),
             uiSpringBounce: SidebarDialTuning.uiSpringBounce(defaults: defaults),
             uiSpringHoverResponse: SidebarDialTuning.uiSpringHoverResponse(defaults: defaults)
@@ -1521,6 +1547,9 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.motionOpenBounceKey, previous.motionOpenBounce, model.motionOpenBounce)
         setIfChanged(defaults, SidebarDialTuning.motionCollapseResponseKey, previous.motionCollapseResponse, model.motionCollapseResponse)
         setIfChanged(defaults, SidebarDialTuning.motionCollapseBounceKey, previous.motionCollapseBounce, model.motionCollapseBounce)
+        setIfChanged(defaults, SidebarDialTuning.motionCloseResponseKey, previous.motionCloseResponse, model.motionCloseResponse)
+        setIfChanged(defaults, SidebarDialTuning.motionReopenResponseKey, previous.motionReopenResponse, model.motionReopenResponse)
+        setIfChanged(defaults, SidebarDialTuning.motionReopenBounceKey, previous.motionReopenBounce, model.motionReopenBounce)
         setIfChanged(defaults, SidebarDialTuning.uiSpringResponseKey, previous.uiSpringResponse, model.uiSpringResponse)
         setIfChanged(defaults, SidebarDialTuning.uiSpringBounceKey, previous.uiSpringBounce, model.uiSpringBounce)
         setIfChanged(defaults, SidebarDialTuning.uiSpringHoverResponseKey, previous.uiSpringHoverResponse, model.uiSpringHoverResponse)
@@ -1584,6 +1613,13 @@ enum SidebarListDialPanel: FocusedDialPanel {
                 .slider("motionOpenBounce", keyPath: \.motionOpenBounce, label: "Open bounce", range: 0...0.5, step: 0.01),
                 .slider("motionCollapseResponse", keyPath: \.motionCollapseResponse, label: "Collapse response", range: 0.15...0.8, step: 0.01, unit: "s"),
                 .slider("motionCollapseBounce", keyPath: \.motionCollapseBounce, label: "Collapse bounce", range: 0...0.5, step: 0.01),
+            ]),
+            // The full close and reopen's springs (Cmd+Shift+S). The close
+            // never overshoots, so it has no bounce dial.
+            .group("closeMotion", label: "Close springs", children: [
+                .slider("motionCloseResponse", keyPath: \.motionCloseResponse, label: "Close response", range: 0.15...0.8, step: 0.01, unit: "s"),
+                .slider("motionReopenResponse", keyPath: \.motionReopenResponse, label: "Reopen response", range: 0.15...0.8, step: 0.01, unit: "s"),
+                .slider("motionReopenBounce", keyPath: \.motionReopenBounce, label: "Reopen bounce", range: 0...0.5, step: 0.01),
             ]),
             // The small motion's springs (`SidebarUISpring`): fold, chip,
             // reflow, hover. Bounce 0 = no overshoot (critically damped);
