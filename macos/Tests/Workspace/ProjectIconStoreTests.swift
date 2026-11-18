@@ -83,6 +83,36 @@ struct ProjectIconStoreTests {
         #expect(store.resolverRuns == 2)
     }
 
+    /// A "no icon" cached before the candidate list grew (the two-line
+    /// format, no version) is stale: the project re-resolves and finds the
+    /// icon the new list covers, within the TTL and at the same root mtime.
+    @Test func negativeCacheFromAnOlderCandidateListIsIgnored() async throws {
+        let rig = try Rig()
+        let root = try ProjectIconFixtures.makeRoot()
+        defer {
+            try? FileManager.default.removeItem(at: rig.base)
+            try? FileManager.default.removeItem(at: root)
+        }
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("src/app"), withIntermediateDirectories: true
+        )
+        let project = rig.project(root: root)
+        let rootMtime = try #require(
+            root.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        ).timeIntervalSince1970
+        try FileManager.default.createDirectory(at: rig.cache, withIntermediateDirectories: true)
+        try Data("\(rootMtime)\n\(Date().timeIntervalSince1970)".utf8)
+            .write(to: rig.cache.appendingPathComponent("\(project.id.uuidString).none"))
+        // Inside `src/app`, so the root's mtime (the cache key) is unchanged.
+        try ProjectIconFixtures.write(root, "src/app/favicon.ico", data: ProjectIconFixtures.icoData(pixels: 48))
+
+        await rig.store.refresh(project)
+
+        #expect(rig.store.resolverRuns == 1, "an old-format negative cache must not short-circuit")
+        #expect(rig.store.image(for: project.id) != nil)
+        #expect(!rig.exists(rig.cache, project.id, "none"))
+    }
+
     @Test func monogramStyleShowsNoImage() async throws {
         let rig = try Rig()
         let root = try ProjectIconFixtures.makeRoot()

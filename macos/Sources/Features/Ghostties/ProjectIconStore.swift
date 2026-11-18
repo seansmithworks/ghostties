@@ -33,7 +33,8 @@ import UniformTypeIdentifiers
 /// - `<caches>/project-icons/<id>.png`  resolved icon (a cache; safe to delete)
 /// - `<caches>/project-icons/<id>.key`  source path + mtime + size the PNG came from
 /// - `<caches>/project-icons/<id>.none` negative cache: "no icon at this root",
-///   keyed on the root's mtime and expiring after 24 hours
+///   keyed on the root's mtime and the resolver's `candidatesVersion`, and
+///   expiring after 24 hours
 /// - `<support>/project-icons/<id>.png` the user's `.file` choice, normalized
 ///   and copied; the original path is never referenced again
 @MainActor
@@ -311,11 +312,14 @@ final class ProjectIconStore {
         let pngURL = file(dir, id, "png")
         let keyURL = file(dir, id, "key")
 
-        // Negative cache: same root mtime, checked within the TTL.
+        // Negative cache: same root mtime and candidate list, checked within
+        // the TTL. A file from an older list (or the two-line format from
+        // before the version) is stale.
         if !force, let rootMtime,
            let text = try? String(contentsOf: noneURL, encoding: .utf8) {
             let parts = text.split(separator: "\n").compactMap { Double($0) }
-            if parts.count == 2, parts[0] == rootMtime, now.timeIntervalSince1970 - parts[1] < negativeCacheTTL {
+            if parts.count == 3, parts[0] == rootMtime, now.timeIntervalSince1970 - parts[1] < negativeCacheTTL,
+               parts[2] == Double(ProjectIconResolver.candidatesVersion) {
                 return Outcome(image: nil, ranResolver: false)
             }
         }
@@ -337,7 +341,7 @@ final class ProjectIconStore {
         case .none:
             var plan = Plan(writes: [], removals: [pngURL, keyURL])
             if let rootMtime {
-                let text = "\(rootMtime)\n\(now.timeIntervalSince1970)"
+                let text = "\(rootMtime)\n\(now.timeIntervalSince1970)\n\(ProjectIconResolver.candidatesVersion)"
                 plan.writes.append((noneURL, Data(text.utf8)))
             }
             return Outcome(image: nil, ranResolver: true, plan: plan)

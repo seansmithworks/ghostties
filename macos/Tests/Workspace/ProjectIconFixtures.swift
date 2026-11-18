@@ -62,6 +62,18 @@ enum ProjectIconFixtures {
         try write(root, "\(relative)/Contents.json", data: json)
     }
 
+    /// An ICNS holding one solid-colour image, `pixels` square (an icns size).
+    static func icnsData(pixels: Int = 128) -> Data {
+        let png = pngData(pixels: pixels)
+        let source = CGImageSourceCreateWithData(png as CFData, nil)!
+        let image = CGImageSourceCreateImageAtIndex(source, 0, nil)!
+        let out = NSMutableData()
+        let dest = CGImageDestinationCreateWithData(out, UTType.icns.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, image, nil)
+        precondition(CGImageDestinationFinalize(dest), "icns encode failed")
+        return out as Data
+    }
+
     /// A single-image ICO wrapping a PNG.
     static func icoData(pixels: Int) -> Data {
         let png = pngData(pixels: pixels)
