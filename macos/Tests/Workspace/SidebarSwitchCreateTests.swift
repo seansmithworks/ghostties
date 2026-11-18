@@ -212,15 +212,15 @@ final class SidebarSwitchCreateTests: XCTestCase {
 
     // MARK: - Header "+" chip
 
-    /// One chip frame for every project with a plain count: its trailing
-    /// edge on the count's, whatever the count's width.
-    func testTheChipsFrameDoesNotMoveWithTheCountsWidth() {
+    /// Over a plain count the chip is centred on the count's text, so the
+    /// "+" glyph takes the digits' place: the icon aligns, not the square.
+    func testTheChipIsCentredOnAPlainCount() {
         let size = ProjectAccordionHeader.newThreadChipSize
-        // "0", "7" and "128" end at the same x and start at different ones.
-        let frames = [(182.0, 200.0), (190.0, 200.0), (170.0, 200.0)].map { minX, maxX in
-            ProjectAccordionHeader.newThreadChipMinX(labelMinX: minX, labelMaxX: maxX, needYouCount: 0)
+        // "7" and "128" as drawn: different widths, both ending at 200.
+        let centres = [(193.0, 200.0), (180.0, 200.0)].map { minX, maxX in
+            ProjectAccordionHeader.newThreadChipMinX(labelMinX: minX, labelMaxX: maxX, needYouCount: 0) + size / 2
         }
-        XCTAssertEqual(frames, [200 - size, 200 - size, 200 - size])
+        XCTAssertEqual(centres, [196.5, 190])
         // The chip drawn is the click target: one size, a square on the 8pt grid.
         XCTAssertEqual(size, 24)
     }
