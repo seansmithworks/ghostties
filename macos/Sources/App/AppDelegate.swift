@@ -1136,11 +1136,20 @@ class AppDelegate: NSObject,
     /// or the user's own keybinds.
     private func setupNewSessionShortcut() {
         _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
-                  event.charactersIgnoringModifiers?.lowercased() == "t"
+            guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command]
             else { return event }
 
             guard let window = NSApp.keyWindow, Self.isWorkspaceWindow(window) else { return event }
+
+            // With keyboard focus in the browser, ⌘T/L/R/[/] act on it
+            // (`BrowserShortcut`). Everywhere else ⌘T stays "New Session" and
+            // the other keys are not ours.
+            if let container = window.contentView as? WorkspaceViewContainer,
+               container.handleBrowserShortcut(key: event.charactersIgnoringModifiers) {
+                return nil
+            }
+
+            guard event.charactersIgnoringModifiers?.lowercased() == "t" else { return event }
 
             NSApp.sendAction(#selector(TerminalController.newWorkspaceSession(_:)), to: nil, from: nil)
             return nil

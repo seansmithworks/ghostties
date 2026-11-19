@@ -101,6 +101,23 @@ final class BrowserNavigationBar: NSView {
         ])
     }
 
+    /// Shows the active tab's loading and history state: the back and forward
+    /// buttons, and the reload button as Stop while loading.
+    func reflect(isLoading: Bool, canGoBack: Bool, canGoForward: Bool) {
+        backButton.isEnabled = canGoBack
+        forwardButton.isEnabled = canGoForward
+        reloadButton.image = NSImage(
+            systemSymbolName: isLoading ? "xmark" : "arrow.clockwise",
+            accessibilityDescription: isLoading ? "Stop" : "Reload"
+        )
+    }
+
+    /// Puts the cursor in the URL field with its whole text selected.
+    func focusURLField() {
+        window?.makeFirstResponder(urlField)
+        urlField.currentEditor()?.selectAll(nil)
+    }
+
     #if DEBUG
     /// Shows the pill naming the driving session, or hides it (nil).
     func setDrivenBy(name: String?, color: NSColor?) {

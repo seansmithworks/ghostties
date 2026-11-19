@@ -2445,31 +2445,92 @@ class WorkspaceViewContainer: NSView {
 
         // Wire the tab bar to this manager.
         browserPanelView.tabBar.tabManager = manager
+        browserPanelView.tabBar.onAddTab = { [weak self] in self?.openBrowserTab() }
 
         // Wire the bridge to this navigation bar.
         let bridge = coordinator.bridge(for: manager)
         bridge?.navigationBar = navBar
 
-        // Embed the active tab's browser view.
-        if let activeTabId = manager.activeTabId,
-           let browserView = manager.browserViews[activeTabId] {
-            browserView.translatesAutoresizingMaskIntoConstraints = false
-            browserPanelView.contentArea.addSubview(browserView)
-            NSLayoutConstraint.activate([
-                browserView.topAnchor.constraint(equalTo: browserPanelView.contentArea.topAnchor),
-                browserView.leadingAnchor.constraint(equalTo: browserPanelView.contentArea.leadingAnchor),
-                browserView.trailingAnchor.constraint(equalTo: browserPanelView.contentArea.trailingAnchor),
-                browserView.bottomAnchor.constraint(equalTo: browserPanelView.contentArea.bottomAnchor),
-            ])
-            // Force layout so CEFBrowserView gets its real size, then tell CEF to resize.
-            browserPanelView.contentArea.layoutSubtreeIfNeeded()
-            if let cefView = browserView as? CEFBrowserView {
-                cefView.setFrameSize(browserPanelView.contentArea.bounds.size)
-                wireBrowserFailureState(for: cefView, bridge: bridge)
+        embedBrowserTab(manager.activeTabId, of: manager)
+
+        // A tab switch, new tab or close shows that tab's page. `$activeTabId`
+        // fires before the value lands, so the emitted id is passed along.
+        activeBrowserTabCancellable = manager.$activeTabId
+            .dropFirst()
+            .sink { [weak self, weak manager] tabId in
+                guard let self, let manager else { return }
+                self.embedBrowserTab(tabId, of: manager)
             }
-        }
 
         _activeBrowserManager = manager
+    }
+
+    private var activeBrowserTabCancellable: AnyCancellable?
+
+    /// Puts `tabId`'s page view in the panel and shows its address and
+    /// history state in the navigation bar.
+    private func embedBrowserTab(_ tabId: UUID?, of manager: BrowserTabManager) {
+        for subview in browserPanelView.contentArea.subviews {
+            subview.removeFromSuperview()
+        }
+        guard let tabId, let browserView = manager.browserViews[tabId] else { return }
+
+        browserView.translatesAutoresizingMaskIntoConstraints = false
+        browserPanelView.contentArea.addSubview(browserView)
+        NSLayoutConstraint.activate([
+            browserView.topAnchor.constraint(equalTo: browserPanelView.contentArea.topAnchor),
+            browserView.leadingAnchor.constraint(equalTo: browserPanelView.contentArea.leadingAnchor),
+            browserView.trailingAnchor.constraint(equalTo: browserPanelView.contentArea.trailingAnchor),
+            browserView.bottomAnchor.constraint(equalTo: browserPanelView.contentArea.bottomAnchor),
+        ])
+        // Force layout so CEFBrowserView gets its real size, then tell CEF to resize.
+        browserPanelView.contentArea.layoutSubtreeIfNeeded()
+        if let cefView = browserView as? CEFBrowserView {
+            cefView.setFrameSize(browserPanelView.contentArea.bounds.size)
+            wireBrowserFailureState(for: cefView, bridge: coordinator.bridge(for: manager))
+            let navBar = browserPanelView.navigationBar
+            navBar.urlField.stringValue = manager.tabs.first(where: { $0.id == tabId })?.url ?? ""
+            navBar.reflect(isLoading: cefView.isLoading, canGoBack: cefView.canGoBack, canGoForward: cefView.canGoForward)
+        }
+    }
+
+    /// Opens a new tab in the shown browser, with the cursor in its URL field.
+    private func openBrowserTab() {
+        guard let manager = _activeBrowserManager,
+              coordinator.addBrowserTab(to: manager) != nil else { return }
+        browserPanelView.navigationBar.focusURLField()
+    }
+
+    /// Runs `shortcut` on the shown browser (see `BrowserShortcut`).
+    private func performBrowserShortcut(_ shortcut: BrowserShortcut) {
+        switch shortcut {
+        case .newTab: openBrowserTab()
+        case .focusURLField: browserPanelView.navigationBar.focusURLField()
+        case .reload: activeCEFView?.reload()
+        case .back: activeCEFView?.goBack()
+        case .forward: activeCEFView?.goForward()
+        }
+    }
+
+    /// Whether the browser panel is up and holds keyboard focus (its page or
+    /// its URL field).
+    private var browserHasKeyboardFocus: Bool {
+        isBrowserVisible && BrowserShortcut.browserHasFocus(
+            firstResponder: window?.firstResponder,
+            contentArea: browserPanelView.contentArea,
+            urlField: browserPanelView.navigationBar.urlField
+        )
+    }
+
+    /// Handles a Command-only key press for the browser. Returns true when it
+    /// was the browser's (focus is in the browser and the key is one of its
+    /// shortcuts), false to leave the event to its normal handling.
+    func handleBrowserShortcut(key: String?) -> Bool {
+        guard let shortcut = BrowserShortcut.route(key: key, browserHasFocus: browserHasKeyboardFocus) else {
+            return false
+        }
+        performBrowserShortcut(shortcut)
+        return true
     }
 
     /// Wires a CEFBrowserView's creation-failure/success callbacks to the
