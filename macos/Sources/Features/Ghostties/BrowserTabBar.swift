@@ -1,8 +1,11 @@
 import AppKit
 import Combine
 
-/// Horizontal tab bar for the browser panel's internal tabs.
-/// Hidden when only one tab exists. Shows tab titles with close buttons.
+/// The browser panel's tab strip, below the navigation bar: one tab per page
+/// and a + at the end. Tabs share the strip evenly up to a maximum width;
+/// titles stay on one line and truncate. A tab's close button sits in a
+/// fixed leading slot, shown for the selected tab and the tab under the
+/// pointer, and the title is centred clear of that slot so they never touch.
 @MainActor
 final class BrowserTabBar: NSView {
     // MARK: - Properties
@@ -15,23 +18,44 @@ final class BrowserTabBar: NSView {
     /// tab needs a page view and this bar only draws the manager's tabs.
     var onAddTab: (() -> Void)?
 
-    private var tabButtons: [UUID: NSButton] = [:]
-    private var closeButtons: [UUID: NSButton] = [:]
-    private var hoverTrackingAreas: [UUID: NSTrackingArea] = [:]
-    private let stackView = NSStackView()
+    /// Tab views in strip order. Reused by tab id across updates, so a title
+    /// change or a selection never rebuilds the strip under the pointer.
+    private var tabViews: [BrowserTabItemView] = []
     private let addTabButton = NSButton()
     private var cancellables = Set<AnyCancellable>()
 
-    /// Tab bar height.
-    private static let barHeight: CGFloat = 24
-    /// Maximum width for each tab.
-    private static let maxTabWidth: CGFloat = 120
+    // MARK: - Metrics
+
+    /// Strip height: the navigation bar's row height, whatever the tab count.
+    static let barHeight: CGFloat = WorkspaceLayout.terminalTitleBarHeight
+    /// Inset from the panel's leading and trailing edges; lines the first tab
+    /// up with the navigation bar's back button.
+    static let horizontalInset: CGFloat = 8
+    /// Inset of a tab from the strip's top and bottom.
+    static let verticalInset: CGFloat = 4
+    /// Gap between tabs, and between the last tab and the +.
+    static let tabSpacing: CGFloat = 4
+    /// The widest a tab gets; tabs shrink evenly below it as they are added.
+    static let maxTabWidth: CGFloat = 192
+    /// The + button's square.
+    static let addButtonSize: CGFloat = 20
+
+    /// Each tab's width when `count` tabs share `availableWidth` (the strip
+    /// less its insets and the +): equal shares, capped at `maxTabWidth`.
+    static func tabWidth(count: Int, availableWidth: CGFloat) -> CGFloat {
+        guard count > 0 else { return 0 }
+        let gaps = tabSpacing * CGFloat(count - 1)
+        let share = floor((availableWidth - gaps) / CGFloat(count))
+        return max(0, min(maxTabWidth, share))
+    }
 
     // MARK: - Intrinsic Size
 
     override var intrinsicContentSize: NSSize {
         NSSize(width: NSView.noIntrinsicMetric, height: Self.barHeight)
     }
+
+    override var isFlipped: Bool { true }
 
     // MARK: - Init
 
@@ -48,45 +72,25 @@ final class BrowserTabBar: NSView {
     // MARK: - Setup
 
     private func setup() {
-        wantsLayer = true
+        setAccessibilityElement(true)
+        setAccessibilityRole(.tabGroup)
+        setAccessibilityLabel("Tabs")
 
-        // Stack view for tab buttons
-        stackView.orientation = .horizontal
-        stackView.spacing = 1
-        stackView.alignment = .centerY
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stackView)
-
-        // Add-tab button
-        configureAddButton()
-        stackView.addArrangedSubview(addTabButton)
-
-        NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            stackView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -4),
-            stackView.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-
-        // Height constraint
-        let heightConstraint = heightAnchor.constraint(equalToConstant: Self.barHeight)
-        heightConstraint.priority = .defaultHigh
-        heightConstraint.isActive = true
-    }
-
-    private func configureAddButton() {
         addTabButton.bezelStyle = .inline
         addTabButton.isBordered = false
         addTabButton.image = NSImage(
             systemSymbolName: "plus",
             accessibilityDescription: "New tab"
-        )
-        addTabButton.imageScaling = .scaleProportionallyDown
+        )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .regular))
+        addTabButton.imagePosition = .imageOnly
+        addTabButton.contentTintColor = BrowserTabItemView.secondaryInk
+        addTabButton.toolTip = "New Tab"
         addTabButton.target = self
         addTabButton.action = #selector(addTabClicked)
-        addTabButton.setContentHuggingPriority(.required, for: .horizontal)
+        addSubview(addTabButton)
 
-        let widthConstraint = addTabButton.widthAnchor.constraint(equalToConstant: 20)
-        widthConstraint.isActive = true
+        let height = heightAnchor.constraint(equalToConstant: Self.barHeight)
+        height.isActive = true
     }
 
     // MARK: - Manager Subscription
@@ -95,7 +99,7 @@ final class BrowserTabBar: NSView {
         cancellables.removeAll()
 
         guard let manager = tabManager else {
-            rebuildTabs(tabs: [], activeId: nil)
+            update(tabs: [], activeId: nil)
             return
         }
 
@@ -106,153 +110,272 @@ final class BrowserTabBar: NSView {
         manager.$tabs
             .combineLatest(manager.$activeTabId)
             .sink { [weak self] tabs, activeId in
-                self?.rebuildTabs(tabs: tabs, activeId: activeId)
+                self?.update(tabs: tabs, activeId: activeId)
             }
             .store(in: &cancellables)
     }
 
-    // MARK: - Rebuild
+    // MARK: - Update
 
-    private func rebuildTabs(tabs: [BrowserTabManager.Tab], activeId: UUID?) {
-        // Remove existing tab buttons (keep the add button)
-        for (_, button) in tabButtons {
-            stackView.removeArrangedSubview(button)
-            button.removeFromSuperview()
+    private func update(tabs: [BrowserTabManager.Tab], activeId: UUID?) {
+        var existing = Dictionary(uniqueKeysWithValues: tabViews.map { ($0.tabId, $0) })
+        tabViews = tabs.map { tab in
+            let view = existing.removeValue(forKey: tab.id) ?? makeTabView(id: tab.id)
+            view.title = tab.title
+            view.isSelected = tab.id == activeId
+            return view
         }
-        for (_, button) in closeButtons {
-            button.removeFromSuperview()
-        }
-        tabButtons.removeAll()
-        closeButtons.removeAll()
-
-        // Remove old tracking areas
-        for (_, area) in hoverTrackingAreas {
-            removeTrackingArea(area)
-        }
-        hoverTrackingAreas.removeAll()
-
-        // Create a button for each tab
-        for (i, tab) in tabs.enumerated() {
-            let button = makeTabButton(tab: tab, isActive: tab.id == activeId)
-            tabButtons[tab.id] = button
-
-            let closeBtn = makeCloseButton(tabId: tab.id)
-            closeButtons[tab.id] = closeBtn
-
-            // Insert before the add button
-            stackView.insertArrangedSubview(button, at: i)
-
-            // Add close button as subview of the tab button
-            button.addSubview(closeBtn)
-            closeBtn.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                closeBtn.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
-                closeBtn.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-                closeBtn.widthAnchor.constraint(equalToConstant: 12),
-                closeBtn.heightAnchor.constraint(equalToConstant: 12),
-            ])
-
-            // Close button hidden by default, shown on hover
-            closeBtn.isHidden = true
-        }
-
-        // Visibility: hidden when 0 or 1 tab
-        alphaValue = tabs.count > 1 ? 1 : 0
+        for stale in existing.values { stale.removeFromSuperview() }
+        needsLayout = true
     }
 
-    // MARK: - Tab Button Factory
+    private func makeTabView(id: UUID) -> BrowserTabItemView {
+        let view = BrowserTabItemView(tabId: id)
+        view.onSelect = { [weak self] in self?.tabManager?.switchTab(id: id) }
+        view.onClose = { [weak self] in self?.tabManager?.closeTab(id: id) }
+        addSubview(view)
+        return view
+    }
 
-    private func makeTabButton(tab: BrowserTabManager.Tab, isActive: Bool) -> NSButton {
-        let button = NSButton()
-        button.bezelStyle = .inline
-        button.isBordered = false
-        button.title = tab.title
-        button.font = NSFont.systemFont(ofSize: 11)
-        button.alignment = .left
-        button.tag = tab.id.hashValue
-        button.target = self
-        button.action = #selector(tabClicked(_:))
-        button.identifier = NSUserInterfaceItemIdentifier(tab.id.uuidString)
+    // MARK: - Layout
 
-        // Width constraint
-        let widthConstraint = button.widthAnchor.constraint(lessThanOrEqualToConstant: Self.maxTabWidth)
-        widthConstraint.isActive = true
+    override func layout() {
+        super.layout()
+        let tabHeight = bounds.height - Self.verticalInset * 2
+        let available = bounds.width - Self.horizontalInset * 2 - Self.addButtonSize - Self.tabSpacing
+        let width = Self.tabWidth(count: tabViews.count, availableWidth: available)
 
-        // Active tab highlight
-        if isActive {
-            button.wantsLayer = true
-            button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
-            button.layer?.cornerRadius = 4
+        var x = Self.horizontalInset
+        for view in tabViews {
+            view.frame = NSRect(x: x, y: Self.verticalInset, width: width, height: tabHeight)
+            x += width + Self.tabSpacing
         }
-
-        // Tracking area for hover (to show/hide close button)
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: ["tabId": tab.id.uuidString]
+        if tabViews.isEmpty { x = Self.horizontalInset }
+        addTabButton.frame = NSRect(
+            x: x,
+            y: (bounds.height - Self.addButtonSize) / 2,
+            width: Self.addButtonSize,
+            height: Self.addButtonSize
         )
-        button.addTrackingArea(trackingArea)
-        hoverTrackingAreas[tab.id] = trackingArea
-
-        return button
-    }
-
-    private func makeCloseButton(tabId: UUID) -> NSButton {
-        let button = NSButton()
-        button.bezelStyle = .inline
-        button.isBordered = false
-        button.image = NSImage(
-            systemSymbolName: "xmark",
-            accessibilityDescription: "Close tab"
-        )?.withSymbolConfiguration(
-            NSImage.SymbolConfiguration(pointSize: 8, weight: .medium)
-        )
-        button.imageScaling = .scaleProportionallyDown
-        button.target = self
-        button.action = #selector(closeTabClicked(_:))
-        button.identifier = NSUserInterfaceItemIdentifier("close-\(tabId.uuidString)")
-        return button
-    }
-
-    // MARK: - Hover
-
-    override func mouseEntered(with event: NSEvent) {
-        guard let userInfo = event.trackingArea?.userInfo,
-              let idString = userInfo["tabId"] as? String,
-              let tabId = UUID(uuidString: idString)
-        else { return }
-        closeButtons[tabId]?.isHidden = false
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        guard let userInfo = event.trackingArea?.userInfo,
-              let idString = userInfo["tabId"] as? String,
-              let tabId = UUID(uuidString: idString)
-        else { return }
-        closeButtons[tabId]?.isHidden = true
     }
 
     // MARK: - Actions
-
-    @objc private func tabClicked(_ sender: NSButton) {
-        guard let idString = sender.identifier?.rawValue,
-              let tabId = UUID(uuidString: idString)
-        else { return }
-        tabManager?.switchTab(id: tabId)
-    }
-
-    @objc private func closeTabClicked(_ sender: NSButton) {
-        guard let idString = sender.identifier?.rawValue,
-              idString.hasPrefix("close-")
-        else { return }
-        let uuidString = String(idString.dropFirst("close-".count))
-        guard let tabId = UUID(uuidString: uuidString) else { return }
-        tabManager?.closeTab(id: tabId)
-    }
 
     @objc private func addTabClicked() {
         onAddTab?()
     }
 
+    #if DEBUG
+    /// Test seam: the tab views in strip order.
+    var tabViewsForTesting: [BrowserTabItemView] { tabViews }
+    /// Test seam: the + button.
+    var addTabButtonForTesting: NSButton { addTabButton }
+    #endif
+}
+
+// MARK: - Tab
+
+/// One tab in `BrowserTabBar`: a centred single-line title, and a close
+/// button in a fixed leading slot that shows for the selected tab and on
+/// hover. The selected tab carries the strip's one fill and the primary ink.
+@MainActor
+final class BrowserTabItemView: NSView {
+    let tabId: UUID
+    var onSelect: (() -> Void)?
+    var onClose: (() -> Void)?
+
+    var title: String = "" {
+        didSet {
+            guard title != oldValue else { return }
+            titleLabel.stringValue = title
+            toolTip = title
+            setAccessibilityLabel(title)
+        }
+    }
+
+    var isSelected = false {
+        didSet {
+            guard isSelected != oldValue else { return }
+            refreshState()
+        }
+    }
+
+    private(set) var isHovered = false {
+        didSet {
+            guard isHovered != oldValue else { return }
+            refreshState()
+        }
+    }
+
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let closeButton = NSButton()
+    private var hoverArea: NSTrackingArea?
+
+    /// The close button's square, and the slot it sits in.
+    static let closeSlotSize: CGFloat = 16
+    /// Padding between the tab's edge and the close slot.
+    static let edgePadding: CGFloat = 4
+    /// How far the title stays from each edge: the close slot plus padding on
+    /// both sides, so the centred title never reaches the button.
+    static let titleInset: CGFloat = edgePadding + closeSlotSize + edgePadding
+
+    init(tabId: UUID) {
+        self.tabId = tabId
+        super.init(frame: .zero)
+        setup()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setup() {
+        wantsLayer = true
+        layer?.cornerCurve = .continuous
+
+        titleLabel.font = .systemFont(ofSize: 11)
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.maximumNumberOfLines = 1
+        titleLabel.usesSingleLineMode = true
+        titleLabel.cell?.wraps = false
+        titleLabel.cell?.truncatesLastVisibleLine = true
+        titleLabel.setAccessibilityElement(false)
+        addSubview(titleLabel)
+
+        closeButton.bezelStyle = .inline
+        closeButton.isBordered = false
+        closeButton.image = NSImage(
+            systemSymbolName: "xmark",
+            accessibilityDescription: "Close Tab"
+        )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8, weight: .semibold))
+        closeButton.imagePosition = .imageOnly
+        closeButton.contentTintColor = Self.secondaryInk
+        closeButton.toolTip = "Close Tab"
+        closeButton.target = self
+        closeButton.action = #selector(closeClicked)
+        addSubview(closeButton)
+
+        setAccessibilityElement(true)
+        setAccessibilityRole(.radioButton)
+        refreshState()
+    }
+
+    // MARK: State
+
+    private func refreshState() {
+        closeButton.isHidden = !(isSelected || isHovered)
+        titleLabel.font = .systemFont(ofSize: 11, weight: isSelected ? .medium : .regular)
+        titleLabel.textColor = isSelected ? .labelColor : Self.secondaryInk
+        setAccessibilityValue(isSelected)
+        needsDisplay = true
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        let fill: NSColor? = isSelected ? Self.selectedFill : (isHovered ? Self.hoverFill : nil)
+        var resolved: CGColor?
+        effectiveAppearance.performAsCurrentDrawingAppearance { resolved = fill?.cgColor }
+        layer?.backgroundColor = resolved
+        layer?.cornerRadius = Self.cornerRadius
+    }
+
+    // MARK: Layout
+
+    override func layout() {
+        super.layout()
+        let slot = Self.closeSlotSize
+        closeButton.frame = NSRect(x: Self.edgePadding, y: (bounds.height - slot) / 2, width: slot, height: slot)
+        let labelHeight = titleLabel.intrinsicContentSize.height
+        titleLabel.frame = NSRect(
+            x: Self.titleInset,
+            y: (bounds.height - labelHeight) / 2,
+            width: max(0, bounds.width - Self.titleInset * 2),
+            height: labelHeight
+        )
+    }
+
+    // MARK: Pointer
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { isHovered = false }
+    }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    /// Selects on press, as Safari's and Finder's tabs do. The tab never
+    /// takes first responder, so the keys stay where they were.
+    override func mouseDown(with event: NSEvent) {
+        onSelect?()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onSelect?()
+        return true
+    }
+
+    @objc private func closeClicked() {
+        onClose?()
+    }
+
+    #if DEBUG
+    /// Test seam: the title label and close button.
+    var titleLabelForTesting: NSTextField { titleLabel }
+    var closeButtonForTesting: NSButton { closeButton }
+    /// Test seam: draws the hover state without a pointer (captures).
+    func setHoveredForTesting(_ hovered: Bool) { isHovered = hovered }
+    #endif
+
+    // MARK: Tokens
+
+    /// The selected tab's fill: ink at the composer's highlighted-row step,
+    /// the heavier of the two row steps, so the selection reads at a glance.
+    static let selectedFill = NSColor(name: nil) { appearance in
+        let theme = ChromeTheme.active(appearance.isDarkForBrowserTabs ? .dark : .light)
+        return theme.ink.withAlphaComponent(ChromeTheme.Step.composerRow.opacity(theme.polarity))
+    }
+
+    /// The tab under the pointer: ink at the active-row step, a step below
+    /// the selection.
+    static let hoverFill = NSColor(name: nil) { appearance in
+        let theme = ChromeTheme.active(appearance.isDarkForBrowserTabs ? .dark : .light)
+        return theme.ink.withAlphaComponent(ChromeTheme.Step.row.opacity(theme.polarity))
+    }
+
+    /// Unselected titles, the close button and the +: the chrome's muted ink.
+    static let secondaryInk = NSColor(name: nil) { appearance in
+        ChromeTheme.active(appearance.isDarkForBrowserTabs ? .dark : .light).inkSecondary
+    }
+
+    /// Concentric with the browser card: the card's corner less the tab's
+    /// inset from the card's edge.
+    static var cornerRadius: CGFloat {
+        WorkspaceLayout.concentricRadius(
+            parent: WorkspaceLayout.terminalCornerRadius,
+            inset: BrowserTabBar.horizontalInset
+        )
+    }
+}
+
+private extension NSAppearance {
+    var isDarkForBrowserTabs: Bool { bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
 }
