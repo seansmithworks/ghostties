@@ -317,13 +317,17 @@ enum SidebarListRowHeight {
     }
 }
 
-/// Which one-view rows draw a second line under the title (Sean,
+/// Which one-view rows draw a second line under the title. Standard (Sean,
 /// 2026-11-15, "Second line only when it asks"): only a thread that needs
-/// the user, "needs you" (or its question) and "error". Working, done and
-/// stopped are one line: the glyph already says it.
+/// the user, "needs you" (or its question) and "error"; working, done and
+/// stopped are one line, the glyph already says it. Detailed: every row
+/// (Settings > Appearance > Sidebar, `SidebarRowText`).
 enum SessionRowSecondLine {
-    static func isShown(_ kind: SessionStatusGlyphKind) -> Bool {
-        kind == .needsInput || kind == .error
+    static func isShown(_ kind: SessionStatusGlyphKind, text: SidebarRowText = .current()) -> Bool {
+        switch text {
+        case .standard: kind == .needsInput || kind == .error
+        case .detailed: true
+        }
     }
 }
 
@@ -566,7 +570,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         // The labels' leading edge in the row's content: the glyph slot,
         // then the stack spacing (same sum the HStack lays out), so the
         // action line starts under the title.
-        let labelLeading = dials.sidebarTileSize + WorkspaceLayout.sidebarIconLabelSpacing
+        let labelLeading = dials.sidebarTileSize + dials.sidebarLabelSpacing
         // The action line's room is held in every state, the rail included
         // (where the line itself fades out), so no tile or glyph below a
         // needs-you row ever moves across the morph or the hover reveal.
@@ -575,7 +579,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         // and, for a new row, its growing slot and fading-in content.
         SelectedRowMixRowReader(id: mixID, isActive: isActive) { look in
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+                HStack(spacing: dials.sidebarLabelSpacing) {
                     // Hover is a tile-sized chip behind the glyph in every list
                     // (option D); the group card is drawn only around a project
                     // group.

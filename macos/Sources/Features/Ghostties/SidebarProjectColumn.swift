@@ -53,19 +53,21 @@ enum RailProjectColumn {
     /// A hovered, unselected chip's fill: subordinate to the selected tint.
     static let hoverChipTintOpacity: Double = 0.04
 
-    /// `context`'s "Thread tile size", clamped to the row height so the
-    /// chip never spills out of its row.
+    /// `context`'s "Thread tile size" (the sidebar's under the Icons
+    /// setting, `SidebarRowIcons`), clamped to the row height so the chip
+    /// never spills out of its row.
     static func chipSize(_ context: SidebarTileContext) -> CGFloat {
         let size = switch context {
-        case .sidebar: SidebarDialTuning.sidebarThreadTileSize()
+        case .sidebar: SidebarRowIcons.current().sidebarTiles().threadTile
         case .rail: SidebarDialTuning.railThreadTileSize()
         }
         return min(max(size, 0), SidebarDialTuning.rowHeight())
     }
-    /// The status glyph inside a chip: `context`'s "Thread tile icon".
+    /// The status glyph inside a chip: `context`'s "Thread tile icon" (the
+    /// sidebar's under the Icons setting).
     static func chipGlyphSize(_ context: SidebarTileContext) -> CGFloat {
         switch context {
-        case .sidebar: max(SidebarDialTuning.sidebarThreadTileIcon(), 0)
+        case .sidebar: max(SidebarRowIcons.current().sidebarTiles().threadIcon, 0)
         case .rail: max(SidebarDialTuning.railThreadTileIcon(), 0)
         }
     }
@@ -127,7 +129,7 @@ enum RailProjectColumn {
     /// plate's box) expanded, and `inset` below the tile when the header is
     /// alone (Sean, 2026-10-09; the expanded bottom, Amendment 5, 2026-10-20).
     static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat, context: SidebarTileContext) -> ClosedRange<CGFloat> {
-        let tileTrim = (ProjectAccordionHeader.height(context) - RailProjectTile.size(context)) / 2
+        let tileTrim = (ProjectAccordionHeader.height(context) - SidebarTileSizes.cardAnchor(tile: RailProjectTile.size(context))) / 2
         let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize(context)) / 2)
         let top = union.minY + tileTrim - inset
         let bottom: CGFloat

@@ -655,7 +655,7 @@ struct IdleProjectsFoldRow: View {
                     )
                 }
                 .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
-                .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
+                .padding(.trailing, dials.sidebarLabelSpacing)
             Text(label.uppercased())
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.5)
@@ -951,7 +951,7 @@ struct ProjectAccordionHeader: View {
                     )
                 }
                 .modifier(MorphTravel(distance: metrics.tileTravel, progress: progress))
-                .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
+                .padding(.trailing, dials.sidebarLabelSpacing)
             HStack(spacing: 0) {
                 Text(name.uppercased())
                     .font(.system(size: 11, weight: .semibold))
@@ -1283,6 +1283,9 @@ struct MorphTileFace: View, Animatable {
             redlineID: redlineID,
             icon: icon
         )
+        // A zero-size tile (Icons: None, on the sidebar) draws nothing,
+        // its monogram included.
+        .opacity(scale > 0 ? 1 : 0)
         .morphIdentityProbe(redlineID)
         .overlay(alignment: .topTrailing) {
             if let badgeCount {
@@ -1361,10 +1364,11 @@ enum RailProjectTile {
     /// The rail's tile, unset (Sean, 2026-10-10: the rail's tiles grow a third
     /// as the sidebar shrinks to it, on the 8pt grid).
     static let defaultRailSize: CGFloat = 40
-    /// The tile's side in `context`: that context's "Project tile size" dial.
+    /// The tile's side in `context`: that context's "Project tile size" dial
+    /// (the sidebar's under the Icons setting, `SidebarRowIcons`).
     static func size(_ context: SidebarTileContext) -> CGFloat {
         switch context {
-        case .sidebar: max(SidebarDialTuning.sidebarProjectTileSize(), 0)
+        case .sidebar: max(SidebarRowIcons.current().sidebarTiles().projectTile, 0)
         case .rail: max(SidebarDialTuning.railProjectTileSize(), 0)
         }
     }
@@ -1379,7 +1383,7 @@ enum RailProjectTile {
     /// the rail, at the defaults).
     static func textSize(_ context: SidebarTileContext, letters: Int) -> CGFloat {
         let text = switch context {
-        case .sidebar: SidebarDialTuning.sidebarProjectTileText()
+        case .sidebar: SidebarRowIcons.current().sidebarTiles().projectText
         case .rail: SidebarDialTuning.railProjectTileText()
         }
         return max(text - (letters > 1 ? 2 : 0), 1)
