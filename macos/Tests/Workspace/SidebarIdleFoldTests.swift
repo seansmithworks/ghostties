@@ -3,7 +3,7 @@ import SwiftUI
 import GhosttiesCore
 @testable import Ghostty
 
-/// One view folds idle projects into one "Idle · N" row at the bottom of
+/// One view folds idle projects into one "No threads · N" row at the bottom of
 /// the list (`SidebarIdleFold`): which projects are idle (only those with no
 /// thread), which never fold,
 /// what the row reads, where it sits, that its state persists, and that no
@@ -141,11 +141,11 @@ final class SidebarIdleFoldTests: XCTestCase {
         let b = session("b", busy)
         let three = arrangement([busy, project("x"), project("y"), project("z")], [b], kinds: ["b": .working])
         XCTAssertEqual(three.row?.count, 3)
-        XCTAssertEqual(SidebarIdleFold.label(count: 3), "Idle · 3")
+        XCTAssertEqual(SidebarIdleFold.label(count: 3), "No threads · 3")
 
         let one = arrangement([busy, project("x")], [b], kinds: ["b": .working])
         XCTAssertEqual(one.row?.count, 1, "one idle project still folds")
-        XCTAssertEqual(SidebarIdleFold.label(count: 1), "Idle · 1")
+        XCTAssertEqual(SidebarIdleFold.label(count: 1), "No threads · 1")
     }
 
     func testTheIdleRowIsAbsentWithNoIdleProject() {
@@ -369,9 +369,9 @@ final class SidebarIdleFoldTests: XCTestCase {
     // MARK: - Accessibility
 
     func testTheIdleRowSpeaksHowManyNeedYou() {
-        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 1), "Idle projects, 5, 1 need you")
-        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 3), "Idle projects, 5, 3 need you")
-        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 0), "Idle projects, 5")
+        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 1), "Projects with no threads, 5, 1 need you")
+        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 3), "Projects with no threads, 5, 3 need you")
+        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 5, needYouCount: 0), "Projects with no threads, 5")
     }
 
     // MARK: - Capture knob
@@ -385,7 +385,7 @@ final class SidebarIdleFoldTests: XCTestCase {
     }
 
     func testTheRowSpeaksItsCountAndWhatAClickDoes() {
-        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 4), "Idle projects, 4")
+        XCTAssertEqual(IdleProjectsFoldRow.accessibilityLabel(count: 4), "Projects with no threads, 4")
         XCTAssertEqual(IdleProjectsFoldRow.accessibilityHint(isExpanded: false), "Shows the idle projects")
         XCTAssertEqual(IdleProjectsFoldRow.accessibilityHint(isExpanded: true), "Hides the idle projects")
     }
