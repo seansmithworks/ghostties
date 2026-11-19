@@ -441,7 +441,7 @@ struct SessionRowPrompt: Equatable {
 // MARK: - Idle fold
 
 /// One view folds every idle project into one row at the bottom of the
-/// list, "Idle · N" (Sean, 2026-11-15, "Idle folded").
+/// list, "No threads · N" (Sean, 2026-11-15, "Idle folded"; renamed 2026-11-19).
 ///
 /// A project with an open thread is "literally not idle" (Sean, 2026-11-18):
 /// it is active whatever its threads' status. Only a project with no
@@ -466,7 +466,7 @@ enum SidebarIdleFold {
     }
 
     /// The row's label.
-    static func label(count: Int) -> String { "Idle · \(count)" }
+    static func label(count: Int) -> String { "No threads · \(count)" }
 
     /// A project is active while it has any thread, whatever its status.
     /// `kinds` are its threads' statuses as their rows show them
@@ -621,7 +621,7 @@ struct IdleProjectsFoldRow: View {
 
     /// Ends as a project header's does: ", N need you".
     static func accessibilityLabel(count: Int, needYouCount: Int = 0) -> String {
-        "Idle projects, \(count)" + (SidebarIdleFold.needYouLabel(needYouCount).map { ", \($0)" } ?? "")
+        "Projects with no threads, \(count)" + (SidebarIdleFold.needYouLabel(needYouCount).map { ", \($0)" } ?? "")
     }
 
     static func accessibilityHint(isExpanded: Bool) -> String {
