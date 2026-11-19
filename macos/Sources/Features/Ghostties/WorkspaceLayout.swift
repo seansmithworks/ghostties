@@ -542,12 +542,6 @@ enum WorkspaceLayout {
     /// raw `CAMediaTimingFunction`) so `SidebarTransitionTiming` stays
     /// `Equatable` and the timing table below is directly unit-testable.
     enum SidebarTransitionCurveKind: Equatable {
-        /// iOS drawer curve — cubic-bezier(0.32, 0.72, 0, 1) (Ionic).
-        /// Almost all the distance is covered in the first third, then it
-        /// coasts to a stop — panels feel pushed, not dragged. Used for
-        /// collapse, expand, and reopen.
-        case drawer
-
         /// Full-close curve — cubic-bezier(0.23, 1, 0.32, 1). Closing runs
         /// against opening because there's nothing left to read on the way
         /// out — the exit should never make the user wait.
@@ -560,8 +554,6 @@ enum WorkspaceLayout {
 
         var mediaTimingFunction: CAMediaTimingFunction {
             switch self {
-            case .drawer:
-                return CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
             case .close:
                 return CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
             case .legacyEaseInOut:
@@ -577,8 +569,6 @@ enum WorkspaceLayout {
         /// `CAMediaTimingFunction` to share directly.
         var swiftUIAnimation: (Double, Double, Double, Double)? {
             switch self {
-            case .drawer:
-                return (0.32, 0.72, 0, 1)
             case .close:
                 return (0.23, 1, 0.32, 1)
             case .legacyEaseInOut:
@@ -596,19 +586,19 @@ enum WorkspaceLayout {
 
     /// The Flow 05 motion spec's named transition table, as a pure
     /// `from → to` lookup (Sean's canvas, "Flow 05 · Collapse and close"),
-    /// for the transitions that are not the sidebar ⇄ rail morph: full
-    /// close 180ms on the steeper `close` curve, reopen 240ms on `drawer`.
-    /// The pinned ⇄ collapsed pair (the Cmd+S toggle and the hover reveal)
-    /// has no duration: it runs on the spring (`sidebarMorphSpring`), and
-    /// falls to the default row here only for Reduce Motion's crossfade
-    /// length. Pairs the spec doesn't name (anything routing through
-    /// `.overlay`) keep the pre-Flow-05 generic 200ms `legacyEaseInOut`.
+    /// for the transitions that don't run on a spring: a peek out of closed
+    /// (the overlay, the hover reveal) dismissing back to closed, 180ms on
+    /// the steeper `close` curve. The pinned ⇄ collapsed pair (the Cmd+S
+    /// toggle and the hover reveal) and the full close and reopen
+    /// (pinned/collapsed ⇄ closed) have no duration: they run on springs
+    /// (`sidebarMorphSpring`, `sidebarCloseReopenSpring`), and fall to the
+    /// default row here only for Reduce Motion's crossfade length. Pairs
+    /// the spec doesn't name (anything else routing through `.overlay`)
+    /// keep the pre-Flow-05 generic 200ms `legacyEaseInOut`.
     static func sidebarTransitionTiming(from: SidebarMode, to: SidebarMode) -> SidebarTransitionTiming {
         switch (from, to) {
-        case (_, .closed):
+        case (.overlay, .closed), (.hoverRevealed, .closed):
             return SidebarTransitionTiming(duration: 0.18, curve: .close)
-        case (.closed, .pinned), (.closed, .collapsed):
-            return SidebarTransitionTiming(duration: 0.24, curve: .drawer)
         default:
             return SidebarTransitionTiming(duration: 0.2, curve: .legacyEaseInOut)
         }
@@ -633,6 +623,45 @@ enum WorkspaceLayout {
                             bounce: SidebarDialTuning.motionCollapseBounce(defaults: defaults))
             : SidebarSpring(response: SidebarDialTuning.motionOpenResponse(defaults: defaults),
                             bounce: SidebarDialTuning.motionOpenBounce(defaults: defaults))
+    }
+
+    /// Full close (pinned or rail -> closed, Cmd+Shift+S): the collapse
+    /// spring's family, so it reads as the same motion as sidebar -> rail
+    /// rather than a flat 180ms snap. Bounce is fixed at 0, not a dial:
+    /// motion-standards "never bounce a close", and an overshoot would
+    /// drive the sidebar's width below 0.
+    static let sidebarCloseSpring = SidebarSpring(response: 0.30, bounce: 0)
+
+    /// Reopen (closed -> pinned or rail): the open spring's family, with
+    /// the same visible overshoot as rail -> sidebar.
+    static let sidebarReopenSpring = SidebarSpring(response: 0.35, bounce: 0.3)
+
+    /// The spring for a full close or reopen, from the "Close springs"
+    /// dials; nil for every other pair (the morph has `sidebarMorphSpring`,
+    /// a peek out of closed keeps its duration curve).
+    static func sidebarCloseReopenSpring(from: SidebarMode, to: SidebarMode, defaults: UserDefaults = SidebarDialTuning.store) -> SidebarSpring? {
+        switch (from, to) {
+        case (.pinned, .closed), (.collapsed, .closed):
+            return SidebarSpring(response: SidebarDialTuning.motionCloseResponse(defaults: defaults), bounce: 0)
+        case (.closed, .pinned), (.closed, .collapsed):
+            return SidebarSpring(response: SidebarDialTuning.motionReopenResponse(defaults: defaults),
+                                 bounce: SidebarDialTuning.motionReopenBounce(defaults: defaults))
+        default:
+            return nil
+        }
+    }
+
+    /// The sidebar content's opacity at rest in `mode`: hidden only when
+    /// closed (`applyTransitionAlphas`).
+    static func sidebarRestingAlpha(for mode: SidebarMode) -> CGFloat {
+        mode == .closed ? 0 : 1
+    }
+
+    /// The close/reopen fade at the spring's `progress`: from `start` (where
+    /// an interrupted fade left it) to `target`, held at the ends so the
+    /// reopen's overshoot never pushes it past either.
+    static func sidebarFadeAlpha(from start: CGFloat, to target: CGFloat, progress: Double) -> CGFloat {
+        start + (target - start) * CGFloat(min(max(progress, 0), 1))
     }
 
 
