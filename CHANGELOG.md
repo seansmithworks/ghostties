@@ -10,6 +10,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.5.0-beta.28] — 2026-11-19
+
+Settings is now one window for everything, with a search field and a live preview. The sidebar follows the thread you pick, shows each thread on one line, and folds projects that have no threads into one row. The embedded browser gets real tabs, a cleaner tab strip and its own Cmd+T, Cmd+L and Cmd+R. This beta also fixes a freeze that could hang the whole app after the display slept or changed.
+
+### Added
+
+- **One Settings window.** Cmd+, opens a single window with a searchable list down the side: General, Appearance and Sidebar for the app, each of your projects plus Templates, and MCP Sources for agents. Appearance, Sidebar and project panes show a live preview strip, so you see a change before you leave the pane.
+- **Sidebar row settings.** Settings → Sidebar has Icons (None, Small or Large) and Text (Standard or Detailed). Large and Standard match how the sidebar looked before; Detailed shows every row's second line.
+- **Browser shortcuts.** While the browser has keyboard focus, Cmd+T opens a new browser tab, Cmd+L selects the address field, Cmd+R reloads, and Cmd+[ and Cmd+] go back and forward. Everywhere else those keys do what they did before.
+- **Quick create from a project header.** Hover a project header and a + replaces its count. Click it to open the composer with that project filled in, or Option-click to start a thread right away.
+
+### Changed
+
+- **Projects with no threads fold into one row.** Unpinned projects with no threads collect in a "No threads · N" row at the bottom of the sidebar. A project with any thread stays listed, pinned projects never fold, and nothing moves while the pointer is in the list.
+- **Thread rows are one line.** A second line appears only when a thread needs you or hit an error. VoiceOver still reads every row's status.
+- **The sidebar follows your selection.** Switching to a thread scrolls the sidebar to it, clear of the bottom tray.
+- **The sidebar closes and reopens on a spring**, and toggling it again mid-animation carries on smoothly instead of jumping.
+- **A clean browser tab strip.** Tabs are one line with long titles cut off, equal width, with a close button on hover and on the selected tab. The strip stays the same height and shows even with one tab, so + is always there.
+- **Browsers you make on purpose fill the window.** A browser from the composer, Option-click or the tray takes the whole canvas. Cmd+B and `gt browser open` still open it beside the terminal.
+- **The composer sits still.** Its field stays a third of the way down the window, the ghost is larger and flips now and then, and in short windows it lies on its side. Reduce Motion turns the movement off.
+- **More project icons are found**, including Next.js `src/app` icons and Mac app `.icns` files.
+- **Agent status hooks are safe to leave behind.** If Ghostties is removed, the Claude Code and Codex status hooks quietly do nothing. The Codex hook is added once and stays removed if you remove it.
+
+### Fixed
+
+- **Ghostties could freeze after the display slept, woke or changed resolution**, the next time you clicked into a terminal. Display refresh now starts and stops only on the main thread (from upstream Ghostty).
+- **Keyboard focus stays in the browser.** After Cmd+T, closing or switching a tab, or pressing Return in the address field, the browser keeps the keys, so the next shortcut reaches it without clicking first.
+- **Browser tabs work.** The tab strip's + used to add a tab with no page.
+- **The project header + sits exactly where the count was.**
+- **Leftover Ghostty names and links** in the app and website now say Ghostties.
+
+---
+
 ## [0.5.0-beta.27] — 2026-11-08
 
 Sessions that need you now say what they need right in the sidebar, and you can approve or deny Claude Code's permission prompts from the row. Projects show their own icons, and Cmd+, opens a Settings window for projects, appearance and themes. The whole window follows your terminal theme, Ghostties ships its own light and dark theme by default, Claude Code status works without setup, and closing the browser no longer closes the window.
