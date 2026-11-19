@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Changelog: Ghostties</title>
+  <title>Changelog — ghostties</title>
   <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
@@ -20,9 +20,9 @@
       link.href = 'data:image/svg+xml;base64,' + btoa(svg);
     })();
   </script>
-  <meta name="description" content="Changelog: what's new in each Ghostties release.">
-  <meta property="og:title" content="Changelog: Ghostties">
-  <meta property="og:description" content="Changelog: what's new in each Ghostties release.">
+  <meta name="description" content="Changelog — what's new in each Ghostties release.">
+  <meta property="og:title" content="Changelog — ghostties">
+  <meta property="og:description" content="Changelog — what's new in each Ghostties release.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ghostties.org/changelog">
   <meta property="og:image" content="https://ghostties.org/assets/social-card.png">
@@ -114,13 +114,58 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <main id="main">
   <div class="content">
-    <a class="back" href="/">&larr; Ghostties</a>
+    <a class="back" href="/">&larr; ghostties</a>
 
     <h1>Changelog</h1>
     <p class="lead">What&rsquo;s new in each Ghostties release, newest first.</p>
 
     <div class="note">
       <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Auto-updates aren't reliable yet in early betas. Download the latest release manually from the <a href="/download">download page</a>.</p>
+    </div>
+
+    <!-- beta.28 -->
+    <div class="release">
+      <div class="release-heading">
+        <h2>v0.5.0-beta.28</h2>
+        <span class="date">November 19, 2026</span>
+      </div>
+      <p class="release-summary">Settings is now one window for everything, with a search field and a live preview. The sidebar follows the thread you pick, shows each thread on one line, and folds projects that have no threads into one row. The embedded browser gets real tabs, a cleaner tab strip and its own Cmd+T, Cmd+L and Cmd+R. This beta also fixes a freeze that could hang the whole app after the display slept or changed.</p>
+
+      <div class="release-section">
+        <h3>Added</h3>
+        <ul>
+          <li><strong>One Settings window.</strong> Cmd+, opens a single window with a searchable list down the side: General, Appearance and Sidebar for the app, each of your projects plus Templates, and MCP Sources for agents. Appearance, Sidebar and project panes show a live preview strip, so you see a change before you leave the pane.</li>
+          <li><strong>Sidebar row settings.</strong> Settings → Sidebar has Icons (None, Small or Large) and Text (Standard or Detailed). Large and Standard match how the sidebar looked before; Detailed shows every row’s second line.</li>
+          <li><strong>Browser shortcuts.</strong> While the browser has keyboard focus, Cmd+T opens a new browser tab, Cmd+L selects the address field, Cmd+R reloads, and Cmd+[ and Cmd+] go back and forward. Everywhere else those keys do what they did before.</li>
+          <li><strong>Quick create from a project header.</strong> Hover a project header and a + replaces its count. Click it to open the composer with that project filled in, or Option-click to start a thread right away.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Changed</h3>
+        <ul>
+          <li><strong>Projects with no threads fold into one row.</strong> Unpinned projects with no threads collect in a “No threads · N” row at the bottom of the sidebar. A project with any thread stays listed, pinned projects never fold, and nothing moves while the pointer is in the list.</li>
+          <li><strong>Thread rows are one line.</strong> A second line appears only when a thread needs you or hit an error. VoiceOver still reads every row’s status.</li>
+          <li><strong>The sidebar follows your selection.</strong> Switching to a thread scrolls the sidebar to it, clear of the bottom tray.</li>
+          <li><strong>The sidebar closes and reopens on a spring</strong>, and toggling it again mid-animation carries on smoothly instead of jumping.</li>
+          <li><strong>A clean browser tab strip.</strong> Tabs are one line with long titles cut off, equal width, with a close button on hover and on the selected tab. The strip stays the same height and shows even with one tab, so + is always there.</li>
+          <li><strong>Browsers you make on purpose fill the window.</strong> A browser from the composer, Option-click or the tray takes the whole canvas. Cmd+B and <code>gt browser open</code> still open it beside the terminal.</li>
+          <li><strong>The composer sits still.</strong> Its field stays a third of the way down the window, the ghost is larger and flips now and then, and in short windows it lies on its side. Reduce Motion turns the movement off.</li>
+          <li><strong>More project icons are found</strong>, including Next.js <code>src/app</code> icons and Mac app <code>.icns</code> files.</li>
+          <li><strong>Agent status hooks are safe to leave behind.</strong> If Ghostties is removed, the Claude Code and Codex status hooks quietly do nothing. The Codex hook is added once and stays removed if you remove it.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Fixed</h3>
+        <ul>
+          <li><strong>Ghostties could freeze after the display slept, woke or changed resolution</strong>, the next time you clicked into a terminal. Display refresh now starts and stops only on the main thread (from upstream Ghostty).</li>
+          <li><strong>Keyboard focus stays in the browser.</strong> After Cmd+T, closing or switching a tab, or pressing Return in the address field, the browser keeps the keys, so the next shortcut reaches it without clicking first.</li>
+          <li><strong>Browser tabs work.</strong> The tab strip’s + used to add a tab with no page.</li>
+          <li><strong>The project header + sits exactly where the count was.</strong></li>
+          <li><strong>Leftover Ghostty names and links</strong> in the app and website now say Ghostties.</li>
+        </ul>
+      </div>
     </div>
 
     <!-- beta.27 -->
