@@ -11,6 +11,10 @@ final class BrowserTabBar: NSView {
         didSet { subscribeToManager() }
     }
 
+    /// Called when the + button is clicked. The owner creates the tab, since a
+    /// tab needs a page view and this bar only draws the manager's tabs.
+    var onAddTab: (() -> Void)?
+
     private var tabButtons: [UUID: NSButton] = [:]
     private var closeButtons: [UUID: NSButton] = [:]
     private var hoverTrackingAreas: [UUID: NSTrackingArea] = [:]
@@ -248,7 +252,7 @@ final class BrowserTabBar: NSView {
     }
 
     @objc private func addTabClicked() {
-        tabManager?.createTab()
+        onAddTab?()
     }
 
 }

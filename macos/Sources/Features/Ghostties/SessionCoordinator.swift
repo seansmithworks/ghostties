@@ -623,7 +623,6 @@ final class SessionCoordinator: ObservableObject {
             tabManager: manager
         )
         browserView.delegate = bridge
-        bridge.activeTabId = tab.id
         bridge.onCloseRequested = { [weak self] tabId in
             self?.closeBrowserTab(sessionId: session.id, tabId: tabId)
         }
@@ -682,6 +681,20 @@ final class SessionCoordinator: ObservableObject {
         #else
         .shared
         #endif
+    }
+
+    /// Opens a new tab in `manager`'s browser and makes it the active one.
+    /// Every new-tab entry point (Cmd+T in the browser, the tab bar's +) goes
+    /// through here, so a tab always has a page view behind it.
+    @discardableResult
+    func addBrowserTab(to manager: BrowserTabManager, url: String = "about:blank") -> BrowserTabManager.Tab? {
+        guard let bridge = bridge(for: manager) else { return nil }
+        let tab = manager.createTab(url: url)
+        let view = CEFBrowserView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), url: url)
+        view.delegate = bridge
+        manager.registerBrowserView(view, for: tab.id)
+        manager.switchTab(id: tab.id)
+        return tab
     }
 
     /// A browser tab closed from outside the app (an agent, or the page

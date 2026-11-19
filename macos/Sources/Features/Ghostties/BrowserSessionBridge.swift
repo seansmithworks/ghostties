@@ -11,9 +11,6 @@ final class BrowserSessionBridge: NSObject, CEFBrowserViewDelegate {
     weak var tabManager: BrowserTabManager?
     weak var navigationBar: BrowserNavigationBar?
 
-    /// The tab ID currently associated with this bridge's CEFBrowserView.
-    var activeTabId: UUID?
-
     /// Forwarded to the panel's inline failure state — set by
     /// `WorkspaceViewContainer` when embedding the browser view.
     var onCreationFailed: (() -> Void)?
@@ -33,34 +30,31 @@ final class BrowserSessionBridge: NSObject, CEFBrowserViewDelegate {
 
     // MARK: - CEFBrowserViewDelegate
 
+    /// The tab `view` belongs to. One bridge serves every tab of a browser,
+    /// so a callback is attributed by its view, never by "the" active tab.
+    private func tabId(for view: CEFBrowserView) -> UUID? {
+        tabManager?.browserViews.first(where: { $0.value === view })?.key
+    }
+
     func browserView(_ view: CEFBrowserView, didChangeURL url: String) {
-        guard let tabId = activeTabId else { return }
+        guard let tabId = tabId(for: view) else { return }
         tabManager?.updateTab(id: tabId, url: url)
-        navigationBar?.urlField.stringValue = url
+        // The bar shows the tab on screen; a background tab only updates its record.
+        if tabId == tabManager?.activeTabId {
+            navigationBar?.urlField.stringValue = url
+        }
     }
 
     func browserView(_ view: CEFBrowserView, didChangeTitle title: String) {
-        guard let tabId = activeTabId else { return }
+        guard let tabId = tabId(for: view) else { return }
         tabManager?.updateTab(id: tabId, title: title)
     }
 
     func browserView(_ view: CEFBrowserView, didChangeLoadingState isLoading: Bool, canGoBack: Bool, canGoForward forward: Bool) {
-        guard let tabId = activeTabId else { return }
+        guard let tabId = tabId(for: view) else { return }
         tabManager?.updateTab(id: tabId, isLoading: isLoading)
-        navigationBar?.backButton.isEnabled = canGoBack
-        navigationBar?.forwardButton.isEnabled = forward
-        // Update the reload button icon based on loading state.
-        if isLoading {
-            navigationBar?.reloadButton.image = NSImage(
-                systemSymbolName: "xmark",
-                accessibilityDescription: "Stop"
-            )
-        } else {
-            navigationBar?.reloadButton.image = NSImage(
-                systemSymbolName: "arrow.clockwise",
-                accessibilityDescription: "Reload"
-            )
-        }
+        guard tabId == tabManager?.activeTabId else { return }
+        navigationBar?.reflect(isLoading: isLoading, canGoBack: canGoBack, canGoForward: forward)
     }
 
     func browserViewDidFail(toCreate view: CEFBrowserView) {
@@ -72,7 +66,7 @@ final class BrowserSessionBridge: NSObject, CEFBrowserViewDelegate {
     }
 
     func browserViewDidRequestClose(_ view: CEFBrowserView) {
-        guard let tabId = tabManager?.browserViews.first(where: { $0.value === view })?.key else { return }
+        guard let tabId = tabId(for: view) else { return }
         onCloseRequested?(tabId)
     }
 }
