@@ -18,6 +18,7 @@
 #include <vector>
 #import "include/cef_display_handler.h"
 #import "include/cef_load_handler.h"
+#import "include/cef_focus_handler.h"
 #import "include/wrapper/cef_helpers.h"
 #endif
 
@@ -213,6 +214,31 @@ private:
     IMPLEMENT_REFCOUNTING(GhosttiesLifeSpanHandler);
 };
 
+#pragma mark - GhosttiesFocusHandler
+
+// A loading page never takes the keys from a text field being typed in.
+// CEF's default focuses the page on every browser-initiated load, which
+// pulled the keys out of the address field a moment after Cmd+T opened a
+// tab. Any other navigation focus is left as it was (it also moves the keys
+// to a new page view after a cross-process navigation).
+class GhosttiesFocusHandler : public CefFocusHandler {
+public:
+    explicit GhosttiesFocusHandler(CEFBrowserView *view) : view_(view) {}
+
+    bool OnSetFocus(CefRefPtr<CefBrowser> browser, FocusSource source) override {
+        CEF_REQUIRE_UI_THREAD();
+        if (source != FOCUS_SOURCE_NAVIGATION) return false;
+        CEFBrowserView *v = view_;
+        // While a field is being edited, its shared field editor (an NSText)
+        // is the window's first responder.
+        return [v.window.firstResponder isKindOfClass:[NSText class]];
+    }
+
+private:
+    __weak CEFBrowserView *view_;
+    IMPLEMENT_REFCOUNTING(GhosttiesFocusHandler);
+};
+
 #pragma mark - GhosttiesCefClient
 
 class GhosttiesCefClient : public CefClient {
@@ -220,7 +246,8 @@ public:
     GhosttiesCefClient(CEFBrowserView *view)
         : life_span_handler_(new GhosttiesLifeSpanHandler(view))
         , display_handler_(new GhosttiesDisplayHandler(view))
-        , load_handler_(new GhosttiesLoadHandler(view)) {}
+        , load_handler_(new GhosttiesLoadHandler(view))
+        , focus_handler_(new GhosttiesFocusHandler(view)) {}
 
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override {
         return life_span_handler_;
@@ -234,10 +261,15 @@ public:
         return load_handler_;
     }
 
+    CefRefPtr<CefFocusHandler> GetFocusHandler() override {
+        return focus_handler_;
+    }
+
 private:
     CefRefPtr<GhosttiesLifeSpanHandler> life_span_handler_;
     CefRefPtr<GhosttiesDisplayHandler> display_handler_;
     CefRefPtr<GhosttiesLoadHandler> load_handler_;
+    CefRefPtr<GhosttiesFocusHandler> focus_handler_;
     IMPLEMENT_REFCOUNTING(GhosttiesCefClient);
 };
 
@@ -594,6 +626,25 @@ private:
 }
 #endif
 
+#pragma mark - Keyboard focus
+
+// The page view takes the keys for its page, so the panel can hand them to a
+// tab whose page does not exist yet (just opened, or never shown). Chromium's
+// own view inside holds them once the page exists: becoming first responder
+// passes focus down, and so does the page arriving while this view holds it.
+- (BOOL)acceptsFirstResponder {
+    return YES;
+}
+
+- (BOOL)becomeFirstResponder {
+#if GHOSTTIES_CEF_AVAILABLE
+    if (_browser) {
+        _browser->GetHost()->SetFocus(true);
+    }
+#endif
+    return YES;
+}
+
 #pragma mark - Layout
 
 - (void)setFrameSize:(NSSize)newSize {
@@ -873,6 +924,13 @@ private:
     self.isLoading = loading;
     self.canGoBack = back;
     self.canGoForward = forward;
+#if GHOSTTIES_CEF_AVAILABLE
+    // Handed the keys mid-navigation, when Chromium had no view to take
+    // them yet: pass them on once the page has settled.
+    if (!loading && _browser && self.window.firstResponder == self) {
+        _browser->GetHost()->SetFocus(true);
+    }
+#endif
     if ([self.delegate respondsToSelector:
              @selector(browserView:didChangeLoadingState:canGoBack:canGoForward:)]) {
         [self.delegate browserView:self didChangeLoadingState:loading
@@ -907,6 +965,10 @@ private:
     [CEFBridgeManager recordChromiumVersionStamp];
     // Sync CEF's internal child view and compositor to our current bounds.
     [self _syncCefChildBounds];
+    // The keys were handed to this view before its page existed: pass them on.
+    if (self.window.firstResponder == self) {
+        _browser->GetHost()->SetFocus(true);
+    }
     if ([self.delegate respondsToSelector:@selector(browserViewDidCreate:)]) {
         [self.delegate browserViewDidCreate:self];
     }

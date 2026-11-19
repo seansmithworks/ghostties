@@ -85,9 +85,6 @@ final class BrowserPanelView: NSView {
         tabBar.translatesAutoresizingMaskIntoConstraints = false
         failureStateView.translatesAutoresizingMaskIntoConstraints = false
 
-        // Tab bar starts hidden (alphaValue 0) and shows automatically when >1 tab.
-        tabBar.alphaValue = 0
-
         // DevTools area constraints — anchored to the bottom, hidden by default.
         devToolsHeightConstraint = devToolsArea.heightAnchor.constraint(equalToConstant: 0)
 
@@ -105,7 +102,7 @@ final class BrowserPanelView: NSView {
             navigationBar.heightAnchor.constraint(
                 equalToConstant: WorkspaceLayout.terminalTitleBarHeight),
 
-            // Tab bar (below nav, 24pt height)
+            // Tab bar (below nav, its own fixed height, shown at every tab count)
             tabBar.topAnchor.constraint(equalTo: navigationBar.bottomAnchor),
             tabBar.leadingAnchor.constraint(equalTo: leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: trailingAnchor),

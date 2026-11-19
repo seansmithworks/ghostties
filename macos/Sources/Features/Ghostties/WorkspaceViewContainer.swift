@@ -2426,11 +2426,6 @@ class WorkspaceViewContainer: NSView {
 
     /// Embed a browser manager's active tab view into `browserPanelView.contentArea`.
     private func embedBrowserInPanel(_ manager: BrowserTabManager) {
-        // Remove any existing content from the panel's content area.
-        for subview in browserPanelView.contentArea.subviews {
-            subview.removeFromSuperview()
-        }
-
         // Wire the navigation bar actions.
         let navBar = browserPanelView.navigationBar
         navBar.backButton.target = self
@@ -2469,11 +2464,19 @@ class WorkspaceViewContainer: NSView {
 
     /// Puts `tabId`'s page view in the panel and shows its address and
     /// history state in the navigation bar.
+    ///
+    /// The one place the panel swaps pages (a new tab, a switch, a close, a
+    /// re-show), so it is where the keyboard is carried across: removing the
+    /// page that held the keys hands them to the bare window, where no browser
+    /// shortcut sees them. A browser that had the keys gives them to the page
+    /// it now shows.
     private func embedBrowserTab(_ tabId: UUID?, of manager: BrowserTabManager) {
+        let browserHadKeys = browserHasKeyboardFocus
         for subview in browserPanelView.contentArea.subviews {
             subview.removeFromSuperview()
         }
         guard let tabId, let browserView = manager.browserViews[tabId] else { return }
+        defer { if browserHadKeys { window?.makeFirstResponder(browserView) } }
 
         browserView.translatesAutoresizingMaskIntoConstraints = false
         browserPanelView.contentArea.addSubview(browserView)
@@ -4619,9 +4622,14 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
                 return true
             }
 
+            // The page takes the keys, as in Safari, before it loads: a
+            // page may not take them from a field being edited. Never `nil`:
+            // that leaves them with the window, and the browser shortcuts
+            // stop working.
+            if let page = _activeBrowserManager?.activeBrowserView {
+                field.window?.makeFirstResponder(page)
+            }
             activeCEFView?.loadURL(urlString)
-            // Resign first responder so keyboard goes back to the browser.
-            field.window?.makeFirstResponder(nil)
             return true
         }
         return false
