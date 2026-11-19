@@ -41,6 +41,16 @@ enum CaptureScript {
         case unpin(project: String)
         /// Opens a browser the way `route` does, with no input.
         case browser(BrowserRoute)
+        /// Browser tab and focus ops, each the call its click or key makes.
+        /// `browserShortcut` runs what the Cmd-key monitor runs for `key`;
+        /// `browserProbe` appends where keyboard focus is to `browser.jsonl`.
+        case browserShortcut(key: String)
+        case browserOpenTab(url: String)
+        case browserSelectTab(index: Int)
+        case browserCloseTab(index: Int)
+        case browserFocusURL
+        case browserCommitURL
+        case browserProbe(name: String)
     }
 
     /// The product path the `browser` op takes: the composer's launch of the
@@ -88,6 +98,9 @@ enum CaptureScript {
         "foldAll": ["op"], "fold": ["op", "project"], "unfold": ["op", "project"],
         "select": ["op", "session"], "pin": ["op", "project"], "unpin": ["op", "project"],
         "browser": ["op", "route"],
+        "browserShortcut": ["op", "key"], "browserOpenTab": ["op", "url"],
+        "browserSelectTab": ["op", "index"], "browserCloseTab": ["op", "index"],
+        "browserFocusURL": ["op"], "browserCommitURL": ["op"], "browserProbe": ["op", "name"],
     ]
 
     private static func parseStep(_ d: [String: Any]) throws -> Step {
@@ -139,6 +152,14 @@ enum CaptureScript {
                 throw Failure("browser needs a route: composer, quick, toggle or agent")
             }
             return .browser(route)
+        case "browserShortcut": return .browserShortcut(key: try name(d, "key", op: op))
+        case "browserOpenTab": return .browserOpenTab(url: try name(d, "url", op: op))
+        case "browserSelectTab", "browserCloseTab":
+            guard let index = (d["index"] as? NSNumber)?.intValue, index >= 0 else { throw Failure("\(op) needs an index >= 0") }
+            return op == "browserSelectTab" ? .browserSelectTab(index: index) : .browserCloseTab(index: index)
+        case "browserFocusURL": return .browserFocusURL
+        case "browserCommitURL": return .browserCommitURL
+        case "browserProbe": return .browserProbe(name: try name(d, "name", op: op))
         default:
             throw Failure("unknown op '\(op)'")
         }
@@ -258,6 +279,9 @@ enum CaptureScript {
         /// Opens a browser by `route`'s own product call; returns once it is
         /// asked for, not once the page has loaded.
         func openBrowser(route: BrowserRoute) async throws
+        /// Browser tab and focus ops (see `Step`). `browserProbe` returns one
+        /// JSON-ready record of where keyboard focus is.
+        func browserStep(_ step: Step) throws -> [String: Any]?
     }
 
     /// Runs steps against a host and reports through files in `stateDir`:
@@ -317,6 +341,12 @@ enum CaptureScript {
             case .pin(let project): try host.setPinned(project: project, pinned: true)
             case .unpin(let project): try host.setPinned(project: project, pinned: false)
             case .browser(let route): try await host.openBrowser(route: route)
+            case .browserShortcut, .browserOpenTab, .browserSelectTab, .browserCloseTab,
+                 .browserFocusURL, .browserCommitURL, .browserProbe:
+                if var record = try host.browserStep(step) {
+                    record["t"] = Date().timeIntervalSince1970
+                    CaptureFixture.appendLine(CaptureFixture.jsonLine(record), to: stateDir.appendingPathComponent("browser.jsonl"))
+                }
             case .wait(let seconds): try await Task.sleep(for: .seconds(seconds))
             case .mark(let name): try await mark(name)
             }
@@ -355,6 +385,12 @@ enum CaptureScript {
         }
         try? await Task.sleep(for: .seconds(1))
         await runner.run(scriptAt: path)
+    }
+}
+
+extension CaptureScript.Host {
+    func browserStep(_ step: CaptureScript.Step) throws -> [String: Any]? {
+        throw CaptureScript.Failure("this host has no browser")
     }
 }
 

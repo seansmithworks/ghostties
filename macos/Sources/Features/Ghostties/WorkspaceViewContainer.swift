@@ -4957,5 +4957,48 @@ extension WorkspaceViewContainer: CaptureScript.Host {
                 sessionId: terminal, url: CaptureFixture.browserStartURL, targetTimeout: 1)
         }
     }
+
+    /// Browser tab and focus ops: each makes the call its click or key makes
+    /// (the tab bar's tab, ×, +; the URL field's click and Return; the
+    /// Cmd-key monitor), on the browser shown in this window.
+    func browserStep(_ step: CaptureScript.Step) throws -> [String: Any]? {
+        guard let manager = _activeBrowserManager else { throw CaptureScript.Failure("no browser is shown") }
+        func tab(_ index: Int) throws -> UUID {
+            guard manager.tabs.indices.contains(index) else {
+                throw CaptureScript.Failure("no tab \(index); there are \(manager.tabs.count)")
+            }
+            return manager.tabs[index].id
+        }
+        switch step {
+        case .browserShortcut(let key):
+            let handled = handleBrowserShortcut(key: key)
+            return ["op": "shortcut", "key": key, "handled": handled]
+        case .browserOpenTab(let url):
+            guard coordinator.addBrowserTab(to: manager, url: url) != nil else {
+                throw CaptureScript.Failure("browserOpenTab: the tab could not open")
+            }
+        case .browserSelectTab(let index): manager.switchTab(id: try tab(index))
+        case .browserCloseTab(let index): manager.closeTab(id: try tab(index))
+        case .browserFocusURL: browserPanelView.navigationBar.focusURLField()
+        case .browserCommitURL:
+            let field = browserPanelView.navigationBar.urlField
+            guard let editor = field.currentEditor() as? NSTextView else {
+                throw CaptureScript.Failure("browserCommitURL: the URL field is not being edited")
+            }
+            _ = control(field, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:)))
+        case .browserProbe(let name):
+            let responder = window?.firstResponder
+            return [
+                "op": "probe", "name": name,
+                "browserHasFocus": browserHasKeyboardFocus,
+                "responder": responder.map { String(describing: Swift.type(of: $0)) } ?? "nil",
+                "responderIsWindow": responder === window,
+                "tabs": manager.tabs.count,
+                "active": manager.tabs.firstIndex(where: { $0.id == manager.activeTabId }) ?? -1,
+            ]
+        default: break
+        }
+        return nil
+    }
 }
 #endif
