@@ -5,10 +5,9 @@ import GhosttyKit
 import GhosttiesCore
 @testable import Ghostty
 
-/// "Settings is your sidebar" (settings-general card 05): Cmd+, opens the
-/// app's Settings window on a copy of the sidebar's project list, each
-/// project's icon and new-session default are edited there, and the old
-/// General + Appearance tabs live one link away as "App Settings".
+/// The one Settings window (mild2wild 2026-11-18, card 11): Cmd+, opens it,
+/// each project is its own row (its name, icon and new-session default are
+/// edited there), and every entry point lands on its pane.
 ///
 /// Stores are persistence-disabled (`WorkspaceStore(testingProjects:)`) or
 /// load from an injected temp dir (`WorkspaceStore(testingStateDirectory:)`);
@@ -49,8 +48,7 @@ final class SettingsSidebarTests: XCTestCase {
 
     /// The app menu's Cmd+, item is "Settings…", and the `open_config`
     /// keybind (Cmd+, by default), performed through a real libghostty
-    /// surface, opens the Settings window on the projects pane. The config
-    /// file is never opened.
+    /// surface, opens the Settings window. The config file is never opened.
     func testCmdCommaOpensSettingsWindowNotConfigFile() async throws {
         let delegate = try XCTUnwrap(NSApp.delegate as? AppDelegate, "test host has no AppDelegate")
         let settingsItem = try XCTUnwrap(
@@ -84,7 +82,6 @@ final class SettingsSidebarTests: XCTestCase {
         }
         XCTAssertEqual(openedConfigFiles, [], "open_config opened the config file instead of Settings")
         XCTAssertEqual(settings.window?.isVisible, true, "open_config did not show the Settings window")
-        XCTAssertEqual(settings.pane, .projects)
     }
 
     // MARK: - Projects pane
@@ -108,48 +105,103 @@ final class SettingsSidebarTests: XCTestCase {
     }
 
     /// `show(projectId:)` (the project menu's "Settings…") lands on that
-    /// project; plain `show()` (Cmd+,) lands on the current one.
+    /// project's pane; plain `show()` (Cmd+,) keeps the pane shown last.
     func testShowProjectIdSelectsThatProject() throws {
         let a = project("atlas-api"), b = project("fieldwork")
         let store = WorkspaceStore(testingProjects: [a, b])
         let controller = try makeController(store)
 
+        controller.show()
+        XCTAssertEqual(controller.pane, .general, "the first open lands on General")
+
         controller.show(projectId: b.id)
-        XCTAssertEqual(controller.pane, .projects)
-        XCTAssertEqual(controller.projects.selectedProjectId, b.id)
+        XCTAssertEqual(controller.pane, .project(b.id))
+        XCTAssertEqual(controller.window?.title, "fieldwork")
 
         controller.show(projectId: a.id)
-        XCTAssertEqual(controller.projects.selectedProjectId, a.id)
-    }
-
-    // MARK: - App Settings
-
-    /// App Settings is one link from the projects pane, Appearance is
-    /// reachable in it with its tab toolbar, and "← Your sidebar" returns.
-    func testAppSettingsAppearanceIsReachableAndLinksBack() throws {
-        let store = WorkspaceStore(testingProjects: [project("atlas-api")])
-        let controller = try makeController(store)
+        XCTAssertEqual(controller.pane, .project(a.id))
 
         controller.show()
-        XCTAssertEqual(controller.pane, .projects)
+        XCTAssertEqual(controller.pane, .project(a.id), "Cmd+, must reopen the pane shown last")
+    }
 
-        controller.projects.openAppSettings()
-        XCTAssertEqual(controller.pane, .app(.general))
+    // MARK: - One window
 
-        controller.show(tab: .appearance)
-        XCTAssertEqual(controller.pane, .app(.appearance))
-        let labels = controller.window?.toolbar?.items.map(\.label) ?? []
-        XCTAssertTrue(labels.contains("Appearance"), "App Settings lost its tab toolbar: \(labels)")
+    /// Every old place routes into the one window: the app menu's "MCP
+    /// Sources…" opens its pane there (no second window), and so does each
+    /// pane by name. A search that would hide the target row is cleared.
+    func testEveryEntryPointRoutesToItsPaneInTheOneWindow() throws {
+        let p = project("atlas-api")
+        let store = WorkspaceStore(testingProjects: [p])
+        let controller = try makeController(store)
 
-        controller.backToSidebar()
-        XCTAssertEqual(controller.pane, .projects)
-        XCTAssertTrue(controller.window?.toolbar?.items.isEmpty ?? true, "the tab toolbar must not show over the projects pane")
+        for pane: SettingsPane in [.general, .appearance, .sidebar, .project(p.id), .templates, .mcpSources] {
+            controller.navigation.query = "zzz"
+            controller.show(pane: pane)
+            XCTAssertEqual(controller.pane, pane)
+            XCTAssertEqual(controller.navigation.query, "", "\(pane): a search hid the row it opened")
+            XCTAssertEqual(controller.window?.isVisible, true)
+        }
+        XCTAssertEqual(controller.window?.title, "MCP Sources")
 
-        // And there again, after a round trip.
-        controller.show(tab: .appearance)
-        XCTAssertEqual(controller.pane, .app(.appearance))
-        let again = controller.window?.toolbar?.items.map(\.label) ?? []
-        XCTAssertTrue(again.contains("Appearance"), "tab toolbar missing after returning: \(again)")
+        let windowsBefore = NSApp.windows.filter(\.isVisible).count
+        let shared = GhosttiesSettingsWindowController.shared
+        addTeardownBlock { @MainActor in GhosttiesSettingsWindowController.shared.window?.close() }
+        (NSApp.delegate as? AppDelegate)?.showMCPSources(nil)
+        XCTAssertEqual(shared.pane, .mcpSources)
+        XCTAssertLessThanOrEqual(
+            NSApp.windows.filter(\.isVisible).count, windowsBefore + 1,
+            "MCP Sources must open in the Settings window, not a window of its own"
+        )
+    }
+
+    /// The left list: App / Workspace / Agents, projects in the sidebar's
+    /// order between Sidebar and Templates; search keeps rows whose title
+    /// or setting labels match ("icons" finds Sidebar and every project).
+    func testListGroupsAndSearchFiltering() {
+        let a = project("atlas-api"), b = project("fieldwork")
+        let all = SettingsPaneList(projects: [a, b], query: "")
+        XCTAssertEqual(all.sections.map(\.group), [.app, .workspace, .agents])
+        XCTAssertEqual(all.panes, [.general, .appearance, .sidebar, .project(a.id), .project(b.id), .templates, .mcpSources])
+
+        XCTAssertEqual(SettingsPaneList(projects: [a, b], query: "  ").panes, all.panes, "a blank search lists everything")
+        XCTAssertEqual(SettingsPaneList(projects: [a, b], query: "field").panes, [.project(b.id)])
+        XCTAssertEqual(SettingsPaneList(projects: [a, b], query: "MCP").panes, [.mcpSources])
+        XCTAssertEqual(SettingsPaneList(projects: [a, b], query: "update").panes, [.general])
+        XCTAssertEqual(SettingsPaneList(projects: [a, b], query: "theme").panes, [.appearance, .sidebar])
+        XCTAssertEqual(
+            SettingsPaneList(projects: [a, b], query: "icons").panes, [.sidebar],
+            "\"icons\" is the Sidebar setting; project panes say \"Icon\""
+        )
+        XCTAssertEqual(SettingsPaneList(projects: [a, b], query: "icon").panes, [.sidebar, .project(a.id), .project(b.id)])
+        XCTAssertTrue(SettingsPaneList(projects: [a, b], query: "nothing matches this").sections.isEmpty)
+    }
+
+    /// The preview strip shows only on panes whose settings change how the
+    /// window looks.
+    func testPreviewStripOnlyOnVisualPanes() {
+        let id = UUID()
+        XCTAssertEqual(
+            [SettingsPane.general, .appearance, .sidebar, .project(id), .templates, .mcpSources].filter(\.hasPreviewStrip),
+            [.appearance, .sidebar, .project(id)]
+        )
+    }
+
+    /// The capture knobs that open a pane and flip Icons (DEBUG).
+    func testCaptureSettingsHooksParse() {
+        XCTAssertEqual(CaptureFixture.parseSettingsHook("general"), .pane(.general))
+        XCTAssertEqual(CaptureFixture.parseSettingsHook("1"), .pane(.appearance))
+        XCTAssertEqual(CaptureFixture.parseSettingsHook("sidebar"), .pane(.sidebar))
+        XCTAssertEqual(CaptureFixture.parseSettingsHook("mcp"), .pane(.mcpSources))
+        XCTAssertEqual(CaptureFixture.parseSettingsHook("project:atlas-api"), .project(name: "atlas-api"))
+        XCTAssertNil(CaptureFixture.parseSettingsHook("project:"))
+        XCTAssertNil(CaptureFixture.parseSettingsHook("browser"))
+        XCTAssertEqual(
+            CaptureFixture.parseSettingsIconsFlip("large,small,5"),
+            CaptureFixture.SettingsIconsFlip(from: .large, to: .small, delay: 5)
+        )
+        XCTAssertNil(CaptureFixture.parseSettingsIconsFlip("large,tiny,5"))
+        XCTAssertNil(CaptureFixture.parseSettingsIconsFlip("large,small"))
     }
 
     // MARK: - Old workspace.json
@@ -210,7 +262,6 @@ final class SettingsSidebarTests: XCTestCase {
         ))
 
         model.rename(id, to: "  harbor  ")
-        XCTAssertEqual(model.selectedProject?.name, "harbor")
         XCTAssertEqual(store.projects.first?.name, "harbor")
 
         model.rename(id, to: "   ")

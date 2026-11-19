@@ -124,8 +124,8 @@ extension Ghostty {
         // MARK: - Ghostties fork fence (open_config opens Settings)
         // The `open_config` keybind (Cmd+, by default) opens the app's
         // Settings window, the same as the app menu's "Settings…". The
-        // config file stays reachable from App Settings ("Open Config
-        // File"), which calls `openConfig()` below directly.
+        // config file stays reachable from Settings > General ("Open
+        // Config File"), which calls `openConfig()` below directly.
         private static func openConfig(_ app: ghostty_app_t) {
             _Concurrency.Task { @MainActor in
                 GhosttiesSettingsWindowController.shared.show()

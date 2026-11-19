@@ -4,157 +4,54 @@ import GhosttiesCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings' default pane, "Settings is your sidebar" (settings-general
-/// card 05): a copy of the sidebar's project list on the chrome at left;
-/// click a project to edit it at right (name, icon, new-session default,
-/// and the shared templates). Everything app-wide is one link away in
-/// App Settings.
-struct ProjectsSettingsPane: View {
+/// Settings > a project (one row per project under Workspace): its name,
+/// icon and new-session default, under a preview strip of the sidebar with
+/// this project selected, which redraws as its name or icon changes.
+struct ProjectSettingsPane: View {
+    let projectId: UUID
     @ObservedObject var model: ProjectsSettingsModel
-    /// Observed so the list and detail follow every project change.
+    /// Observed so the form and strip follow every project change.
     @ObservedObject var store: WorkspaceStore
 
-    @ChromeScheme private var colorScheme
-
-    static let listWidth: CGFloat = 184
-    static let rowHeight: CGFloat = 36
-    static let listTileSize: CGFloat = 24
-    static let paneSize = CGSize(width: 568, height: 600)
+    @AppStorage(SidebarRowIcons.key, store: AppDefaults.store)
+    private var icons: SidebarRowIcons = .large
+    @AppStorage(SidebarRowText.key, store: AppDefaults.store)
+    private var text: SidebarRowText = .standard
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var chrome = ChromeThemeStore.shared
 
     var body: some View {
-        let projects = model.projects
-        let monograms = Dictionary(
-            zip(projects.map(\.id), ProjectMonogram.monograms(for: projects.map(\.name))),
-            uniquingKeysWith: { first, _ in first }
-        )
-        HStack(spacing: 0) {
-            list(projects, monograms: monograms)
-            detail(monograms: monograms)
-        }
-        .frame(width: Self.paneSize.width, height: Self.paneSize.height)
-    }
-
-    // MARK: - List
-
-    private func list(_ projects: [Project], monograms: [UUID: String]) -> some View {
-        let theme = ChromeTheme.active(colorScheme)
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Your sidebar")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(theme.inkSecondaryColor)
-                .padding(.horizontal, 8)
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(projects) { project in
-                        row(project, monogram: monograms[project.id] ?? "?", theme: theme)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 16)
-        .frame(width: Self.listWidth)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(theme.chrome))
-    }
-
-    private func row(_ project: Project, monogram: String, theme: ChromeTheme) -> some View {
-        let isSelected = project.id == model.selectedProject?.id
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        return Button {
-            model.select(project.id)
-        } label: {
-            HStack(spacing: 8) {
-                tile(project, monogram: monogram, size: Self.listTileSize, textSize: 12)
-                Text(project.name)
-                    .font(.system(size: 11))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-                if isSelected {
-                    Text("editing")
-                        .font(.system(size: 11))
-                        .foregroundStyle(WorkspaceLayout.composerSelectionAccent)
-                }
-            }
-            .padding(.horizontal, 8)
-            .frame(height: Self.rowHeight)
-            .background(isSelected ? shape.fill(Color(theme.lifted(.container))) : shape.fill(Color.clear))
-            .overlay(isSelected ? shape.strokeBorder(WorkspaceLayout.composerSelectionAccent, lineWidth: 1.5) : nil)
-            .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    /// The sidebar's own tile face (`ProjectMonogramTileFace`) at `size`:
-    /// the project's icon when it has one, else its monogram. The model
-    /// re-renders the pane when the icon store reports a change.
-    private func tile(_ project: Project, monogram: String, size: CGFloat, textSize: CGFloat) -> some View {
-        ProjectMonogramTileFace(
-            monogram: monogram,
-            size: size,
-            textSize: textSize,
-            icon: model.icon(for: project)
-        )
-    }
-
-    // MARK: - Detail
-
-    @ViewBuilder
-    private func detail(monograms: [UUID: String]) -> some View {
-        if let project = model.selectedProject {
-            VStack(alignment: .leading, spacing: 0) {
-                Form {
-                    Section {
-                        ProjectNameField(project: project, model: model)
-                            .id(project.id)
-                    } header: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(project.name)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.primary)
-                            Text("Click any project at left")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .padding(.bottom, 16)
-                            Text("Name")
-                        }
-                    }
-                    Section("Icon") {
-                        iconEditor(project, monogram: monograms[project.id] ?? "?")
-                    }
-                    Section("New Session") {
-                        newSessionPicker(project)
-                    }
-                    Section {
-                        ProjectTemplatesSection()
-                            .environmentObject(store)
-                    }
-                }
-                .formStyle(.grouped)
-                .frame(maxHeight: .infinity)
-                .clipped()
-                appSettingsLink
-                    .padding(.top, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .windowBackgroundColor))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        if let project = store.projects.first(where: { $0.id == projectId }) {
+            form(project)
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("No projects yet")
-                    .font(.system(size: 15, weight: .semibold))
-                Text("Add a project in the sidebar to set its icon and new-session default here.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                appSettingsLink
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Text("This project is no longer in your sidebar.")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func form(_ project: Project) -> some View {
+        let sample = SettingsPreviewProject.sample(model: model, selected: project.id)
+        let monogram = sample.first(where: { $0.id == project.id })?.monogram ?? "?"
+        return Form {
+            Section {
+                SettingsPreviewStrip(palette: .current(colorScheme)) {
+                    SettingsPreviewSidebar(projects: sample, icons: icons, text: text)
+                }
+                .listRowInsets(EdgeInsets())
+            }
+            Section("Name") {
+                ProjectNameField(project: project, model: model)
+                    .id(project.id)
+            }
+            Section("Icon") {
+                iconEditor(project, monogram: monogram)
+            }
+            Section("New Session") {
+                newSessionPicker(project)
+            }
+        }
+        .formStyle(.grouped)
     }
 
     /// The tile at Settings size, what it is, and the three ways to set it.
@@ -162,7 +59,7 @@ struct ProjectsSettingsPane: View {
         let caption = model.iconCaption(for: project)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                tile(project, monogram: monogram, size: 40, textSize: 18)
+                ProjectMonogramTileFace(monogram: monogram, size: 40, textSize: 18, icon: model.icon(for: project))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(caption.title)
                     Text(caption.detail)
@@ -204,18 +101,6 @@ struct ProjectsSettingsPane: View {
         }
         .pickerStyle(.menu)
     }
-
-    private var appSettingsLink: some View {
-        HStack(spacing: 4) {
-            Text("Everything else:")
-                .foregroundStyle(.secondary)
-            Button("App Settings", action: model.openAppSettings)
-                .buttonStyle(.link)
-        }
-        .font(.system(size: 11))
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
-    }
 }
 
 /// The project's name. Each edit that leaves a non-blank name lands in the
@@ -248,17 +133,12 @@ private struct ProjectNameField: View {
 
 // MARK: - Model
 
-/// The projects pane's state and actions, injectable with its stores so it
+/// The project panes' state and actions, injectable with its stores so it
 /// runs in tests without the shared ones.
 @MainActor
 final class ProjectsSettingsModel: ObservableObject {
     let store: WorkspaceStore
     let iconStore: ProjectIconStore
-    /// The project being edited. Nil, or a removed project, falls back to
-    /// the first in the list.
-    @Published private(set) var selectedProjectId: UUID?
-    /// App Settings, set by the window controller.
-    var onOpenAppSettings: () -> Void = {}
 
     /// Shown under the icon buttons when a chosen image can't be read.
     @Published private(set) var iconError: String?
@@ -274,19 +154,6 @@ final class ProjectsSettingsModel: ObservableObject {
 
     /// The sidebar's projects in the sidebar's order.
     var projects: [Project] { store.projectsInDisplayOrder() }
-
-    var selectedProject: Project? {
-        if let selectedProjectId, let project = store.projects.first(where: { $0.id == selectedProjectId }) {
-            return project
-        }
-        return projects.first
-    }
-
-    func select(_ projectId: UUID) {
-        selectedProjectId = projectId
-    }
-
-    func openAppSettings() { onOpenAppSettings() }
 
     // MARK: Name
 

@@ -1,7 +1,7 @@
 import SwiftUI
 import GhosttiesMCPClient
 
-/// Settings pane for managing external MCP sources (Linear, Sentry, GitHub...).
+/// Settings > MCP Sources: external MCP sources (Linear, Sentry, GitHub...).
 ///
 /// Lists currently-configured sources with a status dot, exposes "Add MCP
 /// Source" that opens a sheet, and allows per-row delete. Non-secret config is
@@ -14,27 +14,43 @@ struct MCPSourceSettingsView: View {
     @State private var pendingDelete: MCPSource?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-
-            Divider()
-
+        Form {
             if let loadError = store.loadError {
-                errorBanner(loadError)
+                Section {
+                    errorBanner(loadError)
+                }
             }
 
-            if store.sources.isEmpty {
-                emptyState
-            } else {
-                sourceList
+            Section {
+                if store.sources.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(store.sources) { source in
+                        MCPSourceRow(
+                            source: source,
+                            status: store.status(for: source.id),
+                            onEdit: { editingSource = source },
+                            onDelete: { pendingDelete = source }
+                        )
+                    }
+                }
+            } header: {
+                Text("Sources")
+            } footer: {
+                HStack(alignment: .top) {
+                    Text("Connect external services (Linear, Sentry, GitHub Issues) so their tickets appear in your Inbox lane.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button("Add MCP Source\u{2026}") {
+                        showAddSheet = true
+                    }
+                    .keyboardShortcut("n", modifiers: .command)
+                }
             }
-
-            Divider()
-
-            footer
         }
-        .frame(minWidth: 520, idealWidth: 560, maxWidth: .infinity,
-               minHeight: 400, idealHeight: 440, maxHeight: .infinity)
+        .formStyle(.grouped)
         .sheet(isPresented: $showAddSheet) {
             AddMCPSourceSheet(
                 store: store,
@@ -69,20 +85,6 @@ struct MCPSourceSettingsView: View {
 
     // MARK: - Sections
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("MCP Sources")
-                .font(.system(size: 16, weight: .semibold))
-            Text("Connect external services — Linear, Sentry, GitHub Issues — so their tickets appear in your Inbox lane.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-    }
-
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "link.badge.plus")
@@ -94,37 +96,8 @@ struct MCPSourceSettingsView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 40)
-    }
-
-    private var sourceList: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(store.sources) { source in
-                    MCPSourceRow(
-                        source: source,
-                        status: store.status(for: source.id),
-                        onEdit: { editingSource = source },
-                        onDelete: { pendingDelete = source }
-                    )
-                    Divider()
-                        .padding(.leading, 20)
-                }
-            }
-        }
-    }
-
-    private var footer: some View {
-        HStack {
-            Spacer()
-            Button("Add MCP Source…") {
-                showAddSheet = true
-            }
-            .keyboardShortcut("n", modifiers: .command)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -136,9 +109,6 @@ struct MCPSourceSettingsView: View {
                 .foregroundStyle(.secondary)
             Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.08))
     }
 
     // MARK: - Actions
@@ -192,8 +162,7 @@ private struct MCPSourceRow: View {
                 .help("Remove source")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
         .onTapGesture(count: 2, perform: onEdit)

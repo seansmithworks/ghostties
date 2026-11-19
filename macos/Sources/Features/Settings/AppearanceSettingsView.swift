@@ -9,14 +9,7 @@ import SwiftUI
 /// file is never written.
 struct AppearanceSettingsView: View {
     @StateObject private var model: AppearanceSettingsModel
-    @AppStorage(ComposerThemePresentation.key, store: GhosttiesThemePicks.appDefaults)
-    private var composerThemePresentation: ComposerThemePresentation = .grid
-    /// The sidebar rows' tiles and second line (`SidebarRowIcons`,
-    /// `SidebarRowText`); the sidebar reads the same keys and follows live.
-    @AppStorage(SidebarRowIcons.key, store: AppDefaults.store)
-    private var sidebarRowIcons: SidebarRowIcons = .large
-    @AppStorage(SidebarRowText.key, store: AppDefaults.store)
-    private var sidebarRowText: SidebarRowText = .standard
+    @Environment(\.colorScheme) private var colorScheme
 
     /// `model` is injectable so the pane can be rendered offscreen in a
     /// given state.
@@ -32,6 +25,14 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                let preview = model.preview(model.previewThemeName(systemScheme: colorScheme))
+                SettingsPreviewStrip(palette: .theme(preview)) {
+                    SettingsPreviewSidebarSketch(ink: preview.text, inkSecondary: preview.inkSecondary)
+                }
+                .listRowInsets(EdgeInsets())
+            }
+
             if model.state == .setByConfig {
                 Section {
                     SetByConfigBanner(openConfig: model.openConfig)
@@ -39,21 +40,15 @@ struct AppearanceSettingsView: View {
             }
 
             Section {
-                LabeledContent("Mode") {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        NeutralSegmentedControl(
-                            options: [
-                                ("System", GhosttiesAppearanceMode.system),
-                                ("Light", .light),
-                                ("Dark", .dark),
-                            ],
-                            selection: $model.mode
-                        )
-                        .disabled(model.modeLockedByConfig)
-                        if let note = model.modeLockedNote {
-                            Text(note).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                Picker("Mode", selection: $model.mode) {
+                    Text("System").tag(GhosttiesAppearanceMode.system)
+                    Text("Light").tag(GhosttiesAppearanceMode.light)
+                    Text("Dark").tag(GhosttiesAppearanceMode.dark)
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.modeLockedByConfig)
+                if let note = model.modeLockedNote {
+                    Text(note).font(.caption).foregroundStyle(.secondary)
                 }
             }
 
@@ -84,33 +79,8 @@ struct AppearanceSettingsView: View {
                 }
             }
 
-            Section {
-                LabeledContent("Icons") {
-                    NeutralSegmentedControl(
-                        options: SidebarRowIcons.allCases.map { ($0.title, $0) },
-                        selection: $sidebarRowIcons
-                    )
-                }
-                LabeledContent("Text") {
-                    NeutralSegmentedControl(
-                        options: SidebarRowText.allCases.map { ($0.title, $0) },
-                        selection: $sidebarRowText
-                    )
-                }
-            } header: {
-                Text("Sidebar")
-            }
-
-            Section {
-                Picker("Composer theme results", selection: $composerThemePresentation) {
-                    Text("Grid").tag(ComposerThemePresentation.grid)
-                    Text("Chips").tag(ComposerThemePresentation.chips)
-                }
-            }
         }
         .formStyle(.grouped)
-        .frame(width: 560)
-        .fixedSize(horizontal: false, vertical: true)
         .onAppear { model.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: .ghosttyConfigDidChange)) { note in
             // App-level config only (a surface's own reload carries the surface).
@@ -184,6 +154,18 @@ final class AppearanceSettingsModel: ObservableObject {
             storedMode = newValue
             applyMode()
         }
+    }
+
+    /// The theme the window shows now, for the preview strip: the side the
+    /// mode picks, with System following `systemScheme`.
+    func previewThemeName(systemScheme: ColorScheme) -> String {
+        let dark: Bool
+        switch mode {
+        case .light: dark = false
+        case .dark: dark = true
+        case .system: dark = systemScheme == .dark
+        }
+        return dark ? shown.dark : shown.light
     }
 
     /// `window-theme` in the user's config fixes the appearance.
@@ -330,79 +312,6 @@ struct ThemePreview {
 
 // MARK: - Views
 
-/// A segmented control whose selected segment is a neutral raised pill on a
-/// gray track, drawn in SwiftUI so no window state (key, accent) can tint it.
-/// Track is `quaternaryLabelColor` (black ~10% in light, white ~10% in dark);
-/// the pill is `controlColor` (white in light, a lighter gray in dark).
-/// Segments share the widest label's width, as system segmented controls do.
-/// The whole control is one focus stop; left/right arrows move the selection.
-private struct NeutralSegmentedControl<Value: Hashable>: View {
-    let options: [(title: String, value: Value)]
-    @Binding var selection: Value
-
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var pill
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(options.indices, id: \.self) { index in
-                segment(options[index])
-            }
-        }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color(nsColor: .quaternaryLabelColor))
-        )
-        .opacity(isEnabled ? 1 : 0.5)
-        .accessibilityElement(children: .contain)
-        .focusable(isEnabled)
-        .onMoveCommand { direction in
-            guard let current = options.firstIndex(where: { $0.value == selection }) else { return }
-            switch direction {
-            case .left: select(options[max(current - 1, 0)].value)
-            case .right: select(options[min(current + 1, options.count - 1)].value)
-            default: break
-            }
-        }
-    }
-
-    private func select(_ value: Value) {
-        guard isEnabled, value != selection else { return }
-        withAnimation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.9)) {
-            selection = value
-        }
-    }
-
-    private func segment(_ option: (title: String, value: Value)) -> some View {
-        let selected = option.value == selection
-        return ZStack {
-            // Every label, hidden, sizes each segment to the widest one.
-            ForEach(options.indices, id: \.self) { Text(options[$0].title).hidden() }
-            Text(option.title)
-        }
-        .font(.system(size: 13))
-        .foregroundStyle(.primary)
-        .padding(.vertical, 3)
-        .padding(.horizontal, 12)
-        .background {
-            if selected {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color(nsColor: .controlColor))
-                    .shadow(color: Color(nsColor: .shadowColor).opacity(0.15), radius: 1, y: 1)
-                    .matchedGeometryEffect(id: "pill", in: pill)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { select(option.value) }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(option.title)
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction { select(option.value) }
-    }
-}
-
 /// The sizes Settings draws the shared theme cards at.
 private enum SettingsThemeCards {
     static let metrics = ThemeCardMetrics(thumbnailHeight: 48, labelSize: 13)
@@ -448,10 +357,13 @@ private struct ThemeBrowsePanel: View {
             HStack(spacing: 8) {
                 Text("Apply single themes to")
                     .foregroundStyle(.secondary)
-                NeutralSegmentedControl(
-                    options: [("Light", ChromeTheme.Polarity.light), ("Dark", .dark)],
-                    selection: $model.browseSide
-                )
+                Picker("Apply single themes to", selection: $model.browseSide) {
+                    Text("Light").tag(ChromeTheme.Polarity.light)
+                    Text("Dark").tag(ChromeTheme.Polarity.dark)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
                 Spacer(minLength: 8)
                 Button("Done", action: model.closeBrowse)
             }

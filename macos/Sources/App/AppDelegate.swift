@@ -288,10 +288,10 @@ class AppDelegate: NSObject,
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 let settings = GhosttiesSettingsWindowController.shared
                 switch hook {
-                case .app(let tab):
-                    settings.show(tab: tab)
-                case .projects(let name):
-                    if let name, let project = settings.projects.store.projects.first(where: { $0.name == name }) {
+                case .pane(let pane):
+                    settings.show(pane: pane)
+                case .project(let name):
+                    if let project = settings.projects.store.projects.first(where: { $0.name == name }) {
                         settings.show(projectId: project.id)
                     } else {
                         settings.show()
@@ -1715,14 +1715,15 @@ class AppDelegate: NSObject,
 
     // MARK: - IB Actions
 
-    /// App menu "Settings…" (Cmd+,): the Settings window, on the projects
-    /// pane. The `open_config` keybind lands here too (`Ghostty.App`).
+    /// App menu "Settings…" (Cmd+,): the Settings window, on the pane shown
+    /// last. The `open_config` keybind lands here too (`Ghostty.App`).
     @IBAction func openSettings(_ sender: Any?) {
         GhosttiesSettingsWindowController.shared.show()
     }
 
+    /// App menu "MCP Sources…": the Settings window's MCP Sources pane.
     @IBAction func showMCPSources(_ sender: Any?) {
-        MCPSourceSettingsWindowController.shared.show()
+        GhosttiesSettingsWindowController.shared.show(pane: .mcpSources)
     }
 
     @IBAction func reloadConfig(_ sender: Any?) {

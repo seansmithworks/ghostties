@@ -1,32 +1,27 @@
 import AppKit
+import Combine
+import GhosttiesCore
 import SwiftUI
 
-/// The Settings window (Cmd+, / app menu "Settings…" / the `open_config`
-/// keybind). One shared window with two contents, swapped in place:
-///
-/// - **Your sidebar** (`ProjectsSettingsPane`), the default: a copy of the
-///   sidebar's project list, where each project's icon and new-session
-///   default are edited (settings-general card 05).
-/// - **App Settings**: the General and Appearance tabs, macOS's own
-///   toolbar-of-tabs layout, each with a "← Your sidebar" link back.
+/// The one Settings window (Cmd+, / app menu "Settings…" / the `open_config`
+/// keybind / a project's "Settings…" / "MCP Sources…"): a System Settings
+/// style list at left, grouped App / Workspace / Agents with search on top,
+/// and the selected pane's form at right (mild2wild 2026-11-18, card 11
+/// "Preview strip"). It replaces App Settings' tabs, the "Your sidebar"
+/// projects window and the MCP Sources window.
 final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = GhosttiesSettingsWindowController()
 
-    enum Tab: Int { case general, appearance }
-    enum Pane: Equatable { case projects, app(Tab) }
-
-    /// The projects pane's state; `show(projectId:)` selects into it.
+    /// The project panes' state and actions.
     let projects: ProjectsSettingsModel
+    /// The list's selection and search text.
+    let navigation: SettingsNavigation
 
-    private let tabs = NSTabViewController()
-    private let projectsHost: NSHostingController<ProjectsSettingsPane>
-    /// The toolbar the tab controller installs, kept while the projects
-    /// pane is up (it has no toolbar) and put back for App Settings.
-    private var tabsToolbar: NSToolbar?
-    /// Keeps the window title on the selected tab's name in App Settings.
-    private var tabSelection: NSKeyValueObservation?
+    private var titleSync: AnyCancellable?
     /// Off under XCTest by default, so a test never writes icon caches.
     private let refreshesIcons: Bool
+
+    static let contentSize = NSSize(width: 820, height: 640)
 
     init(
         store: WorkspaceStore = .shared,
@@ -35,36 +30,35 @@ final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDeleg
     ) {
         let model = ProjectsSettingsModel(store: store, iconStore: iconStore)
         projects = model
-        projectsHost = NSHostingController(rootView: ProjectsSettingsPane(model: model, store: store))
-        projectsHost.sizingOptions = .preferredContentSize
+        navigation = SettingsNavigation()
         self.refreshesIcons = refreshesIcons
 
         let window = NSWindow(
-            contentRect: .zero,
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: true
         )
         window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.contentMinSize = NSSize(width: 680, height: 480)
+        let host = NSHostingController(rootView: UnifiedSettingsView(
+            navigation: navigation,
+            projects: model,
+            store: store
+        ))
+        host.sizingOptions = []
+        window.contentViewController = host
+        window.setContentSize(Self.contentSize)
         super.init(window: window)
         window.delegate = self
 
-        model.onOpenAppSettings = { [weak self] in self?.show(tab: .general) }
-        let back: () -> Void = { [weak self] in self?.backToSidebar() }
-        tabs.tabStyle = .toolbar
-        tabs.addTabViewItem(Self.item(
-            label: "General", symbol: "gearshape",
-            view: AppSettingsPane(onBack: back) { SettingsView() }
-        ))
-        tabs.addTabViewItem(Self.item(
-            label: "Appearance", symbol: "paintpalette",
-            view: AppSettingsPane(onBack: back) { AppearanceSettingsView() }
-        ))
-        window.toolbarStyle = .preference
-        tabSelection = tabs.observe(\.selectedTabViewItemIndex) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.syncTitle() }
-        }
-        setContent(projectsHost)
+        titleSync = navigation.$selection
+            .combineLatest(store.$projects)
+            .sink { [weak self] selection, projects in
+                self?.window?.title = SettingsNavigation.title(for: selection ?? .general, projects: projects)
+            }
         window.center()
     }
 
@@ -72,52 +66,25 @@ final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDeleg
         fatalError("init(coder:) has not been implemented")
     }
 
-    private static func item<V: View>(label: String, symbol: String, view: V) -> NSTabViewItem {
-        let host = NSHostingController(rootView: view)
-        host.sizingOptions = .preferredContentSize
-        let item = NSTabViewItem(viewController: host)
-        item.label = label
-        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
-        return item
-    }
-
-    /// What the window shows now.
-    var pane: Pane {
-        if window?.contentViewController === projectsHost { return .projects }
-        return .app(Tab(rawValue: tabs.selectedTabViewItemIndex) ?? .general)
-    }
+    /// The pane the window shows now.
+    var pane: SettingsPane { navigation.selection ?? .general }
 
     // MARK: - Showing
 
-    /// Cmd+,: the projects pane, on the current project (the one Cmd+T's
-    /// composer would pick: the frontmost terminal's, else the most recent).
+    /// Cmd+, (and every plain "Settings…"): the pane shown last, General the
+    /// first time.
     func show() {
-        let store = projects.store
-        let current = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store)
-        showProjects(selecting: current ?? projects.projects.first?.id)
-    }
-
-    /// The project menu's "Settings…": the projects pane on `projectId`.
-    func show(projectId: UUID) {
-        showProjects(selecting: projectId)
-    }
-
-    /// App Settings, on `tab`.
-    func show(tab: Tab) {
-        tabs.selectedTabViewItemIndex = tab.rawValue
-        setContent(tabs)
         present()
     }
 
-    /// App Settings' "← Your sidebar".
-    func backToSidebar() {
-        setContent(projectsHost)
+    /// A project's "Settings…": that project's pane.
+    func show(projectId: UUID) {
+        show(pane: .project(projectId))
     }
 
-    private func showProjects(selecting projectId: UUID?) {
-        if let projectId { projects.select(projectId) }
-        setContent(projectsHost)
-        refreshIcons()
+    /// Any pane, e.g. "MCP Sources…" from the app menu.
+    func show(pane: SettingsPane) {
+        navigation.select(pane)
         present()
     }
 
@@ -130,53 +97,30 @@ final class GhosttiesSettingsWindowController: NSWindowController, NSWindowDeleg
         }
     }
 
-    /// Swaps the window's content, keeping its top-left corner where it
-    /// was. The tab controller's toolbar only belongs over App Settings.
-    private func setContent(_ controller: NSViewController) {
-        guard let window, window.contentViewController !== controller else { return }
-        let topLeft = window.contentViewController == nil ? nil : NSPoint(x: window.frame.minX, y: window.frame.maxY)
-        if window.contentViewController === tabs {
-            tabsToolbar = window.toolbar ?? tabsToolbar
-            window.toolbar = nil
-        }
-        window.contentViewController = controller
-        if controller === tabs, window.toolbar == nil, let tabsToolbar {
-            window.toolbar = tabsToolbar
-        }
-        syncTitle()
-        if let topLeft { window.setFrameTopLeftPoint(topLeft) }
-    }
-
-    /// "Settings" over the projects pane; the tab's name over App Settings.
-    private func syncTitle() {
-        guard let window else { return }
-        switch pane {
-        case .projects:
-            window.title = "Settings"
-        case .app:
-            let index = tabs.selectedTabViewItemIndex
-            window.title = tabs.tabViewItems.indices.contains(index) ? tabs.tabViewItems[index].label : "Settings"
-        }
-    }
-
     private func present() {
+        refreshIcons()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
 }
 
-/// An App Settings tab: the "← Your sidebar" link above the tab's content.
-private struct AppSettingsPane<Content: View>: View {
-    let onBack: () -> Void
-    @ViewBuilder let content: () -> Content
+/// The left list's selection and search text.
+@MainActor
+final class SettingsNavigation: ObservableObject {
+    @Published var selection: SettingsPane? = .general
+    @Published var query = ""
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button("\u{2190} Your sidebar", action: onBack)
-                .buttonStyle(.link)
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
-            content()
+    /// Selects `pane`, clearing a search that would hide its row.
+    func select(_ pane: SettingsPane) {
+        query = ""
+        selection = pane
+    }
+
+    /// The window's title for `pane`: its row's title.
+    static func title(for pane: SettingsPane, projects: [Project]) -> String {
+        if case .project(let id) = pane {
+            return projects.first(where: { $0.id == id })?.name ?? "Settings"
         }
+        return pane.fixedTitle ?? "Settings"
     }
 }

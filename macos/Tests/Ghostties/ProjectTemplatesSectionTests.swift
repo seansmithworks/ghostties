@@ -5,7 +5,7 @@ import GhosttiesCore
 @testable import Ghostty
 
 /// Template management moved from the deleted composer popover's results
-/// table into the Settings projects pane's Templates section. These cover every
+/// table into Settings > Templates. These cover every
 /// action the table had: create, edit, duplicate, pin/unpin, delete.
 @MainActor
 struct ProjectTemplatesSectionTests {
@@ -127,19 +127,11 @@ struct ProjectTemplatesSectionTests {
     func rendersSettingsPaneWithTemplatesSection(appearance: String) {
         let store = makeStore()
         _ = TemplateManagement.addTemplate(named: "Review pass", store: store)
-        let scratch = FileManager.default.temporaryDirectory
-            .appendingPathComponent("templates-pane-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        let model = ProjectsSettingsModel(store: store, iconStore: ProjectIconStore(
-            cacheDirectory: scratch.appendingPathComponent("cache"),
-            supportDirectory: scratch.appendingPathComponent("support")
-        ))
         let name: NSAppearance.Name = appearance == "darkAqua" ? .darkAqua : .aqua
-        let view = ProjectsSettingsPane(model: model, store: store)
+        let view = TemplatesSettingsPane(store: store)
             .background(Color(nsColor: .windowBackgroundColor))
         let hosting = NSHostingView(rootView: view)
-        let size = hosting.fittingSize
-        hosting.frame = NSRect(origin: .zero, size: size)
+        hosting.frame = NSRect(origin: .zero, size: Self.paneSize)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: name)
         window.contentView = hosting
@@ -161,17 +153,13 @@ struct ProjectTemplatesSectionTests {
 
     // MARK: - The section is mounted in the Settings pane
 
+    /// The Settings detail column's size, about.
+    static let paneSize = CGSize(width: 600, height: 600)
+
     /// The pane at its real size, drawn to pixels.
     private func renderedPane(store: WorkspaceStore) -> Data? {
-        let scratch = FileManager.default.temporaryDirectory
-            .appendingPathComponent("templates-mount-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        let model = ProjectsSettingsModel(store: store, iconStore: ProjectIconStore(
-            cacheDirectory: scratch.appendingPathComponent("cache"),
-            supportDirectory: scratch.appendingPathComponent("support")
-        ))
-        let hosting = NSHostingView(rootView: ProjectsSettingsPane(model: model, store: store))
-        hosting.frame = NSRect(origin: .zero, size: ProjectsSettingsPane.paneSize)
+        let hosting = NSHostingView(rootView: TemplatesSettingsPane(store: store))
+        hosting.frame = NSRect(origin: .zero, size: Self.paneSize)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .aqua)
         window.contentView = hosting
@@ -186,7 +174,7 @@ struct ProjectTemplatesSectionTests {
         return rep.representation(using: .png, properties: [:])
     }
 
-    /// Fails if `ProjectsSettingsPane` stops mounting the Templates section.
+    /// Fails if `TemplatesSettingsPane` stops mounting the Templates section.
     @Test func settingsPaneMountsTheTemplatesSection() {
         let store = makeStore()
         let before = renderedPane(store: store)
