@@ -1851,7 +1851,9 @@ class WorkspaceViewContainer: NSView {
 
     /// Stops a running spring where it is, for an animation that takes the
     /// constraints over (a full close, a view-mode switch, a drag).
-    private func cancelMorphMotion() {
+    /// `settlesFade: false` from `transitionTo`, whose next motion animates
+    /// the fade on from where the cancelled one left it.
+    private func cancelMorphMotion(settlesFade: Bool = true) {
         guard motion.isRunning else { return }
         motion.cancel()
         // Its completion won't fire: retire it and clear what it would have.
@@ -1861,10 +1863,11 @@ class WorkspaceViewContainer: NSView {
         morphClock = nil
         widthModel.isMorphing = false
         setCardLeadingClamp(nil)
-        // A close or reopen fades the sidebar on the spring's frames: land
-        // the fade at the mode's own value. (`transitionTo` restarts the
-        // fade from where it was.)
-        sidebarHostingView.alphaValue = sidebarMode == .closed ? 0 : 1
+        // A close or reopen fades the sidebar on the spring's frames: when
+        // nothing else will animate the fade, land it at the mode's value.
+        if settlesFade {
+            sidebarHostingView.alphaValue = WorkspaceLayout.sidebarRestingAlpha(for: sidebarMode)
+        }
     }
 
     /// Where the card's leading edge is, from the constraints rather than the
@@ -2678,12 +2681,15 @@ class WorkspaceViewContainer: NSView {
             : WorkspaceLayout.sidebarCloseReopenSpring(from: previousMode, to: newMode)
         let springCloses = closeReopenSpring != nil && newMode == .closed
         let cardLeadingAtStart = cardLeadingFromConstraints
+        // The spring writes the fade every frame (no layer animation), so
+        // the model value is what's on screen.
         let sidebarAlphaAtStart = sidebarHostingView.alphaValue
         if !isCollapsePair || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             // Not a spring: the duration-curve path (or the Reduce Motion
             // snap) below takes the constraints from wherever a running
-            // spring left them.
-            cancelMorphMotion()
+            // spring left them, and the fade from where it was (every
+            // branch below animates it on).
+            cancelMorphMotion(settlesFade: false)
         }
         if morphs {
             beginSidebarMorph(
@@ -2875,8 +2881,7 @@ class WorkspaceViewContainer: NSView {
             var targets: [(NSLayoutConstraint, CGFloat)] = []
             applyTransitionConstraints(for: newMode, inset: inset, write: { targets.append(($0, $1)) })
             sidebarOverlayBackground.alphaValue = 0
-            sidebarHostingView.alphaValue = sidebarAlphaAtStart
-            let alphaTarget: CGFloat = newMode == .closed ? 0 : 1
+            let alphaTarget = WorkspaceLayout.sidebarRestingAlpha(for: newMode)
             if !springCloses {
                 // Reopen overshoots: the card stays between where it was
                 // (the closed margin) and its pinned/rail place, as the
@@ -2891,8 +2896,7 @@ class WorkspaceViewContainer: NSView {
                 targets,
                 spring: spring,
                 onFrame: { [weak self] p in
-                    let t = CGFloat(min(max(p, 0), 1))
-                    self?.sidebarHostingView.alphaValue = sidebarAlphaAtStart + (alphaTarget - sidebarAlphaAtStart) * t
+                    self?.sidebarHostingView.alphaValue = WorkspaceLayout.sidebarFadeAlpha(from: sidebarAlphaAtStart, to: alphaTarget, progress: p)
                 },
                 completion: animationCompletion
             )

@@ -651,6 +651,19 @@ enum WorkspaceLayout {
         }
     }
 
+    /// The sidebar content's opacity at rest in `mode`: hidden only when
+    /// closed (`applyTransitionAlphas`).
+    static func sidebarRestingAlpha(for mode: SidebarMode) -> CGFloat {
+        mode == .closed ? 0 : 1
+    }
+
+    /// The close/reopen fade at the spring's `progress`: from `start` (where
+    /// an interrupted fade left it) to `target`, held at the ends so the
+    /// reopen's overshoot never pushes it past either.
+    static func sidebarFadeAlpha(from start: CGFloat, to target: CGFloat, progress: Double) -> CGFloat {
+        start + (target - start) * CGFloat(min(max(progress, 0), 1))
+    }
+
 
     /// Reduced-motion crossfade duration replacing every translation-based
     /// sidebar transition (Flow 05 "Reduced motion": drop the translate,

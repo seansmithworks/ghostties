@@ -218,6 +218,7 @@ struct SidebarPresenceTests {
         withDials {
             for start: SidebarMode in [.pinned, .collapsed] {
                 let spring = WorkspaceLayout.sidebarCloseReopenSpring(from: start, to: .closed)
+                #expect(spring == SidebarSpring(response: 0.30, bounce: 0))
                 #expect(spring == WorkspaceLayout.sidebarCloseSpring)
                 #expect(spring == WorkspaceLayout.sidebarMorphCollapseSpring)
                 #expect(spring?.bounce == 0)
@@ -231,6 +232,7 @@ struct SidebarPresenceTests {
         withDials {
             for target: SidebarMode in [.pinned, .collapsed] {
                 let spring = WorkspaceLayout.sidebarCloseReopenSpring(from: .closed, to: target)
+                #expect(spring == SidebarSpring(response: 0.35, bounce: 0.3))
                 #expect(spring == WorkspaceLayout.sidebarReopenSpring)
                 #expect(spring == WorkspaceLayout.sidebarMorphOpenSpring)
             }
@@ -264,6 +266,23 @@ struct SidebarPresenceTests {
         for (from, to) in others {
             #expect(WorkspaceLayout.sidebarCloseReopenSpring(from: from, to: to) == nil)
         }
+    }
+
+    /// The close/reopen fade rides the spring's progress from wherever an
+    /// interrupted fade left it, never resets to an end, and holds at its
+    /// target through the reopen's overshoot.
+    @Test func closeReopenFadeStartsWhereItWasAndHoldsThroughOvershoot() {
+        #expect(WorkspaceLayout.sidebarRestingAlpha(for: .closed) == 0)
+        for mode: SidebarMode in [.pinned, .collapsed, .overlay, .hoverRevealed] {
+            #expect(WorkspaceLayout.sidebarRestingAlpha(for: mode) == 1)
+        }
+        // A reopen interrupting a close that had faded to 0.4.
+        #expect(WorkspaceLayout.sidebarFadeAlpha(from: 0.4, to: 1, progress: 0) == 0.4)
+        #expect(abs(WorkspaceLayout.sidebarFadeAlpha(from: 0.4, to: 1, progress: 0.5) - 0.7) < 0.0001)
+        #expect(WorkspaceLayout.sidebarFadeAlpha(from: 0.4, to: 1, progress: 1.05) == 1)
+        // A close from full.
+        #expect(WorkspaceLayout.sidebarFadeAlpha(from: 1, to: 0, progress: 0.25) == 0.75)
+        #expect(WorkspaceLayout.sidebarFadeAlpha(from: 1, to: 0, progress: -0.1) == 1)
     }
 
     /// A peek out of closed (the overlay) dismissing back to closed keeps
