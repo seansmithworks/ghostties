@@ -1,7 +1,7 @@
 import SwiftUI
 import GhosttiesCore
 
-/// Template management, hosted in the Settings projects pane (`ProjectsSettingsPane`). These actions used
+/// Template management, hosted in Settings > Templates (`TemplatesSettingsPane`). These actions used
 /// to live in the composer popover's results table; the centered
 /// single-line composer has no list, so this section is now the only place
 /// templates are created, edited, duplicated, pinned and deleted.

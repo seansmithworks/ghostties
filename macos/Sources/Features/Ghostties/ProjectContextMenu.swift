@@ -39,12 +39,17 @@ struct ProjectContextMenu: ViewModifier {
 
     #if DEBUG
     /// `GHOSTTIES_CAPTURE_PROJECT_SETTINGS`: what the context menu's
-    /// "Settings…" does: opens Settings on the named project.
+    /// "Settings…" does: opens Settings on the named project. With a
+    /// template action it opens the Templates pane, where templates live.
     private func applyCaptureProjectSettingsIfNeeded() {
-        guard CaptureFixture.projectSettingsHook?.projectName == project.name,
+        guard let hook = CaptureFixture.projectSettingsHook, hook.projectName == project.name,
               CaptureFixture.claimHook("projectSettings") else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            GhosttiesSettingsWindowController.shared.show(projectId: project.id)
+            if hook.templateAction == .none {
+                GhosttiesSettingsWindowController.shared.show(projectId: project.id)
+            } else {
+                GhosttiesSettingsWindowController.shared.show(pane: .templates)
+            }
         }
     }
     #endif

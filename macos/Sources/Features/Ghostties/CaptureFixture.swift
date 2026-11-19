@@ -1024,26 +1024,53 @@ enum CaptureFixture {
     /// with the Mac's Reduce Motion setting on, for this launch only.
     static var reduceMotion: Bool { env("GHOSTTIES_CAPTURE_REDUCE_MOTION") == "1" }
     /// `GHOSTTIES_CAPTURE_SETTINGS`: opens the Settings window shortly after
-    /// launch, so a pane can be captured without a keystroke. `1` is App
-    /// Settings' Appearance tab, `app` its General tab, `projects` the
-    /// projects pane on the current project, `projects:<name>` on that one.
+    /// launch, on one pane, so it can be captured without a keystroke:
+    /// `general`, `appearance` (also `1`), `sidebar`, `templates`, `mcp`,
+    /// `project:<name>` (a fixture project; unknown names open the window
+    /// on its last pane). `app` and `projects[:<name>]` are the old names.
     static var settingsHook: SettingsHook? { parseSettingsHook(env("GHOSTTIES_CAPTURE_SETTINGS")) }
 
     enum SettingsHook: Equatable {
-        case app(GhosttiesSettingsWindowController.Tab)
-        case projects(name: String?)
+        case pane(SettingsPane)
+        case project(name: String)
     }
 
     static func parseSettingsHook(_ raw: String?) -> SettingsHook? {
         switch raw {
         case nil: return nil
-        case "1": return .app(.appearance)
-        case "app": return .app(.general)
-        case "projects": return .projects(name: nil)
-        case let value? where value.hasPrefix("projects:"):
-            return .projects(name: String(value.dropFirst("projects:".count)))
+        case "general", "app": return .pane(.general)
+        case "appearance", "1": return .pane(.appearance)
+        case "sidebar": return .pane(.sidebar)
+        case "templates": return .pane(.templates)
+        case "mcp": return .pane(.mcpSources)
+        case "projects": return .pane(.general)
+        case let value? where value.hasPrefix("project:") || value.hasPrefix("projects:"):
+            let name = String(value.drop(while: { $0 != ":" }).dropFirst())
+            return name.isEmpty ? nil : .project(name: name)
         default: return nil
         }
+    }
+
+    /// `GHOSTTIES_CAPTURE_SETTINGS_ICONS=<from>,<to>,<seconds>`: Settings >
+    /// Sidebar sets Icons to `from` when it appears and to `to` `seconds`
+    /// later, through the pane's own control binding, so a capture shows
+    /// the preview strip redraw. The stored value from before is put back
+    /// `seconds` after that (the capture domain is shared by worktrees).
+    struct SettingsIconsFlip: Equatable {
+        let from: SidebarRowIcons
+        let to: SidebarRowIcons
+        let delay: TimeInterval
+    }
+
+    static var settingsIconsFlip: SettingsIconsFlip? { parseSettingsIconsFlip(env("GHOSTTIES_CAPTURE_SETTINGS_ICONS")) }
+
+    static func parseSettingsIconsFlip(_ raw: String?) -> SettingsIconsFlip? {
+        let parts = (raw ?? "").split(separator: ",").map(String.init)
+        guard parts.count == 3,
+              let from = SidebarRowIcons(rawValue: parts[0]),
+              let to = SidebarRowIcons(rawValue: parts[1]),
+              let delay = parsePositiveSeconds(parts[2]) else { return nil }
+        return SettingsIconsFlip(from: from, to: to, delay: delay)
     }
 
     /// `GHOSTTIES_CAPTURE_PROJECT_ICON=<project>=<png path>[,<project>=<png path>…]`:
