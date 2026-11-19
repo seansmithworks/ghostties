@@ -49,12 +49,20 @@ struct SidebarMorphMetrics: Equatable {
         /// spec D1), so the rows never reflow across the morph; only a tile
         /// dialled past 40 grows it (`ProjectAccordionHeader.height`).
         var sidebarHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, sidebarTileSize) }
+        /// The expanded gap from the tile slot to the labels; with no tile
+        /// (Icons: None), the labels' small inset (`SidebarTileSizes.labelSpacing`).
+        var sidebarLabelSpacing: CGFloat { SidebarTileSizes.labelSpacing(tile: sidebarTileSize) }
         var railHeaderHeight: CGFloat { max(SidebarMorphMetrics.headerBaseHeight, railTileSize) }
 
         /// The live dials, clamped as the views clamp them
-        /// (`RailProjectTile.size`, `RailProjectColumn.chipSize`, …).
-        static func current(defaults: UserDefaults = SidebarDialTuning.store) -> Dials {
+        /// (`RailProjectTile.size`, `RailProjectColumn.chipSize`, …). The
+        /// sidebar's tiles follow the Icons setting (`SidebarRowIcons`).
+        static func current(
+            defaults: UserDefaults = SidebarDialTuning.store,
+            icons: SidebarRowIcons = .current()
+        ) -> Dials {
             let margin = SidebarDialTuning.windowMargin(defaults: defaults)
+            let tiles = icons.sidebarTiles(dials: defaults)
             let rowHeight = SidebarDialTuning.rowHeight(defaults: defaults)
             let chip = { (size: CGFloat) in min(max(size, 0), rowHeight) }
             return Dials(
@@ -70,13 +78,13 @@ struct SidebarMorphMetrics: Equatable {
                 groupCardInset: SidebarDialTuning.groupCardInset(defaults: defaults),
                 columnInset: max(SidebarDialTuning.railColumnInset(defaults: defaults), 0),
                 chipCornerRadius: max(SidebarDialTuning.railChipCornerRadius(defaults: defaults), 0),
-                sidebarTileSize: max(SidebarDialTuning.sidebarProjectTileSize(defaults: defaults), 0),
+                sidebarTileSize: max(tiles.projectTile, 0),
                 railTileSize: max(SidebarDialTuning.railProjectTileSize(defaults: defaults), 0),
-                sidebarChipSize: chip(SidebarDialTuning.sidebarThreadTileSize(defaults: defaults)),
+                sidebarChipSize: chip(tiles.threadTile),
                 railChipSize: chip(SidebarDialTuning.railThreadTileSize(defaults: defaults)),
-                sidebarGlyphSize: max(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults), 0),
+                sidebarGlyphSize: max(tiles.threadIcon, 0),
                 railGlyphSize: max(SidebarDialTuning.railThreadTileIcon(defaults: defaults), 0),
-                sidebarTileText: SidebarDialTuning.sidebarProjectTileText(defaults: defaults),
+                sidebarTileText: tiles.projectText,
                 railTileText: SidebarDialTuning.railProjectTileText(defaults: defaults)
             )
         }
@@ -215,7 +223,7 @@ struct SidebarMorphMetrics: Equatable {
             topInset: dials.groupCardInset,
             verticalInset: hasRows ? gap : dials.groupCardInset,
             cornerRadius: SelectedRowOutline.cornerRadius + gap,
-            tileTrim: (dials.sidebarHeaderHeight - dials.sidebarTileSize) / 2,
+            tileTrim: (dials.sidebarHeaderHeight - SidebarTileSizes.cardAnchor(tile: dials.sidebarTileSize)) / 2,
             chipTrim: 0
         )
     }
@@ -392,6 +400,8 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
         let glyphSize = SidebarMorphMetrics.lerp(glyphSizes.from, glyphSizes.to, progress)
         glyph(glyphSize)
             .frame(width: glyphSize, height: glyphSize)
+            // A zero-size glyph (Icons: None, on the sidebar) draws nothing.
+            .opacity(glyphSize > 0 ? 1 : 0)
             .frame(width: slotWidth)
             .background {
                 SidebarRowChipBackground(
@@ -588,12 +598,18 @@ struct SidebarMorphFrame<Content: View>: View {
     /// values and no rail dial change reached a leaf.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
-    /// The live dials, keyed by the epoch so the body depends on it.
-    private static func dials(epoch _: Int) -> SidebarMorphMetrics.Dials { .current() }
+    /// Settings > Appearance > Sidebar's Icons; read in `body` for the
+    /// same reason as the epoch.
+    @AppStorage(SidebarRowIcons.key, store: AppDefaults.store) private var rowIconsRaw = SidebarRowIcons.large.rawValue
+
+    /// The live dials, keyed by the epoch and the Icons setting so the body
+    /// depends on both.
+    private static func dials(epoch _: Int, icons _: String) -> SidebarMorphMetrics.Dials { .current() }
 
     var body: some View {
-        // The dials are a function of the epoch, which every panel write bumps.
-        let dials = Self.dials(epoch: dialEpochTick)
+        // The dials are a function of the epoch, which every panel write
+        // bumps, and of the Icons setting.
+        let dials = Self.dials(epoch: dialEpochTick, icons: rowIconsRaw)
         content
             .environment(\.sidebarTrailingGutter, WorkspaceLayout.sidebarTrailingGutter(for: .pinned))
             .environment(\.sidebarMorphDials, dials)

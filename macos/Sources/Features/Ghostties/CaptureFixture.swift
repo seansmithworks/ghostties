@@ -956,6 +956,13 @@ enum CaptureFixture {
     /// draws that tray button's hover highlight without a pointer, so the
     /// hovered state can be captured without synthetic input.
     static var trayHoverItemId: String? { env("GHOSTTIES_CAPTURE_TRAY_HOVER").flatMap { $0.isEmpty ? nil : $0 } }
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_ICONS=none|small|large`: Settings >
+    /// Appearance > Sidebar's Icons for this capture (`SidebarRowIcons`),
+    /// without writing the setting anywhere.
+    static var sidebarIcons: SidebarRowIcons? { env("GHOSTTIES_CAPTURE_SIDEBAR_ICONS").flatMap(SidebarRowIcons.init(rawValue:)) }
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_TEXT=standard|detailed`: the Sidebar
+    /// Text setting for this capture (`SidebarRowText`).
+    static var sidebarText: SidebarRowText? { env("GHOSTTIES_CAPTURE_SIDEBAR_TEXT").flatMap(SidebarRowText.init(rawValue:)) }
     #if DEBUG
     /// `GHOSTTIES_CAPTURE_HEADER_HOVER=<project>[,<project>]`: draws those
     /// one-view project headers' hover state (the quick-create "+" chip)

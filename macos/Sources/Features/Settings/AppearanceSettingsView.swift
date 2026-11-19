@@ -11,6 +11,12 @@ struct AppearanceSettingsView: View {
     @StateObject private var model: AppearanceSettingsModel
     @AppStorage(ComposerThemePresentation.key, store: GhosttiesThemePicks.appDefaults)
     private var composerThemePresentation: ComposerThemePresentation = .grid
+    /// The sidebar rows' tiles and second line (`SidebarRowIcons`,
+    /// `SidebarRowText`); the sidebar reads the same keys and follows live.
+    @AppStorage(SidebarRowIcons.key, store: AppDefaults.store)
+    private var sidebarRowIcons: SidebarRowIcons = .large
+    @AppStorage(SidebarRowText.key, store: AppDefaults.store)
+    private var sidebarRowText: SidebarRowText = .standard
 
     /// `model` is injectable so the pane can be rendered offscreen in a
     /// given state.
@@ -76,6 +82,23 @@ struct AppearanceSettingsView: View {
                     }
                     Button("Open Config File", action: model.openConfig)
                 }
+            }
+
+            Section {
+                LabeledContent("Icons") {
+                    NeutralSegmentedControl(
+                        options: SidebarRowIcons.allCases.map { ($0.title, $0) },
+                        selection: $sidebarRowIcons
+                    )
+                }
+                LabeledContent("Text") {
+                    NeutralSegmentedControl(
+                        options: SidebarRowText.allCases.map { ($0.title, $0) },
+                        selection: $sidebarRowText
+                    )
+                }
+            } header: {
+                Text("Sidebar")
             }
 
             Section {

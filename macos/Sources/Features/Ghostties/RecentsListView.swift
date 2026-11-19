@@ -53,6 +53,11 @@ struct RecentsListView: View {
     @AppStorage("ghostties.sidebarTab", store: AppDefaults.store) private var sidebarTab: SidebarTab = .projects
     /// `ApprovalFlag`, observed so a needs-you row's Approve/Deny follow it.
     @AppStorage(ApprovalFlag.defaultsKey, store: AppDefaults.store) private var approvalsEnabled = true
+    /// Settings > Appearance > Sidebar: which rows draw a second line
+    /// (`SessionRowSecondLine`), and their tiles (`SidebarRowIcons`, read
+    /// by the rows; held here so the list redraws when it changes).
+    @AppStorage(SidebarRowText.key, store: AppDefaults.store) private var rowTextRaw = SidebarRowText.standard.rawValue
+    @AppStorage(SidebarRowIcons.key, store: AppDefaults.store) private var rowIconsRaw = SidebarRowIcons.large.rawValue
     /// Bumped by `ClaudeStateStore.promptsDidChange`: a row's prompt can change
     /// under an unchanged indicator, and `ClaudeStateStore` isn't observable.
     @State private var promptRevision = 0
@@ -139,6 +144,9 @@ struct RecentsListView: View {
         #if DEBUG
         let _ = morphProbe?.evaluated("RecentsListView.body")
         #endif
+        // The tiles' sizes are read below (card and column bounds); the body
+        // depends on the Icons setting so they follow a change.
+        let _ = rowIconsRaw
         // Bound once per body pass — the section model filters the session
         // list into its buckets once (`SidebarSessionSections.make`).
         let sections = SidebarSessionSections.make(
@@ -570,7 +578,7 @@ struct RecentsListView: View {
                         // The glyph says what the session is doing; the
                         // words show only when it needs the user.
                         subtitle: kind.groupedRowSubtitle,
-                        showsSubtitle: SessionRowSecondLine.isShown(kind),
+                        showsSubtitle: SessionRowSecondLine.isShown(kind, text: rowText),
                         projectDrop: dropSlots[item.id].map(projectDropTarget),
                         staggerIndex: cascade.rows[session.id] ?? cascadeStart
                     )
@@ -597,6 +605,14 @@ struct RecentsListView: View {
         return SidebarIdleFold.unfolded(active: activeIds, selectedProjectId: selectedProjectId(active))
     }
 
+    /// The Text setting, as the list reads it (`SidebarRowText.current`, so
+    /// a capture's override applies); `rowTextRaw` makes the body depend
+    /// on the stored value.
+    private var rowText: SidebarRowText {
+        _ = rowTextRaw
+        return .current()
+    }
+
     /// The status a thread's row stands for (`SessionNeedsYou.shownKind`).
     private func shownKind(_ session: AgentSession) -> SessionStatusGlyphKind {
         SessionNeedsYou.shownKind(
@@ -612,7 +628,7 @@ struct RecentsListView: View {
         let isGroupedRow = SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView
             && !session.isPinnedForDisplay(pinningAvailable: pinningAvailable)
         return !isGroupedRow || prompt != nil || coordinator.codexHookUnconfirmed(for: session)
-            || SessionRowSecondLine.isShown(shownKind(session))
+            || SessionRowSecondLine.isShown(shownKind(session), text: rowText)
     }
 
     /// A row's drawn height on the sidebar (`SidebarListRowHeight`).
